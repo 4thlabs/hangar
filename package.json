@@ -7,7 +7,12 @@
     "dev": "waku dev",
     "build": "waku build",
     "start": "waku start",
-    "typegen": "waku router typegen"
+    "typegen": "waku router typegen",
+    "db:pull": "drizzle-kit pull",
+    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "test": "vitest run"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.3",
