@@ -1,6 +1,6 @@
-import { LoginForm } from '#app/components/login-form.tsx';
+import { LoginForm } from '#app/components/auth/login-form';
 
-export default function LoginPage() {
+export default async function LoginPage() {
   return (
     <>
       <title>Sign in | Hangar</title>

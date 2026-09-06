@@ -6,6 +6,8 @@ import type { PathsForPages, GetConfigResponse, SearchCodecsForPages } from 'wak
 // prettier-ignore
 import type { getConfig as File_AuthLogin_getConfig } from './pages/(auth)/login';
 // prettier-ignore
+import type { getConfig as File_AuthRegister_getConfig } from './pages/(auth)/register';
+// prettier-ignore
 import type { getConfig as File_About_getConfig } from './pages/about';
 // prettier-ignore
 import type { getConfig as File_Index_getConfig } from './pages/index';
@@ -13,6 +15,7 @@ import type { getConfig as File_Index_getConfig } from './pages/index';
 // prettier-ignore
 type Page =
 | ({ path: '/login' } & GetConfigResponse<typeof File_AuthLogin_getConfig>)
+| ({ path: '/register' } & GetConfigResponse<typeof File_AuthRegister_getConfig>)
 | ({ path: '/about' } & GetConfigResponse<typeof File_About_getConfig>)
 | ({ path: '/' } & GetConfigResponse<typeof File_Index_getConfig>);
 
