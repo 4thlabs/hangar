@@ -1,10 +1,10 @@
-/**
- * The login page
- */
-export default async function LoginPage() {
+import { LoginForm } from '#app/components/login-form.tsx';
+
+export default function LoginPage() {
   return (
     <>
-      toto
+      <title>Sign in | Hangar</title>
+      <LoginForm />
     </>
   );
 }

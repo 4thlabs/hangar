@@ -12,6 +12,6 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
 
 export const getConfig = async () => {
   return {
-    render: 'dynamic',
+    render: 'static',
   } as const;
 };
