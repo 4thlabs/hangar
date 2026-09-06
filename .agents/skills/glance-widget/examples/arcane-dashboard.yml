@@ -1,0 +1,59 @@
+# Arcane — https://github.com/getarcaneapp/arcane
+# Requires: ARCANE_URL, ARCANE_API_TOKEN, ARCANE_ENV_ID  (see README.md)
+
+- type: custom-api
+  title: Arcane
+  title-url: ${ARCANE_URL}
+  cache: 1m
+  url: ${ARCANE_URL}/api/environments/${ARCANE_ENV_ID}/dashboard
+  headers:
+    X-API-Key: ${ARCANE_API_KEY}
+  template: |
+    <div style="display:flex; align-items:center; gap:12px;">
+      <img src="https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/arcane.webp" width="28" height="28" style="flex-shrink:0; object-fit:contain;" alt="">
+      <div style="flex-grow:1; min-width:0;">
+        <a class="size-h4 block text-truncate color-highlight" href="${ARCANE_URL}" target="_blank">Arcane</a>
+        <ul class="list-horizontal-text">
+          <li>
+            {{ if .JSON.Bool "data.versionInfo.updateAvailable" }}
+              <a class="color-negative" href="{{ .JSON.String "data.versionInfo.releaseUrl" }}" target="_blank">{{ .JSON.String "data.versionInfo.displayVersion" }} &rarr; {{ .JSON.String "data.versionInfo.newestVersion" }}</a>
+            {{ else }}
+              {{ .JSON.String "data.versionInfo.displayVersion" }}
+            {{ end }}
+          </li>
+          <li>{{ .JSON.Int "data.containers.counts.totalContainers" }} containers</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="margin-block-10" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <div>
+        <div class="size-h5 color-subdue">Running</div>
+        <div class="size-h3 color-positive">{{ .JSON.Int "data.containers.counts.runningContainers" }}</div>
+      </div>
+      <div>
+        <div class="size-h5 color-subdue">Stopped</div>
+        <div class="size-h3 {{ if gt (.JSON.Int "data.containers.counts.stoppedContainers") 0 }}color-negative{{ else }}color-highlight{{ end }}">{{ .JSON.Int "data.containers.counts.stoppedContainers" }}</div>
+      </div>
+      <div data-popover-type="text" data-popover-text="{{ .JSON.Int "data.imageUsageCounts.imagesUnused" }} unused &middot; {{ printf "%.1f" (div (.JSON.Float "data.imageUsageCounts.totalImageSize") 1073741824.0) }} GB">
+        <div class="size-h5 color-subdue">Images</div>
+        <div class="size-h3 color-highlight">{{ .JSON.Int "data.imageUsageCounts.totalImages" }}</div>
+      </div>
+      <div data-popover-type="text" data-popover-text="{{ .JSON.Int "data.volumeUsageCounts.inuse" }} in use &middot; {{ .JSON.Int "data.volumeUsageCounts.unused" }} unused">
+        <div class="size-h5 color-subdue">Volumes</div>
+        <div class="size-h3 color-highlight">{{ .JSON.Int "data.volumeUsageCounts.total" }}</div>
+      </div>
+    </div>
+
+    {{ $actions := .JSON.Array "data.actionItems.items" }}
+    {{ if $actions }}
+      <ul class="list-horizontal-text" style="margin-top:0.5rem;">
+
+        {{ range $actions }}
+          <li class="{{ if eq (.String "severity") "critical" }}color-negative{{ else if eq (.String "severity") "warning" }}color-primary{{ else }}color-subdue{{ end }}">
+            {{ .Int "count" }} {{ replaceAll "_" " " (.String "kind") }}
+          </li>
+        {{ end }}
+      
+      </ul>
+    {{ end }}

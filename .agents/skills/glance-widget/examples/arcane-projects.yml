@@ -1,0 +1,38 @@
+# Arcane — https://github.com/getarcaneapp/arcane
+# Requires: ARCANE_URL, ARCANE_API_TOKEN, ARCANE_ENV_ID  (see README.md)
+
+- type: custom-api
+  title: Projects
+  title-url: ${ARCANE_URL}/projects
+  cache: 1m
+  url: ${ARCANE_URL}/api/environments/${ARCANE_ENV_ID}/projects
+  parameters:
+    status: running
+    limit: 100
+  headers:
+    X-API-Key: ${ARCANE_API_KEY}
+  template: |
+    <ul class="list list-gap-10 collapsible-container" data-collapse-after="7">
+
+      {{ range .JSON.Array "data" }}
+        {{ $icon := .String "iconDarkUrl" }}{{ if not $icon }}{{ $icon = .String "iconLightUrl" }}{{ end }}
+        {{ $url := .String "urls.0" }}{{ if not $url }}{{ $url = concat "${ARCANE_URL}/projects/" (.String "id") }}{{ end }}
+        
+        <li style="display:flex; align-items:center; gap:8px;">
+          <span style="width:8px; height:8px; border-radius:50%; flex-shrink:0; background-color:var(--color-positive);"></span>
+          
+          {{ if $icon }}
+            <img src="{{ $icon }}" width="20" height="20" style="flex-shrink:0; object-fit:contain;" alt="" loading="lazy">
+          {{ end }}
+          
+          <a class="color-highlight text-truncate" style="flex-grow:1; min-width:0;" href="{{ $url }}" target="_blank">{{ .String "name" }}</a>
+          
+          {{ if .Bool "updateInfo.hasUpdate" }}
+            <span class="color-primary" data-popover-type="text" data-popover-text="{{ .Int "updateInfo.imagesWithUpdates" }} image update(s) available">&uarr;</span>
+          {{ end }}
+          
+          <span class="size-h6 color-subdue" style="flex-shrink:0;">{{ .Int "runningCount" }}/{{ .Int "serviceCount" }}</span>
+        </li>
+      {{ end }}
+
+    </ul>

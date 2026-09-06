@@ -1,0 +1,56 @@
+{
+  "skill_name": "patched-fork",
+  "evals": [
+    {
+      "id": 0,
+      "name": "setup-new-fork",
+      "prompt": "J'ai forké https://github.com/karakeep-app/karakeep dans 4thlabs/karakeep parce que je porte un patch à moi (un fix sur le crawler). Le clone est dans ~/Code/karakeep. Je veux la même chose que pour arcane et rawkoon : une image ghcr.io/4thlabs/karakeep qui soit la dernière release upstream + mon patch, buildée à la demande. Mets en place ce qu'il faut dans le repo forké.",
+      "expected_output": ".github/workflows/patched-release.yml derived from upstream's own release workflow, FORK_PATCHES.md documenting the crawler patch, correct remote detection, -patched image tag / +patched version",
+      "files": [],
+      "assertions": [
+        "A patched-release workflow exists under .github/workflows/",
+        "The workflow's only trigger is workflow_dispatch (upstream tags arrive on their schedule, not the user's)",
+        "The workflow resolves the newest upstream vX.Y.Z tag at run time instead of hardcoding a version",
+        "The image is built from the upstream release tag with patches cherry-picked on top, not from the fork's branch",
+        "The cherry-pick excludes commits that only touch fork-only scaffolding (.github/, FORK_PATCHES.md)",
+        "The published image tag is <version>-patched (Docker tags forbid '+')",
+        "The application version build-arg carries +patched as semver build metadata, not -patched",
+        "The build step reuses upstream's own Dockerfile path and version build-arg name (./Dockerfile, SERVER_VERSION)",
+        "Upstream's own test command runs on the patched tree before the image is pushed",
+        "A FORK_PATCHES.md documents the crawler patch with its commit, files, problem and upstream status",
+        "The remote roles are read from URLs, not names: the image targets the fork owner (ghcr.io/4thlabs/karakeep or repository_owner)"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "upstream de rawkoon vient de sortir la 1.14.0, resync mon fork dessus et rebuild l'image",
+      "name": "sync-rebase-existing",
+      "expected_output": "backup branch, fetch, rebase onto upstream/main, FORK_PATCHES.md refreshed (date + new SHAs), force-push to fork remote, workflow dispatched; homelab compose untouched",
+      "files": [],
+      "assertions": [
+        "A backup branch of the pre-rebase state was created before rebasing",
+        "The fork branch was rebased onto the new upstream, not merged with it",
+        "The resulting history between upstream/main and HEAD contains no merge commits",
+        "All three fork commits survive the rebase",
+        "The rebase base is upstream's v1.14.0 commit, so the new upstream work is in the history",
+        "FORK_PATCHES.md's 'last synced' line names the new date (2026-09-05) and version (v1.14.0)",
+        "FORK_PATCHES.md carries the post-rebase commit SHAs, with no PLACEHOLDER text left",
+        "The branch was force-pushed to the fork remote (fork bare repo main matches local main)",
+        "The patched-release dispatch was reported to the user rather than silently skipped"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "diagnose-broken-pipeline",
+      "prompt": "Mon patched-release sur ~/Code/arcane a buildé mais l'image contient plein de trucs que je n'ai pas patchés, le log 'applying:' liste genre 200 commits. C'est quoi le problème ?",
+      "expected_output": "identifies non-linear history (a merge of upstream into the fork) as the cause, since the patch set is computed as upstream/main..HEAD; fix is to rebase",
+      "files": [],
+      "assertions": [
+        "Identifies the merge commit on the fork branch as the cause",
+        "Explains that the patch set is computed as upstream/main..HEAD, which a merge fills with upstream commits",
+        "Prescribes rebasing onto upstream rather than patching the workflow's filter to work around it",
+        "If the repo was fixed: the history is linear afterwards and both fork commits survive"
+      ]
+    }
+  ]
+}

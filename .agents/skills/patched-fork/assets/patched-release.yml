@@ -1,0 +1,97 @@
+# Template — replace every <PLACEHOLDER>. The build/test steps in the middle are
+# not boilerplate: copy them from upstream's own release workflow so the patched
+# image is built exactly the way a real release is.
+
+name: Patched Release
+
+# Rebuilds the latest upstream release tag with this fork's patches on top and
+# publishes it as <version>-patched. Run it by hand after upstream cuts a tag.
+
+on:
+  workflow_dispatch:      # only trigger — you decide when to rebuild, not upstream
+
+permissions:
+  contents: write         # pushes the patched/<tag> branch
+  packages: write         # pushes to ghcr.io
+
+concurrency:
+  group: "${{ github.workflow }}"
+  cancel-in-progress: false
+
+jobs:
+  patched-release:
+    name: Patch latest upstream tag and push image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # the patch set is computed from history
+
+      - name: Fetch upstream tags
+        run: |
+          git remote add upstream https://github.com/<UPSTREAM_OWNER>/<UPSTREAM_REPO>.git
+          git fetch upstream '+refs/tags/v*:refs/tags/v*' '+refs/heads/main:refs/remotes/upstream/main'
+          TAG=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          [ -n "$TAG" ] || { echo "no upstream release tag found"; exit 1; }
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          # Docker tags forbid '+', so the image is tagged <x.y.z>-patched while
+          # the app reports <x.y.z>+patched. That distinction matters: '-patched'
+          # is a semver pre-release, i.e. *older* than <x.y.z>, so an in-app
+          # update checker would offer a downgrade to the release you patched.
+          # '+patched' is build metadata, which semver comparison ignores.
+          echo "IMAGE_TAG=${TAG#v}-patched" >> "$GITHUB_ENV"
+          echo "VERSION=${TAG#v}+patched" >> "$GITHUB_ENV"
+
+      - name: Apply patches onto $TAG
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "patched/$TAG" "$TAG"
+
+          # The patch set is whatever the dispatched branch carries on top of
+          # upstream, minus the fork-only scaffolding. Filtering by touched path
+          # means a new patch needs no change here.
+          PATCHES=""
+          for c in $(git rev-list --reverse --no-merges "upstream/main..$GITHUB_SHA"); do
+            git show --pretty= --name-only "$c" \
+              | grep -qvE '^(\.github/|FORK_PATCHES\.md$)' && PATCHES="$PATCHES $c"
+          done
+          [ -n "$PATCHES" ] || { echo "no patches to apply"; exit 1; }
+
+          echo "applying:"; git log --oneline --no-walk $PATCHES
+          git cherry-pick $PATCHES
+          echo "REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      # <<< COPY FROM UPSTREAM'S RELEASE WORKFLOW: toolchain setup + test run.
+      # Running upstream's own tests on the patched tree is the only thing that
+      # catches a patch that silently stopped applying cleanly.
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: <DOCKERFILE_PATH>          # from upstream's workflow
+          platforms: <PLATFORMS>           # amd64 only is fine; note why if you narrow it
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/<IMAGE_NAME>:${{ env.IMAGE_TAG }}
+            ghcr.io/${{ github.repository_owner }}/<IMAGE_NAME>:patched
+          # <VERSION_BUILD_ARG> is upstream's own arg name. Keep comments out of
+          # this block: a literal '|' scalar has no comment syntax, so a trailing
+          # '# ...' would be passed through as part of the build-arg value.
+          build-args: |
+            <VERSION_BUILD_ARG>=${{ env.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Push patched branch
+        run: git push -f origin "patched/$TAG"
