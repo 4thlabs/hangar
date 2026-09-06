@@ -12,9 +12,10 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "allowImportingTsExtensions": true,
+    "resolvePackageJsonImports": true,
     "jsx": "react-jsx",
     "paths": {
-      "#*": ["./src/*"]
+      "#*": ["./src/*"],
     }
   }
 }

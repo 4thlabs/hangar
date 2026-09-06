@@ -1,3 +1,6 @@
+/**
+ * The login page
+ */
 export default async function LoginPage() {
   return (
     <>
@@ -5,3 +8,9 @@ export default async function LoginPage() {
     </>
   );
 }
+
+export const getConfig = async () => {
+  return {
+    render: 'static',
+  } as const;
+};
