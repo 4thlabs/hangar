@@ -8,7 +8,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
   const data = await getData();
 
   return (
-    <div className="font-['Nunito']">
+    <div className="min-h-svh font-['Nunito']">
       <meta name="description" content={data.description} />
       <link rel="icon" type="image/png" href={data.icon} />
       <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -19,10 +19,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
         precedence="font"
       />
 
-      <main className="m-6 flex items-center *:min-h-64 *:min-w-64 lg:m-0 lg:min-h-svh lg:justify-center">
-        {children}
-      </main>
-
+      {children}
     </div>
   );
 }

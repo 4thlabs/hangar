@@ -1,19 +1,17 @@
-import { Link } from 'waku';
-
 export default async function HomePage() {
   const data = await getData();
 
   return (
     <div>
       <title>{data.title}</title>
-      Future Dashbord
+      Future Dashboard
     </div>
   );
 }
 
 const getData = async () => {
   const data = {
-    title: 'Dashbaord | Hangar',
+    title: 'Dashboard | Hangar',
   };
 
   return data;
@@ -21,6 +19,6 @@ const getData = async () => {
 
 export const getConfig = async () => {
   return {
-    render: 'static',
+    render: 'dynamic',
   } as const;
 };
