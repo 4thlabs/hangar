@@ -1,4 +1,4 @@
-import { getProjects, getTags, syncTags } from "#libs/arcane";
+import { getProjects, getTags, syncTags } from "#libs/api/arcane/index.ts";
 import { Command } from "commander";
 
 export const arcane = new Command("arcane")
