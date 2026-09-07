@@ -1,0 +1,21 @@
+import { access, constants } from "node:fs/promises"
+import "./env.ts"
+
+/**
+ * Check if a corresponding project exists and return it's path
+ * @param project The project name (directory path)
+ */
+export const getStackPath = async (project: string) => {
+  const paths = [
+    `${process.env.HOMELAB_STORE_DIR}/${project}`, 
+    // Keeping for old architecture for now
+    `${process.env.HOMELAB_STORE_DIR}/apps/${project}`, 
+    `${process.env.HOMELAB_STORE_DIR}/stacks/${project}`
+  ]
+
+  const promises = paths.map((p) => {
+    return access(p).then(() => p).catch(e => undefined)
+  });
+
+  return (await Promise.all(promises)).filter(i => i);
+}

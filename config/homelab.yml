@@ -1,0 +1,54 @@
+categories:
+  - name: infra
+    color: blue
+    stacks:
+      - traefik
+      - pocket-id
+      - cloudflared
+      - backrest
+      - apprise
+
+  - name: servarr
+    color: orange
+    stacks:
+      - gluetun
+      - prowlarr
+      - jackett
+      - flaresolverr
+      - rdtclient
+  
+  - name: media
+    color: purple
+    stacks:
+      - immich
+      - audiobookshelf
+      - bookorbit
+      - rawkoon
+      - jellyfin
+
+  - name: home
+    color: green
+    stacks:
+      - home-assistant
+      - matter
+      - music-assistant
+      - frigate
+
+  - name: essentials
+    color: blue
+    stacks:
+      - arcane
+      - code-server
+      - glance
+
+  - name: apps
+    color: red
+    stacks:
+    - sync-in
+    - notediscovery
+
+  - name: gaming
+    color: purple
+    stacks:
+      - romm
+      #- ace
