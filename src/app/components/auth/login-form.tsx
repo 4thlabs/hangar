@@ -3,7 +3,7 @@
 import { useState, type SubmitEvent } from 'react';
 import { CircleAlertIcon } from 'lucide-react';
 import { Link, useRouter } from 'waku';
-import { authClient } from '#libs/auth/client/auth.ts';
+import { authClient } from '#libs/auth';
 import { Alert, AlertDescription, AlertTitle } from '#app/components/ui/alert.tsx';
 import { Button } from '#app/components/ui/button.tsx';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '#app/components/ui/card.tsx';
