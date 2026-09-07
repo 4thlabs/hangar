@@ -7,9 +7,9 @@
     "#*": "./src/*"
   },
   "scripts": {
-    "dev": "waku dev",
+    "dev": "waku dev --port 3010",
     "build": "waku build",
-    "start": "waku start",
+    "start": "waku start --port 3010",
     "typegen": "waku router typegen",
     "db:pull": "drizzle-kit pull",
     "db:push": "drizzle-kit push",
