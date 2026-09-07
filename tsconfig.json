@@ -15,8 +15,8 @@
     "resolvePackageJsonImports": true,
     "jsx": "react-jsx",
     "paths": {
-      "#libs/*": ["./src/libs/*/index.ts"],
       "#*": ["./src/*"],
+      "#libs/*": ["./src/libs/*/index.ts"],
     }
   }
 }
