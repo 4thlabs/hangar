@@ -1,4 +1,5 @@
 import { ChildProcess, spawn } from "node:child_process";
+import { access } from "node:fs/promises";
 
 let interrupted = false;
 const childs: Set<ChildProcess> = new Set();
@@ -10,6 +11,7 @@ process.on("SIGINT", () => {
 
 /**
  * Spawn a command, inheriting stdio, and resolve with its exit code.
+ * TODO: Output streaming mode
  * @param command The executable to run
  * @param args Arguments passed to the executable
  */
@@ -38,6 +40,14 @@ export const run = (command: string, ...args: string[]) => {
             resolve(signal ? 130 : code ?? 1);
         });
     });
+}
+
+/**
+ * Check the existance of a file/path
+ * @param path The path to check
+ */
+export const exists = async (path: string) => {
+    return await access(path).then(() => true).catch(e => false);
 }
 
 /**

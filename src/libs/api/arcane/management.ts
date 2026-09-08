@@ -1,7 +1,6 @@
 import { config } from '#libs/store';
 import { getProjects, updateProjectTag } from './client.ts';
 
-
 /**
  * Arcane Tags synchronisation based on the hangar configuration
  */

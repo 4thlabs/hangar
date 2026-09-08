@@ -11,6 +11,7 @@ export type Category = {
 
 /** The config file type */
 export type Config = {
+    store: string,
     categories: Category[]
 };
 

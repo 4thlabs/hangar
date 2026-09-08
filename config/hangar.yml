@@ -1,3 +1,4 @@
+store: https://github.com/4thlabs/hangar-store.git
 categories:
   - name: infra
     color: blue

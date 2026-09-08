@@ -1,4 +1,5 @@
 import { execComposeOn, run } from "#libs/runtime";
+import { install } from "#libs/store";
 import { Argument, Command } from "commander";
 
 export const store = new Command("store");
@@ -12,6 +13,12 @@ store
   .addArgument(trailingArguments)
   .action(async (project: string, args: string[]) => {
     process.exitCode = await execComposeOn(false, project, ...args);
+  });
+
+store
+  .command("install")
+  .action(async () => {
+    process.exitCode = await install()
   });
 
 store
