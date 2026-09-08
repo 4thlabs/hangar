@@ -39,8 +39,8 @@ export const execCompose = async (stack: string, ...args: string[]) => {
         return 1;
     }
 
-    return run('docker',
-        'compose',
+    return run("docker",
+        "compose",
         "--env-file",
         `${process.env.HOMELAB_STORE_DIR}/.env.global`,
         "-f",
