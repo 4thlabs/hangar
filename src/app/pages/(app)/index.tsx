@@ -5,12 +5,7 @@ export default function HomePage() {
   return (
     <main className="flex flex-col gap-6">
       <title>Dashboard | Hangar</title>
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Your homelab at a glance.</p>
-      </header>
-
-      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[1fr_2fr_1fr]">
         <Suspense fallback={<ArcaneGeneralStatsSkeleton />}>
           <ArcaneGeneralStatsWidget />
         </Suspense>

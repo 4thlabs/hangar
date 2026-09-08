@@ -30,8 +30,7 @@ type AppSidebarProps = {
 };
 
 const navigation = [
-  { label: 'Dashboard', href: '/', icon: LayoutDashboardIcon },
-  { label: 'À propos', href: '/about', icon: InfoIcon },
+  { label: 'Dashboard', href: '/', icon: LayoutDashboardIcon }
 ] as const;
 
 export function AppSidebar({ user }: AppSidebarProps) {

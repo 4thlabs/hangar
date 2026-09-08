@@ -1,10 +1,11 @@
-import { CircleAlertIcon, ExternalLinkIcon } from "lucide-react";
+import {CircleAlertIcon, ExternalLinkIcon } from "lucide-react";
 import type { Dashboard } from "#libs/api/arcane";
 import { arcaneUrl, getDashboard } from "#libs/api/arcane";
 import { Alert, AlertDescription, AlertTitle } from "#app/components/ui/alert.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { Skeleton } from "#app/components/ui/skeleton.tsx";
 import { cn } from "#libs/utils";
+import { IconSelfh } from "#app/components/icon-selfh.tsx";
 
 type ArcaneGeneralStatsCardProps = {
   dashboard: Dashboard;
@@ -56,6 +57,7 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 hover:underline"
           >
+            <IconSelfh name="arcane" />
             Arcane
             <ExternalLinkIcon aria-hidden="true" className="size-3.5" />
           </a>
