@@ -1,5 +1,11 @@
 import { Suspense } from "react";
-import { ArcaneGeneralStatsSkeleton, ArcaneGeneralStatsWidget, ClockWidget } from "#libs/widgets";
+import {
+  ArcaneGeneralStatsSkeleton,
+  ArcaneGeneralStatsWidget,
+  ClockWidget,
+  FrigateEventsSkeleton,
+  FrigateEventsWidget,
+} from "#libs/widgets";
 
 export default function HomePage() {
   return (
@@ -10,6 +16,11 @@ export default function HomePage() {
           <ClockWidget />
           <Suspense fallback={<ArcaneGeneralStatsSkeleton />}>
             <ArcaneGeneralStatsWidget />
+          </Suspense>
+        </div>
+        <div className="flex flex-col gap-4 md:col-start-2 xl:col-start-3">
+          <Suspense fallback={<FrigateEventsSkeleton />}>
+            <FrigateEventsWidget />
           </Suspense>
         </div>
       </div>
