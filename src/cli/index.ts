@@ -5,6 +5,6 @@ import { arcane } from "./commands/arcane.ts";
 export const cli = program;
 
 cli
-    .enablePositionalOptions(true)
-    .addCommand(store)
-    .addCommand(arcane);
+	.enablePositionalOptions(true)
+	.addCommand(store)
+	.addCommand(arcane);
