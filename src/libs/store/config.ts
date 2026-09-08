@@ -1,3 +1,4 @@
+import '#libs/env'
 import { readFile } from 'node:fs/promises';
 import { load } from 'js-yaml'; 
 
@@ -28,4 +29,4 @@ export const getConfig = async (filePath: string) => {
     }
 }
 
-export const config = await getConfig(process.env.HOMELAB_CONFIG_FILE);
+export const config = await getConfig(process.env.HANGAR_CONFIG_FILE);

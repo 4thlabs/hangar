@@ -1,5 +1,4 @@
 import { access, constants } from "node:fs/promises"
-import "./env.ts"
 
 /**
  * Check if a corresponding project exists and return it's path
@@ -7,10 +6,10 @@ import "./env.ts"
  */
 export const getStackPath = async (project: string) => {
   const paths = [
-    `${process.env.HOMELAB_STORE_DIR}/${project}`, 
+    `${process.env.HANGAR_DATA_DIR}/${project}`, 
     // Keeping for old architecture for now
-    `${process.env.HOMELAB_STORE_DIR}/apps/${project}`, 
-    `${process.env.HOMELAB_STORE_DIR}/stacks/${project}`
+    `${process.env.HANGAR_DATA_DIR}/apps/${project}`, 
+    `${process.env.HANGAR_DATA_DIR}/stacks/${project}`
   ]
 
   const promises = paths.map((p) => {

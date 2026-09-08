@@ -1,4 +1,4 @@
-import { execOn, run } from "#libs/store";
+import { execComposeOn, run } from "#libs/runtime";
 import { Argument, Command } from "commander";
 
 export const store = new Command("store");
@@ -11,7 +11,7 @@ store
     .argument("<project>", "project to interract with")
     .addArgument(trailingArguments)
     .action(async (project: string, args: string[]) => {
-        process.exitCode = await execOn(false, project, ...args);
+        process.exitCode = await execComposeOn(false, project, ...args);
     });
 
 store
@@ -20,7 +20,7 @@ store
     .requiredOption("-d, --detach", "Run containers in the background")
     .addArgument(trailingArguments)
     .action(async (args: string[]) => {
-        process.exitCode = await execOn(true, "up", "-d", ...args);
+        process.exitCode = await execComposeOn(true, "up", "-d", ...args);
     });
 
 store
@@ -28,7 +28,7 @@ store
     .description("Down all configured projects")
     .addArgument(trailingArguments)
     .action(async (args: string[]) => {
-        process.exitCode = await execOn(true, "down", ...args);
+        process.exitCode = await execComposeOn(true, "down", ...args);
     });
 
 store

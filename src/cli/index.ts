@@ -1,4 +1,3 @@
-import { execOn } from "#libs/store";
 import { Argument, program } from "commander";
 import { store } from "./commands/store.ts";
 import { arcane } from "./commands/arcane.ts";
