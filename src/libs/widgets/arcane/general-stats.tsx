@@ -1,4 +1,4 @@
-import {CircleAlertIcon, ExternalLinkIcon } from "lucide-react";
+import { CircleAlertIcon, ExternalLinkIcon } from "lucide-react";
 import type { Dashboard } from "#libs/api/arcane";
 import { arcaneUrl, getDashboard } from "#libs/api/arcane";
 import { Alert, AlertDescription, AlertTitle } from "#app/components/ui/alert.tsx";
@@ -27,12 +27,17 @@ function formatImageSize(bytes: number) {
 
 function Metric({ label, value, detail, isDestructive = false }: MetricProps) {
   return (
-    <div className="min-w-0">
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className={cn("mt-1 text-2xl font-semibold tabular-nums text-primary", isDestructive && "text-destructive")}>
+    <div className="flex min-w-0 flex-col gap-0">
+      <dt className="text-xs font-medium uppercase leading-tight tracking-wide text-muted-foreground">{label}</dt>
+      <dd
+        className={cn(
+          "text-2xl font-semibold leading-tight tabular-nums text-primary",
+          isDestructive && "text-destructive",
+        )}
+      >
         {integerFormatter.format(value)}
       </dd>
-      {detail && <dd className="mt-1 truncate text-xs text-muted-foreground">{detail}</dd>}
+      {detail && <dd className="truncate text-xs leading-tight text-muted-foreground">{detail}</dd>}
     </div>
   );
 }
@@ -49,7 +54,7 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
 
   return (
     <Card className="@container w-full">
-      <CardHeader className="border-b">
+      <CardHeader className="gap-0 border-b">
         <CardTitle>
           <a
             href={serviceUrl}
@@ -137,14 +142,14 @@ export function ArcaneGeneralStatsError() {
 export function ArcaneGeneralStatsSkeleton() {
   return (
     <Card className="w-full" aria-label="Loading Arcane statistics" aria-busy="true">
-      <CardHeader className="border-b">
+      <CardHeader className="gap-0 border-b">
         <Skeleton className="h-5 w-24" />
         <Skeleton className="h-4 w-40" />
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-4">
           {Array.from({ length: 4 }, (_, index) => (
-            <div key={index} className="flex flex-col gap-2">
+            <div key={index} className="flex flex-col gap-0">
               <Skeleton className="h-3 w-16" />
               <Skeleton className="h-8 w-12" />
               <Skeleton className="h-3 w-24 max-w-full" />

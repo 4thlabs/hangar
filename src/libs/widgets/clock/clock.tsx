@@ -27,7 +27,7 @@ export function ClockWidget() {
   return (
     <Card className="h-20 w-full justify-center py-0 font-mono">
       <CardContent className="flex items-center justify-between">
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-0">
           <p className="flex items-baseline gap-4 text-lg font-semibold">
             <span className="tabular-nums">{now ? now.getDate() : "--"}</span>
             <span>{now ? monthFormatter.format(now) : "--------"}</span>
@@ -35,7 +35,7 @@ export function ClockWidget() {
           <p className="text-sm text-muted-foreground tabular-nums">{now ? now.getFullYear() : "----"}</p>
         </div>
 
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-col items-end gap-0">
           <time className="text-lg font-semibold tabular-nums" dateTime={now?.toISOString()}>
             {now ? timeFormatter.format(now) : "--:--"}
           </time>
