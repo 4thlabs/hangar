@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
-import { AppSidebar } from '#app/components/app-sidebar.tsx';
-import { SidebarInset, SidebarProvider, SidebarTrigger } from '#app/components/ui/sidebar.tsx';
-import { getSession, requireSession } from '#libs/auth';
+import type { ReactNode } from "react";
+import { AppSidebar } from "#app/components/app-sidebar.tsx";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "#app/components/ui/sidebar.tsx";
+import { requireSession } from "#libs/auth";
 
 type AppLayoutProps = { children: ReactNode };
 
@@ -23,6 +23,6 @@ export default async function AppLayout({ children }: AppLayoutProps) {
 
 export const getConfig = async () => {
   return {
-    render: 'dynamic',
+    render: "dynamic",
   } as const;
 };
