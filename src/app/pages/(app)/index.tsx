@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import {
   ArcaneGeneralStatsSkeleton,
   ArcaneGeneralStatsWidget,
-  ClockSkeleton,
   ClockWidget,
   FrigateEventsSkeleton,
   FrigateEventsWidget,
@@ -10,7 +9,7 @@ import {
 
 function Dashboard() {
   return (
-    <div className="grid grid-cols-1 items-start gap-4 duration-200 md:grid-cols-2 xl:grid-cols-[1fr_2fr_1fr]">
+    <div className="grid grid-cols-1 items-start gap-4 duration-200 md:grid-cols-2 xl:grid-cols-[1fr_3fr_1fr]">
       <div className="flex flex-col gap-4 md:col-start-1">
         <ClockWidget />
 
