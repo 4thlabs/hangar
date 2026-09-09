@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { FrigateEvent, FrigateStats } from "#libs/api/frigate";
-import { FrigateEventsCard } from "./events.tsx";
+import { FrigateEventsCard, FrigateEventsSkeleton } from "./events.tsx";
 
 const now = 1_700_000_000_000;
 
@@ -58,5 +58,12 @@ describe("FrigateEventsCard", () => {
 
     expect(html).toContain("No recent events.");
     expect(html).not.toContain("thumbnail.jpg");
+  });
+
+  it("exports a titled skeleton with the same minimum height", () => {
+    const html = renderToStaticMarkup(<FrigateEventsSkeleton />);
+
+    expect(html).toContain("Frigate");
+    expect(html).toContain("min-h-88");
   });
 });

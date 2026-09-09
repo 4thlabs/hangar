@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Dashboard } from "#libs/api";
-import { ArcaneGeneralStatsCard } from "./general-stats.tsx";
+import { ArcaneGeneralStatsCard, ArcaneGeneralStatsSkeleton } from "./general-stats.tsx";
 
 const dashboard: Dashboard = {
   versionInfo: {
@@ -71,5 +71,12 @@ describe("ArcaneGeneralStatsCard", () => {
     expect(html).toContain("Needs attention");
     expect(html).toContain("3</span> container updates");
     expect(html).toContain("text-destructive");
+  });
+
+  it("exports a titled skeleton with the same minimum height", () => {
+    const html = renderToStaticMarkup(<ArcaneGeneralStatsSkeleton />);
+
+    expect(html).toContain("Arcane");
+    expect(html).toContain("min-h-64");
   });
 });

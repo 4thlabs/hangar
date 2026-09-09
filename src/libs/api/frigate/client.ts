@@ -4,22 +4,17 @@ import type { FrigateEvent, FrigateStats } from "./type.ts";
 
 export const frigateUrl = `https://frigate.${process.env.DOMAIN}`;
 
-function createApiClient() {
-  const baseUrl = process.env.FRIGATE_URL;
-  if (!baseUrl) throw new Error("FRIGATE_URL is not configured.");
-
-  return ky.create({
-    baseUrl,
-    prefix: "/api",
-  });
-}
+export const apiClient = ky.create({
+  baseUrl: process.env.FRIDATE_API_URL || frigateUrl,
+  prefix: "/api",
+});
 
 /** Gets the most recent Frigate events. */
 export async function getEvents(limit: number = 5) {
-  return await createApiClient().get<FrigateEvent[]>("events", { searchParams: { limit } }).json();
+  return await apiClient.get<FrigateEvent[]>("events", { searchParams: { limit } }).json();
 }
 
 /** Gets Frigate runtime statistics. */
 export async function getStats() {
-  return await createApiClient().get<FrigateStats>("stats").json();
+  return await apiClient.get<FrigateStats>("stats").json();
 }

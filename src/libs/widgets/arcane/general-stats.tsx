@@ -4,7 +4,7 @@ import { arcaneUrl, getDashboard } from "#libs/api/arcane";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { cn } from "#libs/utils";
 import { IconSelfh } from "#app/components/icon-selfh.tsx";
-import { WidgetError } from "../shared/index.ts";
+import { WidgetError, WidgetSkeleton } from "../shared/index.ts";
 
 type ArcaneGeneralStatsCardProps = {
   dashboard: Dashboard;
@@ -117,6 +117,10 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
       )}
     </Card>
   );
+}
+
+export function ArcaneGeneralStatsSkeleton() {
+  return <WidgetSkeleton className={arcaneWidgetClassName} icon={<IconSelfh name="arcane" />} title="Arcane" />;
 }
 
 export async function ArcaneGeneralStatsWidget({ environment = 0 }: { environment?: number }) {

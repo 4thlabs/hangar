@@ -3,7 +3,7 @@ import type { FrigateEvent, FrigateStats } from "#libs/api/frigate";
 import { frigateUrl, getEvents, getStats } from "#libs/api/frigate";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { IconSelfh } from "#app/components/icon-selfh.tsx";
-import { WidgetError } from "../shared/index.ts";
+import { WidgetError, WidgetSkeleton } from "../shared/index.ts";
 
 type FrigateEventsCardProps = {
   events: FrigateEvent[];
@@ -101,6 +101,10 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
       </CardContent>
     </Card>
   );
+}
+
+export function FrigateEventsSkeleton() {
+  return <WidgetSkeleton className={frigateWidgetClassName} icon={<IconSelfh name="frigate" />} title="Frigate" />;
 }
 
 export async function FrigateEventsWidget() {

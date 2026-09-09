@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ClockIcon } from "lucide-react";
 import { Card, CardContent } from "#app/components/ui/card";
+import { cn } from "#libs/utils";
+import { WidgetSkeleton } from "../shared/index.ts";
 
 const timeFormatter = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit",
@@ -11,6 +14,11 @@ const timeFormatter = new Intl.DateTimeFormat("en-GB", {
 
 const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "long" });
 const weekdayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "long" });
+const clockWidgetClassName = "h-20 w-full";
+
+export function ClockSkeleton() {
+  return <WidgetSkeleton className={clockWidgetClassName} icon={<ClockIcon />} title="Clock" />;
+}
 
 export function ClockWidget() {
   const [now, setNow] = useState<Date | null>(null);
@@ -25,7 +33,7 @@ export function ClockWidget() {
   }, []);
 
   return (
-    <Card className="h-20 w-full justify-center py-0 font-mono">
+    <Card className={cn(clockWidgetClassName, "justify-center py-0 font-mono")}>
       <CardContent className="flex items-center justify-between">
         <div className="flex flex-col gap-0">
           <p className="flex items-baseline gap-4 text-lg font-semibold">
