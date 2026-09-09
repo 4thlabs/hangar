@@ -4,6 +4,10 @@ import { logger } from "#libs/logs";
 import { exists, resolve, run } from "#libs/runtime";
 import { config } from "./config.ts";
 
+/**
+ * Retrieves the paths used for the store and installed stacks.
+ * @returns The paths for the store and installed stacks.
+ */
 const getStorePaths = () => {
   const dataPath = path.resolve(process.env.HANGAR_DATA_DIR);
 
@@ -14,11 +18,22 @@ const getStorePaths = () => {
   };
 };
 
+/**
+ * Returns whether the store is installed by checking for the existence of a .git directory in the store path.
+ * @returns A promise that resolves to true if the store is installed, false otherwise.
+ */
 export const isStoreInstalled = async () => {
   const { storePath } = getStorePaths();
   return exists(path.join(storePath, ".git"));
 };
 
+/**
+ * Links a stack from the store to the installed path.
+ * @param stack The name of the stack to link.
+ * @param storePath The path to the store.
+ * @param installedPath The path to the installed stacks.
+ * @returns A promise that resolves to 0 if the link is successful, 1 otherwise.
+ */
 const linkStack = async (stack: string, storePath: string, installedPath: string) => {
   const source = path.join(storePath, stack);
   const destination = path.join(installedPath, stack);
@@ -36,6 +51,10 @@ const linkStack = async (stack: string, storePath: string, installedPath: string
   }
 };
 
+/**
+ * Links all configured stacks from the store to the installed path.
+ * @returns A promise that resolves to 0 if all links are successful, 1 otherwise.
+ */
 const linkConfiguredStacks = async () => {
   const { storePath, installedPath } = getStorePaths();
   await mkdir(installedPath, { recursive: true });
@@ -44,7 +63,9 @@ const linkConfiguredStacks = async () => {
   return codes.find(code => code !== 0) ?? 0;
 };
 
-/** Install the store repository and link all configured stacks. */
+/** 
+ * Install the store repository and link all configured stacks. 
+ */
 export const install = async () => {
   const { dataPath, storePath } = getStorePaths();
   await mkdir(dataPath, { recursive: true });
@@ -60,7 +81,9 @@ export const install = async () => {
   return linkConfiguredStacks();
 };
 
-/** Update the installed store without overwriting local changes, then reconcile stack links. */
+/** 
+ * Updates the installed store without overwriting local changes, then reconcile stack links. 
+ */
 export const update = async () => {
   if (!(await isStoreInstalled())) {
     return 1;
