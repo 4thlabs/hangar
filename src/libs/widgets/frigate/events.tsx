@@ -104,7 +104,14 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
 }
 
 export function FrigateEventsSkeleton() {
-  return <WidgetSkeleton className={frigateWidgetClassName} icon={<IconSelfh name="frigate" />} title="Frigate" />;
+  return (
+    <WidgetSkeleton
+      className={frigateWidgetClassName}
+      icon={<IconSelfh name="frigate" />}
+      title="Frigate"
+      withSubtitle
+    />
+  );
 }
 
 export async function FrigateEventsWidget() {

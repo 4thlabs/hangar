@@ -5,7 +5,13 @@ import { WidgetSkeleton } from "./widget-skeleton.tsx";
 describe("WidgetSkeleton", () => {
   it("preserves the requested widget size without rendering a spinner", () => {
     const html = renderToStaticMarkup(
-      <WidgetSkeleton className="min-h-64" icon={<span aria-hidden="true">Icon</span>} title="Service" />,
+      <WidgetSkeleton
+        className="min-h-64"
+        icon={<span aria-hidden="true">Icon</span>}
+        title="Service"
+        withFooter
+        withSubtitle
+      />,
     );
 
     expect(html).toContain("Service");
@@ -14,6 +20,8 @@ describe("WidgetSkeleton", () => {
     expect(html).toContain("w-full");
     expect(html).toContain("animate-pulse");
     expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('data-slot="card-footer"');
+    expect(html).toContain("border-b");
     expect(html).not.toContain("spinner");
   });
 });

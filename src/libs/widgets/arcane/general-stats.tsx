@@ -120,7 +120,15 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
 }
 
 export function ArcaneGeneralStatsSkeleton() {
-  return <WidgetSkeleton className={arcaneWidgetClassName} icon={<IconSelfh name="arcane" />} title="Arcane" />;
+  return (
+    <WidgetSkeleton
+      className={arcaneWidgetClassName}
+      icon={<IconSelfh name="arcane" />}
+      title="Arcane"
+      withFooter
+      withSubtitle
+    />
+  );
 }
 
 export async function ArcaneGeneralStatsWidget({ environment = 0 }: { environment?: number }) {
