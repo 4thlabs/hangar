@@ -94,7 +94,7 @@ function AppSidebarContent({ setOpenMobile }: { setOpenMobile: SetOpenMobile }) 
   return (
     <SidebarContent>
       {navigations.map(category => (
-        <SidebarGroup key={category.label}>
+        <SidebarGroup key={category.label} className={category.position === "bottom" ? "mt-auto" : undefined}>
           <SidebarGroupLabel>{category.label}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>

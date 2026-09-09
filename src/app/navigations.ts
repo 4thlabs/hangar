@@ -11,16 +11,18 @@ type NavigationItem = {
 
 type NavigationCategory = {
   label: string;
+  position?: "bottom";
   items: readonly NavigationItem[];
 };
 
-export const navigations = [
+export const navigations: readonly NavigationCategory[] = [
   {
     label: "Général",
     items: [{ label: "Dashboard", href: "/", icon: LayoutDashboardIcon }],
   },
   {
     label: "Administration",
+    position: "bottom",
     items: [{ label: "Paramètres", href: "/settings", icon: SettingsIcon }],
   },
-] as const satisfies readonly NavigationCategory[];
+] as const;
