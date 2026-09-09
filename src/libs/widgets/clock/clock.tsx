@@ -21,7 +21,7 @@ export function ClockSkeleton() {
 }
 
 export function ClockWidget() {
-  const [now, setNow] = useState<Date | null>(null);
+  const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => {
     const updateClock = () => setNow(new Date());
@@ -37,17 +37,17 @@ export function ClockWidget() {
       <CardContent className="flex items-center justify-between">
         <div className="flex flex-col gap-0">
           <p className="flex items-baseline gap-4 text-lg font-semibold">
-            <span className="tabular-nums">{now ? now.getDate() : "--"}</span>
-            <span>{now ? monthFormatter.format(now) : "--------"}</span>
+            <span className="tabular-nums">{now.getDate()}</span>
+            <span>{monthFormatter.format(now)}</span>
           </p>
-          <p className="text-sm text-muted-foreground tabular-nums">{now ? now.getFullYear() : "----"}</p>
+          <p className="text-sm text-muted-foreground tabular-nums">{now.getFullYear()}</p>
         </div>
 
         <div className="flex flex-col items-end gap-0">
-          <time className="text-lg font-semibold tabular-nums" dateTime={now?.toISOString()}>
-            {now ? timeFormatter.format(now) : "--:--"}
+          <time className="text-lg font-semibold tabular-nums" dateTime={now.toISOString()}>
+            {timeFormatter.format(now)}
           </time>
-          <p className="text-sm text-muted-foreground">{now ? weekdayFormatter.format(now) : "--------"}</p>
+          <p className="text-sm text-muted-foreground">{weekdayFormatter.format(now)}</p>
         </div>
       </CardContent>
     </Card>
