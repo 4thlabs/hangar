@@ -77,8 +77,8 @@ function AppSidebarHeader({ setOpenMobile }: { setOpenMobile: SetOpenMobile }) {
             tooltip="Hangar"
             render={
               <Link to="/" onClick={() => setOpenMobile(false)}>
-                <BoxesIcon />
-                <span className="truncate font-semibold group-data-[collapsible=icon]:hidden">Hangar</span>
+                <img src="/images/icon.png" alt="Hangar Logo" className="size-8" />
+                <span className="truncate font-semibold text-2xl group-data-[collapsible=icon]:hidden">Hangar</span>
               </Link>
             }
           />
