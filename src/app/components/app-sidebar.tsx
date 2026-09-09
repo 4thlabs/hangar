@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { BoxesIcon, ChevronsUpDownIcon, LayoutDashboardIcon, LogInIcon, LogOutIcon } from "lucide-react";
+import { BoxesIcon, ChevronsUpDownIcon, LogInIcon, LogOutIcon } from "lucide-react";
 import { Link, useRouter } from "waku";
+import { navigations } from "#app/navigations.ts";
 import { authClient } from "#libs/auth/client";
 import { Avatar, AvatarFallback } from "#app/components/ui/avatar.tsx";
 import {
@@ -45,8 +46,6 @@ type AppSidebarFooterProps = AppSidebarProps & {
   isMobile: boolean;
   setOpenMobile: SetOpenMobile;
 };
-
-const navigation = [{ label: "Dashboard", href: "/", icon: LayoutDashboardIcon }] as const;
 
 function getInitials(name: string, email: string) {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -94,31 +93,34 @@ function AppSidebarContent({ setOpenMobile }: { setOpenMobile: SetOpenMobile }) 
 
   return (
     <SidebarContent>
-      <SidebarGroup>
-        <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {navigation.map(item => (
-              <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton
-                  isActive={router.path === item.href}
-                  tooltip={item.label}
-                  render={
-                    <Link
-                      to={item.href}
-                      onClick={() => setOpenMobile(false)}
-                      aria-current={router.path === item.href ? "page" : undefined}
-                    >
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
+      {navigations.map(category => (
+        <SidebarGroup key={category.label}>
+          <SidebarGroupLabel>{category.label}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {category.items.map(item => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton
+                    isActive={router.path === item.href}
+                    tooltip={item.label}
+                    render={
+                      <Link
+                        to={item.href}
+                        onClick={() => setOpenMobile(false)}
+                        onMouseEnter={() => router.prefetch(item.href)}
+                        aria-current={router.path === item.href ? "page" : undefined}
+                      >
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </Link>
+                    }
+                  />
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      ))}
     </SidebarContent>
   );
 }
