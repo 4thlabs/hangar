@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { cn } from "#libs/utils";
 import { IconSelfh } from "#app/components/icon-selfh.tsx";
 import { WidgetError, WidgetSkeleton } from "../shared/index.ts";
+import { logger } from "#libs/logs";
 
 type ArcaneGeneralStatsCardProps = {
   dashboard: Dashboard;
@@ -145,14 +146,14 @@ export async function ArcaneGeneralStatsWidget({ environment = 0 }: { environmen
     const response = await getDashboard(environment);
 
     if (!response.success) {
-      console.error(`Failed to load the Arcane dashboard: ${response.detail ?? "Unsuccessful response"}`);
+      logger.error(`Failed to load the Arcane dashboard: ${response.detail ?? "Unsuccessful response"}`);
       return errorFallback;
     }
 
     return <ArcaneGeneralStatsCard dashboard={response.data} serviceUrl={arcaneUrl} />;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error(`Failed to load the Arcane dashboard: ${message}`);
+    logger.error(`Failed to load the Arcane dashboard: ${message}`);
     return errorFallback;
   }
 }

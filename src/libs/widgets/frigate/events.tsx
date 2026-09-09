@@ -4,6 +4,7 @@ import { frigateUrl, getEvents, getStats } from "#libs/api/frigate";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { IconSelfh } from "#app/components/icon-selfh.tsx";
 import { WidgetError, WidgetSkeleton } from "../shared/index.ts";
+import { logger } from "#libs/logs";
 
 type FrigateEventsCardProps = {
   events: FrigateEvent[];
@@ -120,7 +121,7 @@ export async function FrigateEventsWidget() {
     return <FrigateEventsCard events={events} stats={stats} serviceUrl={frigateUrl} />;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error(`Failed to load Frigate events: ${message}`);
+    logger.error(`Failed to load Frigate events: ${message}`);
     return (
       <WidgetError
         className={frigateWidgetClassName}
