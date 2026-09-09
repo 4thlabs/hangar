@@ -4,9 +4,13 @@ import type { FrigateEvent, FrigateStats } from "./type.ts";
 
 export const frigateUrl = `https://frigate.${process.env.DOMAIN}`;
 
-export const apiClient = ky.create({
+export const apiClient = ky.extend({
   baseUrl: process.env.FRIDATE_API_URL || frigateUrl,
   prefix: "/api",
+  retry: {
+    limit: 1
+  },
+  timeout: 100
 });
 
 /** Gets the most recent Frigate events. */
