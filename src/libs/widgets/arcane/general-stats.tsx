@@ -1,11 +1,10 @@
-import { CircleAlertIcon, ExternalLinkIcon } from "lucide-react";
+import { ExternalLinkIcon } from "lucide-react";
 import type { Dashboard } from "#libs/api/arcane";
 import { arcaneUrl, getDashboard } from "#libs/api/arcane";
-import { Alert, AlertDescription, AlertTitle } from "#app/components/ui/alert.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
-import { Skeleton } from "#app/components/ui/skeleton.tsx";
 import { cn } from "#libs/utils";
 import { IconSelfh } from "#app/components/icon-selfh.tsx";
+import { WidgetError } from "../shared/index.ts";
 
 type ArcaneGeneralStatsCardProps = {
   dashboard: Dashboard;
@@ -20,6 +19,7 @@ type MetricProps = {
 };
 
 const integerFormatter = new Intl.NumberFormat("en-US");
+const arcaneWidgetClassName = "@container min-h-64 w-full";
 
 function formatImageSize(bytes: number) {
   return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
@@ -53,7 +53,7 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
   const counts = containers.counts;
 
   return (
-    <Card className="@container w-full">
+    <Card className={arcaneWidgetClassName}>
       <CardHeader className="gap-0 border-b">
         <CardTitle>
           <a
@@ -119,62 +119,28 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
   );
 }
 
-export function ArcaneGeneralStatsError() {
-  return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle>Arcane</CardTitle>
-        <CardDescription>General statistics</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Alert variant="destructive">
-          <CircleAlertIcon aria-hidden="true" />
-          <AlertTitle>Arcane is unavailable</AlertTitle>
-          <AlertDescription>
-            The general statistics could not be loaded. The rest of the dashboard is still available.
-          </AlertDescription>
-        </Alert>
-      </CardContent>
-    </Card>
+export async function ArcaneGeneralStatsWidget({ environment = 0 }: { environment?: number }) {
+  const errorFallback = (
+    <WidgetError
+      className={arcaneWidgetClassName}
+      icon={<IconSelfh name="arcane" />}
+      name="Arcane"
+      description="The general statistics could not be loaded. The rest of the dashboard is still available."
+    />
   );
-}
 
-export function ArcaneGeneralStatsSkeleton() {
-  return (
-    <Card className="w-full" aria-label="Loading Arcane statistics" aria-busy="true">
-      <CardHeader className="gap-0 border-b">
-        <Skeleton className="h-5 w-24" />
-        <Skeleton className="h-4 w-40" />
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-4">
-          {Array.from({ length: 4 }, (_, index) => (
-            <div key={index} className="flex flex-col gap-0">
-              <Skeleton className="h-3 w-16" />
-              <Skeleton className="h-8 w-12" />
-              <Skeleton className="h-3 w-24 max-w-full" />
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+  try {
+    const response = await getDashboard(environment);
 
-export function ArcaneGeneralStatsWidget({ environment = 0 }: { environment?: number }) {
-  return getDashboard(environment).then(
-    response => {
-      if (!response.success) {
-        console.error(`Failed to load the Arcane dashboard: ${response.detail ?? "Unsuccessful response"}`);
-        return <ArcaneGeneralStatsError />;
-      }
+    if (!response.success) {
+      console.error(`Failed to load the Arcane dashboard: ${response.detail ?? "Unsuccessful response"}`);
+      return errorFallback;
+    }
 
-      return <ArcaneGeneralStatsCard dashboard={response.data} serviceUrl={arcaneUrl} />;
-    },
-    (error: unknown) => {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error(`Failed to load the Arcane dashboard: ${message}`);
-      return <ArcaneGeneralStatsError />;
-    },
-  );
+    return <ArcaneGeneralStatsCard dashboard={response.data} serviceUrl={arcaneUrl} />;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Failed to load the Arcane dashboard: ${message}`);
+    return errorFallback;
+  }
 }

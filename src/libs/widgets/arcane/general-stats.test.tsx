@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Dashboard } from "#libs/api";
-import { ArcaneGeneralStatsCard, ArcaneGeneralStatsError } from "./general-stats.tsx";
+import { ArcaneGeneralStatsCard } from "./general-stats.tsx";
 
 const dashboard: Dashboard = {
   versionInfo: {
@@ -71,14 +71,5 @@ describe("ArcaneGeneralStatsCard", () => {
     expect(html).toContain("Needs attention");
     expect(html).toContain("3</span> container updates");
     expect(html).toContain("text-destructive");
-  });
-});
-
-describe("ArcaneGeneralStatsError", () => {
-  it("keeps failure details generic", () => {
-    const html = renderToStaticMarkup(<ArcaneGeneralStatsError />);
-
-    expect(html).toContain("Arcane is unavailable");
-    expect(html).toContain("The rest of the dashboard is still available.");
   });
 });

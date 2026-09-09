@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { FrigateEvent, FrigateStats } from "#libs/api/frigate";
-import { FrigateEventsCard, FrigateEventsError } from "./events.tsx";
+import { FrigateEventsCard } from "./events.tsx";
 
 const now = 1_700_000_000_000;
 
@@ -58,14 +58,5 @@ describe("FrigateEventsCard", () => {
 
     expect(html).toContain("No recent events.");
     expect(html).not.toContain("thumbnail.jpg");
-  });
-});
-
-describe("FrigateEventsError", () => {
-  it("keeps failure details generic", () => {
-    const html = renderToStaticMarkup(<FrigateEventsError />);
-
-    expect(html).toContain("Frigate is unavailable");
-    expect(html).toContain("The rest of the dashboard is still available.");
   });
 });

@@ -1,10 +1,9 @@
-import { CircleAlertIcon, ExternalLinkIcon } from "lucide-react";
+import { ExternalLinkIcon } from "lucide-react";
 import type { FrigateEvent, FrigateStats } from "#libs/api/frigate";
 import { frigateUrl, getEvents, getStats } from "#libs/api/frigate";
-import { Alert, AlertDescription, AlertTitle } from "#app/components/ui/alert.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
-import { Skeleton } from "#app/components/ui/skeleton.tsx";
 import { IconSelfh } from "#app/components/icon-selfh.tsx";
+import { WidgetError } from "../shared/index.ts";
 
 type FrigateEventsCardProps = {
   events: FrigateEvent[];
@@ -14,6 +13,7 @@ type FrigateEventsCardProps = {
 };
 
 const relativeTimeFormatter = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+const frigateWidgetClassName = "min-h-88 w-full";
 
 function formatRelativeTime(timestamp: number, now: number) {
   const seconds = timestamp - now / 1_000;
@@ -33,7 +33,7 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
   const detectors = Object.entries(stats.detectors);
 
   return (
-    <Card className="w-full">
+    <Card className={frigateWidgetClassName}>
       <CardHeader className="gap-0 border-b">
         <CardTitle>
           <a
@@ -103,53 +103,6 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
   );
 }
 
-export function FrigateEventsError() {
-  return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="inline-flex items-center gap-1.5">
-           <IconSelfh name="frigate" />
-          Frigate
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Alert variant="destructive">
-          <CircleAlertIcon aria-hidden="true" />
-          <AlertTitle>Frigate is unavailable</AlertTitle>
-          <AlertDescription>
-            The camera events could not be loaded. The rest of the dashboard is still available.
-          </AlertDescription>
-        </Alert>
-      </CardContent>
-    </Card>
-  );
-}
-
-export function FrigateEventsSkeleton() {
-  return (
-    <Card className="w-full" aria-label="Loading Frigate events" aria-busy="true">
-      <CardHeader className="gap-0 border-b">
-        <Skeleton className="h-5 w-24" />
-        <Skeleton className="h-4 w-48 max-w-full" />
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 5 }, (_, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <Skeleton className="aspect-video w-16 shrink-0" />
-              <div className="flex grow flex-col gap-1">
-                <Skeleton className="h-4 w-24 max-w-full" />
-                <Skeleton className="h-3 w-20 max-w-full" />
-              </div>
-              <Skeleton className="h-3 w-12 shrink-0" />
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 export async function FrigateEventsWidget() {
   try {
     const [events, stats] = await Promise.all([getEvents(), getStats()]);
@@ -157,6 +110,13 @@ export async function FrigateEventsWidget() {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error(`Failed to load Frigate events: ${message}`);
-    return <FrigateEventsError />;
+    return (
+      <WidgetError
+        className={frigateWidgetClassName}
+        icon={<IconSelfh name="frigate" />}
+        name="Frigate"
+        description="The camera events could not be loaded. The rest of the dashboard is still available."
+      />
+    );
   }
 }
