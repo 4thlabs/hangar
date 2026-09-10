@@ -1,7 +1,8 @@
 import { ExternalLinkIcon } from "lucide-react";
 import type { FrigateEvent, FrigateStats } from "#libs/api/frigate";
 import { frigateUrl, getEvents, getStats } from "#libs/api/frigate";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
+import { Card } from "#app/components/card/accent-card.tsx";
+import { CardContent, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { IconSelfh } from "#app/components/icon-selfh.tsx";
 import { WidgetError, WidgetSkeleton } from "../shared/index.ts";
 import { logger } from "#libs/logs";

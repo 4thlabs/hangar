@@ -1,7 +1,8 @@
 import { ExternalLinkIcon } from "lucide-react";
 import type { Dashboard } from "#libs/api/arcane";
 import { arcaneUrl, getDashboard } from "#libs/api/arcane";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
+import { Card } from "#app/components/card/accent-card.tsx";
+import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { cn } from "#libs/utils";
 import { IconSelfh } from "#app/components/icon-selfh.tsx";
 import { WidgetError, WidgetSkeleton } from "../shared/index.ts";

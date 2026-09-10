@@ -25,10 +25,10 @@ import {
   SheetTrigger,
 } from "#app/components/ui/sheet.tsx";
 import { Spinner } from "#app/components/ui/spinner.tsx";
+import { Tabs, TabsList, TabsTrigger } from "#app/components/ui/tabs.tsx";
 import { toast } from "#app/components/ui/toast.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#app/components/ui/tooltip.tsx";
 import { authClient } from "#libs/auth/client";
-import { cn } from "cn";
 
 type AppNavbarProps = {
   user: AvatarUser;
@@ -51,24 +51,31 @@ function Brand() {
 
 function DesktopNavigation() {
   const router = useRouter();
-  const dashboard = navigations.flatMap(category => category.items).find(item => item.href === "/");
-
-  if (!dashboard) return null;
+  const items = navigations.filter(category => category.position !== "bottom").flatMap(category => category.items);
 
   return (
-    <Button
-      variant={router.path === dashboard.href ? "secondary" : "ghost"}
-      render={
-        <Link
-          to={dashboard.href}
-          aria-current={router.path === dashboard.href ? "page" : undefined}
-          onMouseEnter={() => router.prefetch(dashboard.href)}
-        >
-          <dashboard.icon data-icon="inline-start" />
-          {dashboard.label}
-        </Link>
-      }
-    />
+    <nav className="h-full" aria-label="Navigation principale">
+      <Tabs value={router.path} className="h-full gap-0">
+        <TabsList variant="line" className="!h-full gap-2 p-0">
+          {items.map(item => (
+            <TabsTrigger
+              key={item.href}
+              value={item.href}
+              className="!h-full px-3 after:!-bottom-px after:!bg-primary"
+              render={
+                <Link
+                  to={item.href}
+                  aria-current={router.path === item.href ? "page" : undefined}
+                  onMouseEnter={() => router.prefetch(item.href)}
+                >
+                  {item.label}
+                </Link>
+              }
+            />
+          ))}
+        </TabsList>
+      </Tabs>
+    </nav>
   );
 }
 
@@ -245,7 +252,7 @@ export function AppNavbar({ user }: AppNavbarProps) {
       </div>
 
       <div className="hidden h-14 grid-cols-[minmax(0,1fr)_minmax(16rem,32rem)_minmax(0,1fr)] items-center gap-4 px-4 md:grid">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex h-full min-w-0 items-center gap-2">
           <Brand />
           <DesktopNavigation />
         </div>

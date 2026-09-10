@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { ClockIcon } from "lucide-react";
-import { Card, CardContent } from "#app/components/ui/card";
+import { CardContent } from "#app/components/ui/card";
 import { cn } from "#libs/utils";
 import { WidgetSkeleton } from "../shared/index.ts";
+import { Card } from "#app/components/card/accent-card.tsx";
 
 const timeFormatter = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit",

@@ -1,15 +1,16 @@
-'use client';
+"use client";
 
-import { useState, type SubmitEvent } from 'react';
-import { CircleAlertIcon } from 'lucide-react';
-import { Link, useRouter } from 'waku';
-import { authClient } from '#libs/auth/client';
-import { Alert, AlertDescription, AlertTitle } from '#app/components/ui/alert.tsx';
-import { Button } from '#app/components/ui/button.tsx';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '#app/components/ui/card.tsx';
-import { Field, FieldError, FieldGroup, FieldLabel } from '#app/components/ui/field.tsx';
-import { Input } from '#app/components/ui/input.tsx';
-import { Spinner } from '#app/components/ui/spinner.tsx';
+import { useState, type SubmitEvent } from "react";
+import { CircleAlertIcon } from "lucide-react";
+import { Link, useRouter } from "waku";
+import { authClient } from "#libs/auth/client";
+import { Alert, AlertDescription, AlertTitle } from "#app/components/ui/alert.tsx";
+import { Button } from "#app/components/ui/button.tsx";
+import { Card } from "#app/components/card/accent-card.tsx";
+import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
+import { Field, FieldError, FieldGroup, FieldLabel } from "#app/components/ui/field.tsx";
+import { Input } from "#app/components/ui/input.tsx";
+import { Spinner } from "#app/components/ui/spinner.tsx";
 
 export function RegisterForm() {
   const router = useRouter();
@@ -23,10 +24,10 @@ export function RegisterForm() {
     setPasswordMismatch(false);
 
     const formData = new FormData(event.currentTarget);
-    const name = String(formData.get('name')).trim();
-    const email = String(formData.get('email')).trim();
-    const password = String(formData.get('password'));
-    const confirmPassword = String(formData.get('confirmPassword'));
+    const name = String(formData.get("name")).trim();
+    const email = String(formData.get("email")).trim();
+    const password = String(formData.get("password"));
+    const confirmPassword = String(formData.get("confirmPassword"));
 
     if (password !== confirmPassword) {
       setPasswordMismatch(true);
@@ -39,13 +40,13 @@ export function RegisterForm() {
       const result = await authClient.signUp.email({ name, email, password });
 
       if (result.error) {
-        setError(result.error.message ?? 'Unable to create your account.');
+        setError(result.error.message ?? "Unable to create your account.");
         return;
       }
 
-      router.replace('/');
+      router.replace("/");
     } catch {
-      setError('Unable to create your account. Please try again.');
+      setError("Unable to create your account. Please try again.");
     } finally {
       setIsPending(false);
     }
@@ -101,7 +102,7 @@ export function RegisterForm() {
                 required
                 disabled={isPending}
                 aria-invalid={passwordMismatch || undefined}
-                aria-describedby={passwordMismatch ? 'confirmPassword-error' : undefined}
+                aria-describedby={passwordMismatch ? "confirmPassword-error" : undefined}
               />
               {passwordMismatch && <FieldError id="confirmPassword-error">Passwords do not match.</FieldError>}
             </Field>
@@ -117,10 +118,10 @@ export function RegisterForm() {
         <CardFooter className="flex-col gap-3">
           <Button type="submit" className="w-full" disabled={isPending}>
             {isPending && <Spinner data-icon="inline-start" />}
-            {isPending ? 'Creating account…' : 'Create account'}
+            {isPending ? "Creating account…" : "Create account"}
           </Button>
           <p className="text-sm text-muted-foreground">
-            Already have an account?{' '}
+            Already have an account?{" "}
             <Link to="/login" className="underline underline-offset-4">
               Sign in
             </Link>

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
+import { Card } from "#app/components/card/accent-card.tsx";
+import { CardContent, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { Skeleton } from "#app/components/ui/skeleton.tsx";
 import { cn } from "#libs/utils";
 

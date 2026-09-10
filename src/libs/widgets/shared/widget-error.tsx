@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { CircleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "#app/components/ui/alert.tsx";
-import { Card, CardContent, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
+import { Card } from "#app/components/card/accent-card.tsx";
+import { CardContent, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { cn } from "#libs/utils";
 
 type WidgetErrorProps = {
