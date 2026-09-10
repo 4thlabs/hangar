@@ -232,7 +232,7 @@ function UserMenu({ user, compact = false }: { user: AvatarUser; compact?: boole
 
 export function AppNavbar({ user }: AppNavbarProps) {
   return (
-    <header className="shrink-0 border-b bg-background">
+    <header className="shrink-0 border-b bg-sidebar">
       <div className="grid h-14 grid-cols-[1fr_auto_1fr] items-center px-2 md:hidden">
         <div className="flex items-center justify-start">
           <MobileNavigation />

@@ -1,6 +1,6 @@
 [data-theme="nord"] {
   color-scheme: light;
-  --font-sans: "Nunito", sans-serif;
+  --font-sans: "Inter", sans-serif;
   --radius: 0.225rem;
   --background: #eceff4;
   --foreground: #2e3440;
@@ -62,7 +62,7 @@
   --chart-3: #ebcb8b;
   --chart-4: #d08770;
   --chart-5: #b48ead;
-  --sidebar: #3b4252;
+  --sidebar: #2f3541;
   --sidebar-foreground: #eceff4;
   --sidebar-primary: #81a1c1;
   --sidebar-primary-foreground: #2e3440;

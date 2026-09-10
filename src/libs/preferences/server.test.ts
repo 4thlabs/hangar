@@ -46,6 +46,13 @@ describe("parseUserPreferences", () => {
     });
   });
 
+  it("accepts the Sunset Horizon palette", () => {
+    expect(parseUserPreferences("theme=light; theme_palette=sunset-horizon")).toMatchObject({
+      theme: "light",
+      themePalette: "sunset-horizon",
+    });
+  });
+
   it("ignores invalid preference values", () => {
     expect(parseUserPreferences("sidebar_state=invalid; theme=blue; theme_palette=unknown")).toEqual({
       sidebarOpen: true,

@@ -8,6 +8,7 @@
 @import "./theme/theme-vs-code.css";
 @import "./theme/theme-northern-lights.css";
 @import "./theme/theme-taupe.css";
+@import "./theme/theme-sunset-horizon.css";
 
 @custom-variant dark (&:is(.dark *));
 
