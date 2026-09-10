@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
-import { AppSidebar } from "#app/components/app-sidebar.tsx";
+import { AppSidebar } from "#app/components/sidebar/sidebar.tsx";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "#app/components/ui/sidebar.tsx";
 import { requireSession } from "#libs/auth";
 import { getUserPreferences } from "#libs/preferences";
-import { SearchBar } from "#app/components/searchbar.tsx";
+import { SearchBar } from "#app/components/sidebar/searchbar.tsx";
 
 type AppLayoutProps = { children: ReactNode };
 
