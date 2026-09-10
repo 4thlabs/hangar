@@ -31,3 +31,7 @@ export const getConfig = async (filePath: string) => {
 };
 
 export const config = await getConfig(process.env.HANGAR_CONFIG_FILE);
+
+export class HangarConfig {
+
+};
