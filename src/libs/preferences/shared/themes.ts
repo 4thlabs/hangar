@@ -5,6 +5,7 @@ export const THEME_PALETTES = [
   { value: "vintage-paper", label: "Vintage Paper" },
   { value: "vs-code", label: "VS Code" },
   { value: "northern-lights", label: "Northern Lights" },
+  { value: "taupe", label: "Taupe" }
 ] as const;
 
 export const COLOR_MODES = [

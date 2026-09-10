@@ -7,6 +7,7 @@
 @import "./theme/theme-vintage-paper.css";
 @import "./theme/theme-vs-code.css";
 @import "./theme/theme-northern-lights.css";
+@import "./theme/theme-taupe.css";
 
 @custom-variant dark (&:is(.dark *));
 
