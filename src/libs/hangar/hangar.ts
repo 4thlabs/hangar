@@ -17,19 +17,32 @@ class Hangar {
 
   /**
    * Constructs a new Hangar instance with the given configuration file and data directory.
-   * @param file
-   * @param dataDir
+   * @param file The path to the configuration file
+   * @param dataDir The Path to the data directory
    */
-  constructor(file: string, dataDir: string) {
+  private constructor(config: HangarConfig, store: HangarStore, db: NodeSQLiteDatabase) {
     this.db = db;
-    this.config = new HangarConfig(file);
-    this.store = new HangarStore(this.config, dataDir);
+    this.config = config;
+    this.store = store;
+  }
+
+  /**
+   * Creates a new Hangar instance with the given configuration file and data directory.
+   * @param file The path to the configuration file
+   * @param dataDir The Path to the data directory
+   * @returns 
+   */
+  static async create(file: string, dataDir: string) {
+    const config = await new HangarConfig(file).load();
+    const store = await new HangarStore(config, dataDir).load();
+    
+    return new Hangar(config, store, db);
   }
 }
 
 // Reused across HMR reloads, otherwise dev opens a new handle
 const globalForHangar = globalThis as unknown as { hangar?: Hangar };
 
-export const hangar = globalForHangar.hangar ?? new Hangar(process.env.HANGAR_CONFIG_FILE, process.env.HANGAR_DATA_DIR);
+export const hangar = globalForHangar.hangar ?? await Hangar.create(process.env.HANGAR_CONFIG_FILE, process.env.HANGAR_DATA_DIR);
 
 globalForHangar.hangar = hangar;

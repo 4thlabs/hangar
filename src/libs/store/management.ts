@@ -13,7 +13,7 @@ const getStorePaths = () => {
 
   return {
     dataPath,
-    storePath: path.join(dataPath, "store"),
+    storePath: path.join(dataPath, "app-store"),
     installedPath: path.join(dataPath, "app-installed"),
   };
 };
