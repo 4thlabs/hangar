@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDownIcon, LogOutIcon, SettingsIcon } from "lucide-react";
+import { ChevronDownIcon, LogOutIcon, PaletteIcon, SettingsIcon } from "lucide-react";
 import { Link, useRouter } from "waku";
 import { MobileNavbarActions } from "#app/components/navbar/navbar-mobile.tsx";
 import { NavbarSearch } from "#app/components/navbar/searchbar.tsx";
@@ -157,6 +157,17 @@ function UserMenu({ user, compact = false }: { user: AvatarUser; compact?: boole
               </div>
             </div>
           </DropdownMenuLabel>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem
+            render={
+              <Link to="/user/settings" onMouseEnter={() => router.prefetch("/user/settings")}>
+                <PaletteIcon />
+                <span>Paramètres utilisateur</span>
+              </Link>
+            }
+          />
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>

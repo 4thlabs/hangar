@@ -1,6 +1,5 @@
 import type { StoreActionResult } from "#app/components/settings/store-settings-card.tsx";
 import { StoreSettingsCard } from "#app/components/settings/store-settings-card.tsx";
-import { ThemeSettingsCard } from "#app/components/settings/theme-settings-card.tsx";
 import { requireSession } from "#libs/auth";
 import { logger } from "#libs/logs";
 import { config, install, isStoreInstalled, update } from "#libs/store";
@@ -50,7 +49,6 @@ export default async function SettingsPage() {
         <h1 className="text-2xl font-semibold">Paramètres</h1>
         <p className="text-sm text-muted-foreground">Gérez la configuration de votre installation Hangar.</p>
       </div>
-      <ThemeSettingsCard />
       <StoreSettingsCard storeUrl={config.store} initialInstalled={installed} manageStore={manageStore} />
     </main>
   );
