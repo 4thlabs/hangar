@@ -1,5 +1,6 @@
 [data-theme="claude"] {
   color-scheme: light;
+  --font-sans: "Nunito", sans-serif;
   --radius: 0.5rem;
   --background: oklch(0.98 0.01 95.1);
   --foreground: oklch(0.34 0.03 95.72);

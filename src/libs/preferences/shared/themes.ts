@@ -1,6 +1,10 @@
 export const THEME_PALETTES = [
   { value: "claude", label: "Claude" },
   { value: "nord", label: "Nord" },
+  { value: "nord-frost", label: "Nord Frost" },
+  { value: "vintage-paper", label: "Vintage Paper" },
+  { value: "vs-code", label: "VS Code" },
+  { value: "northern-lights", label: "Northern Lights" },
 ] as const;
 
 export const COLOR_MODES = [

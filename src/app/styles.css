@@ -3,6 +3,10 @@
 @import "shadcn/tailwind.css";
 @import "./theme/theme-claude.css";
 @import "./theme/theme-nord.css";
+@import "./theme/theme-nord-frost.css";
+@import "./theme/theme-vintage-paper.css";
+@import "./theme/theme-vs-code.css";
+@import "./theme/theme-northern-lights.css";
 
 @custom-variant dark (&:is(.dark *));
 

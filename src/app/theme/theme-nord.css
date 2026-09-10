@@ -1,5 +1,6 @@
 [data-theme="nord"] {
   color-scheme: light;
+  --font-sans: "Nunito", sans-serif;
   --radius: 0.225rem;
   --background: #eceff4;
   --foreground: #2e3440;
@@ -39,7 +40,7 @@
   color-scheme: dark;
   --background: #2e3440;
   --foreground: #eceff4;
-  --card: #3b4252;
+  --card: #2e3440;
   --card-foreground: #eceff4;
   --popover: #3b4252;
   --popover-foreground: #eceff4;

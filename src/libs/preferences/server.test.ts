@@ -18,6 +18,34 @@ describe("parseUserPreferences", () => {
     });
   });
 
+  it("accepts registered palettes", () => {
+    expect(parseUserPreferences("theme=light; theme_palette=vintage-paper")).toMatchObject({
+      theme: "light",
+      themePalette: "vintage-paper",
+    });
+  });
+
+  it("accepts the VS Code palette", () => {
+    expect(parseUserPreferences("theme=dark; theme_palette=vs-code")).toMatchObject({
+      theme: "dark",
+      themePalette: "vs-code",
+    });
+  });
+
+  it("accepts the Northern Lights palette", () => {
+    expect(parseUserPreferences("theme=system; theme_palette=northern-lights")).toMatchObject({
+      theme: "system",
+      themePalette: "northern-lights",
+    });
+  });
+
+  it("accepts the Nord Frost palette", () => {
+    expect(parseUserPreferences("theme=dark; theme_palette=nord-frost")).toMatchObject({
+      theme: "dark",
+      themePalette: "nord-frost",
+    });
+  });
+
   it("ignores invalid preference values", () => {
     expect(parseUserPreferences("sidebar_state=invalid; theme=blue; theme_palette=unknown")).toEqual({
       sidebarOpen: true,
