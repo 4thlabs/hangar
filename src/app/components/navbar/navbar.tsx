@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDownIcon, LogOutIcon, MenuIcon, SearchIcon, SettingsIcon } from "lucide-react";
+import { ChevronDownIcon, LogOutIcon, SettingsIcon } from "lucide-react";
 import { Link, useRouter } from "waku";
+import { MobileNavbarActions } from "#app/components/navbar/navbar-mobile.tsx";
 import { NavbarSearch } from "#app/components/navbar/searchbar.tsx";
 import { UserAvatar, type AvatarUser } from "#app/components/user-avatar.tsx";
 import { navigations } from "#app/navigations.ts";
@@ -16,14 +17,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "#app/components/ui/dropdown-menu.tsx";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "#app/components/ui/sheet.tsx";
 import { Spinner } from "#app/components/ui/spinner.tsx";
 import { Tabs, TabsList, TabsTrigger } from "#app/components/ui/tabs.tsx";
 import { toast } from "#app/components/ui/toast.tsx";
@@ -76,66 +69,6 @@ function DesktopNavigation() {
         </TabsList>
       </Tabs>
     </nav>
-  );
-}
-
-function MobileNavigation() {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-
-  return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Ouvrir la navigation" />}>
-        <MenuIcon />
-      </SheetTrigger>
-      <SheetContent side="left">
-        <SheetHeader>
-          <SheetTitle>Navigation</SheetTitle>
-          <SheetDescription>Accédez aux différentes sections de Hangar.</SheetDescription>
-        </SheetHeader>
-        <nav className="flex flex-col gap-1 px-4" aria-label="Navigation mobile">
-          {navigations.flatMap(category =>
-            category.items.map(item => (
-              <Button
-                key={item.href}
-                variant={router.path === item.href ? "secondary" : "ghost"}
-                className="justify-start"
-                render={
-                  <Link
-                    to={item.href}
-                    aria-current={router.path === item.href ? "page" : undefined}
-                    onClick={() => setOpen(false)}
-                    onMouseEnter={() => router.prefetch(item.href)}
-                  >
-                    <item.icon data-icon="inline-start" />
-                    {item.label}
-                  </Link>
-                }
-              />
-            )),
-          )}
-        </nav>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-function MobileSearch() {
-  return (
-    <Sheet>
-      <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Ouvrir la recherche" />}>
-        <SearchIcon />
-      </SheetTrigger>
-      <SheetContent side="top">
-        <SheetHeader>
-          <SheetTitle>Recherche</SheetTitle>
-          <SheetDescription>Recherchez du contenu dans Hangar.</SheetDescription>
-        </SheetHeader>
-        <div className="px-4 pb-4">
-          <NavbarSearch id="navbar-search-mobile" autoFocus />
-        </div>
-      </SheetContent>
-    </Sheet>
   );
 }
 
@@ -242,8 +175,7 @@ export function AppNavbar({ user }: AppNavbarProps) {
     <header className="shrink-0 border-b bg-sidebar">
       <div className="grid h-14 grid-cols-[1fr_auto_1fr] items-center px-2 md:hidden">
         <div className="flex items-center justify-start">
-          <MobileNavigation />
-          <MobileSearch />
+          <MobileNavbarActions />
         </div>
         <Brand />
         <div className="flex items-center justify-end">
