@@ -5,7 +5,7 @@ import { ChevronDownIcon, LogOutIcon, PaletteIcon, SettingsIcon } from "lucide-r
 import { Link, useRouter } from "waku";
 import { MobileNavbarActions } from "#app/components/navbar/navbar-mobile.tsx";
 import { NavbarSearch } from "#app/components/navbar/searchbar.tsx";
-import { UserAvatar, type AvatarUser } from "#app/components/user-avatar.tsx";
+import { UserAvatar, type AvatarUser } from "#app/components/common/user-avatar.tsx";
 import { navigations } from "#app/navigations.ts";
 import { Button } from "#app/components/ui/button.tsx";
 import {

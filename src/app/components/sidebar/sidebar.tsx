@@ -5,7 +5,7 @@ import { ChevronsUpDownIcon, LogInIcon, LogOutIcon } from "lucide-react";
 import { Link, useRouter } from "waku";
 import { navigations } from "#app/navigations.ts";
 import { authClient } from "#libs/auth/client";
-import { UserAvatar } from "#app/components/user-avatar.tsx";
+import { UserAvatar } from "#app/components/common/user-avatar.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
