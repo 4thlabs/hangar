@@ -8,6 +8,7 @@ const manageStore = async (): Promise<StoreActionResult> => {
   "use server";
 
   await requireSession();
+  
   const wasInstalled = await isStoreInstalled();
   const operation = wasInstalled ? "mise à jour" : "installation";
 

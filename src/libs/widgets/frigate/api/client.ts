@@ -1,6 +1,8 @@
 import "dotenv/config";
 import ky from "ky";
 
+export const frigateUrl = `https://frigate.${process.env.DOMAIN}`;
+
 /** The subset of a Frigate event displayed by Hangar. */
 export interface FrigateEvent {
   id: string;
@@ -21,8 +23,6 @@ export interface FrigateStats {
   cameras: Record<string, object>;
   detectors: Record<string, FrigateDetectorStats>;
 }
-
-export const frigateUrl = `https://frigate.${process.env.DOMAIN}`;
 
 export const apiClient = ky.extend({
   baseUrl: process.env.FRIDATE_API_URL || frigateUrl,

@@ -8,7 +8,6 @@ import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import { WidgetError, WidgetSkeleton } from "../shared/index.ts";
 import { logger } from "#libs/logs";
 
-
 export const GET = (environment: number = 0) => getDashboard(environment); 
 
 type ArcaneGeneralStatsCardProps = {

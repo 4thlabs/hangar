@@ -1,11 +1,13 @@
 import { exists } from "#libs/runtime";
+import { HangarConfig }  from "./hangar-config.ts";
 import { symlink } from "node:fs/promises";
 import path from "node:path";
 
 /**
  * Representation of the App Store
  */
-export class AppStore {
+export class HangarStore {
+
     /** Path of Hangar sata */
     readonly dataPath: string;
 
@@ -15,7 +17,12 @@ export class AppStore {
     /** Path of the store */
     readonly storePath: string;
 
-    constructor(dataDir: string) {
+    /**
+     * Constructs the App Store
+     * @param config Hangar configuration
+     * @param dataDir Directory for storing data
+     */
+    constructor(config: HangarConfig, dataDir: string) {
         this.dataPath = path.resolve(process.env.HANGAR_DATA_DIR);
         this.storePath = path.join(this.dataPath, "app-store");
         this.installedPath = path.join(this.dataPath, "app-installed");
@@ -25,6 +32,10 @@ export class AppStore {
 
     }
 
+    /**
+     * Returns true if the store is installed, false otherwise
+     * @returns boolean indicating if the store is installed
+     */
     async isInstalled() {
         return exists(path.join(this.storePath, ".git"));
     }
@@ -34,7 +45,7 @@ export class AppStore {
     }
 
     async link(name: string) {
-        const source = path.join(this.storePath, name);
+        const source = path.join(this.storePath, "store", name);
         const destination = path.join(this.installedPath, name);
         
         if ((await exists(source)) && !(await exists(destination))) {
@@ -49,8 +60,4 @@ export class AppStore {
     async update() {
 
     }
-}
-
-const appStore = new AppStore(process.env.HANGAR_DATA_DIR);
-
-export default appStore;
+};
