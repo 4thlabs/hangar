@@ -3,30 +3,40 @@ import { getUserPreferences, parseUserPreferences, runWithUserPreferences } from
 
 describe("parseUserPreferences", () => {
   it("uses defaults when no preferences are stored", () => {
-    expect(parseUserPreferences("")).toEqual({ sidebarOpen: true, theme: "system" });
+    expect(parseUserPreferences("")).toEqual({
+      sidebarOpen: true,
+      theme: "system",
+      themePalette: "claude",
+    });
   });
 
   it("reads sidebar and theme preferences from cookies", () => {
-    expect(parseUserPreferences("sidebar_state=false; theme=dark")).toEqual({
+    expect(parseUserPreferences("sidebar_state=false; theme=dark; theme_palette=nord")).toEqual({
       sidebarOpen: false,
       theme: "dark",
+      themePalette: "nord",
     });
   });
 
   it("ignores invalid preference values", () => {
-    expect(parseUserPreferences("sidebar_state=invalid; theme=blue")).toEqual({
+    expect(parseUserPreferences("sidebar_state=invalid; theme=blue; theme_palette=unknown")).toEqual({
       sidebarOpen: true,
       theme: "system",
+      themePalette: "claude",
     });
   });
 
   it("exposes preferences only within the intercepted request", async () => {
-    const preferences = { sidebarOpen: false, theme: "light" } as const;
+    const preferences = { sidebarOpen: false, theme: "light", themePalette: "nord" } as const;
 
     await runWithUserPreferences(preferences, async () => {
       expect(getUserPreferences()).toEqual(preferences);
     });
 
-    expect(getUserPreferences()).toEqual({ sidebarOpen: true, theme: "system" });
+    expect(getUserPreferences()).toEqual({
+      sidebarOpen: true,
+      theme: "system",
+      themePalette: "claude",
+    });
   });
 });

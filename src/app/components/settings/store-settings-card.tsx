@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CircleAlertIcon, CircleCheckIcon, DownloadIcon, RefreshCwIcon } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "#app/components/ui/alert.tsx";
+import { DownloadIcon, RefreshCwIcon } from "lucide-react";
 import { Button } from "#app/components/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#app/components/ui/field.tsx";
 import { Input } from "#app/components/ui/input.tsx";
 import { Spinner } from "#app/components/ui/spinner.tsx";
+import { toast } from "#app/components/ui/toast.tsx";
 
 export type StoreActionResult = {
   success: boolean;
@@ -23,22 +23,23 @@ type StoreSettingsCardProps = {
 
 export function StoreSettingsCard({ storeUrl, initialInstalled, manageStore }: StoreSettingsCardProps) {
   const [installed, setInstalled] = useState(initialInstalled);
-  const [result, setResult] = useState<StoreActionResult | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleManageStore() {
-    setResult(null);
-
     startTransition(async () => {
       try {
         const nextResult = await manageStore();
         setInstalled(nextResult.installed);
-        setResult(nextResult);
+        toast.add({
+          title: nextResult.success ? "Opération terminée" : "Échec de l’opération",
+          description: nextResult.message,
+          type: nextResult.success ? "success" : "error",
+        });
       } catch {
-        setResult({
-          success: false,
-          installed,
-          message: "Impossible de contacter le serveur. Réessayez.",
+        toast.add({
+          title: "Échec de l’opération",
+          description: "Impossible de contacter le serveur. Réessayez.",
+          type: "error",
         });
       }
     });
@@ -59,13 +60,6 @@ export function StoreSettingsCard({ storeUrl, initialInstalled, manageStore }: S
               {installed ? "Le store est installé localement." : "Le store n’est pas encore installé."}
             </FieldDescription>
           </Field>
-          {result && (
-            <Alert variant={result.success ? "default" : "destructive"}>
-              {result.success ? <CircleCheckIcon /> : <CircleAlertIcon />}
-              <AlertTitle>{result.success ? "Opération terminée" : "Échec de l’opération"}</AlertTitle>
-              <AlertDescription>{result.message}</AlertDescription>
-            </Alert>
-          )}
         </FieldGroup>
       </CardContent>
       <CardFooter>

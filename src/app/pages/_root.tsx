@@ -1,28 +1,35 @@
-import type { ReactNode } from 'react';
-import { ErrorBoundary } from 'waku/router/client';
+import type { ReactNode } from "react";
+import { ErrorBoundary } from "waku/router/client";
+import { getUserPreferences } from "#libs/preferences";
 type RootProps = {
   /** Everything below <body>: the layout of whichever route group matched. */
   children: ReactNode;
 };
 
-/** */
 export default function Root({ children }: RootProps) {
+  const { theme, themePalette } = getUserPreferences();
+
   return (
     <ErrorBoundary>
-      {/* The script adds .dark before paint; React hydrates <html> without it. */}
-      <html lang="en" suppressHydrationWarning>
+      <html
+        lang="fr"
+        className={theme === "dark" ? "dark" : undefined}
+        data-theme={themePalette}
+        data-color-mode={theme}
+        suppressHydrationWarning
+      >
         <head></head>
-        <body className="dark">{children}</body>
+        <body>{children}</body>
       </html>
     </ErrorBoundary>
   );
 }
 
 /**
- * Static: prerendered at build time.
+ * Dynamic: reads request-scoped theme preferences.
  */
 export const getConfig = async () => {
   return {
-    render: 'static',
+    render: "dynamic",
   } as const;
 };

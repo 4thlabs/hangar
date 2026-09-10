@@ -1,17 +1,27 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import * as cookie from "cookie";
-import { SIDEBAR_STATE_COOKIE_NAME, THEME_COOKIE_NAME } from "./constants.ts";
+import { SIDEBAR_STATE_COOKIE_NAME, THEME_COOKIE_NAME, THEME_PALETTE_COOKIE_NAME } from "./shared/constants.ts";
+import {
+  DEFAULT_COLOR_MODE,
+  DEFAULT_THEME_PALETTE,
+  isColorMode,
+  isThemePalette,
+  type ColorMode,
+  type ThemePalette,
+} from "./shared/themes.ts";
 
-export type ThemePreference = "dark" | "light" | "system";
+export type ThemePreference = ColorMode;
 
 export type UserPreferences = {
   sidebarOpen: boolean;
-  theme: ThemePreference;
+  theme: ColorMode;
+  themePalette: ThemePalette;
 };
 
 const defaultUserPreferences: UserPreferences = {
   sidebarOpen: true,
-  theme: "system",
+  theme: DEFAULT_COLOR_MODE,
+  themePalette: DEFAULT_THEME_PALETTE,
 };
 
 const userPreferencesStore = new AsyncLocalStorage<UserPreferences>();
@@ -22,18 +32,16 @@ function parseSidebarState(value: string | undefined) {
   return defaultUserPreferences.sidebarOpen;
 }
 
-function parseTheme(value: string | undefined): ThemePreference {
-  if (value === "dark" || value === "light") return value;
-  return "system";
-}
-
 export function parseUserPreferences(cookieHeader: string): UserPreferences {
   const cookies = cookie.parseCookie(cookieHeader);
   const sidebarState = cookies[SIDEBAR_STATE_COOKIE_NAME];
+  const theme = cookies[THEME_COOKIE_NAME];
+  const themePalette = cookies[THEME_PALETTE_COOKIE_NAME];
 
   return {
     sidebarOpen: parseSidebarState(sidebarState),
-    theme: parseTheme(cookies[THEME_COOKIE_NAME]),
+    theme: isColorMode(theme) ? theme : DEFAULT_COLOR_MODE,
+    themePalette: isThemePalette(themePalette) ? themePalette : DEFAULT_THEME_PALETTE,
   };
 }
 
