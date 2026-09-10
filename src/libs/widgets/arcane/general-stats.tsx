@@ -8,6 +8,9 @@ import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import { WidgetError, WidgetSkeleton } from "../shared/index.ts";
 import { logger } from "#libs/logs";
 
+
+export const GET = (environment: number = 0) => getDashboard(environment); 
+
 type ArcaneGeneralStatsCardProps = {
   dashboard: Dashboard;
   serviceUrl: string;
@@ -144,7 +147,8 @@ export async function ArcaneGeneralStatsWidget({ environment = 0 }: { environmen
   );
 
   try {
-    const response = await getDashboard(environment);
+    // Using lib/api (this one is used by the cli)
+    const response = await GET();
 
     if (!response.success) {
       logger.error(`Failed to load the Arcane dashboard: ${response.detail ?? "Unsuccessful response"}`);

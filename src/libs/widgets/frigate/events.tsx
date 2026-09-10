@@ -1,11 +1,15 @@
 import { ExternalLinkIcon } from "lucide-react";
-import type { FrigateEvent, FrigateStats } from "#libs/api/frigate";
-import { frigateUrl, getEvents, getStats } from "#libs/api/frigate";
+import type { FrigateEvent, FrigateStats } from "./api/client.ts";
+import { frigateUrl, getEvents, getStats } from "./api/client.ts";
 import { Card } from "#app/components/card/accent-card.tsx";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import { WidgetError, WidgetSkeleton } from "../shared/index.ts";
 import { logger } from "#libs/logs";
+
+
+/** The data to retrive, self contained api, not used by the cli */
+export const GET = () => Promise.all([getEvents(), getStats()]);
 
 type FrigateEventsCardProps = {
   events: FrigateEvent[];
@@ -118,7 +122,8 @@ export function FrigateEventsSkeleton() {
 
 export async function FrigateEventsWidget() {
   try {
-    const [events, stats] = await Promise.all([getEvents(), getStats()]);
+    const [events, stats] = await GET();
+
     return <FrigateEventsCard events={events} stats={stats} serviceUrl={frigateUrl} />;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
