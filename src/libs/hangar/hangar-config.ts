@@ -34,6 +34,7 @@ export class HangarConfig {
     const config = load(handle) as Config;
 
     this.storeUrl = config.store;
+    this.categories = config.categories;
 
     return this;
   }

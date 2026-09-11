@@ -1,7 +1,8 @@
 import { exists, run } from "./runtime/runtime.ts";
 import { HangarConfig } from "./hangar-config.ts";
-import { mkdir, readdir, symlink } from "node:fs/promises";
+import { constants, mkdir, readdir, symlink } from "node:fs/promises";
 import path from "node:path";
+import { logger } from "#libs/logs";
 
 type HangarApp = string;
 
@@ -44,8 +45,13 @@ export class HangarStore {
    * @returns The instance of the store
    */
   async load() {
-    this.availlableApps = await readdir(path.join(this.storePath, "store"), { recursive: false });
-    this.installedApps = await readdir(this.installedPath, { recursive: false });
+    if (await this.isInstalled()) {
+      this.availlableApps = await readdir(path.join(this.storePath, "store"), { recursive: false });
+    }
+
+    if (await exists(this.installedPath)) {
+      this.installedApps = await readdir(this.installedPath, { recursive: false });
+    }
 
     return this;
   }
@@ -67,11 +73,6 @@ export class HangarStore {
   }
 
   /**
-   * Links all configured apps
-   */
-  async linkAll() {}
-
-  /**
    * Links(symlink) a stack into the installed apps.
    * @param name the stack name
    */
@@ -80,6 +81,7 @@ export class HangarStore {
     const destination = path.join(this.installedPath, name);
 
     if ((await exists(source)) && !(await exists(destination))) {
+      logger.info(`Linking application: ${name}`);
       await symlink(path.join(this.storePath, name), path.join(this.installedPath, name), "dir");
     }
   }
@@ -99,6 +101,15 @@ export class HangarStore {
     if (!(await this.isInstalled())) {
       await run("git", "clone", "--", this.config.storeUrl, this.storePath);
     }
+
+    const apps = this.resolve();
+
+    // prettier-ignore
+    await Promise.all(
+      apps
+          .map(async app => await this.link(app)
+          .catch(ex => logger.error(ex, `Failed to link app: ${app}`))),
+    );
   }
 
   /**
@@ -113,7 +124,5 @@ export class HangarStore {
   /**
    * Runs docker compose against installed stacks
    */
-  async compose(name: string, ...args: string[]) {
-
-  }
+  async compose(name: string, ...args: string[]) {}
 }

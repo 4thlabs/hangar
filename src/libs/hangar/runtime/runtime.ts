@@ -1,7 +1,8 @@
 import { ChildProcess, spawn } from "node:child_process";
-import { access } from "node:fs/promises";
-import { HangarRuntimeError } from "../hangar-error";
+import { access, stat } from "node:fs/promises";
+import { HangarRuntimeError } from "../hangar-error.ts";
 import { logger } from "#libs/logs";
+import constants from "node:constants";
 
 let interrupted = false;
 const childs: Set<ChildProcess> = new Set();
@@ -42,11 +43,12 @@ export const run = (command: string, ...args: string[]) => {
     // A signal means the child was killed (Ctrl-C during an up): that is a failure.
     child.on("close", (code, signal) => {
       childs.delete(child);
+
       if (signal) {
         rejects(new HangarRuntimeError(130, "Process interrupted."));
       }
 
-      (code ?? 1) == 0 ? resolve({ code: code ?? 0 }) : rejects(new HangarRuntimeError(1, "Process exited."));
+      (code ?? 1) == 0 ? resolve({ code: code ?? 0 }) : rejects(new HangarRuntimeError(code ?? 1, "Process exited."));
     });
   });
 };
@@ -55,9 +57,9 @@ export const run = (command: string, ...args: string[]) => {
  * Check the existance of a file/path
  * @param path The path to check
  */
-export const exists = async (path: string) => {
-  return await access(path)
-    .then(() => true)
+export const exists = async (path: string, mode: number = constants.F_OK) => {
+  return stat(path)
+    .then(s => s.isDirectory() || s.isSymbolicLink())
     .catch(e => false);
 };
 
