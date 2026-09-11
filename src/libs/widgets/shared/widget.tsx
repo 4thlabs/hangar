@@ -5,7 +5,7 @@ import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from 
 import { cn } from "#libs/utils";
 
 export function WidgetCard({ className, ...props }: ComponentProps<typeof Card>) {
-  return <Card className={cn("w-full", className)} {...props} />;
+  return <Card className={cn("w-full bg-background", className)} {...props} />;
 }
 
 type WidgetHeaderProps = Omit<ComponentProps<typeof CardHeader>, "title"> & {
