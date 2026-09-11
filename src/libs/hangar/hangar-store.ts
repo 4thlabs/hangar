@@ -1,10 +1,16 @@
 import { exists, run } from "./runtime/runtime.ts";
 import { HangarConfig } from "./hangar-config.ts";
-import { constants, mkdir, readdir, symlink } from "node:fs/promises";
+import { constants, mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import path from "node:path";
 import { logger } from "#libs/logs";
+import { load } from "js-yaml";
 
-type HangarApp = string;
+type HangarApp = {
+  id: string;
+  name: string;
+  icon: string;
+  installed: boolean;
+};
 
 /**
  * Representation of the App Store
@@ -23,10 +29,7 @@ export class HangarStore {
   private readonly config: HangarConfig;
 
   /** A list of all available App */
-  availlableApps: HangarApp[] = [];
-
-  /** A list of all installed App */
-  installedApps: HangarApp[] = [];
+  apps: Set<HangarApp> = new Set();
 
   /**
    * Constructs the App Store
@@ -45,14 +48,7 @@ export class HangarStore {
    * @returns The instance of the store
    */
   async load() {
-    if (await this.isInstalled()) {
-      this.availlableApps = await readdir(path.join(this.storePath, "store"), { recursive: false });
-    }
-
-    if (await exists(this.installedPath)) {
-      this.installedApps = await readdir(this.installedPath, { recursive: false });
-    }
-
+    await this.refresh();
     return this;
   }
 
@@ -126,4 +122,30 @@ export class HangarStore {
    * Runs docker compose against installed stacks
    */
   async compose(name: string, ...args: string[]) {}
+
+  /**
+   * Refreshes store and installed apps.
+   */
+  async refresh() {
+    this.apps.clear();
+
+    if (await this.isInstalled()) {
+      const apps = await readdir(path.join(this.storePath, "store"), { recursive: false });
+      const installed = await readdir(this.installedPath, { recursive: false });
+
+      await Promise.all(
+        apps.map(async app => {
+          const source = await readFile(path.join(this.storePath, "store", app, "compose.yml"), "utf8");
+          const yaml = load(source, { filename: "compose.yml" }) as Record<string, any>; //TODO: typechecking
+
+          this.apps.add({
+            id: app,
+            name: yaml["name"] ?? app,
+            icon: yaml["x-arcane"].icon,
+            installed: installed.indexOf(app) !== -1,
+          });
+        }),
+      );
+    }
+  }
 }

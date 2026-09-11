@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 /** A Stack category */
 export type Category = { name: string; color: string; stacks: string[] };
 export type Config = { store: string; categories: Category[] };
+
 /**
  * The configuration for Hangar
  */
