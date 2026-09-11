@@ -12,9 +12,9 @@ export const manageStore = async (): Promise<StoreActionResult> => {
   const operation = wasInstalled ? "mise à jour" : "installation";
 
   try {
-    wasInstalled ? await hangar.store.update() : await hangar.store.install();
+    await hangar.store.update(true);
     await hangar.store.refresh();
-    
+
     return {
       success: true,
       installed: true,

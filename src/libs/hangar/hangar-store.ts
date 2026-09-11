@@ -91,30 +91,34 @@ export class HangarStore {
   }
 
   /**
-   * Install the store by cloning the repo
+   * Installs the store by cloning the source and linking apps
    */
-  async install() {
-    if (!(await this.isInstalled())) {
+  private async install() {
+    if (!await exists(this.installedPath)) {
       await mkdir(this.installedPath);
-      await run("git", "clone", "--", this.config.storeUrl, this.storePath);
     }
-
+    
+    await run("git", "clone", "--", this.config.storeUrl, this.storePath);
+    
     const apps = this.resolve();
 
     // prettier-ignore
     await Promise.all(
       apps
-          .map(async app => await this.link(app)
-          .catch(ex => logger.error(ex, `Failed to link app: ${app}`))),
+        .map(async app => await this.link(app)
+        .catch(ex => logger.error(ex, `Failed to link app: ${app}`))),
     );
   }
 
   /**
-   * Updates the store by pulling -ff the repo
+   * Install the store by cloning the repo or updates it
+   * @param update boolean Wheter to update the store if already installed
    */
-  async update() {
+  async update(install: boolean = false) {
     if (await this.isInstalled()) {
       await run("git", "-C", this.storePath, "pull", "--ff-only");
+    } else if (install) {
+      await this.install();
     }
   }
 
