@@ -1,8 +1,25 @@
+import { installApp } from "#app/actions/install-app.ts";
+import { StoreAppCard } from "#app/components/store/store-app-card.tsx";
+import { hangar } from "#libs/hangar";
+
 export default function StorePage() {
+  const apps = [...hangar.store.apps].sort((left, right) => left.name.localeCompare(right.name));
+
   return (
     <main className="flex flex-1 flex-col gap-6">
       <title>Store | Hangar</title>
-      <h1 className="text-2xl font-semibold">Store</h1>
+      <div>
+        <h1 className="text-2xl font-semibold">Store</h1>
+      </div>
+      {apps.length > 0 ? (
+        <div className="flex flex-wrap gap-3">
+          {apps.map(app => (
+            <StoreAppCard key={app.id} app={app} installApp={installApp} />
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">Aucune application n’est disponible dans le store.</p>
+      )}
     </main>
   );
 }
