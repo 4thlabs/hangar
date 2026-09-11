@@ -5,7 +5,7 @@ import path from "node:path";
 import { logger } from "#libs/logs";
 import { load } from "js-yaml";
 
-type HangarApp = {
+export type HangarApp = {
   id: string;
   name: string;
   icon: string;

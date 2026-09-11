@@ -7,14 +7,10 @@ import { Button } from "#app/components/ui/button.tsx";
 import { Card, CardContent, CardTitle } from "#app/components/ui/card.tsx";
 import { Spinner } from "#app/components/ui/spinner.tsx";
 import { toast } from "#app/components/ui/toast.tsx";
+import { type HangarApp } from "#libs/hangar";
 
 type StoreAppCardProps = {
-  app: {
-    id: string;
-    name: string;
-    icon: string;
-    installed: boolean;
-  };
+  app: HangarApp,
   installApp: (appId: string) => Promise<InstallAppResult>;
 };
 
