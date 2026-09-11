@@ -51,6 +51,22 @@ export class HangarStore {
   }
 
   /**
+   * Resolve a name to the stacks it covers: no name covers every category,
+   * a category its own stacks, anything else is taken as a stack name.
+   * @param name A global command, a category or a stack name
+   */
+  resolve(name: string = "") {
+    // prettier-ignore
+    const stacks = [...new Set(
+        this.config.categories
+            .filter(c => name.length == 0 || c.name === name)
+            .flatMap(c => c.stacks)
+    )];
+
+    return stacks.length > 0 ? stacks : [name];
+  }
+
+  /**
    * Links all configured apps
    */
   async linkAll() {}
@@ -81,7 +97,7 @@ export class HangarStore {
    */
   async install() {
     if (!(await this.isInstalled())) {
-      const code = await run("git", "clone", "--", this.config.storeUrl, this.storePath);
+      await run("git", "clone", "--", this.config.storeUrl, this.storePath);
     }
   }
 
@@ -90,7 +106,14 @@ export class HangarStore {
    */
   async update() {
     if (await this.isInstalled()) {
-      const code = await run("git", "-C", this.storePath, "pull", "--ff-only");
+      await run("git", "-C", this.storePath, "pull", "--ff-only");
     }
+  }
+
+  /**
+   * Runs docker compose against installed stacks
+   */
+  async compose(name: string, ...args: string[]) {
+
   }
 }

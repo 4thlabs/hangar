@@ -35,7 +35,7 @@ store
   .description("Down all configured projects")
   .addArgument(trailingArguments)
   .action(async (args: string[]) => {
-    process.exitCode = await execComposeOn(true, "down", ...args);
+    process.exitCode = await execComposeOn(true, "down", ...args).then(() => 0).catch(e => e.code);
   });
 
 store

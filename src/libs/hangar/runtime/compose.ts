@@ -1,5 +1,5 @@
-import { config, getStackPath } from "#libs/store";
-import { parallel, run, sequence } from "./runtime.ts";
+import { HangarRuntimeError } from "../hangar-error.ts";
+import { exists, parallel, run, sequence } from "./runtime.ts";
 
 // The order of execution for commands that need to be run in sequence: up and start are run in the order of the stacks, down and stop are run in reverse order.
 const ORDER: Record<string, number> = { start: 1, restart: 1, down: -1, stop: -1 };
@@ -11,32 +11,13 @@ const ORDER: Record<string, number> = { start: 1, restart: 1, down: -1, stop: -1
 const detached = (args: string[]) => args.includes("-d") || args.includes("--detach");
 
 /**
- * Resolve a name to the stacks it covers: a global command covers every category,
- * a category its own stacks, anything else is taken as a stack name.
- * @global If true, the name is a global command and all stacks are returned
- * @param name A global command, a category or a stack name
- */
-export const resolve = (global:boolean, name: string) => {
-    const stacks = [...new Set(
-        config.categories
-            .filter(c => global || c.name === name)
-            .flatMap(c => c.stacks)
-    )];
-
-    return stacks.length > 0 ? stacks : [name];
-}
-
-/**
- * Run docker compose against a stack of the store.
+ * Run docker compose against a stack
  * @param stack The stack name (directory path)
  * @param args Arguments passed through to docker compose
  */
-export const execCompose = async (stack: string, ...args: string[]) => {
-    const paths = await getStackPath(stack);
-
-    if (paths.length === 0) {
-        console.error(`Failed to find project: ${stack}`);
-        return 1;
+export const execCompose = async (path: string, ...args: string[]) => {
+    if (!await exists(path)) {
+        throw new HangarRuntimeError(1, "`Failed to find project: ${stack}`")
     }
 
     return run("docker",
@@ -44,7 +25,7 @@ export const execCompose = async (stack: string, ...args: string[]) => {
         "--env-file",
         `${process.env.HOMELAB_STORE_DIR}/.env.global`,
         "-f",
-        `${paths.at(0)!}/compose.yml`,
+        `${path}/compose.yml`,
         ...args
     );
 }
