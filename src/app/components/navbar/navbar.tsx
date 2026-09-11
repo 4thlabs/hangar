@@ -49,12 +49,12 @@ function DesktopNavigation() {
   return (
     <nav className="h-full" aria-label="Navigation principale">
       <Tabs value={router.path} className="h-full gap-0">
-        <TabsList variant="line" className="!h-full gap-2 p-0">
+        <TabsList variant="line" className="h-full! gap-2 p-0">
           {items.map(item => (
             <TabsTrigger
               key={item.href}
               value={item.href}
-              className="!h-full px-3 after:!-bottom-px after:!bg-primary"
+              className="h-full! px-3 after:-bottom-px! after:bg-primary!"
               render={
                 <Link
                   to={item.href}

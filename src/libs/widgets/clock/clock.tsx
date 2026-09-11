@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { ClockIcon } from "lucide-react";
-import { CardContent } from "#app/components/ui/card";
 import { cn } from "#libs/utils";
-import { WidgetSkeleton } from "../shared/index.ts";
-import { Card } from "#app/components/card/accent-card.tsx";
+import { WidgetCard, WidgetContent, WidgetSkeleton } from "../shared/index.ts";
 
 const timeFormatter = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit",
@@ -15,7 +13,7 @@ const timeFormatter = new Intl.DateTimeFormat("en-GB", {
 
 const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "long" });
 const weekdayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "long" });
-const clockWidgetClassName = "h-20 w-full";
+const clockWidgetClassName = "h-20";
 
 export function ClockSkeleton() {
   return <WidgetSkeleton className={clockWidgetClassName} icon={<ClockIcon />} title="Clock" />;
@@ -34,8 +32,8 @@ export function ClockWidget() {
   }, []);
 
   return (
-    <Card className={cn(clockWidgetClassName, "justify-center py-0 font-mono")}>
-      <CardContent className="flex items-center justify-between">
+    <WidgetCard className={cn(clockWidgetClassName, "justify-center py-0 font-mono")}>
+      <WidgetContent className="flex items-center justify-between">
         <div className="flex flex-col gap-0">
           <p className="flex items-baseline gap-4 text-lg font-semibold">
             <span className="tabular-nums">{now.getDate()}</span>
@@ -50,7 +48,7 @@ export function ClockWidget() {
           </time>
           <p className="text-sm text-muted-foreground">{weekdayFormatter.format(now)}</p>
         </div>
-      </CardContent>
-    </Card>
+      </WidgetContent>
+    </WidgetCard>
   );
 }
