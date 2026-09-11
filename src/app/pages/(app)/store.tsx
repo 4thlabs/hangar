@@ -18,7 +18,7 @@ export default function StorePage() {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">Aucune application n’est disponible dans le store.</p>
+        <p className="text-sm text-muted-foreground">Aucune application disponible dans le store.</p>
       )}
     </main>
   );
