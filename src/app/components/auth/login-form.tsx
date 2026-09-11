@@ -1,16 +1,9 @@
 "use client";
 
 import { useState, type SubmitEvent } from "react";
-import { CircleAlertIcon } from "lucide-react";
-import { Link, useRouter } from "waku";
+import { useRouter } from "waku";
+import { AuthEmailField, AuthFormCard, AuthPasswordField } from "#app/components/auth/auth-form-card.tsx";
 import { authClient } from "#libs/auth/client";
-import { Alert, AlertDescription, AlertTitle } from "#app/components/ui/alert.tsx";
-import { Button } from "#app/components/ui/button.tsx";
-import { Card } from "#app/components/card/accent-card.tsx";
-import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
-import { Field, FieldGroup, FieldLabel } from "#app/components/ui/field.tsx";
-import { Input } from "#app/components/ui/input.tsx";
-import { Spinner } from "#app/components/ui/spinner.tsx";
 
 export function LoginForm() {
   const router = useRouter();
@@ -43,61 +36,21 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-sm">
-      <Card>
-        <CardHeader>
-          <CardTitle>Sign in to Hangar</CardTitle>
-          <CardDescription>Enter your email and password to access your account.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="email">Email</FieldLabel>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="you@example.com"
-                autoComplete="email"
-                required
-                disabled={isPending}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="password">Password</FieldLabel>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                minLength={8}
-                maxLength={128}
-                required
-                disabled={isPending}
-              />
-            </Field>
-            {error && (
-              <Alert variant="destructive">
-                <CircleAlertIcon />
-                <AlertTitle>Sign in failed</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-          </FieldGroup>
-        </CardContent>
-        <CardFooter className="flex-col gap-3">
-          <Button type="submit" className="w-full" disabled={isPending}>
-            {isPending && <Spinner data-icon="inline-start" />}
-            {isPending ? "Signing in…" : "Sign in"}
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link to="/register" className="underline underline-offset-4">
-              Create one
-            </Link>
-          </p>
-        </CardFooter>
-      </Card>
-    </form>
+    <AuthFormCard
+      title="Sign in to Hangar"
+      description="Enter your email and password to access your account."
+      error={error}
+      errorTitle="Sign in failed"
+      isPending={isPending}
+      submitLabel="Sign in"
+      pendingLabel="Signing in…"
+      alternatePrompt="Don't have an account?"
+      alternateHref="/register"
+      alternateLabel="Create one"
+      onSubmit={handleSubmit}
+    >
+      <AuthEmailField disabled={isPending} />
+      <AuthPasswordField disabled={isPending} autoComplete="current-password" />
+    </AuthFormCard>
   );
 }

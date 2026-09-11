@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDownIcon, LogOutIcon, PaletteIcon, SettingsIcon } from "lucide-react";
+import { ChevronDownIcon, LogOutIcon, SettingsIcon } from "lucide-react";
 import { Link, useRouter } from "waku";
 import { MobileNavbarActions } from "#app/components/navbar/navbar-mobile.tsx";
 import { NavbarSearch } from "#app/components/navbar/searchbar.tsx";

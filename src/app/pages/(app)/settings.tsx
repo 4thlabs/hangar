@@ -6,7 +6,7 @@ export default async function SettingsPage() {
   const installed = await hangar.store.isInstalled();
 
   return (
-    <main className="flex flex-1 flex-col gap-6">
+    <main>
       <title>Paramètres | Hangar</title>
       <div>
         <h1 className="text-2xl font-semibold">Paramètres</h1>

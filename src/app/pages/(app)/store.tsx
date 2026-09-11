@@ -6,7 +6,7 @@ export default function StorePage() {
   const apps = [...hangar.store.apps].sort((left, right) => left.name.localeCompare(right.name));
 
   return (
-    <main className="flex flex-1 flex-col gap-6">
+    <main>
       <title>Store | Hangar</title>
       <div>
         <h1 className="text-2xl font-semibold">Store</h1>

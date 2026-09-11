@@ -1,4 +1,4 @@
-import { RegisterForm } from '#app/components/auth/register-form'
+import { RegisterForm } from "#app/components/auth/register-form";
 
 export default function RegisterPage() {
   return (
@@ -11,6 +11,6 @@ export default function RegisterPage() {
 
 export const getConfig = async () => {
   return {
-    render: 'static',
+    render: "static",
   } as const;
 };

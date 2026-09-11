@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { CircleCheckIcon, DownloadIcon } from "lucide-react";
-import type { InstallAppResult } from "#app/actions/install-app.ts";
+import type { StoreActionResult } from "#app/actions/store-action-result.ts";
+import { createStoreActionToast, createStoreTransportErrorToast } from "#app/components/store/store-action-toast.ts";
 import { Button } from "#app/components/ui/button.tsx";
 import { Card, CardContent, CardTitle } from "#app/components/ui/card.tsx";
 import { Spinner } from "#app/components/ui/spinner.tsx";
@@ -10,8 +11,8 @@ import { toast } from "#app/components/ui/toast.tsx";
 import { type HangarApp } from "#libs/hangar";
 
 type StoreAppCardProps = {
-  app: HangarApp,
-  installApp: (appId: string) => Promise<InstallAppResult>;
+  app: HangarApp;
+  installApp: (appId: string) => Promise<StoreActionResult>;
 };
 
 export function StoreAppCard({ app, installApp }: StoreAppCardProps) {
@@ -23,17 +24,14 @@ export function StoreAppCard({ app, installApp }: StoreAppCardProps) {
       try {
         const result = await installApp(app.id);
         setInstalled(result.installed);
-        toast.add({
-          title: result.success ? "Application installée" : "Échec de l’installation",
-          description: result.message,
-          type: result.success ? "success" : "error",
-        });
+        toast.add(
+          createStoreActionToast(result, {
+            success: "Application installée",
+            error: "Échec de l’installation",
+          }),
+        );
       } catch {
-        toast.add({
-          title: "Échec de l’installation",
-          description: "Impossible de contacter le serveur. Réessayez.",
-          type: "error",
-        });
+        toast.add(createStoreTransportErrorToast("Échec de l’installation"));
       }
     });
   }
@@ -46,9 +44,7 @@ export function StoreAppCard({ app, installApp }: StoreAppCardProps) {
     <Card className="relative w-38 gap-2 py-3">
       <CardContent className="flex flex-col items-center gap-2 px-2 text-center">
         <img src={app.icon} alt="" className="size-12 object-contain" />
-        <CardTitle className="line-clamp-2 text-base leading-tight">
-          {app.name}
-        </CardTitle>
+        <CardTitle className="line-clamp-2 text-base leading-tight">{app.name}</CardTitle>
       </CardContent>
       {installed ? (
         <span

@@ -1,6 +1,6 @@
 export default function AppsPage() {
   return (
-    <main className="flex flex-1 flex-col gap-6">
+    <main>
       <title>Apps | Hangar</title>
       <h1 className="text-2xl font-semibold">Apps</h1>
     </main>

@@ -2,7 +2,7 @@ import { ThemeSettingsCard } from "#app/components/settings/theme-settings-card.
 
 export default function UserSettingsPage() {
   return (
-    <main className="flex flex-1 flex-col gap-6">
+    <main>
       <title>Paramètres utilisateur | Hangar</title>
       <div>
         <h1 className="text-2xl font-semibold">Paramètres utilisateur</h1>

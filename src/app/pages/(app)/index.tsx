@@ -31,7 +31,7 @@ function DashboardSkeleton() {
 
 export default function HomePage() {
   return (
-    <main className="flex flex-1 flex-col gap-6">
+    <main>
       <title>Dashboard | Hangar</title>
       <Suspense fallback={<DashboardSkeleton />}>
         <Dashboard />

@@ -1,20 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import type { StoreActionResult } from "#app/actions/store-action-result.ts";
 import { DownloadIcon, RefreshCwIcon } from "lucide-react";
 import { Card } from "#app/components/card/accent-card.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#app/components/ui/field.tsx";
 import { Input } from "#app/components/ui/input.tsx";
+import { createStoreActionToast, createStoreTransportErrorToast } from "#app/components/store/store-action-toast.ts";
 import { Spinner } from "#app/components/ui/spinner.tsx";
 import { toast } from "#app/components/ui/toast.tsx";
-
-export type StoreActionResult = {
-  success: boolean;
-  installed: boolean;
-  message: string;
-};
 
 type StoreSettingsCardProps = {
   storeUrl: string;
@@ -31,17 +27,14 @@ export function StoreSettingsCard({ storeUrl, initialInstalled, manageStore }: S
       try {
         const nextResult = await manageStore();
         setInstalled(nextResult.installed);
-        toast.add({
-          title: nextResult.success ? "Opération terminée" : "Échec de l’opération",
-          description: nextResult.message,
-          type: nextResult.success ? "success" : "error",
-        });
+        toast.add(
+          createStoreActionToast(nextResult, {
+            success: "Opération terminée",
+            error: "Échec de l’opération",
+          }),
+        );
       } catch {
-        toast.add({
-          title: "Échec de l’opération",
-          description: "Impossible de contacter le serveur. Réessayez.",
-          type: "error",
-        });
+        toast.add(createStoreTransportErrorToast("Échec de l’opération"));
       }
     });
   }

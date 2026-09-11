@@ -1,54 +1,89 @@
-# Plan — Ajouter une barre latérale
+# Plan: Reduce duplication in `src/app`
 
 ## Context
 
-Ajouter une navigation latérale aux pages applicatives, tout en conservant les pages d’authentification `/login` et `/register` sans sidebar.
+`src/app` contains several likely parallel implementations, notably authentication forms and navbar/sidebar search controls. The goal is to identify genuine duplication, extract reusable behavior or presentation at the narrowest useful boundary, and preserve current routes, UX, accessibility, and server/client behavior.
+
+Confirmed hotspots:
+
+- `login-form.tsx` and `register-form.tsx` repeat the auth card shell, error alert, submit state, email/password fields, and alternate-route footer.
+- All five app pages repeat the same layout classes on their route-owned `<main>`. The `<main>` elements and route-specific content should remain in each page, while their shared direct-child styling belongs in `(app)/_layout.tsx`.
+- The two theme preference rows in `theme-settings-card.tsx` have identical dropdown composition.
+- `InstallAppResult` and `StoreActionResult` are structurally identical; worse, the server action currently imports its result type from a client component.
+- Store installation and store synchronization duplicate result/catch toast handling.
+- A complete sidebar navigation, its search box, the generated sidebar UI primitive, and the mobile hook are currently unreachable; this overlaps the active navbar navigation rather than representing a second live caller.
+- Framework route `getConfig` exports and desktop/mobile navigation rendering are similar but intentional: Waku discovers config per route, while each navigation uses different accessible UI primitives.
 
 ## Approach
 
-- Conserver `src/app/pages/_layout.tsx` comme layout racine commun, limité aux styles, métadonnées et polices.
-- Créer un groupe de routes applicatif `(app)` doté de son propre `_layout.tsx`, puis y déplacer les pages `/` et `/about` sans modifier leurs URLs. Waku applique ainsi la sidebar uniquement à ce groupe, tandis que `(auth)` garde `/login` et `/register` hors de ce layout.
-- Composer le layout avec les primitives shadcn/Base UI déjà installées (`SidebarProvider`, `Sidebar`, `SidebarInset`, `SidebarTrigger`, menus), avec une sidebar desktop rétractable et le panneau mobile natif.
-- Créer un composant client de sidebar applicatif contenant l’identité Hangar, les liens Dashboard et À propos, leur état actif basé sur `useRouter().path`, puis un espace utilisateur dans `SidebarFooter > SidebarMenu`.
-- Résoudre la session côté serveur avec un helper dédié appelant `auth.api.getSession({ headers: unstable_getRequest().headers })`. Le layout `(app)` sera dynamique, appellera ce helper et transmettra uniquement les données utilisateur nécessaires à la sidebar cliente.
-- Dans `SidebarFooter > SidebarMenu`, afficher le nom et l’e-mail reçus du serveur, proposer une déconnexion via `authClient.signOut()` suivie d’une redirection vers `/login`, et afficher un accès à la connexion lorsqu’aucune session n’existe. Aucune récupération initiale de session ne sera faite côté client et aucune garde d’accès aux routes ne sera ajoutée hors périmètre.
+1. Keep semantic `<main>` elements in each route, but move their common direct-child layout styling into `src/app/pages/(app)/_layout.tsx`; keep route-specific titles, headings, descriptions, and content in each page.
+2. Extract the repeated theme preference dropdown row as a private, typed component in the existing settings module.
+3. Establish one app-layer store mutation result type and one toast helper for store actions; keep transition state and post-success state updates local to each card.
+4. Remove unreachable legacy sidebar/starter code and its orphaned shadcn sidebar primitive/mobile hook, rather than coupling dead code to the active navbar through a premature abstraction.
+5. Preserve intentional repetition in per-route Waku configuration and the distinct desktop/mobile navigation renderers.
+6. Do not modify `src/libs`, generated `pages.gen.ts`, or active shadcn primitives.
 
 ## Files to modify
 
-- `src/app/pages/_layout.tsx` — retirer le conteneur de page centré, mais conserver les responsabilités globales.
-- `src/app/pages/(app)/_layout.tsx` — nouveau layout applicatif avec provider, sidebar, déclencheur mobile et zone de contenu.
-- `src/app/pages/(app)/index.tsx` — déplacement de `src/app/pages/index.tsx` (URL `/` inchangée).
-- `src/app/pages/(app)/about.tsx` — déplacement de `src/app/pages/about.tsx` (URL `/about` inchangée).
-- `src/app/components/app-sidebar.tsx` — nouvelle composition client de navigation et de l’espace utilisateur, alimentée par les données de session du layout serveur.
-- `src/libs/auth/session.ts` — nouveau helper exclusivement serveur pour lire la session Better Auth à partir des en-têtes de la requête Waku.
-- `src/libs/auth/index.ts` — exporter le helper serveur avec la configuration d’authentification existante.
-- `src/app/pages.gen.ts` — régénéré par Waku après le déplacement des routes.
+Expected changes:
+
+- `src/app/components/auth/login-form.tsx`
+- `src/app/components/auth/register-form.tsx`
+- New `src/app/components/auth/auth-form-card.tsx`
+- `src/app/pages/(app)/_layout.tsx`
+- `src/app/pages/(app)/index.tsx`
+- `src/app/pages/(app)/apps.tsx`
+- `src/app/pages/(app)/store.tsx`
+- `src/app/pages/(app)/settings.tsx`
+- `src/app/pages/(app)/user/settings.tsx`
+- `src/app/components/settings/theme-settings-card.tsx`
+- `src/app/actions/install-app.ts`
+- `src/app/actions/manage-store.ts`
+- New `src/app/actions/store-action-result.ts`
+- `src/app/components/store/store-app-card.tsx`
+- `src/app/components/settings/store-settings-card.tsx`
+- New `src/app/components/store/store-action-toast.ts`
+
+Files to remove:
+
+- `src/app/components/sidebar/sidebar.tsx`
+- `src/app/components/sidebar/searchbar.tsx`
+- `src/app/components/sidebar/sidebar-header.tsx`
+- `src/app/components/ui/sidebar.tsx`
+- `src/app/hooks/use-mobile.ts`
+- `src/app/components/header.tsx`
+- `src/app/components/footer.tsx`
 
 ## Reuse
 
-- `src/app/components/ui/sidebar.tsx` — primitive shadcn/Base UI déjà installée, incluant le provider, le mode mobile via `Sheet`, le raccourci clavier et les composants de menu.
-- `src/app/hooks/use-mobile.ts` — hook responsive déjà consommé par la primitive Sidebar.
-- `src/app/pages/(auth)/_layout.tsx` — layout dédié à `/login` et `/register`, à conserver sans sidebar.
-- `Link` et `useRouter` de `waku` — navigation interne et détection de la route active ; `useRouter` est déjà employé par le formulaire de connexion.
-- `auth` dans `src/libs/auth/auth.ts` — instance Better Auth 1.7.3 existante ; son API serveur `auth.api.getSession()` sera encapsulée par le nouveau helper.
-- `unstable_getRequest` de `waku/router/server` — API serveur de Waku 1.0.0-rc.0 donnant accès aux en-têtes/cookies de la requête courante.
-- `authClient` dans `src/libs/auth/client/auth.ts` — client existant utilisé uniquement pour l’action de déconnexion.
-- Variables `--sidebar-*` dans `src/app/styles.css` — thème clair/sombre déjà prêt pour la sidebar.
+Existing reuse points identified so far:
+
+- `src/app/components/card/accent-card.tsx`
+- UI primitives in `src/app/components/ui/`, including `field.tsx`, `input-group.tsx`, `alert.tsx`, `spinner.tsx`, and `card.tsx`
+
+Concrete reuse decisions:
+
+- Continue composing `Card`, `FieldGroup`, `Alert`, `Button`, and `Spinner` from the installed shadcn primitives rather than reproducing their markup.
+- Keep using `Card` from `src/app/components/card/accent-card.tsx` as the common branded card surface.
+- Keep `navigations` from `src/app/navigations.ts` as the single source of navigation labels, routes, and icons; do not unify distinct desktop tabs and mobile sheet markup.
+- Keep the active `NavbarSearch` shared by desktop and mobile navbar contexts.
 
 ## Steps
 
-- [x] Identifier la hiérarchie des layouts, les routes et les primitives UI existantes.
-- [x] Valider le contenu : Hangar, Dashboard, À propos et espace utilisateur dans `SidebarFooter > SidebarMenu`.
-- [ ] Alléger le layout racine, déplacer les pages applicatives dans `(app)` sans changer leurs URLs et créer son layout dédié.
-- [ ] Ajouter le helper serveur de session, rendre le layout `(app)` dynamique et lui faire transmettre l’utilisateur résolu à `AppSidebar`.
-- [ ] Composer `AppSidebar` avec les liens actifs et les états utilisateur (connecté, déconnecté, déconnexion en cours), sans `useSession()` côté client.
-- [ ] Intégrer `SidebarProvider`, `SidebarInset` et un `SidebarTrigger` accessible pour le panneau mobile et le repli desktop.
-- [ ] Régénérer les types de routes Waku, puis vérifier l’accessibilité et le responsive.
+- [x] Keep `<main>` in each of the five app pages, move the repeated `flex flex-1 flex-col gap-6` behavior to the existing `(app)/_layout.tsx` content container via direct-child styling, and remove only the duplicated `className` values from the pages. Keep each page’s `<title>`, optional heading/description, content, and the dashboard’s lack of a visible heading local to the route; do not add page-shell components.
+- [x] Extract an `AuthFormCard` shell for the repeated header, error alert, pending submit button, and alternate-auth link; leave login/register FormData parsing, password confirmation, auth-client calls, and route text in their feature files.
+- [x] Add explicit `AuthEmailField` and `AuthPasswordField` components alongside `AuthFormCard`, parameterized only by pending state and password autocomplete mode; do not build a schema/config-driven universal form.
+- [x] Replace the two duplicated theme dropdown blocks with a private typed `ThemePreferenceField`, retaining the existing atoms and validation guards.
+- [x] Move the common `{ success, installed, message }` contract into `src/app/actions/store-action-result.ts` and consume it from both server actions and both client cards, eliminating the action-to-component type dependency.
+- [x] Extract store action toast formatting/transport-failure handling into an app-layer helper while leaving pending transitions and `installed` state updates in each card.
+- [x] Delete the unreachable sidebar implementation/search/header stub, Waku starter header/footer, and the `ui/sidebar.tsx` plus `use-mobile.ts` files used only by that dead implementation.
+- [x] Format touched files consistently (including existing quote/semicolon drift in auth route files) and update imports without changing behavior.
+- [x] Add focused tests only for extracted logic with meaningful branching; avoid snapshot tests for thin composition components.
 
 ## Verification
 
-- Vérifier manuellement la présence de la sidebar sur `/` et `/about`, ainsi que l’état actif de chaque lien.
-- Vérifier son absence complète sur `/login` et `/register`.
-- Vérifier le panneau mobile, le déclencheur, le repli desktop et la navigation au clavier.
-- Vérifier côté serveur que les cookies de la requête sont transmis à Better Auth et que le footer reçoit le nom/e-mail connecté ; vérifier aussi l’accès à la connexion sans session et la déconnexion suivie de la redirection vers `/login`.
-- Exécuter `npm run typegen`, les diagnostics TypeScript, `npm test` et `npm run build`.
+- Run TypeScript/LSP diagnostics on all changed files.
+- Run `npm test` (project uses Vitest); no snapshot-only tests will be added for thin composition components.
+- Run `npm run build` to validate Waku server/client boundaries, deleted-module references, and generated route integration.
+- Search for imports of every deleted file to confirm no references remain.
+- Manually verify login and registration (success, API error, password mismatch, and pending states); desktop/mobile navbar navigation and search; store install/sync success and failure feedback; all app-page headings; theme palette/mode selection; loading and empty states.

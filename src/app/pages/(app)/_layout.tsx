@@ -10,7 +10,9 @@ export default async function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="flex min-h-svh flex-col bg-background">
       <AppNavbar user={user} />
-      <div className="flex flex-1 flex-col p-6">{children}</div>
+      <div className="flex flex-1 flex-col p-6 [&>main]:flex [&>main]:flex-1 [&>main]:flex-col [&>main]:gap-6">
+        {children}
+      </div>
     </div>
   );
 }

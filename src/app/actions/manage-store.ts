@@ -1,6 +1,6 @@
 "use server";
 
-import { StoreActionResult } from "#app/components/settings/store-settings-card.tsx";
+import { StoreActionResult } from "#app/actions/store-action-result.ts";
 import { requireSession } from "#libs/auth";
 import { logger } from "#libs/logs";
 import { hangar } from "#libs/hangar";
@@ -15,18 +15,13 @@ export const manageStore = async (): Promise<StoreActionResult> => {
     await hangar.store.update(true);
     await hangar.store.refresh();
 
-    return {
-      success: true,
-      installed: true,
-      message: wasInstalled ? "Le store a été mis à jour." : "Le store a été installé.",
-    };
+    return StoreActionResult.success(wasInstalled ? "Le store a été mis à jour." : "Le store a été installé.");
   } catch (error) {
     logger.error({ error, operation }, "Store management failed");
 
-    return {
-      success: false,
-      installed: await hangar.store.isInstalled(),
-      message: `La ${operation} du store a échoué. Consultez les logs du serveur.`,
-    };
+    return StoreActionResult.failure(
+      `La ${operation} du store a échoué. Consultez les logs du serveur.`,
+      await hangar.store.isInstalled(),
+    );
   }
 };

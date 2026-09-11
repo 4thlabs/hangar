@@ -1,4 +1,4 @@
-import { LoginForm } from '#app/components/auth/login-form';
+import { LoginForm } from "#app/components/auth/login-form";
 
 export default async function LoginPage() {
   return (
@@ -11,6 +11,6 @@ export default async function LoginPage() {
 
 export const getConfig = async () => {
   return {
-    render: 'static',
+    render: "static",
   } as const;
 };
