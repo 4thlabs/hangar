@@ -1,4 +1,4 @@
-import { exists, run } from "#libs/runtime";
+import { exists, run } from "./runtime/runtime.ts";
 import { HangarConfig } from "./hangar-config.ts";
 import { mkdir, readdir, symlink } from "node:fs/promises";
 import path from "node:path";
@@ -41,7 +41,7 @@ export class HangarStore {
 
   /**
    * Loads the available apps from the store directory
-   * @returns
+   * @returns The instance of the store
    */
   async load() {
     this.availlableApps = await readdir(path.join(this.storePath, "store"), { recursive: false });
@@ -50,8 +50,15 @@ export class HangarStore {
     return this;
   }
 
+  /**
+   * Links all configured apps
+   */
   async linkAll() {}
 
+  /**
+   * Links(symlink) a stack into the installed apps.
+   * @param name the stack name
+   */
   async link(name: string) {
     const source = path.join(this.storePath, "store", name);
     const destination = path.join(this.installedPath, name);
@@ -69,12 +76,18 @@ export class HangarStore {
     return exists(path.join(this.storePath, ".git"));
   }
 
+  /**
+   * Install the store by cloning the repo
+   */
   async install() {
     if (!(await this.isInstalled())) {
       const code = await run("git", "clone", "--", this.config.storeUrl, this.storePath);
     }
   }
 
+  /**
+   * Updates the store by pulling -ff the repo
+   */
   async update() {
     if (await this.isInstalled()) {
       const code = await run("git", "-C", this.storePath, "pull", "--ff-only");

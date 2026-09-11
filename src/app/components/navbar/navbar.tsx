@@ -163,7 +163,7 @@ function UserMenu({ user, compact = false }: { user: AvatarUser; compact?: boole
           <DropdownMenuItem
             render={
               <Link to="/user/settings" onMouseEnter={() => router.prefetch("/user/settings")}>
-                <PaletteIcon />
+                <SettingsIcon />
                 <span>Paramètres utilisateur</span>
               </Link>
             }
