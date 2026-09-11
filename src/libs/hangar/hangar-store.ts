@@ -82,7 +82,7 @@ export class HangarStore {
 
     if ((await exists(source)) && !(await exists(destination))) {
       logger.info(`Linking application: ${name}`);
-      await symlink(path.join(this.storePath, name), path.join(this.installedPath, name), "dir");
+      await symlink(source, destination, "dir");
     }
   }
 
@@ -99,6 +99,7 @@ export class HangarStore {
    */
   async install() {
     if (!(await this.isInstalled())) {
+      await mkdir(this.installedPath);
       await run("git", "clone", "--", this.config.storeUrl, this.storePath);
     }
 
