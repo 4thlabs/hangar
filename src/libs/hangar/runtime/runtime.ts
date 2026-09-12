@@ -47,7 +47,7 @@ export class Runtime implements CommandRunner {
     return new Promise<RuntimeResult>((resolve, rejects) => {
       // Interrupted: don't start anything new, the caller stops on a non-zero code.
       if (this.interrupted) {
-        rejects(new HangarRuntimeError(130, "Process interrupted."));
+        return rejects(new HangarRuntimeError(130, "Process interrupted."));
       }
 
       const child = spawn(command, args, {
