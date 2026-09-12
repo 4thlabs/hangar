@@ -1,4 +1,4 @@
-import { Hangar } from "./hangar";
+import { Hangar } from "../hangar.ts";
 
 async function createHangarForServer() {
   const hangar = await Hangar.create(process.env.HANGAR_CONFIG_FILE, process.env.HANGAR_DATA_DIR)

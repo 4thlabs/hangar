@@ -2,7 +2,7 @@
 
 import { StoreActionResult } from "#app/actions/store/store-action-result.ts";
 import { requireSession } from "#libs/auth";
-import { hangar } from "#libs/hangar";
+import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 
 export const installApp = async (appId: string): Promise<StoreActionResult> => {

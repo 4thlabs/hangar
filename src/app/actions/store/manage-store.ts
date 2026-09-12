@@ -3,7 +3,7 @@
 import { StoreActionResult } from "#app/actions/store/store-action-result.ts";
 import { requireSession } from "#libs/auth";
 import { logger } from "#libs/logs";
-import { hangar } from "#libs/hangar";
+import { hangar } from "#libs/hangar/server";
 
 export const manageStore = async (): Promise<StoreActionResult> => {
   await requireSession();

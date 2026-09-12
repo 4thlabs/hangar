@@ -1,6 +1,6 @@
 import { installApp } from "#app/actions/store/install-app.ts";
 import { StoreAppCard } from "#app/components/store/store-app-card.tsx";
-import { hangar } from "#libs/hangar";
+import { hangar } from "#libs/hangar/server";
 
 export default function StorePage() {
   const apps = [...hangar.store.apps].sort((left, right) => left.name.localeCompare(right.name));
