@@ -5,6 +5,7 @@ import path from "node:path";
 import type { ConfigurationProvider } from "./hangar-config.ts";
 import type { CommandRunner } from "./runtime/runtime.ts";
 import { HangarStore } from "./hangar-store.ts";
+import { HangarRuntimeError } from "./hangar-error.ts";
 
 const config: ConfigurationProvider = {
   storeUrl: () => "https://example.com/store.git",
@@ -138,5 +139,96 @@ describe("HangarStore", () => {
     await store.refresh();
 
     expect(store.apps).toHaveLength(0);
+  });
+});
+
+describe("HangarStore.compose", () => {
+  let dataDir: string;
+
+  const withStacks = async (...stacks: string[]) => {
+    const runtime = createRuntime();
+    const store = await HangarStore.create(config, dataDir, runtime);
+    await Promise.all(
+      stacks.map(async stack => {
+        await mkdir(path.join(store.installedPath, stack), { recursive: true });
+        await writeFile(path.join(store.installedPath, stack, "compose.yml"), "services: {}\n");
+      }),
+    );
+    return { store, runtime };
+  };
+
+  const targets = (runtime: CommandRunner) =>
+    (runtime.run as ReturnType<typeof vi.fn>).mock.calls.map(call => path.basename(path.dirname(call[5])));
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(path.join(tmpdir(), "hangar-compose-"));
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it("runs a global command against every stack in order", async () => {
+    const { store, runtime } = await withStacks("alpha-app", "beta-app", "gamma-app");
+
+    await store.compose("up", "-d");
+
+    expect(targets(runtime)).toEqual(["alpha-app", "beta-app", "gamma-app"]);
+    expect(runtime.run).toHaveBeenCalledWith(
+      "docker",
+      "compose",
+      "--env-file",
+      path.join(store.installedPath, ".env.global"),
+      "-f",
+      path.join(store.installedPath, "alpha-app", "compose.yml"),
+      "up",
+      "-d",
+    );
+  });
+
+  it("reverses the order for down", async () => {
+    const { store, runtime } = await withStacks("alpha-app", "beta-app", "gamma-app");
+
+    await store.compose("down");
+
+    expect(targets(runtime)).toEqual(["gamma-app", "beta-app", "alpha-app"]);
+  });
+
+  it("restricts a category command to its stacks", async () => {
+    const { store, runtime } = await withStacks("alpha-app", "beta-app", "gamma-app");
+
+    await store.compose("essentials", "restart");
+
+    expect(targets(runtime)).toEqual(["alpha-app", "beta-app"]);
+  });
+
+  it("refuses an attached up across several stacks", async () => {
+    const { store, runtime } = await withStacks("alpha-app", "beta-app");
+
+    await expect(store.compose("up")).rejects.toThrow("Non detached mode");
+    expect(runtime.run).not.toHaveBeenCalled();
+  });
+
+  it("rejects when a stack is not installed", async () => {
+    const { store, runtime } = await withStacks("alpha-app");
+
+    await expect(store.compose("missing-app", "logs")).rejects.toThrow("Failed to find project: missing-app");
+    expect(runtime.run).not.toHaveBeenCalled();
+  });
+
+  it("stops an ordered run at the first failure but completes an unordered one", async () => {
+    const { store } = await withStacks("alpha-app", "beta-app", "gamma-app");
+    const failing = vi.fn(async (_c: string, ...args: string[]) => {
+      if (args.some(arg => arg.includes("beta-app"))) throw new HangarRuntimeError(2, "boom");
+      return { code: 0 };
+    });
+    Object.assign(store, { runtime: { run: failing } });
+
+    await expect(store.compose("up", "-d")).rejects.toMatchObject({ code: 2 });
+    expect(failing).toHaveBeenCalledTimes(2);
+
+    failing.mockClear();
+    await expect(store.compose("essentials", "logs")).rejects.toMatchObject({ code: 2 });
+    expect(failing).toHaveBeenCalledTimes(2);
   });
 });

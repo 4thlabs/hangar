@@ -23,14 +23,13 @@ store
   .argument("<project>", "project to interract with")
   .addArgument(trailingArguments)
   .action(async (project: string, args: string[]) => {
-    //process.exitCode = await execComposeOn(false, project, ...args);
+    process.exitCode = await exitCode(hangar.store.compose(project, ...args));
   });
 
 store
   .command("update")
   .description("Installs and links the app store")
   .action(async () => {
-    
     process.exitCode = await exitCode(hangar.store.update(true));
   });
 
@@ -40,7 +39,7 @@ store
   .requiredOption("-d, --detach", "Run containers in the background")
   .addArgument(trailingArguments)
   .action(async (args: string[]) => {
-    //process.exitCode = await execComposeOn(true, "up", "-d", ...args);
+    process.exitCode = await exitCode(hangar.store.compose("up", "-d", ...args));
   });
 
 store
@@ -48,7 +47,7 @@ store
   .description("Down all configured projects")
   .addArgument(trailingArguments)
   .action(async (args: string[]) => {
-    //process.exitCode = await execComposeOn(true, "down", ...args).then(() => 0).catch(e => e.code);
+    process.exitCode = await exitCode(hangar.store.compose("down", ...args));
   });
 
 store
@@ -56,5 +55,5 @@ store
   .description("View running compose projects")
   .addArgument(trailingArguments)
   .action(async (args: string[]) => {
-    //process.exitCode = await run("docker", "compose", "ls");
+    process.exitCode = await exitCode(hangar.runtime.run("docker", "compose", "ls", ...args));
   });
