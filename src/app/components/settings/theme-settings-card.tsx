@@ -82,7 +82,7 @@ export function ThemeSettingsCard() {
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
-        <CardTitle>Apparence</CardTitle>
+        <CardTitle>APPARENCE</CardTitle>
         <CardDescription>Personnalisez les couleurs du site et leur adaptation à votre système.</CardDescription>
       </CardHeader>
       <CardContent>

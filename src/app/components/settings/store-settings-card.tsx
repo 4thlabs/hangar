@@ -42,7 +42,7 @@ export function StoreSettingsCard({ storeUrl, initialInstalled, manageStore }: S
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
-        <CardTitle>Store</CardTitle>
+        <CardTitle>STORE</CardTitle>
         <CardDescription>Consultez le dépôt configuré et synchronisez sa copie locale.</CardDescription>
       </CardHeader>
       <CardContent>

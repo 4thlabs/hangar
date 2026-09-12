@@ -25,7 +25,12 @@
 
   /* Typography and shape */
   color-scheme: light;
-  --font-sans: "Inter", sans-serif;
+  --font-sans: "JetBrains Mono", monospace;
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.0625rem;
+  --text-2xl: 1.4375rem;
   --radius: 0.225rem;
 
   /* Snow Storm surfaces on Polar Night text */
@@ -67,6 +72,10 @@
   --sidebar-accent-foreground: var(--nord-0);
   --sidebar-border: var(--nord-4);
   --sidebar-ring: var(--nord-8);
+}
+
+[data-theme="nord"] body {
+  font-size: var(--text-base);
 }
 
 .dark[data-theme="nord"] {

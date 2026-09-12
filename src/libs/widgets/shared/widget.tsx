@@ -28,7 +28,7 @@ export function WidgetHeader({
   const titleContent = (
     <>
       {icon}
-      {title}
+      {title?.toString().toUpperCase()}
       {href && <ExternalLinkIcon aria-hidden="true" className="size-3.5" />}
     </>
   );
