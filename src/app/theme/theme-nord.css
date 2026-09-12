@@ -89,7 +89,7 @@
   --popover: var(--nord-1);
   --popover-foreground: var(--nord-6);
   --muted: var(--nord-1);
-  --muted-foreground: var(--nord-5);
+  --muted-foreground: oklch(from var(--nord-5) calc(l - 0.15) c h);
   --border: var(--nord-2);
   --input: var(--nord-2);
 
