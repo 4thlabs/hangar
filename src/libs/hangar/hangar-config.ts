@@ -6,24 +6,38 @@ export type Category = { name: string; color: string; stacks: string[] };
 export type Config = { store: string; categories: Category[] };
 
 /**
+ * HangarConfig interface
+ */
+export interface ConfigurationProvider {
+  storeUrl: () => string;
+  categories: () => Category[];
+}
+
+/**
  * The configuration for Hangar
  */
-export class HangarConfig {
+export class HangarConfig implements ConfigurationProvider{
   /** The config file */
-  readonly configFile: string;
+  private readonly _configFile: string;
 
   /** The URL of the hangar store */
-  storeUrl: string = "";
+  private _storeUrl: string = "";
 
   /** The categories for the various stacks */
-  categories: Category[] = [];
+  private _categories: Category[] = [];
+
+  /** Returns the store URL */
+  public storeUrl = () => this._storeUrl;
+  
+  /** Returns the categories */
+  public categories = () => this._categories;
 
   /**
    * Constructs a new HangarConfig instance with the given configuration file.
    * @param file The path to the configuration file
    */
   private constructor(file: string) {
-    this.configFile = file;
+    this._configFile = file;
   }
 
   /**
@@ -41,11 +55,11 @@ export class HangarConfig {
    * @returns HangarConfig instance with the loaded configuration
    */
   async load() {
-    const handle = await readFile(this.configFile, "utf8");
+    const handle = await readFile(this._configFile, "utf8");
     const config = load(handle) as Config;
 
-    this.storeUrl = config.store;
-    this.categories = config.categories;
+    this._storeUrl = config.store;
+    this._categories = config.categories;
 
     return this;
   }

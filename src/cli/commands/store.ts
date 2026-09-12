@@ -1,8 +1,10 @@
-import { hangar } from "#libs/hangar";
 import { logger } from "#libs/logs";
 import { Argument, Command } from "commander";
+import { createHangar } from "./utils.ts";
 
 export const store = new Command("store");
+
+const hangar = await createHangar();
 
 const trailingArguments = new Argument("[args...]", "docker compose commands");
 
@@ -28,6 +30,7 @@ store
   .command("update")
   .description("Installs and links the app store")
   .action(async () => {
+    
     process.exitCode = await exitCode(hangar.store.update(true));
   });
 

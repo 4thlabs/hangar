@@ -12,10 +12,15 @@ type RuntimeOptions = {
 
 };
 
+/** The command runner interface */
+export interface CommandRunner {
+  run: (command: string, ...args: string[]) => Promise<RuntimeResult>
+}
+
 /**
  * An object for running and managing child commands.
  */
-export class Runtime {
+export class Runtime implements CommandRunner {
   /** Interrupted state */
   private interrupted: boolean = false;
 

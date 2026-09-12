@@ -1,9 +1,9 @@
-import { HangarConfig } from "./hangar-config.ts";
+import { type ConfigurationProvider } from "./hangar-config.ts";
 import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import path from "node:path";
 import { logger } from "#libs/logs";
 import { load } from "js-yaml";
-import { Runtime } from "./runtime/runtime.ts";
+import { type CommandRunner } from "./runtime/runtime.ts";
 import { exists } from "./runtime/utils.ts";
 
 export type HangarApp = {
@@ -27,10 +27,10 @@ export class HangarStore {
   readonly storePath: string;
 
   /** Hangar configuration */
-  private readonly config: HangarConfig;
+  private readonly config: ConfigurationProvider;
 
   /** Runtime to launch commands */
-  private readonly runtime: Runtime;
+  private readonly runtime: CommandRunner;
 
   /** A list of all available App */
   apps: Set<HangarApp> = new Set();
@@ -40,7 +40,7 @@ export class HangarStore {
    * @param config Hangar configuration
    * @param dataDir Directory for storing data
    */
-  private constructor(config: HangarConfig, dataDir: string, runtime: Runtime) {
+  private constructor(config: ConfigurationProvider, dataDir: string, runtime: CommandRunner) {
     this.config = config;
     this.dataPath = path.resolve(dataDir);
     this.storePath = path.join(this.dataPath, "app-store");
@@ -52,9 +52,8 @@ export class HangarStore {
    * Creates the store
    * @returns The instance of the store
    */
-  static async create(config: HangarConfig, dataDir: string, runtime: Runtime) {
+  static async create(config: ConfigurationProvider, dataDir: string, runtime: CommandRunner) {
     const store = new HangarStore(config, dataDir, runtime);
-    await store.refresh();
     return store;
   }
 
@@ -66,7 +65,7 @@ export class HangarStore {
   resolve(name: string = "") {
     // prettier-ignore
     const stacks = [...new Set(
-        this.config.categories
+        this.config.categories()
             .filter(c => name.length == 0 || c.name === name)
             .flatMap(c => c.stacks)
     )];
@@ -104,7 +103,7 @@ export class HangarStore {
       await mkdir(this.installedPath);
     }
     
-    await this.runtime.run("git", "clone", "--", this.config.storeUrl, this.storePath);
+    await this.runtime.run("git", "clone", "--", this.config.storeUrl(), this.storePath);
     
     const apps = this.resolve();
 

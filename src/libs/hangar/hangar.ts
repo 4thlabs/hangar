@@ -41,16 +41,7 @@ export class Hangar {
     const config = await HangarConfig.create(file);
     const runtime = new Runtime();
     const store = await HangarStore.create(config, dataDir, runtime);
-    
-    runtime.signals();
 
     return new Hangar(config, runtime, store, db);
   }
 }
-
-// Reused across HMR reloads, otherwise dev opens a new handle
-const globalForHangar = globalThis as unknown as { hangar?: Hangar };
-
-export const hangar = globalForHangar.hangar ?? await Hangar.create(process.env.HANGAR_CONFIG_FILE, process.env.HANGAR_DATA_DIR);
-
-globalForHangar.hangar = hangar;

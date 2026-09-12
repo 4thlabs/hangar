@@ -1,6 +1,8 @@
-import { getProjects, getTags, syncTags } from "#libs/api/arcane";
-import { hangar } from "#libs/hangar";
+import { syncTags } from "#libs/api/arcane";
 import { Command } from "commander";
+import { createHangar } from "./utils.ts";
+
+const hangar = await createHangar();
 
 export const arcane = new Command("arcane")
 

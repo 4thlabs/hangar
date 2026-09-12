@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises"
-import { HangarRuntimeError } from "../hangar-error";
+import { HangarRuntimeError } from "../hangar-error.ts";
 import { logger } from "#libs/logs";
-import { Hangar } from "../hangar";
+import { Hangar } from "../hangar.ts";
 
 /**
  * Check the existance of a file/path
