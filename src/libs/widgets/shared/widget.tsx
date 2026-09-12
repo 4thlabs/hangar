@@ -5,7 +5,7 @@ import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from 
 import { cn } from "#libs/utils";
 
 export function WidgetCard({ className, ...props }: ComponentProps<typeof Card>) {
-  return <Card className={cn("w-full bg-background", className)} {...props} />;
+  return <Card className={cn("w-full bg-background pt-0", className)} {...props} />;
 }
 
 type WidgetHeaderProps = Omit<ComponentProps<typeof CardHeader>, "title"> & {
@@ -34,7 +34,10 @@ export function WidgetHeader({
   );
 
   return (
-    <CardHeader className={cn(description && "gap-0 border-b", bordered && "border-b", className)} {...props}>
+    <CardHeader
+      className={cn("pt-(--card-spacing)", description && "gap-0 border-b", bordered && "border-b", className)}
+      {...props}
+    >
       <CardTitle className="inline-flex items-center gap-1.5">
         {href ? (
           <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 hover:underline">

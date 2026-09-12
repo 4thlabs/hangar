@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { StoreActionResult } from "#app/actions/store-action-result.ts";
+import type { StoreActionResult } from "#app/actions/store/store-action-result.ts";
 import { DownloadIcon, RefreshCwIcon } from "lucide-react";
 import { Card } from "#app/components/card/accent-card.tsx";
 import { Button } from "#app/components/ui/button.tsx";

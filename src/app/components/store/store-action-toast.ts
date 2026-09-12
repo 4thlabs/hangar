@@ -1,4 +1,4 @@
-import type { StoreActionResult } from "#app/actions/store-action-result.ts";
+import type { StoreActionResult } from "#app/actions/store/store-action-result.ts";
 
 type StoreActionTitles = {
   success: string;

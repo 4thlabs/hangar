@@ -1,11 +1,37 @@
 [data-theme="nord"] {
+  /* Base nord palette */
+  --nord-0: #2e3440;
+  --nord-1: #3b4252;
+  --nord-2: #434c5e;
+  --nord-3: #4c566a;
+  
+  /* Snow Storm palette */
+  --nord-4: #d8dee9;
+  --nord-5: #e5e9f0;
+  --nord-6: #eceff4;
+
+  /* Frost palette */
+  --nord-7: #8fbcbb;
+  --nord-8: #88c0d0;
+  --nord-9: #81a1c1;
+  --nord-10: #5e81ac;
+
+  /* Aurora palette */
+  --nord-11: #bf616a;
+  --nord-12: #d08770;
+  --nord-13: #ebcb8b;
+  --nord-14: #a3be8c;
+  --nord-15: #b48ead;
+}
+
+[data-theme="nord"] {
   color-scheme: light;
   --font-sans: "Inter", sans-serif;
   --radius: 0.225rem;
   --background: #eceff4;
-  --foreground: #2e3440;
+  --foreground: #303540;
   --card: #e5e9f0;
-  --card-foreground: #2e3440;
+  --card-foreground: #333843;
   --popover: #eceff4;
   --popover-foreground: #2e3440;
   --primary: #4c566a;
@@ -18,7 +44,7 @@
   --accent-foreground: #2e3440;
   --destructive: #9d4651;
   --destructive-foreground: #eceff4;
-  --border: #d8dee9;
+  --border: ##393F4C;
   --input: #d8dee9;
   --ring: #5e81ac;
   --chart-1: #5e81ac;
@@ -54,7 +80,7 @@
   --accent-foreground: #eceff4;
   --destructive: #bf616a;
   --destructive-foreground: #eceff4;
-  --border: #4c566a;
+  --border: #434c5e;
   --input: #434c5e;
   --ring: #88c0d0;
   --chart-1: #88c0d0;
@@ -62,7 +88,7 @@
   --chart-3: #ebcb8b;
   --chart-4: #d08770;
   --chart-5: #b48ead;
-  --sidebar: #2f3541;
+  --sidebar: #2e3440;
   --sidebar-foreground: #eceff4;
   --sidebar-primary: #81a1c1;
   --sidebar-primary-foreground: #2e3440;

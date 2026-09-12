@@ -1,6 +1,6 @@
 "use server";
 
-import { StoreActionResult } from "#app/actions/store-action-result.ts";
+import { StoreActionResult } from "#app/actions/store/store-action-result.ts";
 import { requireSession } from "#libs/auth";
 import { hangar } from "#libs/hangar";
 import { logger } from "#libs/logs";

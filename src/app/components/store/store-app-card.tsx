@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { CircleCheckIcon, DownloadIcon } from "lucide-react";
-import type { StoreActionResult } from "#app/actions/store-action-result.ts";
+import type { StoreActionResult } from "#app/actions/store/store-action-result.ts";
 import { createStoreActionToast, createStoreTransportErrorToast } from "#app/components/store/store-action-toast.ts";
 import { Button } from "#app/components/ui/button.tsx";
 import { Card, CardContent, CardTitle } from "#app/components/ui/card.tsx";

@@ -1,4 +1,4 @@
-import { manageStore } from "#app/actions/manage-store.ts";
+import { manageStore } from "#app/actions/store/manage-store.ts";
 import { StoreSettingsCard } from "#app/components/settings/store-settings-card.tsx";
 import { hangar } from "#libs/hangar";
 

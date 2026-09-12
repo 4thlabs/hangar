@@ -1,4 +1,4 @@
-import { installApp } from "#app/actions/install-app.ts";
+import { installApp } from "#app/actions/store/install-app.ts";
 import { StoreAppCard } from "#app/components/store/store-app-card.tsx";
 import { hangar } from "#libs/hangar";
 
