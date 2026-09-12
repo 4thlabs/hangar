@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 type AuthLayoutProps = { children: ReactNode };
 
@@ -8,6 +8,6 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
 
 export const getConfig = async () => {
   return {
-    render: 'static',
+    render: "static",
   } as const;
 };

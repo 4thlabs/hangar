@@ -35,6 +35,10 @@ ENV NODE_ENV=production \
 
 COPY --from=builder --chown=node:node /app/dist ./dist
 
+# HANGAR_CONFIG_FILE points here. Ship the default so the image boots standalone;
+# mount over /app/config to supply your own.
+COPY --from=builder --chown=node:node /app/config ./config
+
 USER 1000:1000
 
 VOLUME ["/app/data"]

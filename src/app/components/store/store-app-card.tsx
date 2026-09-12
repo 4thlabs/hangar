@@ -43,7 +43,11 @@ export function StoreAppCard({ app, installApp }: StoreAppCardProps) {
   return (
     <Card className="relative w-38 gap-2 py-3">
       <CardContent className="flex flex-col items-center gap-2 px-2 text-center">
-        <img src={app.icon} alt="" className="size-12 object-contain" />
+        {app.icon ? (
+          <img src={app.icon} alt="" className="size-12 object-contain" />
+        ) : (
+          <div className="size-12 rounded-sm bg-muted" aria-hidden="true" />
+        )}
         <CardTitle className="line-clamp-2 text-base leading-tight">{app.name}</CardTitle>
       </CardContent>
       {installed ? (

@@ -95,6 +95,12 @@ function SettingsButton() {
   );
 }
 
+const SIGN_OUT_ERROR_TOAST = {
+  title: "Échec de la déconnexion",
+  description: "Impossible de vous déconnecter. Réessayez.",
+  type: "error" as const,
+};
+
 function UserMenu({ user, compact = false }: { user: AvatarUser; compact?: boolean }) {
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -106,21 +112,13 @@ function UserMenu({ user, compact = false }: { user: AvatarUser; compact?: boole
       const result = await authClient.signOut();
 
       if (result.error) {
-        toast.add({
-          title: "Échec de la déconnexion",
-          description: "Impossible de vous déconnecter. Réessayez.",
-          type: "error",
-        });
+        toast.add(SIGN_OUT_ERROR_TOAST);
         return;
       }
 
       router.replace("/login");
     } catch {
-      toast.add({
-        title: "Échec de la déconnexion",
-        description: "Impossible de vous déconnecter. Réessayez.",
-        type: "error",
-      });
+      toast.add(SIGN_OUT_ERROR_TOAST);
     } finally {
       setIsSigningOut(false);
     }

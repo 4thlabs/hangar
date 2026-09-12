@@ -17,7 +17,7 @@ categories:
       - jackett
       - flaresolverr
       - rdtclient
-  
+
   - name: media
     color: purple
     stacks:
@@ -45,8 +45,8 @@ categories:
   - name: apps
     color: red
     stacks:
-    - sync-in
-    - notediscovery
+      - sync-in
+      - notediscovery
 
   - name: gaming
     color: purple

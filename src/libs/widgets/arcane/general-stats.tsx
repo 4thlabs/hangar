@@ -10,11 +10,8 @@ import {
   WidgetMetadata,
   WidgetMetric,
   WidgetMetricGrid,
-  WidgetSkeleton,
 } from "../shared/index.ts";
-import { logger } from "#libs/logs";
-
-export const GET = (environment: number = 0) => getDashboard(environment);
+import { defineWidget } from "../shared/define-widget.tsx";
 
 type ArcaneGeneralStatsCardProps = {
   dashboard: Dashboard;
@@ -23,6 +20,7 @@ type ArcaneGeneralStatsCardProps = {
 
 const integerFormatter = new Intl.NumberFormat("en-US");
 const arcaneWidgetClassName = "@container min-h-64";
+const arcaneIcon = <IconSelfh name="arcane" />;
 
 function formatImageSize(bytes: number) {
   return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
@@ -42,7 +40,7 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
     <WidgetCard className={arcaneWidgetClassName}>
       <WidgetHeader
         href={serviceUrl}
-        icon={<IconSelfh name="arcane" />}
+        icon={arcaneIcon}
         title="Arcane"
         description={
           <WidgetMetadata>
@@ -100,41 +98,20 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
   );
 }
 
-export function ArcaneGeneralStatsSkeleton() {
-  return (
-    <WidgetSkeleton
-      className={arcaneWidgetClassName}
-      icon={<IconSelfh name="arcane" />}
-      title="Arcane"
-      withFooter
-      withSubtitle
-    />
-  );
-}
+export const arcaneGeneralStats = defineWidget({
+  id: "arcane-general-stats",
+  title: "Arcane",
+  icon: arcaneIcon,
+  className: arcaneWidgetClassName,
+  errorDescription: "The general statistics could not be loaded. The rest of the dashboard is still available.",
+  skeleton: { withFooter: true, withSubtitle: true },
+  load: async (environment: number = 0) => {
+    const response = await getDashboard(environment);
 
-export async function ArcaneGeneralStatsWidget({ environment = 0 }: { environment?: number }) {
-  const errorFallback = (
-    <WidgetError
-      className={arcaneWidgetClassName}
-      icon={<IconSelfh name="arcane" />}
-      name="Arcane"
-      description="The general statistics could not be loaded. The rest of the dashboard is still available."
-    />
-  );
+    // The API answers 200 with success:false; treat that as a load failure.
+    if (!response.success) throw new Error(response.detail ?? "Unsuccessful response");
 
-  try {
-    // Using lib/api (this one is used by the cli)
-    const response = await GET();
-
-    if (!response.success) {
-      logger.error(`Failed to load the Arcane dashboard: ${response.detail ?? "Unsuccessful response"}`);
-      return errorFallback;
-    }
-
-    return <ArcaneGeneralStatsCard dashboard={response.data} serviceUrl={arcaneUrl} />;
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    logger.error(`Failed to load the Arcane dashboard: ${message}`);
-    return errorFallback;
-  }
-}
+    return response.data;
+  },
+  render: (dashboard: Dashboard) => <ArcaneGeneralStatsCard dashboard={dashboard} serviceUrl={arcaneUrl} />,
+});

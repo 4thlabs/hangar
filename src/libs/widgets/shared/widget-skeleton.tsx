@@ -3,7 +3,7 @@ import { Skeleton } from "#app/components/ui/skeleton.tsx";
 import { WidgetCard, WidgetContent, WidgetFooter, WidgetHeader } from "./widget.tsx";
 
 type WidgetSkeletonProps = {
-  className: string;
+  className?: string | undefined;
   icon: ReactNode;
   title: string;
   withFooter?: boolean;

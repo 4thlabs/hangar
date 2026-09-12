@@ -1,7 +1,5 @@
-import "dotenv/config";
-import ky from "ky";
-
-export const frigateUrl = `https://frigate.${process.env.DOMAIN}`;
+import { createServiceClient } from "#libs/api/shared";
+import { env } from "#libs/env";
 
 /** The subset of a Frigate event displayed by Hangar. */
 export interface FrigateEvent {
@@ -24,12 +22,13 @@ export interface FrigateStats {
   detectors: Record<string, FrigateDetectorStats>;
 }
 
-export const apiClient = ky.extend({
-  baseUrl: process.env.FRIDATE_API_URL || frigateUrl,
-  prefix: "/api",
-  retry: { limit: 1 },
-  timeout: 100,
+const { url, client: apiClient } = createServiceClient({
+  service: "frigate",
+  baseUrl: env.FRIGATE_API_URL,
 });
+
+export const frigateUrl = url;
+export { apiClient };
 
 /** Gets the most recent Frigate events. */
 export async function getEvents(limit: number = 5) {

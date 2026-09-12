@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "#app/components/ui/alert.ts
 import { WidgetCard, WidgetContent, WidgetHeader } from "./widget.tsx";
 
 type WidgetErrorProps = {
-  className: string;
+  className?: string | undefined;
   description: string;
   icon: ReactNode;
   name: string;

@@ -1,47 +1,56 @@
-import { Hangar } from '#libs/hangar';
-import { getProjects, updateProjectTag } from './client.ts';
+import { Hangar } from "#libs/hangar";
+import { logger } from "#libs/logs";
+import { getProjects, updateProjectTag } from "./client.ts";
 
 /**
  * Arcane Tags synchronisation based on the hangar configuration
+ *
+ * @returns a process exit code: 0 on success, 1 on failure.
  */
 export const syncTags = async (hangar: Hangar) => {
   const projects = await getProjects();
 
   if (!projects.success) {
-    console.error('Failed to grab projects');
-    return -1;
+    logger.error({ detail: projects.detail }, "Failed to grab projects");
+    return 1;
   }
 
-  const stacks = hangar.config.categories().flatMap((c) => c.stacks);
+  // Read the config once: categories() is a getter, not a cheap constant.
+  const categories = hangar.config.categories();
+  const stacks = categories.flatMap(category => category.stacks);
 
-  for (const p of projects.data) {
-    const isInHomelab = stacks.includes(p.dirName);
+  for (const project of projects.data) {
+    const isInHomelab = stacks.includes(project.dirName);
 
     if (isInHomelab) {
       // Adding category tag
-      const category = hangar.config.categories().filter((c) => c.stacks.includes(p.dirName)).at(0);
+      const category = categories.find(candidate => candidate.stacks.includes(project.dirName));
+
+      // stacks is derived from categories, so this cannot miss -- but assert it
+      // rather than reaching through a non-null assertion.
+      if (!category) continue;
 
       try {
-        await updateProjectTag(p.id, category!.name, category!.color, true);
-      } catch (ex) {
-        console.error('Failed to update tag', ex);
-      }
-    } else {
-      if (p.runningCount > 0) {
-        console.warn(`The project ${p.dirName} is running but not in any homelab category`);
+        await updateProjectTag(project.id, category.name, category.color, true);
+      } catch (error) {
+        logger.error({ error, project: project.dirName }, "Failed to update tag");
       }
 
-      // Removing category tag
-      for (const tag of p.tags) {
-        const isCatgoryTag = hangar.config.categories().filter((c) => c.name === tag.name).length > 0;
+      continue;
+    }
 
-        if (isCatgoryTag) {
-          try {
-            await updateProjectTag(p.id, tag.name, '', false);
-          } catch (ex) {
-            console.error('Failed to remove tag', ex);
-          }
-        }
+    if (project.runningCount > 0) {
+      logger.warn(`The project ${project.dirName} is running but not in any homelab category`);
+    }
+
+    // Removing category tag
+    for (const tag of project.tags) {
+      if (!categories.some(category => category.name === tag.name)) continue;
+
+      try {
+        await updateProjectTag(project.id, tag.name, "", false);
+      } catch (error) {
+        logger.error({ error, project: project.dirName, tag: tag.name }, "Failed to remove tag");
       }
     }
   }

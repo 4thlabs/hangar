@@ -1,17 +1,12 @@
-import { syncTags } from "#libs/api/arcane";
 import { Command } from "commander";
-import { createHangar } from "./utils.ts";
+import { syncTags } from "../../libs/api/arcane/management.ts";
+import { run } from "./utils.ts";
 
-const hangar = await createHangar();
+export const arcane = new Command("arcane").description("commands for arcane management");
 
-export const arcane = new Command("arcane")
-
-arcane
-  .description("commands for arcane management");
-    
 arcane
   .command("sync")
   .description("Sync arcane tags based on homelab definition")
   .action(async () => {
-      process.exitCode = await syncTags(hangar);
-  })
+    process.exitCode = await run(syncTags);
+  });

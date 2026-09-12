@@ -1,21 +1,9 @@
-import { logger } from "#libs/logs";
 import { Argument, Command } from "commander";
-import { createHangar } from "./utils.ts";
+import { run } from "./utils.ts";
 
 export const store = new Command("store");
 
-const hangar = await createHangar();
-
 const trailingArguments = new Argument("[args...]", "docker compose commands");
-
-const exitCode = async <T>(p: Promise<T>) => {
-  return p
-    .then(() => 0)
-    .catch(ex => {
-      logger.error(ex);
-      return ex.code ?? 1;
-    });
-};
 
 store
   .description("commands for store management")
@@ -23,23 +11,23 @@ store
   .argument("<project>", "project to interract with")
   .addArgument(trailingArguments)
   .action(async (project: string, args: string[]) => {
-    process.exitCode = await exitCode(hangar.store.compose(project, ...args));
+    process.exitCode = await run(hangar => hangar.store.compose(project, ...args));
   });
 
 store
   .command("update")
   .description("Installs and links the app store")
   .action(async () => {
-    process.exitCode = await exitCode(hangar.store.update(true));
+    process.exitCode = await run(hangar => hangar.store.update(true));
   });
 
 store
   .command("up")
-  .description("Up all configured projects")
-  .requiredOption("-d, --detach", "Run containers in the background")
+  .description("Up all configured projects (always detached)")
+  .option("-d, --detach", "Run containers in the background (default)")
   .addArgument(trailingArguments)
   .action(async (args: string[]) => {
-    process.exitCode = await exitCode(hangar.store.compose("up", "-d", ...args));
+    process.exitCode = await run(hangar => hangar.store.compose("up", "-d", ...args));
   });
 
 store
@@ -47,7 +35,7 @@ store
   .description("Down all configured projects")
   .addArgument(trailingArguments)
   .action(async (args: string[]) => {
-    process.exitCode = await exitCode(hangar.store.compose("down", ...args));
+    process.exitCode = await run(hangar => hangar.store.compose("down", ...args));
   });
 
 store
@@ -55,5 +43,5 @@ store
   .description("View running compose projects")
   .addArgument(trailingArguments)
   .action(async (args: string[]) => {
-    process.exitCode = await exitCode(hangar.runtime.run("docker", "compose", "ls", ...args));
+    process.exitCode = await run(hangar => hangar.runtime.run("docker", "compose", "ls", ...args));
   });

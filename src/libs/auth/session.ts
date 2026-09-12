@@ -1,5 +1,5 @@
-import { unstable_getRequest, unstable_redirect } from 'waku/router/server';
-import { auth } from './auth';
+import { unstable_getRequest, unstable_redirect } from "waku/router/server";
+import { auth } from "./auth";
 
 /**
  * The session for the request being handled.
@@ -29,7 +29,7 @@ export const getSession = (request: Request = unstable_getRequest()) =>
 export const requireSession = async () => {
   const session = await getSession();
   if (!session) {
-    unstable_redirect('/login');
+    unstable_redirect("/login");
   }
   return session;
 };

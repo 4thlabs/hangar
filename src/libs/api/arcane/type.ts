@@ -61,10 +61,13 @@ export interface Dashboard {
   };
 }
 
-/** The arcane result type */
-export interface ArcaneResult<T> {
-  success: boolean;
-  data: T;
-  pagination?: Pagination;
-  detail?: string;
-}
+/**
+ * The arcane result envelope.
+ *
+ * Discriminated on `success`: on a failure envelope `data` is absent, so a
+ * non-optional `data` would let the compiler wave through `response.data`
+ * on a path where it does not exist.
+ */
+export type ArcaneResult<T> =
+  | { success: true; data: T; pagination?: Pagination; detail?: string }
+  | { success: false; data?: undefined; pagination?: Pagination; detail?: string };

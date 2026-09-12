@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Dashboard } from "#libs/api";
-import { ArcaneGeneralStatsCard, ArcaneGeneralStatsSkeleton } from "./general-stats.tsx";
+import { ArcaneGeneralStatsCard, arcaneGeneralStats } from "./general-stats.tsx";
 
 const dashboard: Dashboard = {
   versionInfo: {
@@ -41,9 +41,9 @@ describe("ArcaneGeneralStatsCard", () => {
     expect(html).toContain("v2.18.1");
     expect(html).toContain("24 containers");
     expect(html).toContain("Running");
-    expect(html).toContain("22");
+    expect(html).toContain(">22<");
     expect(html).toContain("Stopped");
-    expect(html).toContain("2");
+    expect(html).toContain(">2<");
     expect(html).toContain("7 unused · 12.5 GB");
     expect(html).toContain("15 in use · 3 unused");
     expect(html).not.toContain("Needs attention");
@@ -73,10 +73,10 @@ describe("ArcaneGeneralStatsCard", () => {
     expect(html).toContain("text-destructive");
   });
 
-  it("exports a titled skeleton with the same minimum height", () => {
-    const html = renderToStaticMarkup(<ArcaneGeneralStatsSkeleton />);
+  it("exposes a titled skeleton through the widget definition", () => {
+    const html = renderToStaticMarkup(<arcaneGeneralStats.Skeleton />);
 
     expect(html).toContain("Arcane");
-    expect(html).toContain("min-h-64");
+    expect(html).toContain('aria-busy="true"');
   });
 });

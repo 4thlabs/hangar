@@ -19,7 +19,7 @@ const detached = (args: string[]) => args.includes("-d") || args.includes("--det
 export type HangarApp = {
   id: string;
   name: string;
-  icon: string;
+  icon: string | undefined;
   installed: boolean;
 };
 
@@ -203,17 +203,25 @@ export class HangarStore {
       const apps = await readdir(path.join(this.storePath, "store"), { recursive: false });
       const installed = await readdir(this.installedPath, { recursive: false });
 
+      // One malformed app must not take down the whole store: log it and skip it.
+      // refresh() runs in a module-level await on the server, so a rejection here
+      // fails web app boot entirely.
       await Promise.all(
         apps.map(async app => {
-          const source = await readFile(path.join(this.storePath, "store", app, "compose.yml"), "utf8");
-          const yaml = load(source, { filename: "compose.yml" }) as Record<string, any>; //TODO: typechecking
+          try {
+            const source = await readFile(path.join(this.storePath, "store", app, "compose.yml"), "utf8");
+            const yaml = load(source, { filename: "compose.yml" }) as Record<string, unknown> | undefined;
+            const metadata = yaml?.["x-arcane"] as { icon?: string } | undefined;
 
-          this.apps.add({
-            id: app,
-            name: yaml["name"] ?? app,
-            icon: yaml["x-arcane"].icon,
-            installed: installed.indexOf(app) !== -1,
-          });
+            this.apps.add({
+              id: app,
+              name: (yaml?.["name"] as string | undefined) ?? app,
+              icon: metadata?.icon,
+              installed: installed.indexOf(app) !== -1,
+            });
+          } catch (error) {
+            logger.warn({ error, app }, "Skipping store app: its compose.yml could not be read");
+          }
         }),
       );
     }

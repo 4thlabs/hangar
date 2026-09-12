@@ -10,12 +10,8 @@ import {
   WidgetList,
   WidgetListItem,
   WidgetMetadata,
-  WidgetSkeleton,
 } from "../shared/index.ts";
-import { logger } from "#libs/logs";
-
-/** The data to retrive, self contained api, not used by the cli */
-export const GET = () => Promise.all([getEvents(), getStats()]);
+import { defineWidget } from "../shared/define-widget.tsx";
 
 type FrigateEventsCardProps = {
   events: FrigateEvent[];
@@ -26,6 +22,7 @@ type FrigateEventsCardProps = {
 
 const relativeTimeFormatter = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 const frigateWidgetClassName = "min-h-88";
+const frigateIcon = <IconSelfh name="frigate" />;
 
 function formatRelativeTime(timestamp: number, now: number) {
   const seconds = timestamp - now / 1_000;
@@ -48,7 +45,7 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
     <WidgetCard className={frigateWidgetClassName}>
       <WidgetHeader
         href={serviceUrl}
-        icon={<IconSelfh name="frigate" />}
+        icon={frigateIcon}
         title="Frigate"
         description={
           <WidgetMetadata>
@@ -110,32 +107,15 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
   );
 }
 
-export function FrigateEventsSkeleton() {
-  return (
-    <WidgetSkeleton
-      className={frigateWidgetClassName}
-      icon={<IconSelfh name="frigate" />}
-      title="Frigate"
-      withSubtitle
-    />
-  );
-}
-
-export async function FrigateEventsWidget() {
-  try {
-    const [events, stats] = await GET();
-
-    return <FrigateEventsCard events={events} stats={stats} serviceUrl={frigateUrl} />;
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    logger.error(`Failed to load Frigate events: ${message}`);
-    return (
-      <WidgetError
-        className={frigateWidgetClassName}
-        icon={<IconSelfh name="frigate" />}
-        name="Frigate"
-        description="The camera events could not be loaded. The rest of the dashboard is still available."
-      />
-    );
-  }
-}
+export const frigateEvents = defineWidget({
+  id: "frigate-events",
+  title: "Frigate",
+  icon: frigateIcon,
+  className: frigateWidgetClassName,
+  errorDescription: "The camera events could not be loaded. The rest of the dashboard is still available.",
+  skeleton: { withSubtitle: true },
+  load: () => Promise.all([getEvents(), getStats()]),
+  render: ([events, stats]: [FrigateEvent[], FrigateStats]) => (
+    <FrigateEventsCard events={events} stats={stats} serviceUrl={frigateUrl} />
+  ),
+});

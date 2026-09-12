@@ -1,4 +1,4 @@
-import { auth } from '#libs/auth';
+import { auth } from "#libs/auth";
 
 /**
  * better-auth reads sessions and runs its OAuth callbacks here.

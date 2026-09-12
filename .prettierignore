@@ -1,0 +1,14 @@
+dist
+node_modules
+.data
+public
+package-lock.json
+*.db
+
+# Vendored agent skill docs
+.agents
+
+# Generated: shadcn components, drizzle schema, waku route types
+src/app/components/ui
+src/libs/db/schemas/auth-schema.ts
+src/app/pages.gen.ts

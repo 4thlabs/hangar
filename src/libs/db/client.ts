@@ -1,16 +1,10 @@
-import 'dotenv/config';
-import { drizzle } from 'drizzle-orm/node-sqlite';
-import { authRelations } from './schemas/auth-schema.ts';
-
-const databasePath = process.env.HANGAR_DB_HOST;
-
-if (!databasePath) {
-  throw new Error('HANGAR_DB_HOST is required');
-}
+import { drizzle } from "drizzle-orm/node-sqlite";
+import { env } from "#libs/env";
+import { authRelations } from "./schemas/auth-schema.ts";
 
 export const db = drizzle({
   connection: {
-    path: databasePath,
+    path: env.HANGAR_DB_HOST,
   },
   relations: { ...authRelations },
 });

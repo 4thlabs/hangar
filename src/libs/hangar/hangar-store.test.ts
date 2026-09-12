@@ -132,6 +132,36 @@ describe("HangarStore", () => {
     expect(store.apps).toHaveLength(2);
   });
 
+  it("keeps going when an app has no x-arcane block or no compose.yml", async () => {
+    const store = await HangarStore.create(config, dataDir, createRuntime());
+    const good = path.join(store.storePath, "store", "good-app");
+    const noMetadata = path.join(store.storePath, "store", "no-metadata-app");
+    const noCompose = path.join(store.storePath, "store", "no-compose-app");
+    await Promise.all([
+      mkdir(path.join(store.storePath, ".git"), { recursive: true }),
+      mkdir(good, { recursive: true }),
+      mkdir(noMetadata, { recursive: true }),
+      mkdir(noCompose, { recursive: true }),
+      mkdir(store.installedPath, { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(path.join(good, "compose.yml"), "name: Good\nx-arcane:\n  icon: good.svg\n"),
+      writeFile(path.join(noMetadata, "compose.yml"), "name: No Metadata\nservices: {}\n"),
+    ]);
+
+    // refresh() runs in a module-level await on the server: a rejection here
+    // would fail web app boot entirely rather than degrading one card.
+    await expect(store.refresh()).resolves.toBeUndefined();
+
+    expect([...store.apps]).toEqual(
+      expect.arrayContaining([
+        { id: "good-app", name: "Good", icon: "good.svg", installed: false },
+        { id: "no-metadata-app", name: "No Metadata", icon: undefined, installed: false },
+      ]),
+    );
+    expect(store.apps).toHaveLength(2);
+  });
+
   it("clears stale app metadata when the store is absent", async () => {
     const store = await HangarStore.create(config, dataDir, createRuntime());
     store.apps.add({ id: "old", name: "Old", icon: "old.svg", installed: true });

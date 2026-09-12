@@ -1,9 +1,22 @@
 import { load } from "js-yaml";
 import { readFile } from "node:fs/promises";
+import * as z from "zod";
+import { HangarError } from "./hangar-error.ts";
 
 /** A Stack category */
-export type Category = { name: string; color: string; stacks: string[] };
-export type Config = { store: string; categories: Category[] };
+const categorySchema = z.object({
+  name: z.string().min(1),
+  color: z.string().min(1),
+  stacks: z.array(z.string().min(1)),
+});
+
+const configSchema = z.object({
+  store: z.string().min(1),
+  categories: z.array(categorySchema),
+});
+
+export type Category = z.infer<typeof categorySchema>;
+export type Config = z.infer<typeof configSchema>;
 
 /**
  * HangarConfig interface
@@ -16,7 +29,7 @@ export interface ConfigurationProvider {
 /**
  * The configuration for Hangar
  */
-export class HangarConfig implements ConfigurationProvider{
+export class HangarConfig implements ConfigurationProvider {
   /** The config file */
   private readonly _configFile: string;
 
@@ -28,7 +41,7 @@ export class HangarConfig implements ConfigurationProvider{
 
   /** Returns the store URL */
   public storeUrl = () => this._storeUrl;
-  
+
   /** Returns the categories */
   public categories = () => this._categories;
 
@@ -41,8 +54,8 @@ export class HangarConfig implements ConfigurationProvider{
   }
 
   /**
-   * Statis async contructor
-   * @param file 
+   * Static async constructor
+   * @param file
    */
   static async create(file: string) {
     const config = new HangarConfig(file);
@@ -55,11 +68,23 @@ export class HangarConfig implements ConfigurationProvider{
    * @returns HangarConfig instance with the loaded configuration
    */
   async load() {
-    const handle = await readFile(this._configFile, "utf8");
-    const config = load(handle) as Config;
+    const handle = await readFile(this._configFile, "utf8").catch((error: NodeJS.ErrnoException) => {
+      // An unreadable config is an operator error, not a defect: report the
+      // path, not a filesystem stack trace.
+      throw new HangarError(`Cannot read the Hangar config at ${this._configFile}: ${error.code ?? error.message}`);
+    });
 
-    this._storeUrl = config.store;
-    this._categories = config.categories;
+    // hangar.yml is user-authored: validate here, or a missing `categories`
+    // surfaces much later as a crash inside HangarStore.resolve().
+    const parsed = configSchema.safeParse(load(handle));
+
+    if (!parsed.success) {
+      const issues = parsed.error.issues.map(issue => `  ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+      throw new HangarError(`Invalid Hangar config at ${this._configFile}:\n${issues.join("\n")}`);
+    }
+
+    this._storeUrl = parsed.data.store;
+    this._categories = parsed.data.categories;
 
     return this;
   }

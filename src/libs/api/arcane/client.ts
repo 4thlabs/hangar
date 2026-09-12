@@ -1,25 +1,14 @@
-import "dotenv/config";
-import ky, { type BeforeRequestState } from "ky";
+import { createServiceClient } from "#libs/api/shared";
+import { env } from "#libs/env";
 import type { ArcaneResult, Dashboard, Project, Tag } from "./type.ts";
 
-export const arcaneUrl = `https://arcane.${process.env.DOMAIN}`;
-
-/**
- * Base client for the arcane api
- */
-export const apiClient = ky.extend({
-  baseUrl: arcaneUrl,
-  prefix: "/api",
-  hooks: {
-    beforeRequest: [
-      ({ request }: BeforeRequestState) => {
-        const apiKey = process.env.ARCANE_API_KEY;
-        if (!apiKey) throw new Error("ARCANE_API_KEY is not configured.");
-        request.headers.set("X-API-Key", apiKey);
-      },
-    ],
-  },
+const { url, client: apiClient } = createServiceClient({
+  service: "arcane",
+  apiKey: env.ARCANE_API_KEY,
 });
+
+export const arcaneUrl = url;
+export { apiClient };
 
 /** Gets the aggregated dashboard for an environment. */
 export const getDashboard = async (environment: number = 0) => {

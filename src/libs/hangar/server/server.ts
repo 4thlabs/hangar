@@ -1,7 +1,8 @@
+import { env } from "#libs/env";
 import { Hangar } from "../hangar.ts";
 
 async function createHangarForServer() {
-  const hangar = await Hangar.create(process.env.HANGAR_CONFIG_FILE, process.env.HANGAR_DATA_DIR)
+  const hangar = await Hangar.create(env.HANGAR_CONFIG_FILE, env.HANGAR_DATA_DIR);
   await hangar.store.refresh();
   return hangar;
 }
@@ -9,6 +10,6 @@ async function createHangarForServer() {
 // Reused across HMR reloads, otherwise dev opens a new handle
 const globalForHangar = globalThis as unknown as { hangar?: Hangar };
 
-export const hangar = globalForHangar.hangar ?? await createHangarForServer();
+export const hangar = globalForHangar.hangar ?? (await createHangarForServer());
 
 globalForHangar.hangar = hangar;

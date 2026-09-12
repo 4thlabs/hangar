@@ -1,20 +1,14 @@
 import { ChildProcess, spawn } from "node:child_process";
 import { HangarRuntimeError } from "../hangar-error.ts";
-import { logger } from "#libs/logs";
 
 /** A runtime run result */
 type RuntimeResult = {
   code: number;
 };
 
-/** the run options */
-type RuntimeOptions = {
-
-};
-
 /** The command runner interface */
 export interface CommandRunner {
-  run: (command: string, ...args: string[]) => Promise<RuntimeResult>
+  run: (command: string, ...args: string[]) => Promise<RuntimeResult>;
 }
 
 /**
@@ -24,16 +18,20 @@ export class Runtime implements CommandRunner {
   /** Interrupted state */
   private interrupted: boolean = false;
 
-  /** A set of the running childs */
-  private childs: Set<ChildProcess> = new Set();
+  /** A set of the running children */
+  private children: Set<ChildProcess> = new Set();
 
   /**
-   * Installs signals handler
+   * Installs the SIGINT handler.
+   *
+   * Call this from the CLI only: it exits the process, which a long-lived
+   * server must not do. Without it `interrupted` never flips and the guard
+   * in `run` is unreachable.
    */
-  signals () {
+  signals() {
     process.on("SIGINT", () => {
       this.interrupted = true;
-      if (this.childs.size === 0) process.exit(130);
+      if (this.children.size === 0) process.exit(130);
     });
   }
 
@@ -43,34 +41,36 @@ export class Runtime implements CommandRunner {
    * @param command The executable to run
    * @param args Arguments passed to the executable
    */
-  run (command: string, ...args: string[]) {
-    return new Promise<RuntimeResult>((resolve, rejects) => {
+  run(command: string, ...args: string[]) {
+    return new Promise<RuntimeResult>((resolve, reject) => {
       // Interrupted: don't start anything new, the caller stops on a non-zero code.
       if (this.interrupted) {
-        return rejects(new HangarRuntimeError(130, "Process interrupted."));
+        return reject(new HangarRuntimeError(130, "Process interrupted."));
       }
 
       const child = spawn(command, args, {
         stdio: ["inherit", "inherit", "inherit"],
       });
 
-      this.childs.add(child);
+      this.children.add(child);
 
       child.on("error", err => {
-        this.childs.delete(child);
-        rejects(new HangarRuntimeError(1, `Failed to run ${command}: ${err.message}`));
+        this.children.delete(child);
+        reject(new HangarRuntimeError(1, `Failed to run ${command}: ${err.message}`));
       });
 
       // A signal means the child was killed (Ctrl-C during an up): that is a failure.
       child.on("close", (code, signal) => {
-        this.childs.delete(child);
+        this.children.delete(child);
 
         if (signal) {
-          rejects(new HangarRuntimeError(130, "Process interrupted."));
+          return reject(new HangarRuntimeError(130, "Process interrupted."));
         }
 
-        (code ?? 1) == 0 ? resolve({ code: code ?? 0 }) : rejects(new HangarRuntimeError(code ?? 1, "Process exited."));
+        return (code ?? 1) === 0
+          ? resolve({ code: code ?? 0 })
+          : reject(new HangarRuntimeError(code ?? 1, "Process exited."));
       });
     });
-  };
-};
+  }
+}

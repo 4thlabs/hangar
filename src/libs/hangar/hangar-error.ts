@@ -3,7 +3,7 @@ export class HangarError extends Error {
     super(message);
     this.name = "HangarError";
   }
-};
+}
 
 export class HangarRuntimeError extends HangarError {
   /** The runtime error code */

@@ -19,9 +19,8 @@ export const manageStore = async (): Promise<StoreActionResult> => {
   } catch (error) {
     logger.error({ error, operation }, "Store management failed");
 
-    return StoreActionResult.failure(
-      `La ${operation} du store a échoué. Consultez les logs du serveur.`,
-      await hangar.store.isInstalled(),
-    );
+    // Do not call isInstalled() here: if the filesystem is why update() threw,
+    // this would reject inside the catch and escape the handler entirely.
+    return StoreActionResult.failure(`La ${operation} du store a échoué. Consultez les logs du serveur.`, wasInstalled);
   }
 };

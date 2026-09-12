@@ -1,4 +1,3 @@
-export * from "./arcane/index.ts";
-export * from "./clock/index.ts";
-export * from "./frigate/index.ts";
+export * from "./registry.ts";
 export * from "./shared/index.ts";
+export * from "./shared/define-widget.tsx";
