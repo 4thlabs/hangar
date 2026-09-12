@@ -1,4 +1,5 @@
 import { getProjects, getTags, syncTags } from "#libs/api/arcane";
+import { hangar } from "#libs/hangar";
 import { Command } from "commander";
 
 export const arcane = new Command("arcane")
@@ -10,5 +11,5 @@ arcane
   .command("sync")
   .description("Sync arcane tags based on homelab definition")
   .action(async () => {
-      process.exitCode = await syncTags();
+      process.exitCode = await syncTags(hangar);
   })

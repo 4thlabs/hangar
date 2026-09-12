@@ -1,10 +1,10 @@
-import { config } from '#libs/store';
+import { Hangar } from '#libs/hangar';
 import { getProjects, updateProjectTag } from './client.ts';
 
 /**
  * Arcane Tags synchronisation based on the hangar configuration
  */
-export const syncTags = async () => {
+export const syncTags = async (hangar: Hangar) => {
   const projects = await getProjects();
 
   if (!projects.success) {
@@ -12,14 +12,14 @@ export const syncTags = async () => {
     return -1;
   }
 
-  const stacks = config.categories.flatMap((c) => c.stacks);
+  const stacks = hangar.config.categories.flatMap((c) => c.stacks);
 
   for (const p of projects.data) {
     const isInHomelab = stacks.includes(p.dirName);
 
     if (isInHomelab) {
       // Adding category tag
-      const category = config.categories.filter((c) => c.stacks.includes(p.dirName)).at(0);
+      const category = hangar.config.categories.filter((c) => c.stacks.includes(p.dirName)).at(0);
 
       try {
         await updateProjectTag(p.id, category!.name, category!.color, true);
@@ -33,7 +33,7 @@ export const syncTags = async () => {
 
       // Removing category tag
       for (const tag of p.tags) {
-        const isCatgoryTag = config.categories.filter((c) => c.name === tag.name).length > 0;
+        const isCatgoryTag = hangar.config.categories.filter((c) => c.name === tag.name).length > 0;
 
         if (isCatgoryTag) {
           try {
