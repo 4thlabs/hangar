@@ -54,7 +54,7 @@ function DesktopNavigation() {
             <TabsTrigger
               key={item.href}
               value={item.href}
-              className="h-full! px-3 after:-bottom-px! after:bg-primary!"
+              className="h-full! px-3 after:-bottom-px! after:bg-sidebar-ring!"
               render={
                 <Link
                   to={item.href}
@@ -183,7 +183,7 @@ function UserMenu({ user, compact = false }: { user: AvatarUser; compact?: boole
 
 export function AppNavbar({ user }: AppNavbarProps) {
   return (
-    <header className="shrink-0 border-b bg-sidebar">
+    <header className="shrink-0 border-b border-sidebar-border bg-sidebar text-sidebar-foreground [--background:var(--sidebar)] [--foreground:var(--sidebar-foreground)] [--input:var(--sidebar-border)] [--muted:var(--sidebar-accent)] [--ring:var(--sidebar-ring)] [--secondary:var(--sidebar-accent)] [--secondary-foreground:var(--sidebar-accent-foreground)]">
       <div className="grid h-14 grid-cols-[1fr_auto_1fr] items-center px-2 md:hidden">
         <div className="flex items-center justify-start">
           <MobileNavbarActions />
