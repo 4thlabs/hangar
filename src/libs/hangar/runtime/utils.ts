@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises"
+import { stat } from "node:fs/promises";
 import { HangarRuntimeError } from "../hangar-error.ts";
 import { logger } from "#libs/logs";
 import { Hangar } from "../hangar.ts";
@@ -38,6 +38,7 @@ export const parallel = async (hangar: Hangar, stacks: string[], run: Function, 
     stacks.map(s =>
       run(hangar, s, ...args).catch((ex: HangarRuntimeError) => {
         logger.info(ex.message);
+        return 1;
       }),
     ),
   );
