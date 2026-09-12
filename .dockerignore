@@ -1,0 +1,15 @@
+.git
+.github
+.agents
+.data
+node_modules
+dist
+.env
+.env.*
+!.env.example
+*.db
+*.tsbuildinfo
+.cache
+.DS_Store
+plans
+PLAN.md
