@@ -22,8 +22,18 @@ export class HangarConfig {
    * Constructs a new HangarConfig instance with the given configuration file.
    * @param file The path to the configuration file
    */
-  constructor(file: string) {
+  private constructor(file: string) {
     this.configFile = file;
+  }
+
+  /**
+   * Statis async contructor
+   * @param file 
+   */
+  static async create(file: string) {
+    const config = new HangarConfig(file);
+    await config.load();
+    return config;
   }
 
   /**

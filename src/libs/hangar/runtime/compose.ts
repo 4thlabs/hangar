@@ -1,8 +1,13 @@
+import path from "node:path";
 import { HangarRuntimeError } from "../hangar-error.ts";
-import { exists, parallel, run, sequence } from "./runtime.ts";
+import { Hangar } from "../hangar.ts";
+import { exists, parallel, sequence } from "./utils.ts";
 
 // The order of execution for commands that need to be run in sequence: up and start are run in the order of the stacks, down and stop are run in reverse order.
 const ORDER: Record<string, number> = { start: 1, restart: 1, down: -1, stop: -1 };
+
+/** Store global commands */
+const GLOBALS: Array<string> = ["up", "down", "pull"];
 
 /**
  * Check if the args contains a detach mode
@@ -15,17 +20,19 @@ const detached = (args: string[]) => args.includes("-d") || args.includes("--det
  * @param stack The stack name (directory path)
  * @param args Arguments passed through to docker compose
  */
-export const execCompose = async (path: string, ...args: string[]) => {
-    if (!await exists(path)) {
+export const execCompose = async (hangar: Hangar, stack: string, ...args: string[]) => {
+    const compose = path.join(hangar.store.installedPath, stack, "compose.yml");
+    
+    if (!await exists(compose)) {
         throw new HangarRuntimeError(1, "`Failed to find project: ${stack}`")
     }
 
-    return run("docker",
+    return hangar.runtime.run("docker",
         "compose",
         "--env-file",
-        `${process.env.HOMELAB_STORE_DIR}/.env.global`,
+        `${hangar.store.installedPath}/.env.global`,
         "-f",
-        `${path}/compose.yml`,
+        compose,
         ...args
     );
 }
@@ -36,10 +43,10 @@ export const execCompose = async (path: string, ...args: string[]) => {
  * @param name A global command, a category or a stack name
  * @param args Arguments passed through to docker compose
  */
-export const execComposeOn = async (global: boolean, name: string, ...args: string[]) => {
+export const execComposeOn = async (hangar: Hangar, name: string, ...args: string[]) => {
 
     // `store up -d` / `store down` / `store pull`: no target, the command takes its place
-    if (global) {
+    if (GLOBALS.includes(name)) {
       args = [name, ...args];
     }
     
@@ -49,7 +56,7 @@ export const execComposeOn = async (global: boolean, name: string, ...args: stri
         dir = 1;
     }
 
-    const stacks = resolve(global, name);
+    const stacks = hangar.store.resolve(name);
 
     if (args[0] === "up" && !detached(args) && stacks.length > 1) {
         console.error("Non detached mode only authorised on a single stack");
@@ -57,8 +64,8 @@ export const execComposeOn = async (global: boolean, name: string, ...args: stri
     }
 
     if (dir != 0) {
-        return await sequence(dir == 1 ? stacks : stacks.reverse(), execCompose, ...args);
+        return await sequence(hangar, dir == 1 ? stacks : stacks.reverse(), execCompose, ...args);
     } else {
-        return await parallel(stacks, execCompose, ...args);
+        return await parallel(hangar, stacks, execCompose, ...args);
     }
 }

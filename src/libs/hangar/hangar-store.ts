@@ -1,9 +1,10 @@
-import { exists, run } from "./runtime/runtime.ts";
 import { HangarConfig } from "./hangar-config.ts";
-import { constants, mkdir, readdir, readFile, symlink } from "node:fs/promises";
+import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import path from "node:path";
 import { logger } from "#libs/logs";
 import { load } from "js-yaml";
+import { Runtime } from "./runtime/runtime.ts";
+import { exists } from "./runtime/utils.ts";
 
 export type HangarApp = {
   id: string;
@@ -28,6 +29,9 @@ export class HangarStore {
   /** Hangar configuration */
   private readonly config: HangarConfig;
 
+  /** Runtime to launch commands */
+  private readonly runtime: Runtime;
+
   /** A list of all available App */
   apps: Set<HangarApp> = new Set();
 
@@ -36,20 +40,22 @@ export class HangarStore {
    * @param config Hangar configuration
    * @param dataDir Directory for storing data
    */
-  constructor(config: HangarConfig, dataDir: string) {
+  private constructor(config: HangarConfig, dataDir: string, runtime: Runtime) {
     this.config = config;
-    this.dataPath = path.resolve(process.env.HANGAR_DATA_DIR);
+    this.dataPath = path.resolve(dataDir);
     this.storePath = path.join(this.dataPath, "app-store");
     this.installedPath = path.join(this.dataPath, "app-installed");
+    this.runtime = runtime;
   }
 
   /**
-   * Loads the available apps from the store directory
+   * Creates the store
    * @returns The instance of the store
    */
-  async load() {
-    await this.refresh();
-    return this;
+  static async create(config: HangarConfig, dataDir: string, runtime: Runtime) {
+    const store = new HangarStore(config, dataDir, runtime);
+    await store.refresh();
+    return store;
   }
 
   /**
@@ -98,7 +104,7 @@ export class HangarStore {
       await mkdir(this.installedPath);
     }
     
-    await run("git", "clone", "--", this.config.storeUrl, this.storePath);
+    await this.runtime.run("git", "clone", "--", this.config.storeUrl, this.storePath);
     
     const apps = this.resolve();
 
@@ -116,7 +122,7 @@ export class HangarStore {
    */
   async update(install: boolean = false) {
     if (await this.isInstalled()) {
-      await run("git", "-C", this.storePath, "pull", "--ff-only");
+      await this.runtime.run("git", "-C", this.storePath, "pull", "--ff-only");
     } else if (install) {
       await this.install();
     }
