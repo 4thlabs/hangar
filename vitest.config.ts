@@ -11,9 +11,9 @@ export default defineConfig({
       HANGAR_DATA_DIR: "./.data",
       HANGAR_DB_HOST: ":memory:",
       HANGAR_CONFIG_FILE: "./config/hangar.yml",
-      DOMAIN:"test.local",
+      DOMAIN: "test.local",
       BETTER_AUTH_URL: "http://localhost:3010",
-      BETTER_AUTH_SECRET: "test-secret-at-least-32-characters-long"
+      BETTER_AUTH_SECRET: "test-secret-at-least-32-characters-long",
     },
   },
 });
