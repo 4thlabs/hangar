@@ -15,10 +15,10 @@ store
   });
 
 store
-  .command("update")
-  .description("Installs and links the app store")
+  .command("install")
+  .description("Installs or updates the store and links the app store")
   .action(async () => {
-    process.exitCode = await run(hangar => hangar.store.update(true));
+    process.exitCode = await run(hangar => hangar.store.install());
   });
 
 store

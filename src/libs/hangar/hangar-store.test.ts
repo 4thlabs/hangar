@@ -68,7 +68,7 @@ describe("HangarStore", () => {
     const store = await HangarStore.create(config, dataDir, runtime);
     await mkdir(path.join(store.storePath, ".git"), { recursive: true });
 
-    await store.update();
+    await store.install();
 
     expect(runtime.run).toHaveBeenCalledOnce();
     expect(runtime.run).toHaveBeenCalledWith("git", "-C", store.storePath, "pull", "--ff-only");
@@ -87,22 +87,13 @@ describe("HangarStore", () => {
     };
     const store = await HangarStore.create(config, dataDir, runtime);
 
-    await store.update(true);
+    await store.install();
 
     expect(runtime.run).toHaveBeenCalledWith("git", "clone", "--", "https://example.com/store.git", store.storePath);
     await expect(lstat(path.join(store.installedPath, "alpha-app"))).resolves.toMatchObject({});
     expect((await lstat(path.join(store.installedPath, "alpha-app"))).isSymbolicLink()).toBe(true);
     expect((await lstat(path.join(store.installedPath, "beta-app"))).isSymbolicLink()).toBe(true);
     expect((await lstat(path.join(store.installedPath, "gamma-app"))).isSymbolicLink()).toBe(true);
-  });
-
-  it("does nothing when the store is absent and installation is not requested", async () => {
-    const runtime = createRuntime();
-    const store = await HangarStore.create(config, dataDir, runtime);
-
-    await store.update();
-
-    expect(runtime.run).not.toHaveBeenCalled();
   });
 
   it("refreshes app metadata and installation state from disk", async () => {

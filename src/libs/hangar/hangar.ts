@@ -1,5 +1,3 @@
-import "server-only";
-
 import "#libs/env";
 import { HangarStore } from "./hangar-store.ts";
 import { HangarConfig } from "./hangar-config.ts";

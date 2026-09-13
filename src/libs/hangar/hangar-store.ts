@@ -106,14 +106,19 @@ export class HangarStore {
   }
 
   /**
-   * Installs the store by cloning the source and linking apps
+   * Install/Updates the store by cloning the repo or updates it
+   * @param update boolean Wheter to update the store if already installed
    */
-  private async install() {
+  async install() {
     if (!(await exists(this.installedPath))) {
       await mkdir(this.installedPath);
     }
 
-    await this.runtime.run("git", "clone", "--", this.config.storeUrl(), this.storePath);
+    if (await this.isInstalled()) {
+      await this.runtime.run("git", "-C", this.storePath, "pull", "--ff-only");
+    } else {
+      await this.runtime.run("git", "clone", "--", this.config.storeUrl(), this.storePath);
+    }
 
     const apps = this.resolve();
 
@@ -123,18 +128,6 @@ export class HangarStore {
         .map(async app => await this.link(app)
         .catch(ex => logger.error(ex, `Failed to link app: ${app}`))),
     );
-  }
-
-  /**
-   * Install the store by cloning the repo or updates it
-   * @param update boolean Wheter to update the store if already installed
-   */
-  async update(install: boolean = false) {
-    if (await this.isInstalled()) {
-      await this.runtime.run("git", "-C", this.storePath, "pull", "--ff-only");
-    } else if (install) {
-      await this.install();
-    }
   }
 
   /**
