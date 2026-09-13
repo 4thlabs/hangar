@@ -11,7 +11,7 @@ COPY . .
 # The auth secret is a disposable placeholder and is not copied into the runtime image.
 # hadolint ignore=DL3064
 ENV HANGAR_DATA_DIR=/tmp/hangar \
-    HANGAR_DB_HOST=/tmp/hangar/hangar.db \
+    HANGAR_DB_HOST=:memory: \
     HANGAR_CONFIG_FILE=/app/config/hangar.yml \
     BETTER_AUTH_URL=http://localhost:3010 \
     BETTER_AUTH_SECRET=build-only-secret-at-least-32-characters
@@ -30,7 +30,7 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3010 \
     HANGAR_DATA_DIR=/app/data \
-    HANGAR_DB_HOST=/app/data/hangar.db \
+    HANGAR_DB_HOST=/app/data/app-data/hangar/hangar.db \
     HANGAR_CONFIG_FILE=/app/config/hangar.yml
 
 COPY --from=builder --chown=node:node /app/dist ./dist

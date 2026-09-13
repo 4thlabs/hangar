@@ -1,4 +1,4 @@
-import { Hangar } from "#libs/hangar";
+import { Hangar, HangarError } from "#libs/hangar";
 import { logger } from "#libs/logs";
 import { getProjects, updateProjectTag } from "./client.ts";
 
@@ -12,7 +12,7 @@ export const syncTags = async (hangar: Hangar) => {
 
   if (!projects.success) {
     logger.error({ detail: projects.detail }, "Failed to grab projects");
-    return 1;
+    throw new HangarError("Failed to grap projets");
   }
 
   // Read the config once: categories() is a getter, not a cheap constant.
