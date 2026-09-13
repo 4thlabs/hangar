@@ -1,3 +1,5 @@
+import "server-only";
+
 import { unstable_getRequest, unstable_redirect } from "waku/router/server";
 import { auth } from "./auth";
 

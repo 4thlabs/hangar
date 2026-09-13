@@ -1,3 +1,5 @@
+import "server-only";
+
 import { drizzle } from "drizzle-orm/node-sqlite";
 import { env } from "#libs/env";
 import { authRelations } from "./schemas/auth-schema.ts";

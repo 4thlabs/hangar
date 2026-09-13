@@ -1,4 +1,3 @@
-import { config } from "dotenv";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -8,6 +7,13 @@ import { defineConfig } from "vitest/config";
  */
 export default defineConfig({
   test: {
-    env: config({ path: ".env.test" }).parsed ?? {},
+    env: {
+      HANGAR_DATA_DIR: "./.data",
+      HANGAR_DB_HOST: ":memory:",
+      HANGAR_CONFIG_FILE: "./config/hangar.yml",
+      DOMAIN:"test.local",
+      BETTER_AUTH_URL: "http://localhost:3010",
+      BETTER_AUTH_SECRET: "test-secret-at-least-32-characters-long"
+    },
   },
 });
