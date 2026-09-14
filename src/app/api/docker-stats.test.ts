@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Lives here rather than beside the route: waku turns every file under `src/app/pages/` into a
+// route, test files included, which breaks the build. `docker-route.ts` next door is what the
+// 401/404/503 assertions below actually exercise.
 const mocks = vi.hoisted(() => ({ getSession: vi.fn(), logger: { error: vi.fn() } }));
 
 vi.mock("server-only", () => ({}));
