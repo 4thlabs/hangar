@@ -1,16 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import type { StoreActionResult } from "#app/actions/store/store-action-result.ts";
 import { DownloadIcon, RefreshCwIcon } from "lucide-react";
-import { Card } from "#app/components/card/accent-card.tsx";
 import { Button } from "#app/components/ui/button.tsx";
-import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#app/components/ui/field.tsx";
 import { Input } from "#app/components/ui/input.tsx";
-import { createStoreActionToast, createStoreTransportErrorToast } from "#app/components/store/store-action-toast.ts";
 import { Spinner } from "#app/components/ui/spinner.tsx";
-import { toast } from "#app/components/ui/toast.tsx";
+import { useServerAction } from "#app/hooks/use-server-action.ts";
 
 type StoreSettingsCardProps = {
   storeUrl: string;
@@ -20,24 +18,13 @@ type StoreSettingsCardProps = {
 
 export function StoreSettingsCard({ storeUrl, initialInstalled, manageStore }: StoreSettingsCardProps) {
   const [installed, setInstalled] = useState(initialInstalled);
-  const [isPending, startTransition] = useTransition();
+  const { run, isPending } = useServerAction();
 
-  function handleManageStore() {
-    startTransition(async () => {
-      try {
-        const nextResult = await manageStore();
-        setInstalled(nextResult.installed);
-        toast.add(
-          createStoreActionToast(nextResult, {
-            success: "Opération terminée",
-            error: "Échec de l’opération",
-          }),
-        );
-      } catch {
-        toast.add(createStoreTransportErrorToast("Échec de l’opération"));
-      }
+  const handleManageStore = () =>
+    run(manageStore, { success: "Opération terminée", error: "Échec de l’opération" }, result => {
+      // Only a returned result carries the new state; a transport failure leaves it as it was.
+      if (result) setInstalled(result.installed);
     });
-  }
 
   return (
     <Card className="w-full max-w-2xl">

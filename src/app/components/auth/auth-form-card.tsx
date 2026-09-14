@@ -3,10 +3,9 @@
 import type { ComponentProps, ReactNode } from "react";
 import { CircleAlertIcon } from "lucide-react";
 import { Link } from "waku";
-import { Card } from "#app/components/card/accent-card.tsx";
 import { Alert, AlertDescription, AlertTitle } from "#app/components/ui/alert.tsx";
 import { Button } from "#app/components/ui/button.tsx";
-import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { Field, FieldGroup, FieldLabel } from "#app/components/ui/field.tsx";
 import { Input } from "#app/components/ui/input.tsx";
 import { Spinner } from "#app/components/ui/spinner.tsx";

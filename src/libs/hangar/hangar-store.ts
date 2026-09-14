@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import path from "node:path";
 import { logger } from "#libs/logs";
 import { load } from "js-yaml";
-import { type CommandRunner } from "./runtime/runtime.ts";
+import { type CommandRunner, type RunOptions } from "./runtime/runtime.ts";
 import { exists } from "./runtime/utils.ts";
 import { HangarRuntimeError } from "./hangar-error.ts";
 
@@ -115,9 +115,9 @@ export class HangarStore {
     }
 
     if (await this.isInstalled()) {
-      await this.runtime.run("git", "-C", this.storePath, "pull", "--ff-only");
+      await this.runtime.run("git", ["-C", this.storePath, "pull", "--ff-only"]);
     } else {
-      await this.runtime.run("git", "clone", "--", this.config.storeUrl(), this.storePath);
+      await this.runtime.run("git", ["clone", "--", this.config.storeUrl(), this.storePath]);
     }
 
     const apps = this.resolve();
@@ -134,8 +134,9 @@ export class HangarStore {
    * Runs docker compose against a single installed stack
    * @param stack The stack name
    * @param args Arguments passed through to docker compose
+   * @param options Run options, forwarded to the runtime (`pipe` to capture the output)
    */
-  private async composeStack(stack: string, ...args: string[]) {
+  private async composeStack(stack: string, args: string[], options?: RunOptions) {
     const compose = path.join(this.installedPath, stack, "compose.yml");
 
     if (!(await exists(compose))) {
@@ -143,19 +144,21 @@ export class HangarStore {
     }
 
     // prettier-ignore
-    return this.runtime.run("docker", "compose",
+    return this.runtime.run("docker", [
+      "compose",
       "--env-file", path.join(this.installedPath, ".env.global"),
       "-f", compose,
       ...args,
-    );
+    ], options);
   }
 
   /**
    * Runs docker compose against every stack, a category or a single stack.
    * @param name A global command, a category or a stack name
    * @param args Arguments passed through to docker compose
+   * @param options Run options, forwarded to the runtime (`pipe` to capture the output)
    */
-  async compose(name: string, ...args: string[]) {
+  async compose(name: string, args: string[], options?: RunOptions) {
     // `store up -d` / `store down` / `store pull`: no target, the command takes its place
     if (GLOBALS.includes(name)) {
       args = [name, ...args];
@@ -173,7 +176,7 @@ export class HangarStore {
 
     // Unordered: let every stack run, then surface the first failure.
     if (order === 0) {
-      const results = await Promise.allSettled(stacks.map(stack => this.composeStack(stack, ...args)));
+      const results = await Promise.allSettled(stacks.map(stack => this.composeStack(stack, args, options)));
       const failure = results.find(result => result.status === "rejected");
 
       if (failure) throw failure.reason;
@@ -182,8 +185,15 @@ export class HangarStore {
 
     // Ordered: stop at the first failure, up/start forwards, down/stop backwards.
     for (const stack of order === 1 ? stacks : [...stacks].reverse()) {
-      await this.composeStack(stack, ...args);
+      await this.composeStack(stack, args, options);
     }
+  }
+
+  /**
+   * Returns the ids of installed apps.
+   */
+  installedProjectIds(): Set<string> {
+    return new Set([...this.apps].flatMap(app => (app.installed ? [app.id] : [])));
   }
 
   /**

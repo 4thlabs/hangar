@@ -3,9 +3,8 @@
 import { useAtom } from "jotai";
 import { ChevronDownIcon } from "lucide-react";
 import { colorModeAtom, themePaletteAtom } from "#app/atoms/theme.ts";
-import { Card } from "#app/components/card/accent-card.tsx";
 import { Button } from "#app/components/ui/button.tsx";
-import { CardContent, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,

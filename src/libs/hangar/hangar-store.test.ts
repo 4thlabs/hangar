@@ -17,7 +17,7 @@ const config: ConfigurationProvider = {
 
 const createRuntime = () =>
   ({
-    run: vi.fn(async () => ({ code: 0 })),
+    run: vi.fn(async () => ({ code: 0, stdout: "" })),
   }) satisfies CommandRunner;
 
 describe("HangarStore", () => {
@@ -71,7 +71,7 @@ describe("HangarStore", () => {
     await store.install();
 
     expect(runtime.run).toHaveBeenCalledOnce();
-    expect(runtime.run).toHaveBeenCalledWith("git", "-C", store.storePath, "pull", "--ff-only");
+    expect(runtime.run).toHaveBeenCalledWith("git", ["-C", store.storePath, "pull", "--ff-only"]);
   });
 
   it("clones and links configured apps when installation is requested", async () => {
@@ -82,14 +82,14 @@ describe("HangarStore", () => {
           mkdir(path.join(dataDir, "app-store", "store", "beta-app"), { recursive: true }),
           mkdir(path.join(dataDir, "app-store", "store", "gamma-app"), { recursive: true }),
         ]);
-        return { code: 0 };
+        return { code: 0, stdout: "" };
       }),
     };
     const store = await HangarStore.create(config, dataDir, runtime);
 
     await store.install();
 
-    expect(runtime.run).toHaveBeenCalledWith("git", "clone", "--", "https://example.com/store.git", store.storePath);
+    expect(runtime.run).toHaveBeenCalledWith("git", ["clone", "--", "https://example.com/store.git", store.storePath]);
     await expect(lstat(path.join(store.installedPath, "alpha-app"))).resolves.toMatchObject({});
     expect((await lstat(path.join(store.installedPath, "alpha-app"))).isSymbolicLink()).toBe(true);
     expect((await lstat(path.join(store.installedPath, "beta-app"))).isSymbolicLink()).toBe(true);
@@ -161,6 +161,14 @@ describe("HangarStore", () => {
 
     expect(store.apps).toHaveLength(0);
   });
+
+  it("returns only installed app ids", async () => {
+    const store = await HangarStore.create(config, dataDir, createRuntime());
+    store.apps.add({ id: "a", name: "A", icon: undefined, installed: true });
+    store.apps.add({ id: "b", name: "B", icon: undefined, installed: false });
+
+    expect(store.installedProjectIds()).toEqual(new Set(["a"]));
+  });
 });
 
 describe("HangarStore.compose", () => {
@@ -178,8 +186,16 @@ describe("HangarStore.compose", () => {
     return { store, runtime };
   };
 
+  /** The stack each `docker compose` call targeted, read off the `-f <path>/compose.yml` argument. */
   const targets = (runtime: CommandRunner) =>
-    (runtime.run as ReturnType<typeof vi.fn>).mock.calls.map(call => path.basename(path.dirname(call[5])));
+    (runtime.run as ReturnType<typeof vi.fn>).mock.calls.map(call => {
+      const args = call[1] as string[];
+      const compose = args.find(arg => arg.endsWith("compose.yml"));
+
+      if (!compose) throw new Error(`No compose file in: ${args.join(" ")}`);
+
+      return path.basename(path.dirname(compose));
+    });
 
   beforeEach(async () => {
     dataDir = await mkdtemp(path.join(tmpdir(), "hangar-compose-"));
@@ -192,25 +208,28 @@ describe("HangarStore.compose", () => {
   it("runs a global command against every stack in order", async () => {
     const { store, runtime } = await withStacks("alpha-app", "beta-app", "gamma-app");
 
-    await store.compose("up", "-d");
+    await store.compose("up", ["-d"]);
 
     expect(targets(runtime)).toEqual(["alpha-app", "beta-app", "gamma-app"]);
     expect(runtime.run).toHaveBeenCalledWith(
       "docker",
-      "compose",
-      "--env-file",
-      path.join(store.installedPath, ".env.global"),
-      "-f",
-      path.join(store.installedPath, "alpha-app", "compose.yml"),
-      "up",
-      "-d",
+      [
+        "compose",
+        "--env-file",
+        path.join(store.installedPath, ".env.global"),
+        "-f",
+        path.join(store.installedPath, "alpha-app", "compose.yml"),
+        "up",
+        "-d",
+      ],
+      undefined,
     );
   });
 
   it("reverses the order for down", async () => {
     const { store, runtime } = await withStacks("alpha-app", "beta-app", "gamma-app");
 
-    await store.compose("down");
+    await store.compose("down", []);
 
     expect(targets(runtime)).toEqual(["gamma-app", "beta-app", "alpha-app"]);
   });
@@ -218,7 +237,7 @@ describe("HangarStore.compose", () => {
   it("restricts a category command to its stacks", async () => {
     const { store, runtime } = await withStacks("alpha-app", "beta-app", "gamma-app");
 
-    await store.compose("essentials", "restart");
+    await store.compose("essentials", ["restart"]);
 
     expect(targets(runtime)).toEqual(["alpha-app", "beta-app"]);
   });
@@ -226,30 +245,30 @@ describe("HangarStore.compose", () => {
   it("refuses an attached up across several stacks", async () => {
     const { store, runtime } = await withStacks("alpha-app", "beta-app");
 
-    await expect(store.compose("up")).rejects.toThrow("Non detached mode");
+    await expect(store.compose("up", [])).rejects.toThrow("Non detached mode");
     expect(runtime.run).not.toHaveBeenCalled();
   });
 
   it("rejects when a stack is not installed", async () => {
     const { store, runtime } = await withStacks("alpha-app");
 
-    await expect(store.compose("missing-app", "logs")).rejects.toThrow("Failed to find project: missing-app");
+    await expect(store.compose("missing-app", ["logs"])).rejects.toThrow("Failed to find project: missing-app");
     expect(runtime.run).not.toHaveBeenCalled();
   });
 
   it("stops an ordered run at the first failure but completes an unordered one", async () => {
     const { store } = await withStacks("alpha-app", "beta-app", "gamma-app");
-    const failing = vi.fn(async (_c: string, ...args: string[]) => {
+    const failing = vi.fn(async (_c: string, args: string[]) => {
       if (args.some(arg => arg.includes("beta-app"))) throw new HangarRuntimeError(2, "boom");
       return { code: 0 };
     });
     Object.assign(store, { runtime: { run: failing } });
 
-    await expect(store.compose("up", "-d")).rejects.toMatchObject({ code: 2 });
+    await expect(store.compose("up", ["-d"])).rejects.toMatchObject({ code: 2 });
     expect(failing).toHaveBeenCalledTimes(2);
 
     failing.mockClear();
-    await expect(store.compose("essentials", "logs")).rejects.toMatchObject({ code: 2 });
+    await expect(store.compose("essentials", ["logs"])).rejects.toMatchObject({ code: 2 });
     expect(failing).toHaveBeenCalledTimes(2);
   });
 });

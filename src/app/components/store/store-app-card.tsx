@@ -1,14 +1,7 @@
-"use client";
-
-import { useTransition } from "react";
-import { CircleCheckIcon, DownloadIcon } from "lucide-react";
-import { useRouter } from "waku";
+import { CircleCheckIcon } from "lucide-react";
 import type { StoreActionResult } from "#app/actions/store/store-action-result.ts";
-import { createStoreActionToast, createStoreTransportErrorToast } from "#app/components/store/store-action-toast.ts";
-import { Button } from "#app/components/ui/button.tsx";
+import { StoreInstallButton } from "#app/components/store/store-install-button.tsx";
 import { Card, CardContent, CardTitle } from "#app/components/ui/card.tsx";
-import { Spinner } from "#app/components/ui/spinner.tsx";
-import { toast } from "#app/components/ui/toast.tsx";
 import { type HangarApp } from "#libs/hangar";
 
 type StoreAppCardProps = {
@@ -16,32 +9,8 @@ type StoreAppCardProps = {
   installApp: (appId: string) => Promise<StoreActionResult>;
 };
 
+/** Server component: only the install button below is interactive. */
 export function StoreAppCard({ app, installApp }: StoreAppCardProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-
-  function handleInstall() {
-    startTransition(async () => {
-      try {
-        const result = await installApp(app.id);
-        // The list and its filter are computed server-side; refetch so both follow.
-        await router.reload();
-        toast.add(
-          createStoreActionToast(result, {
-            success: "Application installée",
-            error: "Échec de l’installation",
-          }),
-        );
-      } catch {
-        toast.add(createStoreTransportErrorToast("Échec de l’installation"));
-      }
-    });
-  }
-
-  const installLabel = isPending ? `Installation de ${app.name}` : `Installer ${app.name}`;
-  const installTitle = isPending ? "Installation…" : "Installer";
-  const installIcon = isPending ? <Spinner /> : <DownloadIcon />;
-
   return (
     <Card className="relative w-38 gap-2 py-3">
       <CardContent className="flex flex-col items-center gap-2 px-2 text-center">
@@ -61,17 +30,7 @@ export function StoreAppCard({ app, installApp }: StoreAppCardProps) {
           <CircleCheckIcon aria-hidden="true" className="size-4" />
         </span>
       ) : (
-        <Button
-          type="button"
-          size="icon-xs"
-          className="absolute top-1.5 right-1.5"
-          disabled={isPending}
-          onClick={handleInstall}
-          aria-label={installLabel}
-          title={installTitle}
-        >
-          {installIcon}
-        </Button>
+        <StoreInstallButton appId={app.id} appName={app.name} installApp={installApp} />
       )}
     </Card>
   );

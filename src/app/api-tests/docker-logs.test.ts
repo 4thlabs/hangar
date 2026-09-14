@@ -1,0 +1,68 @@
+import { Readable } from "node:stream";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  openDockerLogs: vi.fn(),
+  runtime: { run: vi.fn() },
+  logger: { error: vi.fn() },
+}));
+
+vi.mock("server-only", () => ({}));
+vi.mock("#libs/auth", () => ({ getSession: mocks.getSession }));
+vi.mock("#libs/docker", async importOriginal => ({
+  // The response helpers and error class are real; only the Docker calls are stubbed.
+  ...(await importOriginal<typeof import("#libs/docker")>()),
+  openDockerLogs: mocks.openDockerLogs,
+}));
+vi.mock("#libs/hangar/server", () => ({ hangar: { runtime: mocks.runtime } }));
+vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
+
+const { DockerNotFoundError } = await import("#libs/docker");
+const { GET } = await import("#app/pages/_api/api/docker/apps/[project]/containers/[container]/logs.ts");
+const context = { params: { project: "alpha", container: "a".repeat(64) } };
+
+describe("GET Docker container logs", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSession.mockResolvedValue({ user: { id: "1" } });
+    mocks.openDockerLogs.mockResolvedValue(Readable.from([Buffer.from("hello\n")]));
+  });
+
+  it("returns 401 before opening Docker logs", async () => {
+    mocks.getSession.mockResolvedValue(null);
+
+    const response = await GET(new Request("http://localhost/logs"), context);
+
+    expect(response.status).toBe(401);
+    expect(mocks.openDockerLogs).not.toHaveBeenCalled();
+  });
+
+  it("streams logs with buffering disabled, handing the request signal to the child", async () => {
+    const request = new Request("http://localhost/logs");
+
+    const response = await GET(request, context);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-accel-buffering")).toBe("no");
+    expect(await response.text()).toBe("hello\n");
+    // The signal is what kills `docker logs -f` when the client disconnects.
+    expect(mocks.openDockerLogs).toHaveBeenCalledWith(mocks.runtime, "alpha", "a".repeat(64), request.signal);
+  });
+
+  it("returns 404 when the container is absent or belongs to another project", async () => {
+    mocks.openDockerLogs.mockRejectedValue(new DockerNotFoundError("test subject"));
+
+    await expect(GET(new Request("http://localhost/logs"), context)).resolves.toMatchObject({ status: 404 });
+  });
+
+  it("returns 503 without leaking transport errors", async () => {
+    mocks.openDockerLogs.mockRejectedValue(new Error("private socket detail"));
+
+    const response = await GET(new Request("http://localhost/logs"), context);
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error.message).not.toContain("private socket detail");
+  });
+});

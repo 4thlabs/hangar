@@ -1,8 +1,7 @@
 import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
 import { ExternalLinkIcon } from "lucide-react";
-import { Card } from "#app/components/card/accent-card.tsx";
-import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
-import { cn } from "#libs/utils";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
+import { cn } from "cn";
 
 export function WidgetCard({ className, ...props }: ComponentProps<typeof Card>) {
   return <Card className={cn("w-full bg-background pt-0", className)} {...props} />;

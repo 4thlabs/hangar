@@ -1,5 +1,6 @@
 "use server";
 
+import { SERVER_LOG_HINT } from "#app/actions/action-result.ts";
 import { StoreActionResult } from "#app/actions/store/store-action-result.ts";
 import { requireSession } from "#libs/auth";
 import { hangar } from "#libs/hangar/server";
@@ -32,6 +33,6 @@ export const installApp = async (appId: string): Promise<StoreActionResult> => {
   } catch (error) {
     logger.error({ error, appId: app.id }, "App installation failed");
 
-    return StoreActionResult.failure(`L’installation de ${app.name} a échoué. Consultez les logs du serveur.`);
+    return StoreActionResult.failure(`L’installation de ${app.name} a échoué. ${SERVER_LOG_HINT}`);
   }
 };

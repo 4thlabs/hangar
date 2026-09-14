@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ClockIcon } from "lucide-react";
-import { cn } from "#libs/utils";
+import { cn } from "cn";
 import { WidgetCard, WidgetContent, WidgetSkeleton } from "../shared/index.ts";
 
 const timeFormatter = new Intl.DateTimeFormat("en-GB", {

@@ -11,7 +11,7 @@ store
   .argument("<project>", "project to interract with")
   .addArgument(trailingArguments)
   .action(async (project: string, args: string[]) => {
-    process.exitCode = await run(hangar => hangar.store.compose(project, ...args));
+    process.exitCode = await run(hangar => hangar.store.compose(project, args));
   });
 
 store
@@ -27,7 +27,7 @@ store
   .option("-d, --detach", "Run containers in the background (default)")
   .addArgument(trailingArguments)
   .action(async (args: string[]) => {
-    process.exitCode = await run(hangar => hangar.store.compose("up", "-d", ...args));
+    process.exitCode = await run(hangar => hangar.store.compose("up", ["-d", ...args]));
   });
 
 store
@@ -35,7 +35,7 @@ store
   .description("Down all configured projects")
   .addArgument(trailingArguments)
   .action(async (args: string[]) => {
-    process.exitCode = await run(hangar => hangar.store.compose("down", ...args));
+    process.exitCode = await run(hangar => hangar.store.compose("down", args));
   });
 
 store
@@ -43,5 +43,7 @@ store
   .description("View running compose projects")
   .addArgument(trailingArguments)
   .action(async (args: string[]) => {
-    process.exitCode = await run(hangar => hangar.runtime.run("docker", "compose", "ls", ...args));
+    // Deliberately shells out rather than reusing `listComposeProjects`: that module is marked
+    // `server-only`, which throws outside a React Server Component — the CLI included.
+    process.exitCode = await run(hangar => hangar.runtime.run("docker", ["compose", "ls", ...args]));
   });

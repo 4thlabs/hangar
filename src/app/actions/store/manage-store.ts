@@ -1,5 +1,6 @@
 "use server";
 
+import { SERVER_LOG_HINT } from "#app/actions/action-result.ts";
 import { StoreActionResult } from "#app/actions/store/store-action-result.ts";
 import { requireSession } from "#libs/auth";
 import { logger } from "#libs/logs";
@@ -21,6 +22,6 @@ export const manageStore = async (): Promise<StoreActionResult> => {
 
     // Do not call isInstalled() here: if the filesystem is why update() threw,
     // this would reject inside the catch and escape the handler entirely.
-    return StoreActionResult.failure(`La ${operation} du store a échoué. Consultez les logs du serveur.`, wasInstalled);
+    return StoreActionResult.failure(`La ${operation} du store a échoué. ${SERVER_LOG_HINT}`, wasInstalled);
   }
 };

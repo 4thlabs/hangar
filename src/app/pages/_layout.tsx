@@ -6,15 +6,14 @@ import { getUserPreferences } from "#libs/preferences";
 
 type RootLayoutProps = { children: ReactNode };
 
-export default async function RootLayout({ children }: RootLayoutProps) {
-  const data = await getData();
+export default function RootLayout({ children }: RootLayoutProps) {
   const { theme, themePalette } = getUserPreferences();
 
   return (
     <AppProviders initialPalette={themePalette} initialMode={theme}>
       <div className="min-h-svh font-sans">
-        <meta name="description" content={data.description} />
-        <link rel="icon" type="image/png" href={data.icon} />
+        <meta name="description" content="Hangar — vos applications auto-hébergées." />
+        <link rel="icon" type="image/png" href="/images/favicon.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
@@ -28,15 +27,6 @@ export default async function RootLayout({ children }: RootLayoutProps) {
     </AppProviders>
   );
 }
-
-const getData = async () => {
-  const data = {
-    description: "An internet website!",
-    icon: "/images/favicon.png",
-  };
-
-  return data;
-};
 
 export const getConfig = async () => {
   return {
