@@ -2,7 +2,9 @@
 
 import { useState, type ReactNode } from "react";
 import { createStore, Provider } from "jotai";
+import { Unstable_SearchCodecsProvider } from "waku/router/client";
 import { colorModeAtom, themePaletteAtom } from "#app/atoms/theme.ts";
+import { searchCodecs } from "#app/search-codecs.ts";
 import { ThemeEffects } from "#app/components/theme/theme-effects.tsx";
 import { Toaster } from "#app/components/ui/toast.tsx";
 import type { ColorMode, ThemePalette } from "../../libs/preferences/shared/themes.ts";
@@ -23,9 +25,11 @@ export function AppProviders({ children, initialPalette, initialMode }: AppProvi
 
   return (
     <Provider store={store}>
-      <ThemeEffects />
-      {children}
-      <Toaster />
+      <Unstable_SearchCodecsProvider searchCodecs={searchCodecs}>
+        <ThemeEffects />
+        {children}
+        <Toaster />
+      </Unstable_SearchCodecsProvider>
     </Provider>
   );
 }

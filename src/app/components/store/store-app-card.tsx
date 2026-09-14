@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { CircleCheckIcon, DownloadIcon } from "lucide-react";
+import { useRouter } from "waku";
 import type { StoreActionResult } from "#app/actions/store/store-action-result.ts";
 import { createStoreActionToast, createStoreTransportErrorToast } from "#app/components/store/store-action-toast.ts";
 import { Button } from "#app/components/ui/button.tsx";
@@ -16,14 +17,15 @@ type StoreAppCardProps = {
 };
 
 export function StoreAppCard({ app, installApp }: StoreAppCardProps) {
-  const [installed, setInstalled] = useState(app.installed);
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   function handleInstall() {
     startTransition(async () => {
       try {
         const result = await installApp(app.id);
-        setInstalled(result.installed);
+        // The list and its filter are computed server-side; refetch so both follow.
+        await router.reload();
         toast.add(
           createStoreActionToast(result, {
             success: "Application installée",
@@ -50,7 +52,7 @@ export function StoreAppCard({ app, installApp }: StoreAppCardProps) {
         )}
         <CardTitle className="line-clamp-2 text-base leading-tight">{app.name}</CardTitle>
       </CardContent>
-      {installed ? (
+      {app.installed ? (
         <span
           role="status"
           aria-label={`${app.name} est installée`}
