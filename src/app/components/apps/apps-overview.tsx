@@ -27,7 +27,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#a
 import { Spinner } from "#app/components/ui/spinner.tsx";
 import { useDockerStats } from "#app/hooks/use-docker-stats.ts";
 import type { AppSortColumn, AppsSearch } from "#app/search-codecs.ts";
-import type { ComposeProjectsSnapshot } from "#libs/docker/projects.ts";
+import type { ComposeProjectsSnapshot } from "#libs/docker/compose.ts";
 
 type AppsOverviewProps = {
   snapshot: ComposeProjectsSnapshot | null;

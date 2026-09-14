@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { containerMetrics, type ContainerStatsSample } from "./stats.ts";
+import { ContainerStats, type ContainerStatsSample } from "./stats.ts";
 
 /** A stats sample with only the fields the derivation reads. */
 const sample = ({
@@ -23,9 +23,9 @@ const sample = ({
     blkio_stats: { io_service_bytes_recursive: blkio },
   }) as unknown as ContainerStatsSample;
 
-describe("containerMetrics", () => {
+describe("ContainerStats", () => {
   it("reports no CPU share for the first sample, having nothing to compare against", () => {
-    expect(containerMetrics(sample()).cpuPercent).toBeNull();
+    expect(new ContainerStats(sample()).metrics().cpuPercent).toBeNull();
   });
 
   it("derives the CPU share from the delta between two samples, scaled by the cores", () => {
@@ -33,18 +33,18 @@ describe("containerMetrics", () => {
     // 1% of the host's time over the window, across 4 cores.
     const current = sample({ cpu: 1_100_000, system: 20_000_000, cores: 4 });
 
-    expect(containerMetrics(current, previous).cpuPercent).toBeCloseTo(4, 5);
+    expect(new ContainerStats(current, previous).metrics().cpuPercent).toBeCloseTo(4, 5);
   });
 
   it("reports no CPU share when a restart resets the counter backwards", () => {
     const previous = sample({ cpu: 5_000_000, system: 10_000_000 });
     const current = sample({ cpu: 10_000, system: 20_000_000 });
 
-    expect(containerMetrics(current, previous).cpuPercent).toBeNull();
+    expect(new ContainerStats(current, previous).metrics().cpuPercent).toBeNull();
   });
 
   it("subtracts the reclaimable page cache from the memory figure, as Docker's own does", () => {
-    const metrics = containerMetrics(sample({ usage: 200, cache: 50, limit: 1_000 }));
+    const metrics = new ContainerStats(sample({ usage: 200, cache: 50, limit: 1_000 })).metrics();
 
     expect(metrics.memoryUsage).toBe(150);
     expect(metrics.memoryLimit).toBe(1_000);
@@ -57,11 +57,11 @@ describe("containerMetrics", () => {
       memory_stats: { usage: 200, limit: 1_000, stats: { total_inactive_file: 50 } },
     } as unknown as ContainerStatsSample;
 
-    expect(containerMetrics(v1).memoryUsage).toBe(150);
+    expect(new ContainerStats(v1).metrics().memoryUsage).toBe(150);
   });
 
   it("sums every interface and every block device", () => {
-    const metrics = containerMetrics(sample());
+    const metrics = new ContainerStats(sample()).metrics();
 
     expect(metrics.networkRx).toBe(15);
     expect(metrics.networkTx).toBe(21);
@@ -72,7 +72,7 @@ describe("containerMetrics", () => {
 
   it("reports nulls rather than zeros when a counter is missing entirely", () => {
     const bare = { cpu_stats: { cpu_usage: {} }, memory_stats: {} } as unknown as ContainerStatsSample;
-    const metrics = containerMetrics(bare);
+    const metrics = new ContainerStats(bare).metrics();
 
     expect(metrics).toMatchObject({
       memoryUsage: null,

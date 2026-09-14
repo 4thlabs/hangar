@@ -16,7 +16,7 @@ import { Badge } from "#app/components/ui/badge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#app/components/ui/table.tsx";
 import { useServerAction } from "#app/hooks/use-server-action.ts";
 import type { AppSortColumn, AppsSort } from "#app/search-codecs.ts";
-import type { ComposeProjectSummary } from "#libs/docker/projects.ts";
+import type { ComposeProjectSummary } from "#libs/docker/compose.ts";
 
 type AppsTableProps = {
   projects: ComposeProjectSummary[];

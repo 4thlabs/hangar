@@ -16,73 +16,93 @@ export type ContainerMetrics = {
 };
 
 /**
- * CPU time is a counter, so a percentage only exists between two samples: the container's own
- * delta over the host's, scaled by the cores it may use. The very first sample of a container
- * has nothing to compare against and reports `null` rather than a misleading zero.
+ * One container's resource usage, derived from a raw Engine API stats sample and the one before
+ * it. Pure — it only reads the two samples it was handed, so it never touches the daemon.
+ *
+ * {@link metrics} returns a plain object on purpose, not the instance: it crosses the RSC
+ * boundary into client components, and that serialization does not carry classes.
  */
-function cpuPercent(sample: ContainerStatsSample, previous: ContainerStatsSample | undefined): number | null {
-  if (!previous) return null;
+export class ContainerStats {
+  /** The sample just taken. */
+  private readonly sample: ContainerStatsSample;
 
-  const used = sample.cpu_stats.cpu_usage.total_usage - previous.cpu_stats.cpu_usage.total_usage;
-  const available = sample.cpu_stats.system_cpu_usage - previous.cpu_stats.system_cpu_usage;
-  const cores = sample.cpu_stats.online_cpus || sample.cpu_stats.cpu_usage.percpu_usage?.length || 1;
+  /** The sample before it; absent on a container's first frame. */
+  private readonly previous: ContainerStatsSample | undefined;
 
-  // A restarted container resets its counter, which would otherwise read as a negative share.
-  if (available <= 0 || used < 0) return null;
+  /**
+   * @param sample The sample just taken
+   * @param previous The sample before it, needed for the CPU delta; omit it on the first one
+   */
+  constructor(sample: ContainerStatsSample, previous?: ContainerStatsSample | undefined) {
+    this.sample = sample;
+    this.previous = previous;
+  }
 
-  return (used / available) * cores * 100;
-}
+  /**
+   * CPU time is a counter, so a percentage only exists between two samples: the container's own
+   * delta over the host's, scaled by the cores it may use. The very first sample of a container
+   * has nothing to compare against and reports `null` rather than a misleading zero.
+   */
+  private cpuPercent(): number | null {
+    if (!this.previous) return null;
 
-/**
- * Docker's own memory figure subtracts the page cache, which is reclaimable and would otherwise
- * make an idle container look like it is holding hundreds of megabytes it does not need.
- */
-function memoryUsage(sample: ContainerStatsSample): number | null {
-  const usage = sample.memory_stats.usage;
-  if (usage === undefined) return null;
+    const { cpu_stats: current } = this.sample;
+    const used = current.cpu_usage.total_usage - this.previous.cpu_stats.cpu_usage.total_usage;
+    const available = current.system_cpu_usage - this.previous.cpu_stats.system_cpu_usage;
+    const cores = current.online_cpus || current.cpu_usage.percpu_usage?.length || 1;
 
-  const stats = sample.memory_stats.stats as Record<string, number> | undefined;
-  // cgroup v2 calls it `inactive_file`; v1 called it `total_inactive_file`.
-  const cache = stats?.inactive_file ?? stats?.total_inactive_file ?? 0;
+    // A restarted container resets its counter, which would otherwise read as a negative share.
+    if (available <= 0 || used < 0) return null;
 
-  return Math.max(usage - cache, 0);
-}
+    return (used / available) * cores * 100;
+  }
 
-/** Sums one direction across every network interface the container is attached to. */
-const network = (sample: ContainerStatsSample, direction: "rx_bytes" | "tx_bytes"): number | null => {
-  const interfaces = Object.values(sample.networks ?? {});
+  /**
+   * Docker's own memory figure subtracts the page cache, which is reclaimable and would otherwise
+   * make an idle container look like it is holding hundreds of megabytes it does not need.
+   */
+  private memoryUsage(): number | null {
+    const usage = this.sample.memory_stats.usage;
+    if (usage === undefined) return null;
 
-  return interfaces.length > 0 ? interfaces.reduce((total, entry) => total + entry[direction], 0) : null;
-};
+    const stats = this.sample.memory_stats.stats as Record<string, number> | undefined;
+    // cgroup v2 calls it `inactive_file`; v1 called it `total_inactive_file`.
+    const cache = stats?.inactive_file ?? stats?.total_inactive_file ?? 0;
 
-/** Sums one block I/O operation across every backing device. */
-const blockIo = (sample: ContainerStatsSample, operation: "read" | "write"): number | null => {
-  const entries = sample.blkio_stats?.io_service_bytes_recursive;
-  if (!entries) return null;
+    return Math.max(usage - cache, 0);
+  }
 
-  return entries.filter(entry => entry.op.toLowerCase() === operation).reduce((total, entry) => total + entry.value, 0);
-};
+  /** Sums one direction across every network interface the container is attached to. */
+  private network(direction: "rx_bytes" | "tx_bytes"): number | null {
+    const interfaces = Object.values(this.sample.networks ?? {});
 
-/**
- * Derives the UI-facing {@link ContainerMetrics} from one raw Engine API stats sample.
- * @param sample The sample just taken
- * @param previous The sample before it, needed for the CPU delta; omit it on the first one
- */
-export function containerMetrics(
-  sample: ContainerStatsSample,
-  previous?: ContainerStatsSample | undefined,
-): ContainerMetrics {
-  const usage = memoryUsage(sample);
-  const limit = sample.memory_stats.limit ?? null;
+    return interfaces.length > 0 ? interfaces.reduce((total, entry) => total + entry[direction], 0) : null;
+  }
 
-  return {
-    cpuPercent: cpuPercent(sample, previous),
-    memoryUsage: usage,
-    memoryLimit: limit,
-    memoryPercent: usage !== null && limit ? (usage / limit) * 100 : null,
-    networkRx: network(sample, "rx_bytes"),
-    networkTx: network(sample, "tx_bytes"),
-    blockRead: blockIo(sample, "read"),
-    blockWrite: blockIo(sample, "write"),
-  };
+  /** Sums one block I/O operation across every backing device. */
+  private blockIo(operation: "read" | "write"): number | null {
+    const entries = this.sample.blkio_stats?.io_service_bytes_recursive;
+    if (!entries) return null;
+
+    return entries
+      .filter(entry => entry.op.toLowerCase() === operation)
+      .reduce((total, entry) => total + entry.value, 0);
+  }
+
+  /** The UI-facing view of this sample. */
+  metrics(): ContainerMetrics {
+    const usage = this.memoryUsage();
+    const limit = this.sample.memory_stats.limit ?? null;
+
+    return {
+      cpuPercent: this.cpuPercent(),
+      memoryUsage: usage,
+      memoryLimit: limit,
+      memoryPercent: usage !== null && limit ? (usage / limit) * 100 : null,
+      networkRx: this.network("rx_bytes"),
+      networkTx: this.network("tx_bytes"),
+      blockRead: this.blockIo("read"),
+      blockWrite: this.blockIo("write"),
+    };
+  }
 }

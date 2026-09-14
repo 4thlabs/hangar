@@ -12,17 +12,17 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#app/components/ui/empty.tsx";
-import { DockerNotFoundError, getComposeProjectDetail } from "#libs/docker/projects.ts";
-import { hangar } from "#libs/hangar/server";
+import { DockerNotFoundError } from "#libs/docker/compose.ts";
+import { docker } from "#libs/docker/server.ts";
 import { logger } from "#libs/logs";
 
 export default async function AppDetailPage({ project }: PageProps<"/apps/[project]">) {
   try {
-    const detail = await getComposeProjectDetail(project, hangar.store.installedProjectIds());
+    const detail = await docker.projectDetail(project);
 
     return (
       <main>
-        <title>{project} | Apps | Hangar</title>
+        <title>{`${project} | Apps | Hangar`}</title>
         <AppDetail detail={detail} />
       </main>
     );
@@ -33,7 +33,7 @@ export default async function AppDetailPage({ project }: PageProps<"/apps/[proje
 
     return (
       <main>
-        <title>{project} | Apps | Hangar</title>
+        <title>{`${project} | Apps | Hangar`}</title>
         {error instanceof DockerNotFoundError ? (
           <Empty>
             <EmptyHeader>

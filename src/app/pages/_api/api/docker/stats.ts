@@ -1,35 +1,16 @@
 import { Readable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { dockerRoute, dockerStream } from "#app/api/docker-route.ts";
-import { docker } from "#libs/docker/client.ts";
-import { COMPOSE_PROJECT_LABEL } from "#libs/docker/projects.ts";
-import { containerMetrics, type ContainerStatsSample } from "#libs/docker/stats.ts";
+import type { Samples } from "#libs/docker/docker.ts";
+import { docker } from "#libs/docker/server.ts";
+import { ContainerStats } from "#libs/docker/stats.ts";
 
 /** How often a frame goes out. Also the window the CPU percentage is measured over. */
 const INTERVAL = 1_000;
 
-/** Raw samples keyed by full container id. */
-type Samples = Map<string, ContainerStatsSample>;
-
-/** Takes one sample of every running Compose container, in parallel. */
-async function sample(): Promise<Samples> {
-  const running = await docker.listContainers({ filters: { label: [COMPOSE_PROJECT_LABEL] } });
-  const samples = await Promise.all(
-    running.map(
-      async entry =>
-        [
-          entry.Id,
-          (await docker.getContainer(entry.Id).stats({ stream: false, "one-shot": true })) as unknown,
-        ] as const,
-    ),
-  );
-
-  return new Map(samples.map(([id, raw]) => [id, raw as ContainerStatsSample]));
-}
-
 /** One event, carrying every container's metrics; CPU is the delta from `previous`. */
 function frame(current: Samples, previous: Samples) {
-  const metrics = [...current].map(([id, raw]) => [id, containerMetrics(raw, previous.get(id))]);
+  const metrics = [...current].map(([id, raw]) => [id, new ContainerStats(raw, previous.get(id)).metrics()]);
 
   return `data: ${JSON.stringify(Object.fromEntries(metrics))}\n\n`;
 }
@@ -49,7 +30,7 @@ async function* frames(first: Samples, signal: AbortSignal) {
       yield frame(current, previous);
       previous = current;
       await delay(INTERVAL, undefined, { signal });
-      current = await sample();
+      current = await docker.sampleStats();
     }
   } catch {
     // The client went away, or the daemon did after a good first frame. Ending the stream is all
@@ -67,7 +48,7 @@ export const GET = dockerRoute(
   async request => {
     // Sampled before the response so an unreachable daemon surfaces as a 503 with a message,
     // rather than as a 200 that streams nothing and has the browser reconnect forever.
-    const first = await sample();
+    const first = await docker.sampleStats();
 
     // `objectMode: false` so the frames reach the response as bytes; the default would hand
     // `Response` raw strings, which it rejects.

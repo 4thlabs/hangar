@@ -43,7 +43,7 @@ store
   .description("View running compose projects")
   .addArgument(trailingArguments)
   .action(async (args: string[]) => {
-    // Deliberately shells out rather than reusing `listComposeProjects`: that module is marked
+    // Deliberately shells out rather than reusing `Docker.listProjects`: that module is marked
     // `server-only`, which throws outside a React Server Component — the CLI included.
     process.exitCode = await run(hangar => hangar.runtime.run("docker", ["compose", "ls", ...args]));
   });

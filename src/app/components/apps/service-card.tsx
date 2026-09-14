@@ -3,7 +3,7 @@ import { statusLabel, statusVariant } from "#app/components/apps/status.ts";
 import { Badge } from "#app/components/ui/badge.tsx";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import type { ContainerStats } from "#app/hooks/use-docker-stats.ts";
-import type { ComposeService } from "#libs/docker/projects.ts";
+import type { ComposeService } from "#libs/docker/compose.ts";
 import { ContainerTable } from "./container-table.tsx";
 
 type ServiceCardProps = { project: string; service: ComposeService; stats: ContainerStats };

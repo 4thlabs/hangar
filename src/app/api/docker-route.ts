@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 import { getSession } from "#libs/auth";
-import { DockerNotFoundError } from "#libs/docker/projects.ts";
+import { DockerNotFoundError } from "#libs/docker/compose.ts";
 import { logger } from "#libs/logs";
 
 /**

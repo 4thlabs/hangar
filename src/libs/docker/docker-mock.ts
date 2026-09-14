@@ -1,10 +1,12 @@
-import type Docker from "dockerode";
+import type Dockerode from "dockerode";
 import { vi } from "vitest";
-import type { ComposeContainerSource } from "./projects.ts";
+import type { ComposeContainerSource } from "./compose.ts";
+import type { InstalledApps } from "./docker.ts";
 
 /**
- * The Engine API calls the docker modules make, as vitest mocks. A test file swaps the real
- * client for {@link docker} with `vi.mock("./client.ts", ...)` and drives these.
+ * The Engine API calls the {@link Docker} class makes, as vitest mocks. A test builds a client
+ * with {@link fakeDockerode} and drives these; no module mocking is involved, because the class
+ * takes its client as a constructor argument.
  */
 export const dockerMock = {
   listContainers: vi.fn(),
@@ -14,16 +16,25 @@ export const dockerMock = {
   demuxStream: vi.fn(),
 };
 
-/** A stand-in for the `docker` singleton, routing every container call through {@link dockerMock}. */
-export const docker = {
-  listContainers: dockerMock.listContainers,
-  getContainer: (id: string) => ({
-    inspect: () => dockerMock.inspect(id),
-    logs: (options: unknown) => dockerMock.logs(id, options),
-    stats: (options: unknown) => dockerMock.stats(id, options),
-  }),
-  modem: { demuxStream: dockerMock.demuxStream },
-};
+/**
+ * A stand-in for a `Dockerode` client, routing every container call through {@link dockerMock}.
+ * Cast once here so the tests themselves stay free of `as unknown as` noise.
+ */
+export const fakeDockerode = () =>
+  ({
+    listContainers: dockerMock.listContainers,
+    getContainer: (id: string) => ({
+      inspect: () => dockerMock.inspect(id),
+      logs: (options: unknown) => dockerMock.logs(id, options),
+      stats: (options: unknown) => dockerMock.stats(id, options),
+    }),
+    modem: { demuxStream: dockerMock.demuxStream },
+  }) as unknown as Dockerode;
+
+/** An installed-app lookup over the given project names. */
+export const fakeApps = (...projects: string[]): InstalledApps => ({
+  installedProjectIds: () => new Set(projects),
+});
 
 type Overrides = {
   Id?: string;
@@ -31,7 +42,7 @@ type Overrides = {
   labels?: Record<string, string>;
   state?: string;
   health?: string;
-  ports?: Docker.Port[];
+  ports?: Dockerode.Port[];
   tty?: boolean;
 };
 

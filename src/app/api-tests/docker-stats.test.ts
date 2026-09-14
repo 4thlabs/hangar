@@ -5,7 +5,14 @@ const mocks = vi.hoisted(() => ({ getSession: vi.fn(), logger: { error: vi.fn() 
 vi.mock("server-only", () => ({}));
 vi.mock("#libs/auth", () => ({ getSession: mocks.getSession }));
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
-vi.mock("#libs/docker/client.ts", async () => ({ docker: (await import("#libs/docker/docker-mock.ts")).docker }));
+// One small singleton stands in for the whole layer: the class itself is tested against a fake
+// client in `src/libs/docker/docker.test.ts`.
+vi.mock("#libs/docker/server.ts", async () => {
+  const { Docker } = await import("#libs/docker/docker.ts");
+  const { fakeApps, fakeDockerode } = await import("#libs/docker/docker-mock.ts");
+
+  return { docker: new Docker(fakeDockerode(), fakeApps("alpha")) };
+});
 
 const { containerSource, dockerMock, givenContainers } = await import("#libs/docker/docker-mock.ts");
 const { GET } = await import("#app/pages/_api/api/docker/stats.ts");
