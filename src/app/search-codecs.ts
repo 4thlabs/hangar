@@ -1,5 +1,5 @@
 import type { Unstable_SearchCodec } from "waku/router";
-import type { ComposeProjectStatus } from "#libs/docker";
+import type { ComposeProjectStatus } from "#libs/docker/projects.ts";
 
 export type StoreFilter = "installed" | "available";
 export type StoreSearch = { q: string; filter: StoreFilter[] };

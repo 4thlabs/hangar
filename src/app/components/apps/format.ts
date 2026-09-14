@@ -12,3 +12,9 @@ export function formatBytes(value: number | null) {
 }
 
 export const formatPercent = (value: number | null) => (value === null ? "—" : `${value.toFixed(1)} %`);
+
+/** French plural agreement: the `s` a noun or adjective takes past one. */
+export const s = (count: number) => (count > 1 ? "s" : "");
+
+/** A count and its noun, agreed: `2 applications`. */
+export const plural = (count: number, word: string) => `${count} ${word}${s(count)}`;

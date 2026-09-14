@@ -1,89 +1,88 @@
-import type { ContainerMetrics } from "./types.ts";
+import type Docker from "dockerode";
 
-/** Fallback metrics for a container that has no live stats sample (e.g. it isn't running). */
-export const EMPTY_CONTAINER_METRICS: ContainerMetrics = {
-  cpuPercent: null,
-  memoryUsage: null,
-  memoryLimit: null,
-  memoryPercent: null,
-  networkRx: null,
-  networkTx: null,
-  blockRead: null,
-  blockWrite: null,
-};
+/** One raw sample from the Engine API's container stats endpoint. */
+export type ContainerStatsSample = Docker.ContainerStats;
 
-/** One line of `docker stats --no-stream --format '{{json .}}'`, every field pre-formatted as text. */
-export type DockerStatsLine = {
-  ID: string;
-  CPUPerc: string;
-  MemUsage: string;
-  MemPerc: string;
-  NetIO: string;
-  BlockIO: string;
-};
-
-// Docker mixes unit families in the same line: memory is binary (MiB/GiB), network and
-// block I/O are decimal (kB/MB). Both spellings have to parse to the right number of bytes.
-const UNITS: Record<string, number> = {
-  b: 1,
-  kb: 1e3,
-  mb: 1e6,
-  gb: 1e9,
-  tb: 1e12,
-  kib: 1024,
-  mib: 1024 ** 2,
-  gib: 1024 ** 3,
-  tib: 1024 ** 4,
+/** Point-in-time resource usage for a single container; a field is `null` when it could not be derived. */
+export type ContainerMetrics = {
+  cpuPercent: number | null;
+  memoryUsage: number | null;
+  memoryLimit: number | null;
+  memoryPercent: number | null;
+  networkRx: number | null;
+  networkTx: number | null;
+  blockRead: number | null;
+  blockWrite: number | null;
 };
 
 /**
- * Parses one Docker-formatted byte size, e.g. `"2.87GiB"`, `"19.7MB"` or `"126B"`.
- * @param value The size as Docker printed it
- * @returns The size in bytes, or `null` when it is absent or unparseable (Docker prints `"--"`)
+ * CPU time is a counter, so a percentage only exists between two samples: the container's own
+ * delta over the host's, scaled by the cores it may use. The very first sample of a container
+ * has nothing to compare against and reports `null` rather than a misleading zero.
  */
-export function parseBytes(value: string | undefined): number | null {
-  const match = /^([\d.]+)\s*([a-z]*)$/i.exec(value?.trim() ?? "");
-  if (!match) return null;
+function cpuPercent(sample: ContainerStatsSample, previous: ContainerStatsSample | undefined): number | null {
+  if (!previous) return null;
 
-  const [, amountText = "", unitText = ""] = match;
-  const amount = Number.parseFloat(amountText);
-  const unit = UNITS[unitText.toLowerCase() || "b"];
+  const used = sample.cpu_stats.cpu_usage.total_usage - previous.cpu_stats.cpu_usage.total_usage;
+  const available = sample.cpu_stats.system_cpu_usage - previous.cpu_stats.system_cpu_usage;
+  const cores = sample.cpu_stats.online_cpus || sample.cpu_stats.cpu_usage.percpu_usage?.length || 1;
 
-  return Number.isFinite(amount) && unit ? amount * unit : null;
+  // A restarted container resets its counter, which would otherwise read as a negative share.
+  if (available <= 0 || used < 0) return null;
+
+  return (used / available) * cores * 100;
 }
 
-/** Parses a Docker-formatted percentage, e.g. `"22.38%"`. */
-export function parsePercent(value: string | undefined): number | null {
-  const amount = Number.parseFloat(value?.replace("%", "").trim() ?? "");
+/**
+ * Docker's own memory figure subtracts the page cache, which is reclaimable and would otherwise
+ * make an idle container look like it is holding hundreds of megabytes it does not need.
+ */
+function memoryUsage(sample: ContainerStatsSample): number | null {
+  const usage = sample.memory_stats.usage;
+  if (usage === undefined) return null;
 
-  return Number.isFinite(amount) ? amount : null;
+  const stats = sample.memory_stats.stats as Record<string, number> | undefined;
+  // cgroup v2 calls it `inactive_file`; v1 called it `total_inactive_file`.
+  const cache = stats?.inactive_file ?? stats?.total_inactive_file ?? 0;
+
+  return Math.max(usage - cache, 0);
 }
 
-/** Splits a Docker `"<read> / <write>"` pair (used by `NetIO` and `BlockIO`) into bytes. */
-const parsePair = (value: string | undefined) => {
-  const [left, right] = (value ?? "").split("/");
+/** Sums one direction across every network interface the container is attached to. */
+const network = (sample: ContainerStatsSample, direction: "rx_bytes" | "tx_bytes"): number | null => {
+  const interfaces = Object.values(sample.networks ?? {});
 
-  return { left: parseBytes(left), right: parseBytes(right) };
+  return interfaces.length > 0 ? interfaces.reduce((total, entry) => total + entry[direction], 0) : null;
+};
+
+/** Sums one block I/O operation across every backing device. */
+const blockIo = (sample: ContainerStatsSample, operation: "read" | "write"): number | null => {
+  const entries = sample.blkio_stats?.io_service_bytes_recursive;
+  if (!entries) return null;
+
+  return entries.filter(entry => entry.op.toLowerCase() === operation).reduce((total, entry) => total + entry.value, 0);
 };
 
 /**
- * Derives the full {@link ContainerMetrics} shape from one `docker stats` line.
- * Docker already computes the CPU and memory percentages, so nothing is recomputed here.
- * @param stats One parsed line of `docker stats --no-stream --format '{{json .}}'`
+ * Derives the UI-facing {@link ContainerMetrics} from one raw Engine API stats sample.
+ * @param sample The sample just taken
+ * @param previous The sample before it, needed for the CPU delta; omit it on the first one
  */
-export function containerMetrics(stats: DockerStatsLine): ContainerMetrics {
-  const memory = parsePair(stats.MemUsage);
-  const network = parsePair(stats.NetIO);
-  const block = parsePair(stats.BlockIO);
+export function containerMetrics(
+  sample: ContainerStatsSample,
+  previous?: ContainerStatsSample | undefined,
+): ContainerMetrics {
+  const usage = memoryUsage(sample);
+  const limit = sample.memory_stats.limit ?? null;
 
   return {
-    cpuPercent: parsePercent(stats.CPUPerc),
-    memoryUsage: memory.left,
-    memoryLimit: memory.right,
-    memoryPercent: parsePercent(stats.MemPerc),
-    networkRx: network.left,
-    networkTx: network.right,
-    blockRead: block.left,
-    blockWrite: block.right,
+    cpuPercent: cpuPercent(sample, previous),
+    memoryUsage: usage,
+    memoryLimit: limit,
+    memoryPercent: usage !== null && limit ? (usage / limit) * 100 : null,
+    networkRx: network(sample, "rx_bytes"),
+    networkTx: network(sample, "tx_bytes"),
+    blockRead: blockIo(sample, "read"),
+    blockWrite: blockIo(sample, "write"),
   };
 }

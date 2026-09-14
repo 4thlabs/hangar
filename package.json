@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "imports": {
+    "#libs/docker/*": "./src/libs/docker/*",
     "#libs/*": "./src/libs/*/index.ts",
     "#*": "./src/*"
   },
@@ -30,6 +31,7 @@
     "cn": "^0.2.6",
     "commander": "^15.0.0",
     "cookie": "^2.0.1",
+    "dockerode": "^5.0.1",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^1.0.0-rc.4",
     "fuzzysort": "^4.0.2",
@@ -53,6 +55,7 @@
   "devDependencies": {
     "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "4.3.3",
+    "@types/dockerode": "^4.0.1",
     "@types/js-yaml": "^4.0.9",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

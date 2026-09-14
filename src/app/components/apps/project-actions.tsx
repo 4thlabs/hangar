@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useRouter } from "waku";
 import { ActionResult } from "#app/actions/action-result.ts";
 import { actionLabel, type AppOperation } from "#app/actions/apps/app-operation.ts";
 import {
@@ -12,12 +13,8 @@ import { ComposeOutputSheet } from "#app/components/apps/compose-output-sheet.ts
 import { createActionToast, createTransportErrorToast } from "#app/components/common/action-toast.ts";
 import { toast } from "#app/components/ui/toast.tsx";
 
-type ProjectActionsProps = {
-  project: string;
-  refresh: () => Promise<void>;
-};
-
-export function ProjectActions({ project, refresh }: ProjectActionsProps) {
+export function ProjectActions({ project }: { project: string }) {
+  const router = useRouter();
   const [confirmation, setConfirmation] = useState<DestructiveOperation | null>(null);
   const [running, setRunning] = useState<AppOperation | null>(null);
   const disabled = running !== null;
@@ -44,9 +41,9 @@ export function ProjectActions({ project, refresh }: ProjectActionsProps) {
             ),
       );
 
-      void refresh();
+      void router.reload();
     },
-    [project, refresh],
+    [project, router],
   );
 
   const confirmationTitle = confirmation === "down" ? `Arrêter ${project} ?` : `Recréer ${project} ?`;

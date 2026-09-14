@@ -1,0 +1,79 @@
+import { Readable } from "node:stream";
+import { setTimeout as delay } from "node:timers/promises";
+import { dockerRoute, dockerStream } from "#app/api/docker-route.ts";
+import { docker } from "#libs/docker/client.ts";
+import { COMPOSE_PROJECT_LABEL } from "#libs/docker/projects.ts";
+import { containerMetrics, type ContainerStatsSample } from "#libs/docker/stats.ts";
+
+/** How often a frame goes out. Also the window the CPU percentage is measured over. */
+const INTERVAL = 1_000;
+
+/** Raw samples keyed by full container id. */
+type Samples = Map<string, ContainerStatsSample>;
+
+/** Takes one sample of every running Compose container, in parallel. */
+async function sample(): Promise<Samples> {
+  const running = await docker.listContainers({ filters: { label: [COMPOSE_PROJECT_LABEL] } });
+  const samples = await Promise.all(
+    running.map(
+      async entry =>
+        [
+          entry.Id,
+          (await docker.getContainer(entry.Id).stats({ stream: false, "one-shot": true })) as unknown,
+        ] as const,
+    ),
+  );
+
+  return new Map(samples.map(([id, raw]) => [id, raw as ContainerStatsSample]));
+}
+
+/** One event, carrying every container's metrics; CPU is the delta from `previous`. */
+function frame(current: Samples, previous: Samples) {
+  const metrics = [...current].map(([id, raw]) => [id, containerMetrics(raw, previous.get(id))]);
+
+  return `data: ${JSON.stringify(Object.fromEntries(metrics))}\n\n`;
+}
+
+/**
+ * Each connection keeps its own previous sample: a CPU percentage is a delta between two reads,
+ * and one-shot samples cost ~2ms apiece, so there is nothing worth sharing between connections.
+ * @param first The sample taken before the response, so a dead daemon is a 503 and not an empty stream
+ */
+async function* frames(first: Samples, signal: AbortSignal) {
+  let previous: Samples = new Map();
+  let current = first;
+
+  try {
+    for (;;) {
+      // The first frame has no previous sample, so its CPU reads as unknown rather than zero.
+      yield frame(current, previous);
+      previous = current;
+      await delay(INTERVAL, undefined, { signal });
+      current = await sample();
+    }
+  } catch {
+    // The client went away, or the daemon did after a good first frame. Ending the stream is all
+    // that is left: the status line is long gone, so the browser reconnects and gets the 503 then.
+  }
+}
+
+/**
+ * Live resource usage for every running Compose container, as Server-Sent Events. The payload is
+ * keyed by full container id, so the same stream serves one app's container table and the
+ * whole-inventory totals — a caller reads the ids it happens to be showing.
+ */
+export const GET = dockerRoute(
+  { log: "Failed to stream Docker container statistics", unavailable: "Les statistiques Docker sont indisponibles." },
+  async request => {
+    // Sampled before the response so an unreachable daemon surfaces as a 503 with a message,
+    // rather than as a 200 that streams nothing and has the browser reconnect forever.
+    const first = await sample();
+
+    // `objectMode: false` so the frames reach the response as bytes; the default would hand
+    // `Response` raw strings, which it rejects.
+    return dockerStream(
+      Readable.from(frames(first, request.signal), { objectMode: false }),
+      "text/event-stream; charset=utf-8",
+    );
+  },
+);

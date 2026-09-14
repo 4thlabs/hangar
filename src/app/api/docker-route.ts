@@ -1,6 +1,32 @@
+import { Readable } from "node:stream";
 import { getSession } from "#libs/auth";
-import { dockerError, DockerNotFoundError, unauthorizedDockerResponse } from "#libs/docker";
+import { DockerNotFoundError } from "#libs/docker/projects.ts";
 import { logger } from "#libs/logs";
+
+/**
+ * Error response for the Docker API routes. The client only ever renders the message,
+ * so the HTTP status carries the machine-readable part.
+ * @param message Message shown to the user, in French
+ * @param status HTTP status to respond with
+ */
+export function dockerError(message: string, status: number): Response {
+  return Response.json({ success: false, error: { message } }, { status });
+}
+
+/**
+ * Streams a Node readable live: no buffering anywhere between the producer and the browser,
+ * or the output only shows up once the command is over.
+ * @param contentType Defaults to plain text; the statistics route sends an event stream
+ */
+export function dockerStream(stream: Readable, contentType = "text/plain; charset=utf-8"): Response {
+  return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
+    headers: {
+      "Cache-Control": "no-cache, no-store",
+      "Content-Type": contentType,
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
 
 type DockerRouteOptions = {
   /** Logged server-side when the handler throws something unexpected. */
@@ -26,7 +52,7 @@ export function dockerRoute<C extends RouteContext = RouteContext>(
   handler: (request: Request, context: C) => Promise<Response>,
 ) {
   return async (request: Request, context = {} as C): Promise<Response> => {
-    if (!(await getSession(request))) return unauthorizedDockerResponse();
+    if (!(await getSession(request))) return dockerError("Authentification requise.", 401);
 
     try {
       return await handler(request, context);

@@ -3,8 +3,7 @@ import type { ApiContext } from "waku/router";
 import { isAppOperation } from "#app/actions/apps/app-operation.ts";
 import { appOperationArguments, refuseAppOperation } from "#app/actions/apps/app-operations.ts";
 import { COMPOSE_EXIT_MARKER } from "#app/actions/apps/compose-stream.ts";
-import { dockerRoute } from "#app/api/docker-route.ts";
-import { dockerError, dockerTextStream } from "#libs/docker";
+import { dockerError, dockerRoute, dockerStream } from "#app/api/docker-route.ts";
 import { HangarRuntimeError } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
@@ -45,6 +44,6 @@ export const POST = dockerRoute<ApiContext<"/api/docker/apps/[project]/compose">
         output.end(`\n${COMPOSE_EXIT_MARKER}${exitCode(error)}\n`);
       });
 
-    return dockerTextStream(output);
+    return dockerStream(output);
   },
 );

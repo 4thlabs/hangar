@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { ComposeContainer, ComposeProjectsSnapshot } from "#libs/docker";
+import type { ComposeContainer, ComposeProjectsSnapshot } from "#libs/docker/projects.ts";
 
 vi.mock("waku", () => ({
   Link: ({ children }: { children: ReactNode }) => <a href="/apps/alpha">{children}</a>,
+  useRouter: () => ({ reload: async () => {} }),
 }));
 vi.mock("waku/router/client", () => ({
   useSearch_UNSTABLE: () => ({ q: "", status: [], sort: null }),
@@ -18,7 +19,6 @@ const { AppsOverview } = await import("./apps-overview.tsx");
 const { ContainerTable } = await import("./container-table.tsx");
 
 const snapshot: ComposeProjectsSnapshot = {
-  sampledAt: "2026-01-01T00:00:00.000Z",
   projects: [
     {
       name: "alpha",
@@ -28,6 +28,7 @@ const snapshot: ComposeProjectsSnapshot = {
       runningCount: 2,
       stoppedCount: 1,
       unhealthyCount: 0,
+      containerIds: ["container-1", "container-2", "container-3"],
     },
   ],
 };
@@ -41,8 +42,12 @@ const container: ComposeContainer = {
   state: "running",
   health: "healthy",
   restartCount: 2,
-  ports: [{ hostIp: "0.0.0.0", hostPort: 8080, containerPort: 80, protocol: "tcp" }],
-  metrics: {
+  ports: [{ IP: "0.0.0.0", PrivatePort: 80, PublicPort: 8080, Type: "tcp" }],
+};
+
+/** One frame of the stats stream, keyed by container id the way the SSE route sends it. */
+const stats = {
+  [container.id]: {
     cpuPercent: 12.5,
     memoryUsage: 1024,
     memoryLimit: 2048,
@@ -52,7 +57,6 @@ const container: ComposeContainer = {
     blockRead: 300,
     blockWrite: 400,
   },
-  metricsAvailable: true,
 };
 
 describe("Docker apps views", () => {
@@ -66,9 +70,7 @@ describe("Docker apps views", () => {
       runningCount: 0,
       stoppedCount: 0,
     };
-    const html = renderToStaticMarkup(
-      <AppsTable projects={[...snapshot.projects, stopped]} refresh={async () => {}} />,
-    );
+    const html = renderToStaticMarkup(<AppsTable projects={[...snapshot.projects, stopped]} />);
 
     expect(html).toContain("alpha");
     expect(html).toContain("Partiel");
@@ -85,7 +87,7 @@ describe("Docker apps views", () => {
     const html = renderToStaticMarkup(
       <AppsTable
         projects={snapshot.projects}
-        refresh={async () => {}}
+
         sort={{ column: "services", descending: true }}
       />,
     );
@@ -98,7 +100,7 @@ describe("Docker apps views", () => {
 
   it("renders the empty Compose inventory state", () => {
     const html = renderToStaticMarkup(
-      <AppsOverview initialData={{ ...snapshot, projects: [] }} initialError={null} search={noSearch} />,
+      <AppsOverview snapshot={{ ...snapshot, projects: [] }} error={null} search={noSearch} />,
     );
 
     expect(html).toContain("Aucune application installée");
@@ -106,21 +108,26 @@ describe("Docker apps views", () => {
   });
 
   it("renders daemon errors without inventing project data", () => {
-    const html = renderToStaticMarkup(
-      <AppsOverview initialData={null} initialError="Socket inaccessible" search={noSearch} />,
-    );
+    const html = renderToStaticMarkup(<AppsOverview snapshot={null} error="Socket inaccessible" search={noSearch} />);
 
     expect(html).toContain("Docker indisponible");
     expect(html).toContain("Socket inaccessible");
   });
 
-  it("renders container metrics, ports and the logs action", () => {
-    const html = renderToStaticMarkup(<ContainerTable project="alpha" containers={[container]} />);
+  it("renders live metrics from the stats frame, ports and the logs action", () => {
+    const html = renderToStaticMarkup(<ContainerTable stats={stats} project="alpha" containers={[container]} />);
 
     expect(html).toContain("alpha-web-1");
     expect(html).toContain("nginx:latest");
     expect(html).toContain("8080");
     expect(html).toContain("12.5 %");
     expect(html).toContain("Logs");
+  });
+
+  it("shows dashes for a container the stats stream has no frame for", () => {
+    const html = renderToStaticMarkup(<ContainerTable stats={{}} project="alpha" containers={[container]} />);
+
+    expect(html).toContain("alpha-web-1");
+    expect(html).not.toContain("12.5 %");
   });
 });

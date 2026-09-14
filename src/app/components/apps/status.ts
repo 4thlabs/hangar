@@ -1,4 +1,4 @@
-import type { ComposeProjectStatus } from "#libs/docker";
+import type { ComposeProjectStatus } from "#libs/docker/projects.ts";
 
 export const statusLabel: Record<ComposeProjectStatus, string> = {
   running: "En cours",

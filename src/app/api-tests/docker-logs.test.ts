@@ -10,15 +10,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("server-only", () => ({}));
 vi.mock("#libs/auth", () => ({ getSession: mocks.getSession }));
-vi.mock("#libs/docker", async importOriginal => ({
-  // The response helpers and error class are real; only the Docker calls are stubbed.
-  ...(await importOriginal<typeof import("#libs/docker")>()),
-  openDockerLogs: mocks.openDockerLogs,
-}));
+vi.mock("#libs/docker/logs.ts", () => ({ openDockerLogs: mocks.openDockerLogs }));
 vi.mock("#libs/hangar/server", () => ({ hangar: { runtime: mocks.runtime } }));
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
 
-const { DockerNotFoundError } = await import("#libs/docker");
+const { DockerNotFoundError } = await import("#libs/docker/projects.ts");
 const { GET } = await import("#app/pages/_api/api/docker/apps/[project]/containers/[container]/logs.ts");
 const context = { params: { project: "alpha", container: "a".repeat(64) } };
 
@@ -46,8 +42,8 @@ describe("GET Docker container logs", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("x-accel-buffering")).toBe("no");
     expect(await response.text()).toBe("hello\n");
-    // The signal is what kills `docker logs -f` when the client disconnects.
-    expect(mocks.openDockerLogs).toHaveBeenCalledWith(mocks.runtime, "alpha", "a".repeat(64), request.signal);
+    // The signal is what tears the log stream down when the client disconnects.
+    expect(mocks.openDockerLogs).toHaveBeenCalledWith("alpha", "a".repeat(64), request.signal);
   });
 
   it("returns 404 when the container is absent or belongs to another project", async () => {

@@ -1,6 +1,6 @@
 import { searchByName } from "#app/search.ts";
 import { APP_STATUSES, type AppSortColumn, type AppsSearch, type AppsSort } from "#app/search-codecs.ts";
-import type { ComposeProjectSummary } from "#libs/docker";
+import type { ComposeProjectSummary } from "#libs/docker/projects.ts";
 
 /** What each sortable column compares on. Status sorts by severity, i.e. `APP_STATUSES` order. */
 const sortValue: Record<AppSortColumn, (project: ComposeProjectSummary) => number | string> = {

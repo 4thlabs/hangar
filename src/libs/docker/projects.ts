@@ -1,18 +1,58 @@
 import "server-only";
 
-import { HangarError, type CommandRunner } from "#libs/hangar";
-import { logger } from "#libs/logs";
-import { containerMetrics, EMPTY_CONTAINER_METRICS, type DockerStatsLine } from "./stats.ts";
-import type {
-  ComposeContainer,
-  ComposeProjectDetail,
-  ComposeProjectStatus,
-  ComposeProjectSummary,
-  ComposeProjectsSnapshot,
-  ComposeService,
-  ContainerHealth,
-  PublishedPort,
-} from "./types.ts";
+import type Docker from "dockerode";
+import { HangarError } from "#libs/hangar";
+import { docker } from "./client.ts";
+
+/** Aggregate run state of a Compose project or service. */
+export type ComposeProjectStatus = "running" | "partial" | "stopped" | "unhealthy";
+
+/** Docker healthcheck state of a single container. */
+export type ContainerHealth = "healthy" | "unhealthy" | "starting" | "none";
+
+/** Lightweight per-project summary, cheap enough to compute for every project on the overview page. */
+export type ComposeProjectSummary = {
+  name: string;
+  status: ComposeProjectStatus;
+  serviceCount: number;
+  containerCount: number;
+  runningCount: number;
+  stoppedCount: number;
+  unhealthyCount: number;
+  /** Full ids of this project's containers, so a client can pick its rows out of the stats stream. */
+  containerIds: string[];
+};
+
+/** Response body for the "list all projects" endpoint. */
+export type ComposeProjectsSnapshot = { projects: ComposeProjectSummary[] };
+
+/** Full detail for one container, as shown on the project detail page. */
+export type ComposeContainer = {
+  id: string;
+  name: string;
+  service: string;
+  /** Compose replica index (`container-number` label), or `null` when absent/unparseable. */
+  replica: number | null;
+  image: string;
+  state: string;
+  health: ContainerHealth;
+  restartCount: number | null;
+  /** Host-published ports only, as the Engine API reports them. */
+  ports: Docker.Port[];
+};
+
+/** One Compose service (a named group of container replicas) within a project. */
+export type ComposeService = {
+  name: string;
+  status: ComposeProjectStatus;
+  containerCount: number;
+  runningCount: number;
+  unhealthyCount: number;
+  containers: ComposeContainer[];
+};
+
+/** Full detail for one Compose project, as shown on the project detail page. */
+export type ComposeProjectDetail = ComposeProjectSummary & { services: ComposeService[] };
 
 /** Labels Docker Compose stamps on every container it creates; used to discover and group projects. */
 export const COMPOSE_PROJECT_LABEL = "com.docker.compose.project";
@@ -20,29 +60,12 @@ export const COMPOSE_SERVICE_LABEL = "com.docker.compose.service";
 export const COMPOSE_CONTAINER_NUMBER_LABEL = "com.docker.compose.container-number";
 export const COMPOSE_ONEOFF_LABEL = "com.docker.compose.oneoff";
 
-/** The subset of `docker inspect` output this module reads. */
-export type InspectedContainer = {
-  Id: string;
-  Name: string;
-  RestartCount: number;
-  State: { Status: string; Health?: { Status: string } };
-  Config: { Image: string; Labels: Record<string, string> };
-  NetworkSettings: { Ports: Record<string, { HostIp: string; HostPort: string }[] | null> };
-};
-
-/** `docker stats` and `docker ps` report a 12-character id; `docker inspect` reports the full one. */
-const shortId = (id: string) => id.slice(0, 12);
-
 /**
- * Runs a `docker` command and parses its newline-delimited JSON output, the shape
- * `--format '{{json .}}'` produces. The runner already decides what a failure is:
- * a command that printed nothing rejects, a partial success comes back parseable.
+ * A Compose container seen through both Engine API views. The list entry already carries labels,
+ * state, image and structured ports; the inspect adds the healthcheck and the restart count,
+ * which the list only exposes inside a human-readable status string.
  */
-async function dockerJson<T>(runner: CommandRunner, args: string[]): Promise<T[]> {
-  const { stdout } = await runner.run("docker", args, { capture: true });
-
-  return stdout.split("\n").flatMap(line => (line.trim() ? [JSON.parse(line) as T] : []));
-}
+export type ComposeContainerSource = { info: Docker.ContainerInfo; detail: Docker.ContainerInspectInfo };
 
 const textCompare = (left: string, right: string) => left.localeCompare(right, "en");
 
@@ -51,8 +74,8 @@ export const isComposeOneoff = (labels: Record<string, string>) =>
   labels[COMPOSE_ONEOFF_LABEL]?.toLowerCase() === "true";
 
 /** Reads Docker's structured healthcheck state; `none` when the container declares no healthcheck. */
-export const containerHealth = (container: InspectedContainer): ContainerHealth => {
-  const health = container.State.Health?.Status;
+export const containerHealth = ({ detail }: ComposeContainerSource): ContainerHealth => {
+  const health = detail.State.Health?.Status;
 
   return health === "healthy" || health === "unhealthy" || health === "starting" ? health : "none";
 };
@@ -80,30 +103,30 @@ export function projectStatus(
  * @param installedProjects Project names Hangar installed and can run compose commands against
  */
 export function buildComposeProjectSummaries(
-  containers: InspectedContainer[],
+  containers: ComposeContainerSource[],
   installedProjects: ReadonlySet<string>,
 ): ComposeProjectSummary[] {
   const projects = new Map<
     string,
-    { services: Set<string>; containerCount: number; runningCount: number; unhealthyCount: number }
+    { services: Set<string>; containerIds: string[]; runningCount: number; unhealthyCount: number }
   >();
 
   for (const container of containers) {
-    const labels = container.Config.Labels;
+    const labels = container.info.Labels;
     const project = labels[COMPOSE_PROJECT_LABEL] ?? "";
     const service = labels[COMPOSE_SERVICE_LABEL] ?? "";
 
     if (installedProjects.has(project)) {
       const aggregate = projects.get(project) ?? {
         services: new Set<string>(),
-        containerCount: 0,
+        containerIds: [],
         runningCount: 0,
         unhealthyCount: 0,
       };
 
       aggregate.services.add(service);
-      aggregate.containerCount += 1;
-      aggregate.runningCount += container.State.Status === "running" ? 1 : 0;
+      aggregate.containerIds.push(container.info.Id);
+      aggregate.runningCount += container.info.State === "running" ? 1 : 0;
       aggregate.unhealthyCount += containerHealth(container) === "unhealthy" ? 1 : 0;
       projects.set(project, aggregate);
     }
@@ -111,19 +134,20 @@ export function buildComposeProjectSummaries(
 
   for (const name of installedProjects) {
     if (!projects.has(name)) {
-      projects.set(name, { services: new Set(), containerCount: 0, runningCount: 0, unhealthyCount: 0 });
+      projects.set(name, { services: new Set(), containerIds: [], runningCount: 0, unhealthyCount: 0 });
     }
   }
 
   return [...projects.entries()]
     .map(([name, aggregate]) => ({
       name,
-      status: projectStatus(aggregate.containerCount, aggregate.runningCount, aggregate.unhealthyCount),
+      status: projectStatus(aggregate.containerIds.length, aggregate.runningCount, aggregate.unhealthyCount),
       serviceCount: aggregate.services.size,
-      containerCount: aggregate.containerCount,
+      containerCount: aggregate.containerIds.length,
       runningCount: aggregate.runningCount,
-      stoppedCount: aggregate.containerCount - aggregate.runningCount,
+      stoppedCount: aggregate.containerIds.length - aggregate.runningCount,
       unhealthyCount: aggregate.unhealthyCount,
+      containerIds: aggregate.containerIds,
     }))
     .sort((left, right) => textCompare(left.name, right.name));
 }
@@ -141,34 +165,22 @@ export class DockerNotFoundError extends HangarError {
 }
 
 /**
- * Lists and inspects every Compose-labeled container, or just one project's.
- * One `docker inspect` call covers them all: labels, state, healthcheck and ports
- * all come back structured, so nothing has to be scraped from a human-readable string.
- *
- * ponytail: every id goes into a single `docker inspect` argv, which caps this at a few
- * thousand containers on a normal host. Chunk the id list if one ever gets that big.
- * @param runner Runs the `docker` commands
+ * Lists every Compose-labeled container, or just one project's, in both API views. The daemon
+ * applies the label filter itself, and an inspect costs a few milliseconds over the socket, so
+ * they all go out at once.
  * @param project When set, only that Compose project's containers
  */
-export async function inspectComposeContainers(runner: CommandRunner, project?: string): Promise<InspectedContainer[]> {
+export async function inspectComposeContainers(project?: string): Promise<ComposeContainerSource[]> {
   const label = project ? `${COMPOSE_PROJECT_LABEL}=${project}` : COMPOSE_PROJECT_LABEL;
-  const listed = await runner.run("docker", ["ps", "-a", "--filter", `label=${label}`, "--format", "{{.ID}}"], {
-    capture: true,
-  });
-  const ids = listed.stdout
-    .split("\n")
-    .map(line => line.trim())
-    .filter(Boolean);
+  const listed = await docker.listContainers({ all: true, filters: { label: [label] } });
 
-  if (ids.length === 0) return [];
-
-  return dockerJson<InspectedContainer>(runner, ["inspect", ...ids, "--format", "{{json .}}"]);
+  return Promise.all(listed.map(async info => ({ info, detail: await docker.getContainer(info.Id).inspect() })));
 }
 
 /** Keeps only containers that belong to a Compose service and aren't from a one-off run. */
-const composeManaged = (containers: InspectedContainer[], project?: string) =>
+export const composeManaged = (containers: ComposeContainerSource[], project?: string) =>
   containers.filter(container => {
-    const labels = container.Config.Labels;
+    const labels = container.info.Labels;
 
     return (
       Boolean(labels[COMPOSE_PROJECT_LABEL]) &&
@@ -180,19 +192,12 @@ const composeManaged = (containers: InspectedContainer[], project?: string) =>
 
 /**
  * Lists every app Hangar installed, as lightweight summaries of their Docker state.
- * @param runner Runs the `docker` commands
  * @param installedProjects Project names Hangar installed and can run compose commands against
  */
-export async function listComposeProjects(
-  runner: CommandRunner,
-  installedProjects: ReadonlySet<string>,
-): Promise<ComposeProjectsSnapshot> {
-  const containers = await inspectComposeContainers(runner);
+export async function listComposeProjects(installedProjects: ReadonlySet<string>): Promise<ComposeProjectsSnapshot> {
+  const containers = await inspectComposeContainers();
 
-  return {
-    sampledAt: new Date().toISOString(),
-    projects: buildComposeProjectSummaries(composeManaged(containers), installedProjects),
-  };
+  return { projects: buildComposeProjectSummaries(composeManaged(containers), installedProjects) };
 }
 
 /** Parses the Compose replica index label, or `null` when absent/unparseable. */
@@ -202,57 +207,23 @@ const parseReplica = (labels: Record<string, string>) => {
 };
 
 /** Keeps only ports actually published to the host, sorted by host port. */
-const publishedPorts = (ports: InspectedContainer["NetworkSettings"]["Ports"]): PublishedPort[] =>
-  Object.entries(ports ?? {})
-    .flatMap(([portSpec, bindings]) => {
-      const [containerPort = "", protocol = "tcp"] = portSpec.split("/");
+const publishedPorts = (ports: Docker.Port[]) =>
+  ports.filter(port => port.PublicPort).sort((left, right) => left.PublicPort - right.PublicPort);
 
-      return (bindings ?? []).map(binding => ({
-        hostIp: binding.HostIp || "0.0.0.0",
-        hostPort: Number.parseInt(binding.HostPort, 10),
-        containerPort: Number.parseInt(containerPort, 10),
-        protocol,
-      }));
-    })
-    .filter(port => Number.isFinite(port.hostPort))
-    .sort((left, right) => left.hostPort - right.hostPort);
-
-/**
- * Takes one live stats sample for the given containers, keyed by the short id `docker stats`
- * reports. Returns `null` when the sample fails, so the caller can mark the snapshot partial.
- *
- * This costs 1-2 seconds however it is asked for: a CPU percentage is a delta, so the daemon
- * itself waits between two samples. Keep it off anything a page render blocks on.
- */
-async function sampleStats(runner: CommandRunner, ids: string[]): Promise<Map<string, DockerStatsLine> | null> {
-  if (ids.length === 0) return new Map();
-
-  try {
-    const lines = await dockerJson<DockerStatsLine>(runner, ["stats", "--no-stream", "--format", "{{json .}}", ...ids]);
-
-    return new Map(lines.map(line => [shortId(line.ID), line]));
-  } catch (error) {
-    logger.warn({ error }, "Docker container statistics failed");
-    return null;
-  }
-}
-
-/** Builds the UI-facing container shape, attaching a live stats sample when one was taken. */
-function toComposeContainer(container: InspectedContainer, stats: DockerStatsLine | undefined): ComposeContainer {
-  const labels = container.Config.Labels;
+/** Builds the UI-facing container shape. Resource usage is not here: it arrives over the stats stream. */
+function toComposeContainer({ info, detail }: ComposeContainerSource): ComposeContainer {
+  const labels = info.Labels;
 
   return {
-    id: container.Id,
-    name: container.Name.replace(/^\//, ""),
+    id: info.Id,
+    name: (info.Names[0] ?? "").replace(/^\//, ""),
     service: labels[COMPOSE_SERVICE_LABEL] ?? "unknown",
     replica: parseReplica(labels),
-    image: container.Config.Image,
-    state: container.State.Status,
-    health: containerHealth(container),
-    restartCount: container.RestartCount ?? null,
-    ports: publishedPorts(container.NetworkSettings.Ports),
-    metrics: stats ? containerMetrics(stats) : EMPTY_CONTAINER_METRICS,
-    metricsAvailable: stats !== undefined,
+    image: info.Image,
+    state: info.State,
+    health: containerHealth({ info, detail }),
+    restartCount: detail.RestartCount ?? null,
+    ports: publishedPorts(info.Ports),
   };
 }
 
@@ -283,38 +254,22 @@ const buildServices = (containers: ComposeContainer[]): ComposeService[] => {
 };
 
 /**
- * Fetches full detail (services, containers, live metrics) for one installed app.
+ * Fetches the topology (services, containers, ports) of one installed app. No resource usage:
+ * that is sampled separately and arrives over the stats stream.
  * An installed app with no container yet resolves to a stopped project with no service.
- * @param runner Runs the `docker` commands
  * @param project The Compose project name
  * @param installedProjects Project names Hangar installed and can run compose commands against
- * @param sampleMetrics Whether to take a live stats sample; see {@link sampleStats} for its cost
  * @throws {DockerNotFoundError} if the project is not an installed app
  */
 export async function getComposeProjectDetail(
-  runner: CommandRunner,
   project: string,
   installedProjects: ReadonlySet<string>,
-  sampleMetrics = true,
 ): Promise<ComposeProjectDetail> {
-  const containers = composeManaged(await inspectComposeContainers(runner, project), project);
-  const summary = buildComposeProjectSummaries(containers, installedProjects).find(entry => entry.name === project);
+  const containers = composeManaged(await inspectComposeContainers(project), project);
+  // One name in, one summary out: an app Hangar didn't install yields none, and reads as not found.
+  const [summary] = buildComposeProjectSummaries(containers, new Set(installedProjects.has(project) ? [project] : []));
 
   if (!summary) throw new DockerNotFoundError(`Compose project ${project}`);
 
-  // No ids means no sample and no cost: skipping metrics needs no separate branch.
-  const running = sampleMetrics ? containers.filter(container => container.State.Status === "running") : [];
-  const stats = await sampleStats(
-    runner,
-    running.map(container => container.Id),
-  );
-
-  return {
-    ...summary,
-    sampledAt: new Date().toISOString(),
-    services: buildServices(
-      containers.map(container => toComposeContainer(container, stats?.get(shortId(container.Id)))),
-    ),
-    partial: stats === null,
-  };
+  return { ...summary, services: buildServices(containers.map(toComposeContainer)) };
 }

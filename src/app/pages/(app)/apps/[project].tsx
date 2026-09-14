@@ -12,25 +12,18 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#app/components/ui/empty.tsx";
-import { DockerNotFoundError, getComposeProjectDetail } from "#libs/docker";
+import { DockerNotFoundError, getComposeProjectDetail } from "#libs/docker/projects.ts";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 
 export default async function AppDetailPage({ project }: PageProps<"/apps/[project]">) {
   try {
-    // Without the stats sample: it costs 1-2s and would delay first paint by that much.
-    // `AppDetail` polls on mount, so the metrics land a moment after the page is usable.
-    const initialData = await getComposeProjectDetail(
-      hangar.runtime,
-      project,
-      hangar.store.installedProjectIds(),
-      false,
-    );
+    const detail = await getComposeProjectDetail(project, hangar.store.installedProjectIds());
 
     return (
       <main>
         <title>{project} | Apps | Hangar</title>
-        <AppDetail initialData={initialData} />
+        <AppDetail detail={detail} />
       </main>
     );
   } catch (error) {

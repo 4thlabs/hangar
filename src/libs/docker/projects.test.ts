@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
-import type { CommandRunner } from "#libs/hangar";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.mock("./client.ts", async () => ({ docker: (await import("./docker-mock.ts")).docker }));
+
+const { containerSource, dockerMock, givenContainers } = await import("./docker-mock.ts");
 
 const {
   buildComposeProjectSummaries,
@@ -12,68 +14,26 @@ const {
   DockerNotFoundError,
   getComposeProjectDetail,
 } = await import("./projects.ts");
+/** Shorthand for the shared fixture, which already defaults to one `alpha`/`web` container. */
+const container = containerSource;
 
-type Overrides = {
-  Id?: string;
-  Name?: string;
-  labels?: Record<string, string>;
-  status?: string;
-  health?: string;
-};
-
-/** A `docker inspect` entry, trimmed to the fields the module reads. */
-const container = ({
-  Id = "container-1",
-  Name = "/alpha-web-1",
-  labels,
-  status = "running",
-  health,
-}: Overrides = {}) => ({
-  Id,
-  Name,
-  RestartCount: 2,
-  State: { Status: status, ...(health ? { Health: { Status: health } } : {}) },
-  Config: {
-    Image: "nginx:alpine",
-    Labels: labels ?? {
-      [COMPOSE_PROJECT_LABEL]: "alpha",
-      [COMPOSE_SERVICE_LABEL]: "web",
-      [COMPOSE_CONTAINER_NUMBER_LABEL]: "1",
-    },
-  },
-  NetworkSettings: { Ports: { "80/tcp": [{ HostIp: "127.0.0.1", HostPort: "8080" }] } },
-});
-
-/**
- * A runner that answers the three `docker` commands this module issues, the way the real
- * runtime would: `ps` with one id per line, `inspect` and `stats` with one JSON doc per line.
- */
-const runnerFor = (containers: ReturnType<typeof container>[], stats: unknown[] = []): CommandRunner => ({
-  run: vi.fn(async (_command: string, args: string[]) => {
-    const lines =
-      args[0] === "ps"
-        ? containers.map(entry => entry.Id)
-        : (args[0] === "stats" ? stats : containers).map(entry => JSON.stringify(entry));
-
-    return { code: 0, stdout: lines.join("\n") };
-  }),
-});
+beforeEach(() => vi.clearAllMocks());
 
 describe("Docker Compose project aggregation", () => {
   it("groups by canonical labels, ignores one-offs and non-installed projects, and sorts projects", () => {
     const containers = [
       container({
         Id: "beta-1",
-        Name: "/beta-api-1",
+        name: "/beta-api-1",
         labels: { [COMPOSE_PROJECT_LABEL]: "beta", [COMPOSE_SERVICE_LABEL]: "api" },
         health: "unhealthy",
       }),
       container(),
       container({
         Id: "alpha-db-1",
-        Name: "/alpha-db-1",
+        name: "/alpha-db-1",
         labels: { [COMPOSE_PROJECT_LABEL]: "alpha", [COMPOSE_SERVICE_LABEL]: "db" },
-        status: "exited",
+        state: "exited",
       }),
     ];
 
@@ -86,6 +46,7 @@ describe("Docker Compose project aggregation", () => {
         runningCount: 1,
         stoppedCount: 1,
         unhealthyCount: 0,
+        containerIds: ["container-1", "alpha-db-1"],
       },
       {
         name: "beta",
@@ -95,6 +56,7 @@ describe("Docker Compose project aggregation", () => {
         runningCount: 1,
         stoppedCount: 0,
         unhealthyCount: 1,
+        containerIds: ["beta-1"],
       },
     ]);
     expect(buildComposeProjectSummaries(containers, new Set(["alpha"])).map(project => project.name)).toEqual([
@@ -112,12 +74,13 @@ describe("Docker Compose project aggregation", () => {
         runningCount: 0,
         stoppedCount: 0,
         unhealthyCount: 0,
+        containerIds: [],
       },
     ]);
   });
 
   it("excludes one-off containers and those without a service label", async () => {
-    const runner = runnerFor([
+    givenContainers([
       container(),
       container({
         Id: "alpha-run-1",
@@ -130,83 +93,53 @@ describe("Docker Compose project aggregation", () => {
       container({ Id: "no-service", labels: { [COMPOSE_PROJECT_LABEL]: "alpha" } }),
     ]);
 
-    const detail = await getComposeProjectDetail(runner, "alpha", new Set(["alpha"]));
+    const detail = await getComposeProjectDetail("alpha", new Set(["alpha"]));
 
     expect(detail.services.map(service => service.name)).toEqual(["web"]);
     expect(detail.containerCount).toBe(1);
   });
 
   it("returns an empty detail for an installed app without containers", async () => {
-    await expect(getComposeProjectDetail(runnerFor([]), "gamma", new Set(["alpha", "gamma"]))).resolves.toMatchObject({
+    await expect(getComposeProjectDetail("gamma", new Set(["alpha", "gamma"]))).resolves.toMatchObject({
       name: "gamma",
       status: "stopped",
       services: [],
-      partial: false,
+      containerIds: [],
     });
   });
 
   it("rejects a project that is not an installed app", async () => {
-    await expect(getComposeProjectDetail(runnerFor([container()]), "alpha", new Set(["beta"]))).rejects.toThrow(
-      DockerNotFoundError,
-    );
+    givenContainers([container()]);
+
+    await expect(getComposeProjectDetail("alpha", new Set(["beta"]))).rejects.toThrow(DockerNotFoundError);
   });
 
-  it("skips the stats sample entirely when metrics are not asked for", async () => {
-    const runner = runnerFor([container()]);
+  it("never samples statistics: the topology must not wait on a CPU delta", async () => {
+    givenContainers([container()]);
 
-    const detail = await getComposeProjectDetail(runner, "alpha", new Set(["alpha"]), false);
+    const detail = await getComposeProjectDetail("alpha", new Set(["alpha"]));
 
-    // The page render path must not pay the 1-2s `docker stats` cost.
-    const commands = (runner.run as unknown as { mock: { calls: [string, string[]][] } }).mock.calls.map(
-      call => call[1][0],
-    );
-    expect(commands).not.toContain("stats");
-    expect(detail.services[0]?.containers[0]).toMatchObject({ metricsAvailable: false });
-    // Skipping is deliberate, not a failed sample: no "partial" warning on the page.
-    expect(detail.partial).toBe(false);
+    expect(dockerMock.stats).not.toHaveBeenCalled();
+    // The ids are what lets the client pick this app's rows out of the shared stats stream.
+    expect(detail.containerIds).toEqual(["container-1"]);
   });
 
-  it("attaches live metrics to the matching container and publishes its ports", async () => {
-    const runner = runnerFor(
-      [container({ Id: "abcdef0123456789" })],
-      [
-        {
-          // `docker stats` reports the short id; the full inspect id has to find it.
-          ID: "abcdef012345",
-          CPUPerc: "10.00%",
-          MemUsage: "100MiB / 1GiB",
-          MemPerc: "10.00%",
-          NetIO: "1kB / 2kB",
-          BlockIO: "3kB / 4kB",
-        },
-      ],
-    );
+  it("describes the container and keeps only host-published ports", async () => {
+    givenContainers([
+      container({
+        Id: "abcdef0123456789",
+        ports: [
+          // Exposed but not published: nothing to show the user, and no host port to sort on.
+          { IP: "", PrivatePort: 9000, PublicPort: 0, Type: "tcp" },
+          { IP: "127.0.0.1", PrivatePort: 80, PublicPort: 8080, Type: "tcp" },
+        ],
+      }),
+    ]);
 
-    const detail = await getComposeProjectDetail(runner, "alpha", new Set(["alpha"]));
+    const detail = await getComposeProjectDetail("alpha", new Set(["alpha"]));
     const [first] = detail.services[0]?.containers ?? [];
 
-    expect(detail.partial).toBe(false);
-    expect(first).toMatchObject({ name: "alpha-web-1", replica: 1, restartCount: 2, metricsAvailable: true });
-    expect(first?.metrics.cpuPercent).toBe(10);
-    expect(first?.ports).toEqual([{ hostIp: "127.0.0.1", hostPort: 8080, containerPort: 80, protocol: "tcp" }]);
-  });
-
-  it("marks the snapshot partial and drops metrics when the stats sample fails", async () => {
-    const runner: CommandRunner = {
-      run: vi.fn(async (_command: string, args: string[]) => {
-        if (args[0] === "stats") throw new Error("daemon busy");
-
-        return {
-          code: 0,
-          stdout: args[0] === "ps" ? "container-1" : JSON.stringify(container()),
-        };
-      }),
-    };
-
-    const detail = await getComposeProjectDetail(runner, "alpha", new Set(["alpha"]));
-
-    expect(detail.partial).toBe(true);
-    expect(detail.services[0]?.containers[0]).toMatchObject({ metricsAvailable: false });
-    expect(detail.services[0]?.containers[0]?.metrics.cpuPercent).toBeNull();
+    expect(first).toMatchObject({ name: "alpha-web-1", replica: 1, restartCount: 2 });
+    expect(first?.ports).toEqual([{ IP: "127.0.0.1", PrivatePort: 80, PublicPort: 8080, Type: "tcp" }]);
   });
 });

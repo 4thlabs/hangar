@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
-import { Link } from "waku";
+import { Link, useRouter } from "waku";
 import { ActionResult } from "#app/actions/action-result.ts";
 import { actionLabel, type AppOperation } from "#app/actions/apps/app-operation.ts";
+import { plural, s } from "#app/components/apps/format.ts";
 import {
   ComposeConfirmDialog,
   ComposeOperationButtons,
@@ -15,12 +16,11 @@ import { Badge } from "#app/components/ui/badge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#app/components/ui/table.tsx";
 import { useServerAction } from "#app/hooks/use-server-action.ts";
 import type { AppSortColumn, AppsSort } from "#app/search-codecs.ts";
-import type { ComposeProjectSummary } from "#libs/docker";
+import type { ComposeProjectSummary } from "#libs/docker/projects.ts";
 
 type AppsTableProps = {
   projects: ComposeProjectSummary[];
   manageApp?: ((project: string, operation: AppOperation) => Promise<ActionResult>) | undefined;
-  refresh: () => Promise<void>;
   sort?: AppsSort;
   onSort?: (column: AppSortColumn) => void;
 };
@@ -52,15 +52,14 @@ function SortableHead({ column, label, sort, onSort, className }: SortableHeadPr
   );
 }
 
-const plural = (count: number, singular: string) => `${count} ${singular}${count > 1 ? "s" : ""}`;
-
-export function AppsTable({ projects, manageApp, refresh, sort = null, onSort }: AppsTableProps) {
+export function AppsTable({ projects, manageApp, sort = null, onSort }: AppsTableProps) {
+  const router = useRouter();
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
   const [confirmation, setConfirmation] = useState<DestructiveOperation | null>(null);
   const [pendingOperation, setPendingOperation] = useState<AppOperation | null>(null);
   const { run: runAction, isPending } = useServerAction();
 
-  // The snapshot is refreshed while a selection is held, so drop names that disappeared meanwhile.
+  // The list re-renders while a selection is held, so drop names that disappeared meanwhile.
   const selected = projects.map(project => project.name).filter(name => selection.has(name));
   const disabled = selected.length === 0 || !manageApp || isPending;
 
@@ -88,7 +87,7 @@ export function AppsTable({ projects, manageApp, refresh, sort = null, onSort }:
         const failures = results.filter(result => !result.success);
 
         return failures.length === 0
-          ? ActionResult.success(`${plural(results.length, "application")} traitée${results.length > 1 ? "s" : ""}.`)
+          ? ActionResult.success(`${plural(results.length, "application")} traitée${s(results.length)}.`)
           : ActionResult.failure(
               `${plural(failures.length, "échec")} sur ${results.length} : ${failures.map(failure => failure.message).join(" ")}`,
             );
@@ -100,7 +99,7 @@ export function AppsTable({ projects, manageApp, refresh, sort = null, onSort }:
       },
       async () => {
         setPendingOperation(null);
-        await refresh();
+        await router.reload();
       },
     );
   }
@@ -119,7 +118,7 @@ export function AppsTable({ projects, manageApp, refresh, sort = null, onSort }:
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground" aria-live="polite">
           {selected.length > 0
-            ? `${plural(selected.length, "application")} sélectionnée${selected.length > 1 ? "s" : ""}`
+            ? `${plural(selected.length, "application")} sélectionnée${s(selected.length)}`
             : "Aucune sélection"}
         </span>
         <ComposeOperationButtons

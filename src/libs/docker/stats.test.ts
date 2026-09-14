@@ -1,68 +1,85 @@
 import { describe, expect, it } from "vitest";
-import { containerMetrics, parseBytes, parsePercent, type DockerStatsLine } from "./stats.ts";
+import { containerMetrics, type ContainerStatsSample } from "./stats.ts";
 
-describe("parseBytes", () => {
-  it("parses decimal units, as used by network and block I/O", () => {
-    expect(parseBytes("126B")).toBe(126);
-    expect(parseBytes("4.69kB")).toBe(4_690);
-    expect(parseBytes("19.7MB")).toBe(19_700_000);
-  });
-
-  it("parses binary units, as used by memory", () => {
-    expect(parseBytes("37.93MiB")).toBeCloseTo(37.93 * 1024 ** 2);
-    expect(parseBytes("2.87GiB")).toBeCloseTo(2.87 * 1024 ** 3);
-  });
-
-  it("returns null for the placeholders Docker prints when a value is unavailable", () => {
-    expect(parseBytes("--")).toBeNull();
-    expect(parseBytes("")).toBeNull();
-    expect(parseBytes(undefined)).toBeNull();
-  });
-});
-
-describe("parsePercent", () => {
-  it("strips the percent sign", () => {
-    expect(parsePercent("22.38%")).toBe(22.38);
-    expect(parsePercent("0.00%")).toBe(0);
-  });
-
-  it("returns null when unavailable", () => {
-    expect(parsePercent("--")).toBeNull();
-    expect(parsePercent(undefined)).toBeNull();
-  });
-});
+/** A stats sample with only the fields the derivation reads. */
+const sample = ({
+  cpu = 1_000_000,
+  system = 10_000_000,
+  cores = 4,
+  usage = 200,
+  cache = 50,
+  limit = 1_000,
+  networks = { eth0: { rx_bytes: 10, tx_bytes: 20 }, eth1: { rx_bytes: 5, tx_bytes: 1 } },
+  blkio = [
+    { op: "read", value: 300 },
+    { op: "write", value: 400 },
+    { op: "Read", value: 7 },
+  ],
+} = {}) =>
+  ({
+    cpu_stats: { cpu_usage: { total_usage: cpu }, system_cpu_usage: system, online_cpus: cores },
+    memory_stats: { usage, limit, stats: { inactive_file: cache } },
+    networks,
+    blkio_stats: { io_service_bytes_recursive: blkio },
+  }) as unknown as ContainerStatsSample;
 
 describe("containerMetrics", () => {
-  // A real line of `docker stats --no-stream --format '{{json .}}'`.
-  const line: DockerStatsLine = {
-    ID: "c2d660a4c3fb",
-    CPUPerc: "22.38%",
-    MemUsage: "2.87GiB / 15.62GiB",
-    MemPerc: "18.37%",
-    NetIO: "4.69kB / 126B",
-    BlockIO: "210MB / 19.7MB",
-  };
-
-  it("splits every pair into its two sides", () => {
-    const metrics = containerMetrics(line);
-
-    expect(metrics.cpuPercent).toBe(22.38);
-    expect(metrics.memoryPercent).toBe(18.37);
-    expect(metrics.memoryUsage).toBeCloseTo(2.87 * 1024 ** 3);
-    expect(metrics.memoryLimit).toBeCloseTo(15.62 * 1024 ** 3);
-    expect(metrics.networkRx).toBe(4_690);
-    expect(metrics.networkTx).toBe(126);
-    expect(metrics.blockRead).toBe(210_000_000);
-    expect(metrics.blockWrite).toBe(19_700_000);
+  it("reports no CPU share for the first sample, having nothing to compare against", () => {
+    expect(containerMetrics(sample()).cpuPercent).toBeNull();
   });
 
-  it("degrades to null per field rather than throwing when Docker reports no value", () => {
-    const metrics = containerMetrics({ ...line, CPUPerc: "--", BlockIO: "-- / --" });
+  it("derives the CPU share from the delta between two samples, scaled by the cores", () => {
+    const previous = sample({ cpu: 1_000_000, system: 10_000_000 });
+    // 1% of the host's time over the window, across 4 cores.
+    const current = sample({ cpu: 1_100_000, system: 20_000_000, cores: 4 });
 
-    expect(metrics.cpuPercent).toBeNull();
-    expect(metrics.blockRead).toBeNull();
-    expect(metrics.blockWrite).toBeNull();
-    // Unaffected fields still parse.
-    expect(metrics.memoryPercent).toBe(18.37);
+    expect(containerMetrics(current, previous).cpuPercent).toBeCloseTo(4, 5);
+  });
+
+  it("reports no CPU share when a restart resets the counter backwards", () => {
+    const previous = sample({ cpu: 5_000_000, system: 10_000_000 });
+    const current = sample({ cpu: 10_000, system: 20_000_000 });
+
+    expect(containerMetrics(current, previous).cpuPercent).toBeNull();
+  });
+
+  it("subtracts the reclaimable page cache from the memory figure, as Docker's own does", () => {
+    const metrics = containerMetrics(sample({ usage: 200, cache: 50, limit: 1_000 }));
+
+    expect(metrics.memoryUsage).toBe(150);
+    expect(metrics.memoryLimit).toBe(1_000);
+    expect(metrics.memoryPercent).toBeCloseTo(15, 5);
+  });
+
+  it("falls back to the cgroup v1 spelling of the cache counter", () => {
+    const v1 = {
+      ...sample(),
+      memory_stats: { usage: 200, limit: 1_000, stats: { total_inactive_file: 50 } },
+    } as unknown as ContainerStatsSample;
+
+    expect(containerMetrics(v1).memoryUsage).toBe(150);
+  });
+
+  it("sums every interface and every block device", () => {
+    const metrics = containerMetrics(sample());
+
+    expect(metrics.networkRx).toBe(15);
+    expect(metrics.networkTx).toBe(21);
+    // Docker spells the operation inconsistently across versions, so matching is case-insensitive.
+    expect(metrics.blockRead).toBe(307);
+    expect(metrics.blockWrite).toBe(400);
+  });
+
+  it("reports nulls rather than zeros when a counter is missing entirely", () => {
+    const bare = { cpu_stats: { cpu_usage: {} }, memory_stats: {} } as unknown as ContainerStatsSample;
+    const metrics = containerMetrics(bare);
+
+    expect(metrics).toMatchObject({
+      memoryUsage: null,
+      memoryLimit: null,
+      memoryPercent: null,
+      networkRx: null,
+      blockRead: null,
+    });
   });
 });

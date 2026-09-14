@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ComposeProjectSummary } from "#libs/docker";
+import type { ComposeProjectSummary } from "#libs/docker/projects.ts";
 import { filterProjects, nextSort, statusCounts } from "./filter.ts";
 
 const project = (name: string, status: ComposeProjectSummary["status"]): ComposeProjectSummary => ({
@@ -10,6 +10,7 @@ const project = (name: string, status: ComposeProjectSummary["status"]): Compose
   runningCount: status === "running" ? 1 : 0,
   stoppedCount: status === "running" ? 0 : 1,
   unhealthyCount: status === "unhealthy" ? 1 : 0,
+  containerIds: [`${name}-1`],
 });
 
 const projects = [
