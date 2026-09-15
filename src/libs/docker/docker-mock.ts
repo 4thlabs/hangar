@@ -16,6 +16,8 @@ export const dockerMock = {
   demuxStream: vi.fn(),
   imageInspect: vi.fn(),
   distribution: vi.fn(),
+  info: vi.fn(),
+  df: vi.fn(),
 };
 
 /**
@@ -34,6 +36,8 @@ export const fakeDockerode = () =>
       inspect: () => dockerMock.imageInspect(reference),
       distribution: (options: unknown) => dockerMock.distribution(reference, options),
     }),
+    info: dockerMock.info,
+    df: dockerMock.df,
     modem: { demuxStream: dockerMock.demuxStream },
   }) as unknown as Dockerode;
 

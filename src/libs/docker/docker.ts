@@ -15,6 +15,29 @@ import type { ContainerStatsSample } from "./stats.ts";
 /** Raw stats samples keyed by full container id. */
 export type Samples = Map<string, ContainerStatsSample>;
 
+/** Host-wide usage of the local Docker daemon, in the shape the dashboard widget renders. */
+export type DockerOverview = {
+  version: string;
+  containers: { total: number; running: number; stopped: number };
+  images: { total: number; unused: number; size: number };
+  volumes: { total: number; inUse: number; unused: number };
+};
+
+/** The `info` fields {@link Docker.overview} reads; the client hands them back untyped. */
+type SystemInfo = {
+  ServerVersion: string;
+  Containers: number;
+  ContainersRunning: number;
+  ContainersStopped: number;
+};
+
+/** The `df` fields {@link Docker.overview} reads; the client hands them back untyped. */
+type SystemDiskUsage = {
+  LayersSize: number;
+  Images: Dockerode.ImageInfo[] | null;
+  Volumes: Dockerode.VolumeInspectInfo[] | null;
+};
+
 /**
  * The slice of `HangarStore` this layer needs: which apps Hangar installed, and so which
  * Compose projects a caller may see. An interface rather than the class so a test can pass a
@@ -118,6 +141,32 @@ export class Docker {
 
       return "unknown";
     }
+  }
+
+  /**
+   * Host-wide counts for the local daemon: the whole engine, not just the apps Hangar installed,
+   * so the dashboard reports the local environment the way Arcane reports a remote one.
+   *
+   * Two endpoints because neither answers alone: `info` carries the container tallies and the
+   * daemon version, `df` the disk usage (which images nothing runs, which volumes nothing mounts).
+   */
+  async overview(): Promise<DockerOverview> {
+    const [info, usage] = (await Promise.all([this.docker.info(), this.docker.df()])) as [SystemInfo, SystemDiskUsage];
+    const images = usage.Images ?? [];
+    const volumes = usage.Volumes ?? [];
+    const inUse = volumes.filter(volume => (volume.UsageData?.RefCount ?? 0) > 0).length;
+
+    return {
+      version: info.ServerVersion,
+      containers: { total: info.Containers, running: info.ContainersRunning, stopped: info.ContainersStopped },
+      // `LayersSize` rather than the sum of the images: layers shared between images are on disk once.
+      images: {
+        total: images.length,
+        unused: images.filter(image => image.Containers === 0).length,
+        size: usage.LayersSize,
+      },
+      volumes: { total: volumes.length, inUse, unused: volumes.length - inUse },
+    };
   }
 
   /** Lists every app Hangar installed, as lightweight summaries of their Docker state. */

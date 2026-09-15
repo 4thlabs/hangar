@@ -272,3 +272,41 @@ describe("Docker.imageUpdates", () => {
     expect(await client("alpha").imageUpdates()).toEqual([]);
   });
 });
+
+describe("Docker.overview", () => {
+  it("reports the host's containers, images and volumes", async () => {
+    dockerMock.info.mockResolvedValue({
+      ServerVersion: "27.3.1",
+      Containers: 5,
+      ContainersRunning: 4,
+      ContainersStopped: 1,
+    });
+    dockerMock.df.mockResolvedValue({
+      LayersSize: 1_073_741_824,
+      Images: [{ Containers: 2 }, { Containers: 0 }],
+      Volumes: [{ UsageData: { RefCount: 1 } }, { UsageData: { RefCount: 0 } }, { UsageData: null }],
+    });
+
+    expect(await client().overview()).toEqual({
+      version: "27.3.1",
+      containers: { total: 5, running: 4, stopped: 1 },
+      images: { total: 2, unused: 1, size: 1_073_741_824 },
+      volumes: { total: 3, inUse: 1, unused: 2 },
+    });
+  });
+
+  it("survives a daemon that reports neither images nor volumes", async () => {
+    dockerMock.info.mockResolvedValue({
+      ServerVersion: "27.3.1",
+      Containers: 0,
+      ContainersRunning: 0,
+      ContainersStopped: 0,
+    });
+    dockerMock.df.mockResolvedValue({ LayersSize: 0, Images: null, Volumes: null });
+
+    const overview = await client().overview();
+
+    expect(overview.images).toEqual({ total: 0, unused: 0, size: 0 });
+    expect(overview.volumes).toEqual({ total: 0, inUse: 0, unused: 0 });
+  });
+});

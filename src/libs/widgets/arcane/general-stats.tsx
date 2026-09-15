@@ -10,6 +10,8 @@ import {
   WidgetMetadata,
   WidgetMetric,
   WidgetMetricGrid,
+  formatGigabytes,
+  integerFormatter,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
@@ -18,13 +20,8 @@ type ArcaneGeneralStatsCardProps = {
   serviceUrl: string;
 };
 
-const integerFormatter = new Intl.NumberFormat("en-US");
 const arcaneWidgetClassName = "@container min-h-64";
 const arcaneIcon = <IconSelfh name="arcane" />;
-
-function formatImageSize(bytes: number) {
-  return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
-}
 
 function actionColor(severity: string) {
   if (severity === "critical") return "text-destructive";
@@ -72,7 +69,7 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
           <WidgetMetric
             label="Images"
             value={integerFormatter.format(imageUsageCounts.totalImages)}
-            detail={`${integerFormatter.format(imageUsageCounts.imagesUnused)} unused · ${formatImageSize(imageUsageCounts.totalImageSize)}`}
+            detail={`${integerFormatter.format(imageUsageCounts.imagesUnused)} unused · ${formatGigabytes(imageUsageCounts.totalImageSize)}`}
           />
           <WidgetMetric
             label="Volumes"

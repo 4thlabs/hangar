@@ -10,6 +10,9 @@ import { HangarRuntimeError } from "./hangar-error.ts";
 /** True when the compose args ask for detached mode */
 const detached = (args: string[]) => args.includes("-d") || args.includes("--detach");
 
+/** Capitalize first letter of a string */
+const capitalize = (s: string) => s && String(s[0]).toUpperCase() + String(s).slice(1);
+
 export type HangarApp = {
   id: string;
   name: string;
@@ -237,7 +240,7 @@ export class HangarStore {
 
             this.apps.add({
               id: app,
-              name: (yaml?.["name"] as string | undefined) ?? app,
+              name: (yaml?.["name"] as string | undefined) ?? capitalize(app),
               icon: metadata?.icon,
               installed: installed.indexOf(app) !== -1,
             });

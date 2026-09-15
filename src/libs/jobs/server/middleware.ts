@@ -26,9 +26,6 @@ export const sidequestBoot = () : MiddlewareHandler  => {
     // endpoint, which counts against Docker Hub's anonymous per-IP limit.
     await Sidequest.build(CheckImageVersion).schedule("0 * * * *");
 
-    // Once at boot too, so a fresh install shows update badges without waiting for the hour.
-    await Sidequest.build(CheckImageVersion).enqueue();
-
     configured = true;
   }
 }

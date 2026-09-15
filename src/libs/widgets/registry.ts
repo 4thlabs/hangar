@@ -1,5 +1,6 @@
 import type { Widget } from "./shared/define-widget.tsx";
 import { arcaneGeneralStats } from "./arcane/general-stats.tsx";
+import { dockerGeneralStats } from "./docker/general-stats.tsx";
 import { frigateEvents } from "./frigate/events.tsx";
 import { ClockSkeleton, ClockWidget } from "./clock/clock.tsx";
 
@@ -26,6 +27,6 @@ export const dashboardWidgets: readonly WidgetPlacement[] = [
   // would arrive as a proxy whose .Widget/.Skeleton read back undefined.
   // Only components survive the boundary.
   { column: 1, widget: { id: "clock", Widget: ClockWidget, Skeleton: ClockSkeleton } },
-  { column: 1, widget: arcaneGeneralStats },
+  { column: 1, widget: dockerGeneralStats },
   { column: 3, widget: frigateEvents },
 ];
