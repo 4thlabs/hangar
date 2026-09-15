@@ -117,7 +117,7 @@ describe("HangarStore", () => {
     expect([...store.apps]).toEqual(
       expect.arrayContaining([
         { id: "alpha-app", name: "Alpha App", icon: "alpha.svg", installed: true },
-        { id: "beta-app", name: "beta-app", icon: "beta.svg", installed: false },
+        { id: "beta-app", name: "Beta-app", icon: "beta.svg", installed: false },
       ]),
     );
     expect(store.apps).toHaveLength(2);
