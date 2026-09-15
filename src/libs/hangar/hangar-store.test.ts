@@ -169,6 +169,14 @@ describe("HangarStore", () => {
 
     expect(store.installedProjectIds()).toEqual(new Set(["a"]));
   });
+
+  it("looks up a store app by id", async () => {
+    const store = await HangarStore.create(config, dataDir, createRuntime());
+    store.apps.add({ id: "a", name: "A", icon: undefined, installed: true });
+
+    expect(store.app("a")).toMatchObject({ id: "a" });
+    expect(store.app("missing")).toBeUndefined();
+  });
 });
 
 describe("HangarStore.compose", () => {

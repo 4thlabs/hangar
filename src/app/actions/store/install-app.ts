@@ -9,7 +9,7 @@ import { logger } from "#libs/logs";
 export const installApp = async (appId: string): Promise<StoreActionResult> => {
   await requireSession();
 
-  const app = [...hangar.store.apps].find(candidate => candidate.id === appId);
+  const app = hangar.store.app(appId);
 
   if (!app) {
     logger.warn("App installation rejected: unknown app", { appId });
@@ -25,7 +25,7 @@ export const installApp = async (appId: string): Promise<StoreActionResult> => {
     await hangar.store.link(app.id);
     await hangar.store.refresh();
 
-    const installed = [...hangar.store.apps].some(candidate => candidate.id === app.id && candidate.installed);
+    const installed = hangar.store.app(app.id)?.installed ?? false;
 
     return installed
       ? StoreActionResult.success(`${app.name} a été installée.`)

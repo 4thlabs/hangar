@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#app/
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#app/components/ui/empty.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#app/components/ui/table.tsx";
 import { useServerAction } from "#app/hooks/use-server-action.ts";
+import { RotateCcwIcon, XIcon } from "lucide-react";
 import type { JobData, JobState } from "sidequest";
 import { useRouter } from "waku";
 
@@ -85,22 +86,26 @@ export function JobsSettingsCard({ jobs, runJob, cancelJob }: JobsSettingsCardPr
                     <div className="flex gap-2">
                       <Button
                         type="button"
-                        size="sm"
+                        size="icon-sm"
                         variant="outline"
+                        title="Relancer"
+                        aria-label="Relancer le job"
                         disabled={isPending}
                         onClick={() => handle(() => runJob(job.id), "Échec de la relance")}
                       >
-                        Relancer
+                        <RotateCcwIcon />
                       </Button>
                       {cancellable.includes(job.state) && (
                         <Button
                           type="button"
-                          size="sm"
+                          size="icon-sm"
                           variant="ghost"
+                          title="Annuler"
+                          aria-label="Annuler le job"
                           disabled={isPending}
                           onClick={() => handle(() => cancelJob(job.id), "Échec de l’annulation")}
                         >
-                          Annuler
+                          <XIcon />
                         </Button>
                       )}
                     </div>

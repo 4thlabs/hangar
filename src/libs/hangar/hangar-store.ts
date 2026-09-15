@@ -97,14 +97,14 @@ export class HangarStore {
     }
   }
 
-    /**
+  /**
    * Links(symlink) a stack into the installed apps.
    * @param name the stack name
    */
   async unlink(name: string) {
     const destination = path.join(this.installedPath, name);
 
-    if ((await exists(destination))) {
+    if (await exists(destination)) {
       logger.info(`Unlinking application: ${name}`);
       await unlink(destination);
     }
@@ -200,6 +200,12 @@ export class HangarStore {
     for (const stack of order === 1 ? stacks : [...stacks].reverse()) {
       await this.composeStack(stack, args, options);
     }
+  }
+
+  /** The store app with this id, or `undefined` when the store does not carry it. */
+  app(id: string): HangarApp | undefined {
+    for (const app of this.apps) if (app.id === id) return app;
+    return undefined;
   }
 
   /**

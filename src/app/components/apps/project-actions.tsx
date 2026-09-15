@@ -10,11 +10,11 @@ import {
   type DestructiveOperation,
 } from "#app/components/apps/compose-operations.tsx";
 import { ComposeOutputSheet } from "#app/components/apps/compose-output-sheet.tsx";
-import { createActionToast, createTransportErrorToast } from "#app/components/common/action-toast.ts";
-import { toast } from "#app/components/ui/toast.tsx";
+import { useServerAction } from "#app/hooks/use-server-action.ts";
 
 export function ProjectActions({ project }: { project: string }) {
   const router = useRouter();
+  const { run: report } = useServerAction();
   const [confirmation, setConfirmation] = useState<DestructiveOperation | null>(null);
   const [running, setRunning] = useState<AppOperation | null>(null);
   const disabled = running !== null;
@@ -30,20 +30,23 @@ export function ProjectActions({ project }: { project: string }) {
     (operation: AppOperation, code: number | null) => {
       const label = actionLabel[operation];
 
-      toast.add(
-        code === null
-          ? createTransportErrorToast(`${label} interrompu`, "Le flux de sortie a été interrompu.")
-          : createActionToast(
-              code === 0
-                ? ActionResult.success(`${project} : la commande s’est terminée.`)
-                : ActionResult.failure(`Docker Compose a terminé avec le code ${code}.`),
-              { success: `${label} terminé`, error: `${label} échoué` },
-            ),
+      report(
+        async () =>
+          code === 0
+            ? ActionResult.success(`${project} : la commande s’est terminée.`)
+            : ActionResult.failure(
+                code === null
+                  ? "Le flux de sortie a été interrompu."
+                  : `Docker Compose a terminé avec le code ${code}.`,
+              ),
+        {
+          success: `${label} terminé`,
+          error: code === null ? `${label} interrompu` : `${label} échoué`,
+        },
+        () => router.reload(),
       );
-
-      void router.reload();
     },
-    [project, router],
+    [project, report, router],
   );
 
   const confirmationTitle = confirmation === "down" ? `Arrêter ${project} ?` : `Recréer ${project} ?`;

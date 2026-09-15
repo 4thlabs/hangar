@@ -9,7 +9,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("#libs/auth", () => ({ requireSession: mocks.requireSession }));
-vi.mock("#libs/hangar/server", () => ({ hangar: { store: { apps: mocks.apps, compose: mocks.compose } } }));
+vi.mock("#libs/hangar/server", () => ({
+  hangar: {
+    store: {
+      apps: mocks.apps,
+      compose: mocks.compose,
+      app: (id: string) => [...mocks.apps].find(app => app.id === id),
+    },
+  },
+}));
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
 
 const { manageApp } = await import("./manage-app.ts");
