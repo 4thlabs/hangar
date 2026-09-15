@@ -14,7 +14,7 @@ import {
 } from "#app/components/ui/empty.tsx";
 import { DockerNotFoundError } from "#libs/docker/compose.ts";
 import { docker } from "#libs/docker/server";
-import { outdatedProjects } from "#libs/jobs/server";
+import { outdatedProjects } from "#libs/jobs";
 import { logger } from "#libs/logs";
 
 export default async function AppDetailPage({ project }: PageProps<"/apps/[project]">) {

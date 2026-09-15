@@ -7,6 +7,8 @@ await Sidequest.configure({
     config: process.env.HANGAR_DB_HOST,
   },
   queues: [{ name: "default", concurrency: 1, priority: 50, state: "active" }],
+  // Jobs come from `sidequest.jobs.js`, not from stack-trace guessing. See that file.
+  manualJobResolution: true,
 });
 
 await Sidequest.start();

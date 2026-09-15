@@ -4,7 +4,7 @@ import { AppsOverview } from "#app/components/apps/apps-overview.tsx";
 import { appsSearchCodec } from "#app/search-codecs.ts";
 import type { ComposeProjectsSnapshot } from "#libs/docker/compose.ts";
 import { docker } from "#libs/docker/server";
-import { outdatedProjects } from "#libs/jobs/server";
+import { outdatedProjects } from "#libs/jobs";
 import { logger } from "#libs/logs";
 
 export default async function AppsPage({ search }: PageProps<"/apps">) {
