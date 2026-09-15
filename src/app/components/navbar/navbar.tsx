@@ -59,7 +59,7 @@ function DesktopNavigation() {
                 <Link
                   to={item.href}
                   aria-current={router.path === item.href ? "page" : undefined}
-                  onMouseEnter={() => router.prefetch(item.href)}
+                  onMouseEnter={item.prefetch ? () => router.prefetch(item.href) : undefined}
                 >
                   {item.label}
                 </Link>
@@ -83,7 +83,7 @@ function SettingsButton() {
             variant={router.path === "/settings" ? "secondary" : "ghost"}
             size="icon"
             render={
-              <Link to="/settings" aria-label="Paramètres" onMouseEnter={() => router.prefetch("/settings")}>
+              <Link to="/settings" aria-label="Paramètres">
                 <SettingsIcon />
               </Link>
             }
@@ -160,7 +160,7 @@ function UserMenu({ user, compact = false }: { user: AvatarUser; compact?: boole
         <DropdownMenuGroup>
           <DropdownMenuItem
             render={
-              <Link to="/user/settings" onMouseEnter={() => router.prefetch("/user/settings")}>
+              <Link to="/user/settings">
                 <SettingsIcon />
                 <span>Paramètres utilisateur</span>
               </Link>

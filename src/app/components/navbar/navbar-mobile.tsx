@@ -41,7 +41,7 @@ function MobileNavigation() {
                     to={item.href}
                     aria-current={router.path === item.href ? "page" : undefined}
                     onClick={() => setOpen(false)}
-                    onMouseEnter={() => router.prefetch(item.href)}
+                    onMouseEnter={item.prefetch ? () => router.prefetch(item.href) : undefined}
                   >
                     <item.icon data-icon="inline-start" />
                     {item.label}

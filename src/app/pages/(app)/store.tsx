@@ -1,5 +1,6 @@
 import type { PageProps } from "waku/router";
 import { installApp } from "#app/actions/store/install-app.ts";
+import { uninstallApp } from "#app/actions/store/uninstall-app.ts";
 import { StoreAppCard } from "#app/components/store/store-app-card.tsx";
 import { StoreFilterMenu } from "#app/components/store/store-filter-menu.tsx";
 import { searchByName } from "#app/search.ts";
@@ -29,7 +30,7 @@ export default function StorePage({ search }: PageProps<"/store">) {
       {apps.length > 0 ? (
         <div className="flex flex-wrap gap-3">
           {apps.map(app => (
-            <StoreAppCard key={app.id} app={app} installApp={installApp} />
+            <StoreAppCard key={app.id} app={app} installApp={installApp} uninstallApp={uninstallApp} />
           ))}
         </div>
       ) : (
