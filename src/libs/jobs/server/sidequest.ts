@@ -11,4 +11,9 @@ await Sidequest.configure({
 
 await Sidequest.start();
 
-//await Sidequest.build(CheckImageVersion).schedule("*/10 * * * * *");
+// Hourly, not the every-10s of the stub: each check makes the daemon hit the registry's manifest
+// endpoint, which counts against Docker Hub's anonymous per-IP limit.
+await Sidequest.build(CheckImageVersion).schedule("0 * * * *");
+
+// Once at boot too, so a fresh install shows update badges without waiting for the hour.
+await Sidequest.build(CheckImageVersion).enqueue();

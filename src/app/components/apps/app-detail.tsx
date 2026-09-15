@@ -24,6 +24,7 @@ export function AppDetail({ detail }: { detail: ComposeProjectDetail }) {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold">{detail.name}</h1>
             <Badge variant={statusVariant(detail.status)}>{statusLabel[detail.status]}</Badge>
+            {detail.updateAvailable && <Badge variant="outline">Mise à jour disponible</Badge>}
           </div>
           <p className="text-sm text-muted-foreground">
             {detail.serviceCount} service{s(detail.serviceCount)} · {detail.runningCount}/{detail.containerCount}{" "}

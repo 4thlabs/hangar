@@ -162,9 +162,12 @@ export function AppsTable({ projects, manageApp, sort = null, onSort }: AppsTabl
                 />
               </TableCell>
               <TableCell className="font-medium">
-                <Link to={{ to: "/apps/[project]", params: { project: project.name } }} className="hover:underline">
-                  {project.name}
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link to={{ to: "/apps/[project]", params: { project: project.name } }} className="hover:underline">
+                    {project.name}
+                  </Link>
+                  {project.updateAvailable && <Badge variant="outline">Mise à jour</Badge>}
+                </div>
               </TableCell>
               <TableCell>
                 <Badge variant={statusVariant(project.status)}>{statusLabel[project.status]}</Badge>

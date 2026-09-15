@@ -14,6 +14,8 @@ export const dockerMock = {
   logs: vi.fn(),
   stats: vi.fn(),
   demuxStream: vi.fn(),
+  imageInspect: vi.fn(),
+  distribution: vi.fn(),
 };
 
 /**
@@ -27,6 +29,10 @@ export const fakeDockerode = () =>
       inspect: () => dockerMock.inspect(id),
       logs: (options: unknown) => dockerMock.logs(id, options),
       stats: (options: unknown) => dockerMock.stats(id, options),
+    }),
+    getImage: (reference: string) => ({
+      inspect: () => dockerMock.imageInspect(reference),
+      distribution: (options: unknown) => dockerMock.distribution(reference, options),
     }),
     modem: { demuxStream: dockerMock.demuxStream },
   }) as unknown as Dockerode;
@@ -44,6 +50,7 @@ type Overrides = {
   health?: string;
   ports?: Dockerode.Port[];
   tty?: boolean;
+  image?: string;
 };
 
 /**
@@ -62,15 +69,16 @@ export function containerSource({
   health,
   ports = [{ IP: "127.0.0.1", PrivatePort: 80, PublicPort: 8080, Type: "tcp" }],
   tty = false,
+  image = "nginx:alpine",
 }: Overrides = {}): ComposeContainerSource {
   return {
-    info: { Id, Names: [name], Image: "nginx:alpine", Labels: labels, State: state, Ports: ports },
+    info: { Id, Names: [name], Image: image, Labels: labels, State: state, Ports: ports },
     detail: {
       Id,
       Name: name,
       RestartCount: 2,
       State: { Status: state, ...(health ? { Health: { Status: health } } : {}) },
-      Config: { Image: "nginx:alpine", Labels: labels, Tty: tty },
+      Config: { Image: image, Labels: labels, Tty: tty },
     },
   } as unknown as ComposeContainerSource;
 }

@@ -195,3 +195,80 @@ describe("Docker.sampleStats", () => {
     expect(dockerMock.stats).toHaveBeenCalledWith("container-1", { stream: false, "one-shot": true });
   });
 });
+
+describe("Docker.imageUpdates", () => {
+  /** The local image carries `digest` as its registry digest, and the registry serves `remote`. */
+  const givenDigests = (digest: string | null, remote = "sha256:remote") => {
+    dockerMock.imageInspect.mockResolvedValue({ RepoDigests: digest ? [`nginx@${digest}`] : [] });
+    dockerMock.distribution.mockResolvedValue({ Descriptor: { digest: remote } });
+  };
+
+  it("reports an image the registry has moved past", async () => {
+    givenContainers([container()]);
+    givenDigests("sha256:local");
+
+    expect(await client("alpha").imageUpdates()).toEqual([
+      { project: "alpha", image: "nginx:alpine", status: "outdated" },
+    ]);
+  });
+
+  it("reports an image the registry still serves as current", async () => {
+    givenContainers([container()]);
+    givenDigests("sha256:same", "sha256:same");
+
+    expect(await client("alpha").imageUpdates()).toEqual([
+      { project: "alpha", image: "nginx:alpine", status: "current" },
+    ]);
+  });
+
+  it("does not claim an update for an image built here, which has no registry digest", async () => {
+    givenContainers([container()]);
+    givenDigests(null);
+
+    expect(await client("alpha").imageUpdates()).toEqual([
+      { project: "alpha", image: "nginx:alpine", status: "unknown" },
+    ]);
+    expect(dockerMock.distribution).not.toHaveBeenCalled();
+  });
+
+  it("does not claim an update when the registry cannot be reached", async () => {
+    givenContainers([container()]);
+    dockerMock.imageInspect.mockResolvedValue({ RepoDigests: ["nginx@sha256:local"] });
+    dockerMock.distribution.mockRejectedValue(new Error("toomanyrequests"));
+
+    expect(await client("alpha").imageUpdates()).toEqual([
+      { project: "alpha", image: "nginx:alpine", status: "unknown" },
+    ]);
+  });
+
+  it("leaves a digest-pinned reference alone: it already names one exact image", async () => {
+    givenContainers([container({ image: "nginx@sha256:pinned" })]);
+
+    expect(await client("alpha").imageUpdates()).toEqual([
+      { project: "alpha", image: "nginx@sha256:pinned", status: "current" },
+    ]);
+    expect(dockerMock.imageInspect).not.toHaveBeenCalled();
+    expect(dockerMock.distribution).not.toHaveBeenCalled();
+  });
+
+  it("asks the registry once for a reference two projects share, and answers for both", async () => {
+    givenContainers([
+      container(),
+      container({ Id: "container-2", labels: { [LABEL.project]: "beta", [LABEL.service]: "web" } }),
+    ]);
+    givenDigests("sha256:local");
+
+    const updates = await client("alpha", "beta").imageUpdates();
+
+    expect(updates.map(update => update.project)).toEqual(["alpha", "beta"]);
+    expect(updates.every(update => update.status === "outdated")).toBe(true);
+    expect(dockerMock.distribution).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores images from projects Hangar did not install", async () => {
+    givenContainers([container({ Id: "beta-1", labels: { [LABEL.project]: "beta", [LABEL.service]: "web" } })]);
+    givenDigests("sha256:local");
+
+    expect(await client("alpha").imageUpdates()).toEqual([]);
+  });
+});

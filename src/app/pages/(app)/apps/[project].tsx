@@ -14,16 +14,17 @@ import {
 } from "#app/components/ui/empty.tsx";
 import { DockerNotFoundError } from "#libs/docker/compose.ts";
 import { docker } from "#libs/docker/server";
+import { outdatedProjects } from "#libs/jobs/server";
 import { logger } from "#libs/logs";
 
 export default async function AppDetailPage({ project }: PageProps<"/apps/[project]">) {
   try {
-    const detail = await docker.projectDetail(project);
+    const [detail, outdated] = await Promise.all([docker.projectDetail(project), outdatedProjects()]);
 
     return (
       <main>
         <title>{`${project} | Apps | Hangar`}</title>
-        <AppDetail detail={detail} />
+        <AppDetail detail={{ ...detail, updateAvailable: outdated.has(project) }} />
       </main>
     );
   } catch (error) {

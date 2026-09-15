@@ -1,5 +1,3 @@
-import "server-only";
-
 import { PassThrough, type Readable } from "node:stream";
 import type Dockerode from "dockerode";
 import {
@@ -8,7 +6,10 @@ import {
   type ComposeContainerSource,
   type ComposeProjectDetail,
   type ComposeProjectsSnapshot,
+  type ImageUpdate,
+  type ImageUpdateStatus,
 } from "./compose.ts";
+import { logger } from "#libs/logs";
 import type { ContainerStatsSample } from "./stats.ts";
 
 /** Raw stats samples keyed by full container id. */
@@ -29,6 +30,10 @@ export interface InstalledApps {
  * comes back as numbers instead of strings like `"2.87GiB"` that would have to be parsed back.
  *
  * Compose operations are not part of this API and still go through the CLI; see `hangar.store`.
+ *
+ * No `server-only` guard here on purpose: Sidequest runs a job by `import()`ing its module in a
+ * plain Node process, where that marker throws. `dockerode` is only ever a type in this file, so
+ * the guard lives at the composition root that constructs it — see `./server/server.ts`.
  */
 export class Docker {
   /** A full or short container id, as the Engine API spells them. */
@@ -60,6 +65,59 @@ export class Docker {
     const listed = await this.docker.listContainers({ all: true, filters: { label: [label] } });
 
     return Promise.all(listed.map(async info => ({ info, detail: await this.docker.getContainer(info.Id).inspect() })));
+  }
+
+  /**
+   * Asks the registry, for every image the installed apps run, whether it still serves what is
+   * running here. The daemon does the talking (`/distribution/{name}/json`), so its own registry
+   * credentials apply and nothing here handles auth.
+   *
+   * One entry per project and image reference, but one registry call per *reference*: replicas of
+   * a service share an image, and two apps may share one too. Anything the daemon cannot answer
+   * reads as `unknown` rather than throwing, so one unreachable registry does not cost the report
+   * — and, more importantly, never renders as a false "update available".
+   */
+  async imageUpdates(): Promise<ImageUpdate[]> {
+    const installed = this.apps.installedProjectIds();
+    const pairs = new Map<string, { project: string; image: string }>();
+
+    for (const { info } of await this.inspectContainers()) {
+      const project = info.Labels[ComposeProjects.LABEL.project] ?? "";
+
+      if (installed.has(project)) pairs.set(`${project}\u0000${info.Image}`, { project, image: info.Image });
+    }
+
+    const references = [...new Set([...pairs.values()].map(pair => pair.image))];
+    const statuses = new Map(
+      await Promise.all(references.map(async image => [image, await this.imageStatus(image)] as const)),
+    );
+
+    return [...pairs.values()].map(pair => ({ ...pair, status: statuses.get(pair.image) ?? "unknown" }));
+  }
+
+  /**
+   * One reference's verdict against its registry.
+   * @param image The reference as Compose runs it, e.g. `nginx:alpine`
+   */
+  private async imageStatus(image: string): Promise<ImageUpdateStatus> {
+    // Pinned to a digest, or named by id: the reference already denotes one exact image.
+    if (image.includes("@sha256:") || image.startsWith("sha256:")) return "current";
+
+    try {
+      const local = await this.docker.getImage(image).inspect();
+
+      // An image built here was never pulled, so it carries no registry digest to compare against.
+      if (!local.RepoDigests?.length) return "unknown";
+
+      const remote = await this.docker.getImage(image).distribution({ abortSignal: AbortSignal.timeout(10_000) });
+
+      return local.RepoDigests.some(digest => digest.endsWith(`@${remote.Descriptor.digest}`)) ? "current" : "outdated";
+    } catch (error) {
+      // Unreachable registry, rate limit, private image with no credentials: all say "don't know".
+      logger.warn("Could not check an image for updates", { error, image });
+
+      return "unknown";
+    }
   }
 
   /** Lists every app Hangar installed, as lightweight summaries of their Docker state. */

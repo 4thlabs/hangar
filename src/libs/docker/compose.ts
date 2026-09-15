@@ -18,10 +18,29 @@ export type ComposeProjectSummary = {
   unhealthyCount: number;
   /** Full ids of this project's containers, so a client can pick its rows out of the stats stream. */
   containerIds: string[];
+  /**
+   * Whether the last image check found this app behind its registry. Set by the page from that
+   * report, not by the Docker layer: `undefined` simply means no check has run yet.
+   */
+  updateAvailable?: boolean;
 };
 
 /** Response body for the "list all projects" endpoint. */
 export type ComposeProjectsSnapshot = { projects: ComposeProjectSummary[] };
+
+/** Whether the registry still serves what a container runs, as far as we could tell. */
+export type ImageUpdateStatus = "current" | "outdated" | "unknown";
+
+/** One image an installed app runs, and whether the registry has a newer one. */
+export type ImageUpdate = {
+  project: string;
+  /** The reference as Compose runs it, e.g. `nginx:alpine`. */
+  image: string;
+  status: ImageUpdateStatus;
+};
+
+/** What `CheckImageVersion` leaves behind as its job result. */
+export type ImageUpdateReport = { checkedAt: string; updates: ImageUpdate[] };
 
 /** Full detail for one container, as shown on the project detail page. */
 export type ComposeContainer = {

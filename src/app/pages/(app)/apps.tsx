@@ -4,6 +4,7 @@ import { AppsOverview } from "#app/components/apps/apps-overview.tsx";
 import { appsSearchCodec } from "#app/search-codecs.ts";
 import type { ComposeProjectsSnapshot } from "#libs/docker/compose.ts";
 import { docker } from "#libs/docker/server";
+import { outdatedProjects } from "#libs/jobs/server";
 import { logger } from "#libs/logs";
 
 export default async function AppsPage({ search }: PageProps<"/apps">) {
@@ -11,7 +12,9 @@ export default async function AppsPage({ search }: PageProps<"/apps">) {
   let error: string | null = null;
 
   try {
-    snapshot = await docker.listProjects();
+    const [projects, outdated] = await Promise.all([docker.listProjects(), outdatedProjects()]);
+
+    snapshot = { projects: projects.projects.map(p => ({ ...p, updateAvailable: outdated.has(p.name) })) };
   } catch (failure) {
     logger.error("Failed to render Docker Compose projects", { error: failure });
     error = "Le daemon Docker est indisponible. Vérifiez le socket et ses permissions.";
