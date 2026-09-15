@@ -107,8 +107,8 @@ describe("HangarStore", () => {
       mkdir(store.installedPath, { recursive: true }),
     ]);
     await Promise.all([
-      writeFile(path.join(alphaApp, "compose.yml"), "name: Alpha App\nx-arcane:\n  icon: alpha.svg\n"),
-      writeFile(path.join(betaApp, "compose.yml"), "x-arcane:\n  icon: beta.svg\n"),
+      writeFile(path.join(alphaApp, "compose.yml"), "name: Alpha App\nx-hangar:\n  icon: alpha.svg\n"),
+      writeFile(path.join(betaApp, "compose.yml"), "x-hangar:\n  icon: beta.svg\n"),
       mkdir(path.join(store.installedPath, "alpha-app")),
     ]);
 
@@ -136,7 +136,7 @@ describe("HangarStore", () => {
       mkdir(store.installedPath, { recursive: true }),
     ]);
     await Promise.all([
-      writeFile(path.join(good, "compose.yml"), "name: Good\nx-arcane:\n  icon: good.svg\n"),
+      writeFile(path.join(good, "compose.yml"), "name: Good\nx-hangar:\n  icon: good.svg\n"),
       writeFile(path.join(noMetadata, "compose.yml"), "name: No Metadata\nservices: {}\n"),
     ]);
 
