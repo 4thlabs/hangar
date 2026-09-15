@@ -7,12 +7,6 @@ import { type CommandRunner, type RunOptions } from "./runtime/runtime.ts";
 import { exists } from "./runtime/utils.ts";
 import { HangarRuntimeError } from "./hangar-error.ts";
 
-/** Run order per compose command: 1 in stack order, -1 in reverse, absent means parallel */
-const ORDER: Record<string, number> = { up: 1, start: 1, restart: 1, down: -1, stop: -1 };
-
-/** Commands that address the whole store instead of a single stack */
-const GLOBALS = ["up", "down", "pull"];
-
 /** True when the compose args ask for detached mode */
 const detached = (args: string[]) => args.includes("-d") || args.includes("--detach");
 
@@ -27,6 +21,12 @@ export type HangarApp = {
  * Representation of the App Store
  */
 export class HangarStore {
+  /** Run order per compose command: 1 in stack order, -1 in reverse, absent means parallel */
+  static readonly CommandOrder: Record<string, number> = { up: 1, start: 1, restart: 1, down: -1, stop: -1 };
+
+  /** Commands that address the whole store instead of a single stack */
+  static readonly GlobalCommand = ["up", "down", "pull"];
+
   /** Path of Hangar sata */
   readonly dataPath: string;
 
@@ -160,7 +160,7 @@ export class HangarStore {
    */
   async compose(name: string, args: string[], options?: RunOptions) {
     // `store up -d` / `store down` / `store pull`: no target, the command takes its place
-    if (GLOBALS.includes(name)) {
+    if (HangarStore.GlobalCommand.includes(name)) {
       args = [name, ...args];
       name = "";
     }
@@ -172,7 +172,7 @@ export class HangarStore {
       throw new HangarRuntimeError(1, "Non detached mode only authorised on a single stack");
     }
 
-    const order = ORDER[command] ?? 0;
+    const order = HangarStore.CommandOrder[command] ?? 0;
 
     // Unordered: let every stack run, then surface the first failure.
     if (order === 0) {
@@ -214,7 +214,7 @@ export class HangarStore {
           try {
             const source = await readFile(path.join(this.storePath, "store", app, "compose.yml"), "utf8");
             const yaml = load(source, { filename: "compose.yml" }) as Record<string, unknown> | undefined;
-            const metadata = yaml?.["x-arcane"] as { icon?: string } | undefined;
+            const metadata = yaml?.["x-hangar"] as { icon?: string } | undefined;
 
             this.apps.add({
               id: app,

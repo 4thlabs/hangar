@@ -3,9 +3,9 @@ import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "waku/config";
 
-// `dockerode` reaches a native `.node` binary through ssh2/cpu-features, which the bundler
-// cannot read. It only ever runs on the server, so it stays external and is required at runtime.
-const nativeDeps = ["node:sqlite", "node:path", "dockerode"];
+// `better-sqlite3` and `dockerode` (via ssh2/cpu-features) load native `.node` binaries the bundler
+// cannot read. They only ever run on the server, so they stay external and are required at runtime.
+const nativeDeps = ["better-sqlite3", "node:path", "dockerode"];
 
 export default defineConfig({
   srcDir: "src/app",
