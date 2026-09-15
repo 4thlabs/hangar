@@ -1,5 +1,5 @@
 import { type ConfigurationProvider } from "./hangar-config.ts";
-import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
+import { mkdir, readdir, readFile, symlink, unlink } from "node:fs/promises";
 import path from "node:path";
 import { logger } from "#libs/logs";
 import { load } from "js-yaml";
@@ -94,6 +94,19 @@ export class HangarStore {
     if ((await exists(source)) && !(await exists(destination))) {
       logger.info(`Linking application: ${name}`);
       await symlink(source, destination, "dir");
+    }
+  }
+
+    /**
+   * Links(symlink) a stack into the installed apps.
+   * @param name the stack name
+   */
+  async unlink(name: string) {
+    const destination = path.join(this.installedPath, name);
+
+    if ((await exists(destination))) {
+      logger.info(`Unlinking application: ${name}`);
+      await unlink(destination);
     }
   }
 
