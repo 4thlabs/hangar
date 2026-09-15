@@ -139,7 +139,7 @@ export class HangarStore {
     await Promise.all(
       apps
         .map(async app => await this.link(app)
-        .catch(ex => logger.error(ex, `Failed to link app: ${app}`))),
+        .catch(ex => logger.error(`Failed to link app: ${app}`, { error: ex }))),
     );
   }
 
@@ -236,7 +236,7 @@ export class HangarStore {
               installed: installed.indexOf(app) !== -1,
             });
           } catch (error) {
-            logger.warn({ error, app }, "Skipping store app: its compose.yml could not be read");
+            logger.warn("Skipping store app: its compose.yml could not be read", { error, app });
           }
         }),
       );

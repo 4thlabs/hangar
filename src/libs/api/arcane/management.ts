@@ -12,7 +12,7 @@ export const syncTags = async (hangar: Hangar) => {
   const projects = await getProjects();
 
   if (!projects.success) {
-    logger.error({ detail: projects.detail }, "Failed to grab projects");
+    logger.error("Failed to grab projects", { detail: projects.detail });
     throw new HangarError("Failed to grab projects");
   }
 
@@ -27,7 +27,7 @@ export const syncTags = async (hangar: Hangar) => {
       try {
         await updateProjectTag(project.id, category.name, category.color, true);
       } catch (error) {
-        logger.error({ error, project: project.dirName, tag: category.name }, "Failed to attach tag");
+        logger.error("Failed to attach tag", { error, project: project.dirName, tag: category.name });
         failures.push(`${project.dirName}: +${category.name}`);
       }
     } else {
@@ -41,7 +41,7 @@ export const syncTags = async (hangar: Hangar) => {
         try {
           await updateProjectTag(project.id, tag.name, "", false);
         } catch (error) {
-          logger.error({ error, project: project.dirName, tag: tag.name }, "Failed to detach tag");
+          logger.error("Failed to detach tag", { error, project: project.dirName, tag: tag.name });
           failures.push(`${project.dirName}: -${tag.name}`);
         }
       }

@@ -1,6 +1,6 @@
 import type { ApiContext } from "waku/router";
 import { dockerRoute, dockerStream } from "#app/api/docker-route.ts";
-import { docker } from "#libs/docker/server.ts";
+import { docker } from "#libs/docker/server";
 
 export const GET = dockerRoute<ApiContext<"/api/docker/apps/[project]/containers/[container]/logs">>(
   {

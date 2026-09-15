@@ -13,7 +13,7 @@ import {
   EmptyTitle,
 } from "#app/components/ui/empty.tsx";
 import { DockerNotFoundError } from "#libs/docker/compose.ts";
-import { docker } from "#libs/docker/server.ts";
+import { docker } from "#libs/docker/server";
 import { logger } from "#libs/logs";
 
 export default async function AppDetailPage({ project }: PageProps<"/apps/[project]">) {
@@ -28,7 +28,7 @@ export default async function AppDetailPage({ project }: PageProps<"/apps/[proje
     );
   } catch (error) {
     if (!(error instanceof DockerNotFoundError)) {
-      logger.error({ error, project }, "Failed to render Docker Compose project");
+      logger.error("Failed to render Docker Compose project", { error, project });
     }
 
     return (

@@ -2,7 +2,7 @@ import "server-only";
 
 import Dockerode from "dockerode";
 import { hangar } from "#libs/hangar/server";
-import { Docker } from "./docker.ts";
+import { Docker } from "../docker.ts";
 
 /**
  * The Docker layer for the web server, scoped to the apps this Hangar installed.

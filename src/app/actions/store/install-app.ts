@@ -12,7 +12,7 @@ export const installApp = async (appId: string): Promise<StoreActionResult> => {
   const app = [...hangar.store.apps].find(candidate => candidate.id === appId);
 
   if (!app) {
-    logger.warn({ appId }, "App installation rejected: unknown app");
+    logger.warn("App installation rejected: unknown app", { appId });
 
     return StoreActionResult.failure("Cette application n’existe pas dans le store.");
   }
@@ -31,7 +31,7 @@ export const installApp = async (appId: string): Promise<StoreActionResult> => {
       ? StoreActionResult.success(`${app.name} a été installée.`)
       : StoreActionResult.failure(`L’installation de ${app.name} n’a pas pu être confirmée.`);
   } catch (error) {
-    logger.error({ error, appId: app.id }, "App installation failed");
+    logger.error("App installation failed", { error, appId: app.id });
 
     return StoreActionResult.failure(`L’installation de ${app.name} a échoué. ${SERVER_LOG_HINT}`);
   }

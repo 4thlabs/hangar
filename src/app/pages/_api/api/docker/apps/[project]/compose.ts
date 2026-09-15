@@ -23,14 +23,14 @@ export const POST = dockerRoute<ApiContext<"/api/docker/apps/[project]/compose">
 
     // Checked before `refuseAppOperation` so `operation` narrows to an `AppOperation` below.
     if (!isAppOperation(operation)) {
-      logger.warn({ project, operation }, "Docker Compose stream rejected");
+      logger.warn("Docker Compose stream rejected", { project, operation });
       return dockerError("La commande Docker Compose est invalide.", 400);
     }
 
     const refusal = refuseAppOperation(project, operation);
 
     if (refusal) {
-      logger.warn({ project, operation, reason: refusal.reason }, "Docker Compose stream rejected");
+      logger.warn("Docker Compose stream rejected", { project, operation, reason: refusal.reason });
       return dockerError(refusal.message, refusal.reason === "invalid" ? 400 : 404);
     }
 
@@ -40,7 +40,7 @@ export const POST = dockerRoute<ApiContext<"/api/docker/apps/[project]/compose">
       .compose(project, [...appOperationArguments[operation]], { pipe: output })
       .then(() => output.end(`\n${COMPOSE_EXIT_MARKER}0\n`))
       .catch((error: unknown) => {
-        logger.error({ error, project, operation }, "Docker Compose stream command failed");
+        logger.error("Docker Compose stream command failed", { error, project, operation });
         output.end(`\n${COMPOSE_EXIT_MARKER}${exitCode(error)}\n`);
       });
 

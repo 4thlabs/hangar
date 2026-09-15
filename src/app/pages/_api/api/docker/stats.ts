@@ -2,7 +2,7 @@ import { Readable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { dockerRoute, dockerStream } from "#app/api/docker-route.ts";
 import type { Samples } from "#libs/docker/docker.ts";
-import { docker } from "#libs/docker/server.ts";
+import { docker } from "#libs/docker/server";
 import { ContainerStats } from "#libs/docker/stats.ts";
 
 /** How often a frame goes out. Also the window the CPU percentage is measured over. */

@@ -3,7 +3,7 @@ import { manageApp } from "#app/actions/apps/manage-app.ts";
 import { AppsOverview } from "#app/components/apps/apps-overview.tsx";
 import { appsSearchCodec } from "#app/search-codecs.ts";
 import type { ComposeProjectsSnapshot } from "#libs/docker/compose.ts";
-import { docker } from "#libs/docker/server.ts";
+import { docker } from "#libs/docker/server";
 import { logger } from "#libs/logs";
 
 export default async function AppsPage({ search }: PageProps<"/apps">) {
@@ -13,7 +13,7 @@ export default async function AppsPage({ search }: PageProps<"/apps">) {
   try {
     snapshot = await docker.listProjects();
   } catch (failure) {
-    logger.error({ error: failure }, "Failed to render Docker Compose projects");
+    logger.error("Failed to render Docker Compose projects", { error: failure });
     error = "Le daemon Docker est indisponible. Vérifiez le socket et ses permissions.";
   }
 

@@ -18,7 +18,7 @@ export const manageStore = async (): Promise<StoreActionResult> => {
 
     return StoreActionResult.success(wasInstalled ? "Le store a été mis à jour." : "Le store a été installé.");
   } catch (error) {
-    logger.error({ error, operation }, "Store management failed");
+    logger.error("Store management failed", { error, operation });
 
     // Do not call isInstalled() here: if the filesystem is why update() threw,
     // this would reject inside the catch and escape the handler entirely.

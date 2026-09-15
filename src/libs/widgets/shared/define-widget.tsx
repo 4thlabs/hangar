@@ -48,7 +48,7 @@ export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
         const data = await load();
         return render(data) ?? fallback();
       } catch (error: unknown) {
-        logger.error({ error, widget: id }, `Failed to load the ${title} widget`);
+        logger.error(`Failed to load the ${title} widget`, { error, widget: id });
         return fallback();
       }
     },

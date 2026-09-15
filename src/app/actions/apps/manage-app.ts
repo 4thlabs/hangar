@@ -12,7 +12,7 @@ export async function manageApp(project: string, operation: AppOperation): Promi
 
   const refusal = refuseAppOperation(project, operation);
   if (refusal) {
-    logger.warn({ project, operation, reason: refusal.reason }, "Docker Compose command rejected");
+    logger.warn("Docker Compose command rejected", { project, operation, reason: refusal.reason });
     return ActionResult.failure(refusal.message);
   }
 
@@ -26,7 +26,7 @@ export async function manageApp(project: string, operation: AppOperation): Promi
       }[operation],
     );
   } catch (error) {
-    logger.error({ error, project, operation }, "Docker Compose app command failed");
+    logger.error("Docker Compose app command failed", { error, project, operation });
     return ActionResult.failure(`La commande Docker Compose a échoué. ${SERVER_LOG_HINT}`);
   }
 }

@@ -61,7 +61,7 @@ export function dockerRoute<C extends RouteContext = RouteContext>(
         return dockerError(options.notFound, 404);
       }
 
-      logger.error({ error, ...context.params }, options.log);
+      logger.error(options.log, { error, ...context.params });
       return dockerError(options.unavailable, 503);
     }
   };

@@ -36,7 +36,7 @@ export const run = async (body: (hangar: Hangar) => Promise<number | unknown>) =
     // Config and runtime failures are expected operator errors: report the
     // message. Anything else is a real defect, so keep the stack.
     if (error instanceof HangarError) logger.error(error.message);
-    else logger.error(error);
+    else logger.error("Command failed", { error });
 
     return error instanceof HangarRuntimeError ? error.code : 1;
   }
