@@ -23,6 +23,8 @@ export type ComposeProjectSummary = {
    * report, not by the Docker layer: `undefined` simply means no check has run yet.
    */
   updateAvailable?: boolean;
+  /** Store icon of the app, when the store carries one. Set by the page, like `updateAvailable`. */
+  icon?: string | undefined;
 };
 
 /** Response body for the "list all projects" endpoint. */

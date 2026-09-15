@@ -163,6 +163,7 @@ export function AppsTable({ projects, manageApp, sort = null, onSort }: AppsTabl
               </TableCell>
               <TableCell className="font-medium">
                 <div className="flex flex-wrap items-center gap-2">
+                  {project.icon && <img src={project.icon} alt="" className="size-5 object-contain" />}
                   <Link to={{ to: "/apps/[project]", params: { project: project.name } }} className="hover:underline">
                     {project.name}
                   </Link>
