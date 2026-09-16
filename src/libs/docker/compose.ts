@@ -25,6 +25,8 @@ export type ComposeProjectSummary = {
   updateAvailable?: boolean;
   /** Store icon of the app, when the store carries one. Set by the page, like `updateAvailable`. */
   icon?: string | undefined;
+  /** Category the stack belongs to in `hangar.yml`. Set by the page, like `icon`. */
+  category?: { name: string; color: string } | undefined;
 };
 
 /** Response body for the "list all projects" endpoint. */

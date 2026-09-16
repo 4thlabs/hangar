@@ -33,21 +33,36 @@ describe("appsSearchCodec", () => {
     expect(appsSearchCodec.parse("status=unhealthy,garbage,running,running")).toEqual({
       q: "",
       status: ["running", "unhealthy"],
+      category: [],
       sort: null,
     });
   });
 
+  it("keeps categories as written, there being no closed list to check them against", () => {
+    expect(appsSearchCodec.parse("category=media,unknown")).toEqual({
+      q: "",
+      status: [],
+      category: ["media", "unknown"],
+      sort: null,
+    });
+  });
+
+  it("treats a missing or empty category as no filter", () => {
+    expect(appsSearchCodec.parse("category=")).toEqual({ q: "", status: [], category: [], sort: null });
+    expect(appsSearchCodec.parse("category=,,")).toEqual({ q: "", status: [], category: [], sort: null });
+  });
+
   it("treats a missing or empty status as no filter", () => {
-    expect(appsSearchCodec.parse("")).toEqual({ q: "", status: [], sort: null });
-    expect(appsSearchCodec.parse("status=")).toEqual({ q: "", status: [], sort: null });
+    expect(appsSearchCodec.parse("")).toEqual({ q: "", status: [], category: [], sort: null });
+    expect(appsSearchCodec.parse("status=")).toEqual({ q: "", status: [], category: [], sort: null });
   });
 
   it("keeps the default state out of the URL", () => {
-    expect(appsSearchCodec.serialize({ q: "", status: [], sort: null })).toBe("");
+    expect(appsSearchCodec.serialize({ q: "", status: [], category: [], sort: null })).toBe("");
   });
 
   it("round-trips a query and a selection", () => {
-    const query = "q=next&status=running%2Cstopped";
+    const query = "q=next&status=running%2Cstopped&category=media%2Cinfra";
     expect(appsSearchCodec.serialize(appsSearchCodec.parse(query))).toBe(query);
   });
 });

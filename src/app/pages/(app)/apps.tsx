@@ -14,12 +14,21 @@ export default async function AppsPage({ search }: PageProps<"/apps">) {
 
   try {
     const [projects, outdated] = await Promise.all([docker.listProjects(), outdatedProjects()]);
+    const categories = hangar.config.categories();
+    // Nothing stops a stack from being listed twice: the first match wins, as it does for Arcane tags.
+    // Only the name and colour travel to the client; the stack list would be dead weight on every row.
+    const categoryOf = (stack: string) => {
+      const found = categories.find(category => category.stacks.includes(stack));
+
+      return found && { name: found.name, color: found.color };
+    };
 
     snapshot = {
       projects: projects.projects.map(p => ({
         ...p,
         updateAvailable: outdated.has(p.name),
         icon: hangar.store.app(p.name)?.icon,
+        category: categoryOf(p.name),
       })),
     };
   } catch (failure) {

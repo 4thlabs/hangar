@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ComposeProjectSummary } from "#libs/docker/compose.ts";
-import { filterProjects, nextSort, statusCounts } from "./filter.ts";
+import { countBy, filterProjects, nextSort } from "./filter.ts";
 
-const project = (name: string, status: ComposeProjectSummary["status"]): ComposeProjectSummary => ({
+const project = (name: string, status: ComposeProjectSummary["status"], category?: string): ComposeProjectSummary => ({
   name,
   status,
+  ...(category ? { category: { name: category, color: "blue" } } : {}),
   serviceCount: 1,
   containerCount: 1,
   runningCount: status === "running" ? 1 : 0,
@@ -20,11 +21,19 @@ const projects = [
   project("audiobookshelf", "partial"),
 ];
 
+/** The same four apps, but classified: `gitea` is deliberately left out of every category. */
+const classified = [
+  project("nextcloud", "running", "media"),
+  project("gitea", "stopped"),
+  project("immich", "unhealthy", "media"),
+  project("audiobookshelf", "partial", "infra"),
+];
+
 const names = (result: ComposeProjectSummary[]) => result.map(entry => entry.name);
 
 describe("filterProjects", () => {
   it("shows everything, alphabetically, when nothing is selected", () => {
-    expect(names(filterProjects(projects, { q: "", status: [], sort: null }))).toEqual([
+    expect(names(filterProjects(projects, { q: "", status: [], category: [], sort: null }))).toEqual([
       "audiobookshelf",
       "gitea",
       "immich",
@@ -33,28 +42,32 @@ describe("filterProjects", () => {
   });
 
   it("narrows to one selected status", () => {
-    expect(names(filterProjects(projects, { q: "", status: ["running"], sort: null }))).toEqual(["nextcloud"]);
+    expect(names(filterProjects(projects, { q: "", status: ["running"], category: [], sort: null }))).toEqual([
+      "nextcloud",
+    ]);
   });
 
   it("shows the union of several selected statuses", () => {
-    const result = filterProjects(projects, { q: "", status: ["unhealthy", "partial"], sort: null });
+    const result = filterProjects(projects, { q: "", status: ["unhealthy", "partial"], category: [], sort: null });
 
     expect(names(result)).toEqual(["audiobookshelf", "immich"]);
   });
 
   it("matches names loosely, and by subsequence", () => {
-    expect(names(filterProjects(projects, { q: "next", status: [], sort: null }))).toEqual(["nextcloud"]);
-    expect(names(filterProjects(projects, { q: "abs", status: [], sort: null }))).toEqual(["audiobookshelf"]);
+    expect(names(filterProjects(projects, { q: "next", status: [], category: [], sort: null }))).toEqual(["nextcloud"]);
+    expect(names(filterProjects(projects, { q: "abs", status: [], category: [], sort: null }))).toEqual([
+      "audiobookshelf",
+    ]);
   });
 
   it("applies the status filter before the query", () => {
     // "nextcloud" matches the query but is running, so the stopped-only filter wins.
-    expect(filterProjects(projects, { q: "next", status: ["stopped"], sort: null })).toEqual([]);
+    expect(filterProjects(projects, { q: "next", status: ["stopped"], category: [], sort: null })).toEqual([]);
   });
 
   it("leaves the caller's array untouched", () => {
     const original = [...projects];
-    filterProjects(projects, { q: "", status: [], sort: null });
+    filterProjects(projects, { q: "", status: [], category: [], sort: null });
 
     expect(projects).toEqual(original);
   });
@@ -62,7 +75,7 @@ describe("filterProjects", () => {
 
 describe("sorting", () => {
   const sorted = (column: Parameters<typeof nextSort>[1], descending: boolean) =>
-    names(filterProjects(projects, { q: "", status: [], sort: { column, descending } }));
+    names(filterProjects(projects, { q: "", status: [], category: [], sort: { column, descending } }));
 
   it("sorts by name in both directions", () => {
     expect(sorted("name", false)).toEqual(["audiobookshelf", "gitea", "immich", "nextcloud"]);
@@ -79,7 +92,12 @@ describe("sorting", () => {
       { ...project("a", "running"), containerCount: 9 },
       { ...project("b", "running"), containerCount: 10 },
     ];
-    const result = filterProjects(wide, { q: "", status: [], sort: { column: "containers", descending: true } });
+    const result = filterProjects(wide, {
+      q: "",
+      status: [],
+      category: [],
+      sort: { column: "containers", descending: true },
+    });
 
     // A string compare would put "9" after "10".
     expect(names(result)).toEqual(["b", "a"]);
@@ -92,10 +110,52 @@ describe("sorting", () => {
   });
 
   it("overrides search relevance when a column is chosen", () => {
-    const relevance = names(filterProjects(projects, { q: "i", status: [], sort: null }));
-    const byName = names(filterProjects(projects, { q: "i", status: [], sort: { column: "name", descending: true } }));
+    const relevance = names(filterProjects(projects, { q: "i", status: [], category: [], sort: null }));
+    const byName = names(
+      filterProjects(projects, { q: "i", status: [], category: [], sort: { column: "name", descending: true } }),
+    );
 
     expect(byName).toEqual([...relevance].sort((left, right) => right.localeCompare(left)));
+  });
+});
+
+describe("category filter", () => {
+  it("keeps only the selected category", () => {
+    expect(names(filterProjects(classified, { q: "", status: [], category: ["media"], sort: null }))).toEqual([
+      "immich",
+      "nextcloud",
+    ]);
+  });
+
+  it("unions several categories, and drops the apps in none of them", () => {
+    expect(names(filterProjects(classified, { q: "", status: [], category: ["media", "infra"], sort: null }))).toEqual([
+      "audiobookshelf",
+      "immich",
+      "nextcloud",
+    ]);
+  });
+
+  it("combines with the status filter", () => {
+    expect(names(filterProjects(classified, { q: "", status: ["running"], category: ["media"], sort: null }))).toEqual([
+      "nextcloud",
+    ]);
+  });
+
+  it("sorts by category, grouping the unclassified last and breaking ties on the name", () => {
+    expect(
+      names(
+        filterProjects(classified, {
+          q: "",
+          status: [],
+          category: [],
+          sort: { column: "category", descending: false },
+        }),
+      ),
+    ).toEqual(["audiobookshelf", "immich", "nextcloud", "gitea"]);
+  });
+
+  it("yields nothing for a category no app carries", () => {
+    expect(filterProjects(classified, { q: "", status: [], category: ["gaming"], sort: null })).toEqual([]);
   });
 });
 
@@ -119,10 +179,14 @@ describe("nextSort", () => {
   });
 });
 
-describe("statusCounts", () => {
+describe("countBy", () => {
   it("counts each status, and reports nothing for absent ones", () => {
-    const counts = statusCounts([...projects, project("paperless", "running")]);
+    const counts = countBy([...projects, project("paperless", "running")], entry => entry.status);
 
     expect(counts).toEqual({ running: 2, stopped: 1, unhealthy: 1, partial: 1 });
+  });
+
+  it("leaves apps in no category out of the category counts", () => {
+    expect(countBy(classified, entry => entry.category?.name)).toEqual({ media: 2, infra: 1 });
   });
 });

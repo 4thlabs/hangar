@@ -5,6 +5,8 @@ import type { ComposeProjectSummary } from "#libs/docker/compose.ts";
 /** What each sortable column compares on. Status sorts by severity, i.e. `APP_STATUSES` order. */
 const sortValue: Record<AppSortColumn, (project: ComposeProjectSummary) => number | string> = {
   name: project => project.name,
+  // The sentinel sorts after any real name, so apps in no category group at the bottom ascending.
+  category: project => project.category?.name ?? "\uffff",
   status: project => APP_STATUSES.indexOf(project.status),
   services: project => project.serviceCount,
   containers: project => project.containerCount,
@@ -27,16 +29,22 @@ function sortProjects(projects: ComposeProjectSummary[], { column, descending }:
 }
 
 /**
- * Narrows the app list to the selected statuses, then to the search query.
- * An empty `status` list means no status filter, so the unfiltered view needs no special case.
+ * Narrows the app list to the selected categories and statuses, then to the search query.
+ * An empty list means no filter on that dimension, so the unfiltered view needs no special case.
+ * A stack missing from every `hangar.yml` category can only show up unfiltered.
  * @param projects The current snapshot's projects
  * @param search The `/apps` search params
  */
 export function filterProjects(
   projects: ComposeProjectSummary[],
-  { q, status, sort }: AppsSearch,
+  { q, status, category, sort }: AppsSearch,
 ): ComposeProjectSummary[] {
-  const matching = status.length === 0 ? projects : projects.filter(project => status.includes(project.status));
+  const classified =
+    category.length === 0
+      ? projects
+      : projects.filter(project => project.category && category.includes(project.category.name));
+
+  const matching = status.length === 0 ? classified : classified.filter(project => status.includes(project.status));
 
   const found = searchByName(q, matching);
 
@@ -54,10 +62,19 @@ export function nextSort(current: AppsSort, column: AppSortColumn): AppsSort {
   return current.descending ? null : { column, descending: true };
 }
 
-/** How many projects carry each status, for the counts shown beside each checkbox. */
-export function statusCounts(projects: ComposeProjectSummary[]): Record<string, number> {
+/**
+ * How many projects carry each value, for the counts shown beside each checkbox.
+ * A project the key does not apply to — an app in no category — counts towards nothing.
+ */
+export function countBy(
+  projects: ComposeProjectSummary[],
+  key: (project: ComposeProjectSummary) => string | undefined,
+): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const project of projects) counts[project.status] = (counts[project.status] ?? 0) + 1;
+  for (const project of projects) {
+    const value = key(project);
+    if (value !== undefined) counts[value] = (counts[value] ?? 0) + 1;
+  }
 
   return counts;
 }

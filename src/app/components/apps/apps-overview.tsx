@@ -15,9 +15,10 @@ import { useRouter } from "waku";
 import { useSetSearch_UNSTABLE } from "waku/router/client";
 import type { ActionResult } from "#app/actions/action-result.ts";
 import type { AppOperation } from "#app/actions/apps/app-operation.ts";
+import { AppsCategoryFilter } from "#app/components/apps/apps-category-filter.tsx";
 import { AppsStatusFilter } from "#app/components/apps/apps-status-filter.tsx";
 import { AppsTable } from "#app/components/apps/apps-table.tsx";
-import { filterProjects, nextSort, statusCounts } from "#app/components/apps/filter.ts";
+import { countBy, filterProjects, nextSort } from "#app/components/apps/filter.ts";
 import { formatBytes, formatPercent } from "#app/components/apps/format.ts";
 import { StatCard } from "#app/components/apps/stat-card.tsx";
 import { AutoReload } from "#app/components/common/auto-reload.tsx";
@@ -43,7 +44,8 @@ export function AppsOverview({ snapshot, error, manageApp, search }: AppsOvervie
   const onSort = (column: AppSortColumn) => void setSearch({ sort: nextSort(search.sort, column) });
   const projects = snapshot?.projects ?? [];
   const visible = filterProjects(projects, search);
-  const counts = statusCounts(projects);
+  const counts = countBy(projects, project => project.status);
+  const categoryCounts = countBy(projects, project => project.category?.name);
   const totals = projects.reduce(
     (result, project) => ({
       services: result.services + project.serviceCount,
@@ -74,6 +76,7 @@ export function AppsOverview({ snapshot, error, manageApp, search }: AppsOvervie
           <p className="text-sm text-muted-foreground">Applications installées par Hangar et leur état Docker.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <AppsCategoryFilter counts={categoryCounts} />
           <AppsStatusFilter counts={counts} />
           <Button type="button" variant="outline" disabled={isRefreshing} onClick={() => void refresh()}>
             {isRefreshing ? <Spinner /> : <RefreshCwIcon data-icon="inline-start" />}

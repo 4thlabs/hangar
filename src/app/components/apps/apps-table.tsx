@@ -5,6 +5,7 @@ import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
 import { Link, useRouter } from "waku";
 import { ActionResult } from "#app/actions/action-result.ts";
 import { actionLabel, type AppOperation } from "#app/actions/apps/app-operation.ts";
+import { categoryBadgeClass } from "#app/components/apps/category.ts";
 import { plural, s } from "#app/components/apps/format.ts";
 import {
   ComposeConfirmDialog,
@@ -143,6 +144,7 @@ export function AppsTable({ projects, manageApp, sort = null, onSort }: AppsTabl
               />
             </TableHead>
             <SortableHead column="name" label="Application" sort={sort} onSort={onSort} />
+            <SortableHead column="category" label="Catégorie" sort={sort} onSort={onSort} />
             <SortableHead column="status" label="Statut" sort={sort} onSort={onSort} />
             <SortableHead column="services" label="Services" sort={sort} onSort={onSort} />
             <SortableHead column="containers" label="Conteneurs" sort={sort} onSort={onSort} />
@@ -169,6 +171,15 @@ export function AppsTable({ projects, manageApp, sort = null, onSort }: AppsTabl
                   </Link>
                   {project.updateAvailable && <Badge variant="outline">Mise à jour</Badge>}
                 </div>
+              </TableCell>
+              <TableCell>
+                {project.category ? (
+                  <Badge variant="secondary" className={categoryBadgeClass[project.category.color]}>
+                    {project.category.name}
+                  </Badge>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
               </TableCell>
               <TableCell>
                 <Badge variant={statusVariant(project.status)}>{statusLabel[project.status]}</Badge>

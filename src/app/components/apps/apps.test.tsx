@@ -8,11 +8,11 @@ vi.mock("waku", () => ({
   useRouter: () => ({ reload: async () => {} }),
 }));
 vi.mock("waku/router/client", () => ({
-  useSearch_UNSTABLE: () => ({ q: "", status: [], sort: null }),
+  useSearch_UNSTABLE: () => ({ q: "", status: [], category: [], sort: null }),
   useSetSearch_UNSTABLE: () => () => {},
 }));
 
-const noSearch = { q: "", status: [], sort: null };
+const noSearch = { q: "", status: [], category: [], sort: null };
 
 const { AppsTable } = await import("./apps-table.tsx");
 const { AppsOverview } = await import("./apps-overview.tsx");
@@ -93,9 +93,9 @@ describe("Docker apps views", () => {
     );
 
     expect(html).toContain('aria-sort="descending"');
-    expect(html.match(/aria-sort="none"/g)).toHaveLength(4);
+    expect(html.match(/aria-sort="none"/g)).toHaveLength(5);
     // Every sortable header is a real button, so it is keyboard reachable.
-    expect(html.match(/<th[^>]*aria-sort[^>]*><button/g)).toHaveLength(5);
+    expect(html.match(/<th[^>]*aria-sort[^>]*><button/g)).toHaveLength(6);
   });
 
   it("renders the empty Compose inventory state", () => {
