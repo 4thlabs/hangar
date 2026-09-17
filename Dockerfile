@@ -10,7 +10,8 @@ COPY . .
 # Waku evaluates server modules during the build, so provide isolated build-time values.
 # The auth secret is a disposable placeholder and is not copied into the runtime image.
 # hadolint ignore=DL3064
-ENV HANGAR_DATA_DIR=/tmp/hangar \
+ENV DOMAIN="example.com" \
+    HANGAR_DATA_DIR=/tmp/hangar \
     HANGAR_DB_HOST=:memory: \
     HANGAR_STORE_URL=https://example.com/store.git \
     BETTER_AUTH_URL=http://localhost:3010 \
