@@ -1,4 +1,5 @@
 import { HangarConfig } from "./hangar-config.ts";
+import { HangarEnv } from "./hangar-env.ts";
 import { mkdir, readdir, readFile, symlink, unlink } from "node:fs/promises";
 import path from "node:path";
 import { logger } from "#libs/logs";
@@ -45,6 +46,9 @@ export class HangarStore {
   /** Configuration shipped by the store, empty until the store is on disk */
   readonly config: HangarConfig;
 
+  /** The global environment every stack is composed with */
+  readonly env: HangarEnv;
+
   /** Runtime to launch commands */
   private readonly runtime: CommandRunner;
 
@@ -62,6 +66,11 @@ export class HangarStore {
     this.storePath = path.join(this.dataPath, "app-store");
     this.installedPath = path.join(this.dataPath, "app-installed");
     this.config = new HangarConfig(path.join(this.storePath, "config", "hangar.yml"));
+    // APP_DATA_DIR is the one variable Hangar can answer for the operator: the stacks keep
+    // their data under the same resolved data directory Hangar itself uses.
+    this.env = new HangarEnv(path.join(this.installedPath, ".env.global"), path.join(this.storePath, "store"), {
+      APP_DATA_DIR: path.join(this.dataPath, "app-data"),
+    });
     this.runtime = runtime;
   }
 
@@ -152,6 +161,10 @@ export class HangarStore {
         .map(async entry => await this.link(entry)
         .catch(ex => logger.error(`Failed to link: ${entry}`, { error: ex }))),
     );
+
+    // The stacks are composed with .env.global: without it every compose call fails, so a
+    // fresh install leaves the operator the list of variables to fill rather than nothing.
+    await this.env.ensure();
   }
 
   /**
@@ -170,7 +183,7 @@ export class HangarStore {
     // prettier-ignore
     return this.runtime.run("docker", [
       "compose",
-      "--env-file", path.join(this.installedPath, ".env.global"),
+      "--env-file", this.env.file(),
       "-f", compose,
       ...args,
     ], options);

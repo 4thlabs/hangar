@@ -1,5 +1,7 @@
 import { cancelJob, runJob } from "#app/actions/jobs/manage-job.ts";
+import { saveEnv } from "#app/actions/store/manage-env.ts";
 import { manageStore } from "#app/actions/store/manage-store.ts";
+import { EnvSettingsCard } from "#app/components/settings/env-settings-card.tsx";
 import { JobsSettingsCard } from "#app/components/settings/jobs-settings-card.tsx";
 import { StoreSettingsCard } from "#app/components/settings/store-settings-card.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#app/components/ui/tabs.tsx";
@@ -9,6 +11,7 @@ import { Sidequest } from "sidequest";
 export default async function SettingsPage() {
   const installed = await hangar.store.isInstalled();
   const jobs = await Sidequest.job.list({ limit: 50 });
+  const variables = await hangar.store.env.read();
 
   return (
     <main>
@@ -20,10 +23,14 @@ export default async function SettingsPage() {
       <Tabs defaultValue="store" className="gap-6">
         <TabsList className="self-center">
           <TabsTrigger value="store">Store</TabsTrigger>
+          <TabsTrigger value="env">Environnement</TabsTrigger>
           <TabsTrigger value="jobs">Jobs</TabsTrigger>
         </TabsList>
         <TabsContent value="store">
           <StoreSettingsCard storeUrl={hangar.store.url} initialInstalled={installed} manageStore={manageStore} />
+        </TabsContent>
+        <TabsContent value="env">
+          <EnvSettingsCard variables={variables} saveEnv={saveEnv} />
         </TabsContent>
         <TabsContent value="jobs">
           <JobsSettingsCard jobs={jobs} runJob={runJob} cancelJob={cancelJob} />

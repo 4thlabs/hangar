@@ -128,6 +128,27 @@ describe("HangarStore", () => {
     );
   });
 
+  it("bootstraps the global env with the variables the stacks reference", async () => {
+    const store = await createStore(dataDir, createRuntime());
+    const alphaApp = path.join(store.storePath, "store", "alpha-app");
+    await Promise.all([
+      mkdir(path.join(store.storePath, ".git"), { recursive: true }),
+      mkdir(alphaApp, { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(
+        path.join(alphaApp, "compose.yml"),
+        "services:\n  alpha:\n    image: alpha:${ALPHA_TAG:-latest}\n    working_dir: ${PWD}\n    environment:\n      DOMAIN: $DOMAIN\n      PRICE: $$5\n",
+      ),
+      writeFile(path.join(store.storePath, "store", "networks.yml"), "networks:\n  web:\n    name: ${NETWORK}\n"),
+    ]);
+
+    await store.install();
+
+    // PWD is compose's to fill, `$$5` is an escaped dollar, everything else is the operator's.
+    expect(await store.env.read()).toEqual({ ALPHA_TAG: "", DOMAIN: "", NETWORK: "" });
+  });
+
   it("keeps shared files out of the app list", async () => {
     const store = await createStore(dataDir, createRuntime());
     const alphaApp = path.join(store.storePath, "store", "alpha-app");
