@@ -18,6 +18,10 @@ ENV HANGAR_DATA_DIR=/tmp/hangar \
 
 RUN npm run build
 
+# The bundler leaves the native deps external (see waku.config.ts) and the job modules are plain
+# TypeScript outside the bundle, so the runner needs real node_modules - production only.
+RUN npm prune --omit=dev
+
 FROM node:24-alpine AS runner
 
 # Package versions are coupled to the Alpine base repository.
@@ -36,6 +40,12 @@ ENV NODE_ENV=production \
     HANGAR_DB_HOST=/app/data/app-data/hangar/hangar.db
 
 COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+
+# `manualJobResolution` makes the worker import `sidequest.jobs.js` at run time, which pulls the job
+# classes straight from `src/` through the `#libs/*` map in package.json. All three must ship.
+COPY --chown=node:node package.json sidequest.jobs.js ./
+COPY --chown=node:node src ./src
 
 USER 1000:1000
 
