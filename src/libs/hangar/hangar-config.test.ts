@@ -14,40 +14,42 @@ async function configFile(contents: string) {
 describe("HangarConfig", () => {
   it("loads a valid config", async () => {
     const file = await configFile(`
-store: https://github.com/example/store.git
 categories:
   - name: infra
     color: blue
     stacks: [traefik, backrest]
 `);
 
-    const config = await HangarConfig.create(file);
+    const config = await new HangarConfig(file).load();
 
-    expect(config.storeUrl()).toBe("https://github.com/example/store.git");
     expect(config.categories()).toEqual([{ name: "infra", color: "blue", stacks: ["traefik", "backrest"] }]);
+  });
+
+  it("starts empty, before anything is loaded", () => {
+    expect(new HangarConfig("/nowhere/hangar.yml").categories()).toEqual([]);
+  });
+
+  it("loads a store without a config as a store without categories", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "hangar-config-"));
+
+    const config = await new HangarConfig(path.join(dir, "hangar.yml")).load();
+
+    expect(config.categories()).toEqual([]);
   });
 
   it("rejects a config missing categories, naming the file", async () => {
     const file = await configFile("store: https://github.com/example/store.git\n");
 
-    await expect(HangarConfig.create(file)).rejects.toThrow(/Invalid Hangar config at .*hangar\.yml/);
+    await expect(new HangarConfig(file).load()).rejects.toThrow(/Invalid Hangar config at .*hangar\.yml/);
   });
 
   it("rejects a malformed category instead of loading it", async () => {
     const file = await configFile(`
-store: https://github.com/example/store.git
 categories:
   - name: infra
     stacks: [traefik]
 `);
 
-    await expect(HangarConfig.create(file)).rejects.toThrow(/categories\.0\.color/);
-  });
-
-  it("ships a valid config in the repo", async () => {
-    const config = await HangarConfig.create("./config/hangar.yml");
-
-    expect(config.storeUrl()).toMatch(/^https:\/\//);
-    expect(config.categories().length).toBeGreaterThan(0);
+    await expect(new HangarConfig(file).load()).rejects.toThrow(/categories\.0\.color/);
   });
 });

@@ -9,7 +9,7 @@ import * as z from "zod";
  * not halfway through a render as `https://arcane.undefined`.
  */
 const envVariables = z.object({
-  HANGAR_CONFIG_FILE: z.string().min(1),
+  HANGAR_STORE_URL: z.string().min(1),
   HANGAR_DATA_DIR: z.string().min(1),
   HANGAR_DB_HOST: z.string().min(1),
   DOMAIN: z.string().min(1),

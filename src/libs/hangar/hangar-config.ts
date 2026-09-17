@@ -1,5 +1,6 @@
 import { load } from "js-yaml";
 import { readFile } from "node:fs/promises";
+import { logger } from "#libs/logs";
 import * as z from "zod";
 import { HangarError } from "./hangar-error.ts";
 
@@ -11,7 +12,6 @@ const categorySchema = z.object({
 });
 
 const configSchema = z.object({
-  store: z.string().min(1),
   categories: z.array(categorySchema),
 });
 
@@ -19,48 +19,30 @@ export type Category = z.infer<typeof categorySchema>;
 export type Config = z.infer<typeof configSchema>;
 
 /**
- * HangarConfig interface
+ * The configuration of a store, read from the `hangar.yml` it ships.
+ *
+ * Owned by the HangarStore: it describes how that store's stacks are grouped,
+ * so it only exists once the store has been cloned. Until then — a fresh
+ * install, or the Waku build, which evaluates the server modules with no data
+ * directory — the configuration is simply empty.
  */
-export interface ConfigurationProvider {
-  storeUrl: () => string;
-  categories: () => Category[];
-}
-
-/**
- * The configuration for Hangar
- */
-export class HangarConfig implements ConfigurationProvider {
+export class HangarConfig {
   /** The config file */
   private readonly _configFile: string;
 
-  /** The URL of the hangar store */
-  private _storeUrl: string = "";
-
   /** The categories for the various stacks */
   private _categories: Category[] = [];
-
-  /** Returns the store URL */
-  public storeUrl = () => this._storeUrl;
 
   /** Returns the categories */
   public categories = () => this._categories;
 
   /**
-   * Constructs a new HangarConfig instance with the given configuration file.
+   * Constructs the configuration for the given file. Does not read it:
+   * call `load()` once the store is on disk.
    * @param file The path to the configuration file
    */
-  private constructor(file: string) {
+  constructor(file: string) {
     this._configFile = file;
-  }
-
-  /**
-   * Static async constructor
-   * @param file
-   */
-  static async create(file: string) {
-    const config = new HangarConfig(file);
-    await config.load();
-    return config;
   }
 
   /**
@@ -69,10 +51,20 @@ export class HangarConfig implements ConfigurationProvider {
    */
   async load() {
     const handle = await readFile(this._configFile, "utf8").catch((error: NodeJS.ErrnoException) => {
+      // A store without a hangar.yml is a store without categories, not a
+      // failure: it still installs, its apps are just left ungrouped.
+      if (error.code === "ENOENT") return undefined;
+
       // An unreadable config is an operator error, not a defect: report the
       // path, not a filesystem stack trace.
       throw new HangarError(`Cannot read the Hangar config at ${this._configFile}: ${error.code ?? error.message}`);
     });
+
+    if (handle === undefined) {
+      logger.warn(`No Hangar config at ${this._configFile}: the store declares no categories`);
+      this._categories = [];
+      return this;
+    }
 
     // hangar.yml is user-authored: validate here, or a missing `categories`
     // surfaces much later as a crash inside HangarStore.resolve().
@@ -83,7 +75,6 @@ export class HangarConfig implements ConfigurationProvider {
       throw new HangarError(`Invalid Hangar config at ${this._configFile}:\n${issues.join("\n")}`);
     }
 
-    this._storeUrl = parsed.data.store;
     this._categories = parsed.data.categories;
 
     return this;

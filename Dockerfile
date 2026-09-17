@@ -12,7 +12,7 @@ COPY . .
 # hadolint ignore=DL3064
 ENV HANGAR_DATA_DIR=/tmp/hangar \
     HANGAR_DB_HOST=:memory: \
-    HANGAR_CONFIG_FILE=/app/config/hangar.yml \
+    HANGAR_STORE_URL=https://example.com/store.git \
     BETTER_AUTH_URL=http://localhost:3010 \
     BETTER_AUTH_SECRET=build-only-secret-at-least-32-characters
 
@@ -26,18 +26,16 @@ RUN apk add --no-cache docker-cli docker-cli-compose git
 
 WORKDIR /app
 
+# HANGAR_STORE_URL has no default on purpose: the store carries both the stacks
+# and their categories, so it is the operator's own repository. Supply it at run
+# time or the app refuses to start.
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3010 \
     HANGAR_DATA_DIR=/app/data \
-    HANGAR_DB_HOST=/app/data/app-data/hangar/hangar.db \
-    HANGAR_CONFIG_FILE=/app/config/hangar.yml
+    HANGAR_DB_HOST=/app/data/app-data/hangar/hangar.db
 
 COPY --from=builder --chown=node:node /app/dist ./dist
-
-# HANGAR_CONFIG_FILE points here. Ship the default so the image boots standalone;
-# mount over /app/config to supply your own.
-COPY --from=builder --chown=node:node /app/config ./config
 
 USER 1000:1000
 

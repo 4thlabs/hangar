@@ -42,7 +42,7 @@ jobs:
         env:
           HANGAR_DATA_DIR: /tmp/hangar
           HANGAR_DB_HOST: /tmp/hangar/hangar.db
-          HANGAR_CONFIG_FILE: ${{ github.workspace }}/config/hangar.yml
+          HANGAR_STORE_URL: https://example.com/store.git
           DOMAIN: example.com
           BETTER_AUTH_URL: http://localhost:3010
           BETTER_AUTH_SECRET: build-only-secret-at-least-32-characters

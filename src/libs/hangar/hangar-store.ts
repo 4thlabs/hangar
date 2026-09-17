@@ -1,4 +1,4 @@
-import { type ConfigurationProvider } from "./hangar-config.ts";
+import { HangarConfig } from "./hangar-config.ts";
 import { mkdir, readdir, readFile, symlink, unlink } from "node:fs/promises";
 import path from "node:path";
 import { logger } from "#libs/logs";
@@ -39,8 +39,11 @@ export class HangarStore {
   /** Path of the store */
   readonly storePath: string;
 
-  /** Hangar configuration */
-  private readonly config: ConfigurationProvider;
+  /** The URL of the store repository */
+  readonly url: string;
+
+  /** Configuration shipped by the store, empty until the store is on disk */
+  readonly config: HangarConfig;
 
   /** Runtime to launch commands */
   private readonly runtime: CommandRunner;
@@ -50,14 +53,15 @@ export class HangarStore {
 
   /**
    * Constructs the App Store
-   * @param config Hangar configuration
+   * @param url URL of the store repository
    * @param dataDir Directory for storing data
    */
-  private constructor(config: ConfigurationProvider, dataDir: string, runtime: CommandRunner) {
-    this.config = config;
+  private constructor(url: string, dataDir: string, runtime: CommandRunner) {
+    this.url = url;
     this.dataPath = path.resolve(dataDir);
     this.storePath = path.join(this.dataPath, "app-store");
     this.installedPath = path.join(this.dataPath, "app-installed");
+    this.config = new HangarConfig(path.join(this.storePath, "hangar.yml"));
     this.runtime = runtime;
   }
 
@@ -65,8 +69,8 @@ export class HangarStore {
    * Creates the store
    * @returns The instance of the store
    */
-  static async create(config: ConfigurationProvider, dataDir: string, runtime: CommandRunner) {
-    const store = new HangarStore(config, dataDir, runtime);
+  static async create(url: string, dataDir: string, runtime: CommandRunner) {
+    const store = new HangarStore(url, dataDir, runtime);
     return store;
   }
 
@@ -133,8 +137,11 @@ export class HangarStore {
     if (await this.isInstalled()) {
       await this.runtime.run("git", ["-C", this.storePath, "pull", "--ff-only"]);
     } else {
-      await this.runtime.run("git", ["clone", "--", this.config.storeUrl(), this.storePath]);
+      await this.runtime.run("git", ["clone", "--", this.url, this.storePath]);
     }
+
+    // The categories only exist once the clone brought hangar.yml in.
+    await this.config.load();
 
     const apps = this.resolve();
 
@@ -225,6 +232,8 @@ export class HangarStore {
     this.apps.clear();
 
     if (await this.isInstalled()) {
+      await this.config.load();
+
       const apps = await readdir(path.join(this.storePath, "store"), { recursive: false });
       const installed = await readdir(this.installedPath, { recursive: false });
 

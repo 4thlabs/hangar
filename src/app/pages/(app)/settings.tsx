@@ -17,17 +17,13 @@ export default async function SettingsPage() {
         <h1 className="text-2xl font-semibold">Paramètres</h1>
         <p className="text-sm text-muted-foreground">Gérez la configuration de votre installation Hangar.</p>
       </div>
-      <Tabs defaultValue="store">
-        <TabsList>
+      <Tabs defaultValue="store" className="gap-6">
+        <TabsList className="self-center">
           <TabsTrigger value="store">Store</TabsTrigger>
           <TabsTrigger value="jobs">Jobs</TabsTrigger>
         </TabsList>
         <TabsContent value="store">
-          <StoreSettingsCard
-            storeUrl={hangar.config.storeUrl()}
-            initialInstalled={installed}
-            manageStore={manageStore}
-          />
+          <StoreSettingsCard storeUrl={hangar.store.url} initialInstalled={installed} manageStore={manageStore} />
         </TabsContent>
         <TabsContent value="jobs">
           <JobsSettingsCard jobs={jobs} runJob={runJob} cancelJob={cancelJob} />
