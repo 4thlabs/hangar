@@ -23,6 +23,18 @@ categories:
     const config = await new HangarConfig(file).load();
 
     expect(config.categories()).toEqual([{ name: "infra", color: "blue", stacks: ["traefik", "backrest"] }]);
+    expect(config.shared()).toEqual([]);
+  });
+
+  it("loads the files shared by every stack", async () => {
+    const file = await configFile(`
+categories: []
+shared: [networks.yml]
+`);
+
+    const config = await new HangarConfig(file).load();
+
+    expect(config.shared()).toEqual(["networks.yml"]);
   });
 
   it("starts empty, before anything is loaded", () => {

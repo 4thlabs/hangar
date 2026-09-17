@@ -17,6 +17,7 @@ categories:
   - name: utilities
     color: green
     stacks: [beta-app, gamma-app]
+shared: [networks.yml]
 `;
 
 const createRuntime = () =>
@@ -28,8 +29,8 @@ const createRuntime = () =>
 const createStore = async (dataDir: string, runtime: CommandRunner) => {
   const store = await HangarStore.create(STORE_URL, dataDir, runtime);
 
-  await mkdir(store.storePath, { recursive: true });
-  await writeFile(path.join(store.storePath, "hangar.yml"), CATEGORIES);
+  await mkdir(path.join(store.storePath, "config"), { recursive: true });
+  await writeFile(path.join(store.storePath, "config", "hangar.yml"), CATEGORIES);
   await store.config.load();
 
   return store;
@@ -102,8 +103,12 @@ describe("HangarStore", () => {
           mkdir(path.join(dataDir, "app-store", "store", "alpha-app"), { recursive: true }),
           mkdir(path.join(dataDir, "app-store", "store", "beta-app"), { recursive: true }),
           mkdir(path.join(dataDir, "app-store", "store", "gamma-app"), { recursive: true }),
+          mkdir(path.join(dataDir, "app-store", "config"), { recursive: true }),
         ]);
-        await writeFile(path.join(dataDir, "app-store", "hangar.yml"), CATEGORIES);
+        await Promise.all([
+          writeFile(path.join(dataDir, "app-store", "config", "hangar.yml"), CATEGORIES),
+          writeFile(path.join(dataDir, "app-store", "store", "networks.yml"), "networks: {}\n"),
+        ]);
         return { code: 0, stdout: "" };
       }),
     };
@@ -117,6 +122,28 @@ describe("HangarStore", () => {
     expect((await lstat(path.join(store.installedPath, "alpha-app"))).isSymbolicLink()).toBe(true);
     expect((await lstat(path.join(store.installedPath, "beta-app"))).isSymbolicLink()).toBe(true);
     expect((await lstat(path.join(store.installedPath, "gamma-app"))).isSymbolicLink()).toBe(true);
+    // Shared files ride along with the stacks: compose resolves them from app-installed.
+    expect(await readlink(path.join(store.installedPath, "networks.yml"))).toBe(
+      path.join(store.storePath, "store", "networks.yml"),
+    );
+  });
+
+  it("keeps shared files out of the app list", async () => {
+    const store = await createStore(dataDir, createRuntime());
+    const alphaApp = path.join(store.storePath, "store", "alpha-app");
+    await Promise.all([
+      mkdir(path.join(store.storePath, ".git"), { recursive: true }),
+      mkdir(alphaApp, { recursive: true }),
+      mkdir(store.installedPath, { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(path.join(alphaApp, "compose.yml"), "services: {}\n"),
+      writeFile(path.join(store.storePath, "store", "networks.yml"), "networks: {}\n"),
+    ]);
+
+    await store.refresh();
+
+    expect([...store.apps].map(app => app.id)).toEqual(["alpha-app"]);
   });
 
   it("refreshes app metadata and installation state from disk", async () => {

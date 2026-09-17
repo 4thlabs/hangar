@@ -61,7 +61,7 @@ export class HangarStore {
     this.dataPath = path.resolve(dataDir);
     this.storePath = path.join(this.dataPath, "app-store");
     this.installedPath = path.join(this.dataPath, "app-installed");
-    this.config = new HangarConfig(path.join(this.storePath, "hangar.yml"));
+    this.config = new HangarConfig(path.join(this.storePath, "config", "hangar.yml"));
     this.runtime = runtime;
   }
 
@@ -143,13 +143,14 @@ export class HangarStore {
     // The categories only exist once the clone brought hangar.yml in.
     await this.config.load();
 
-    const apps = this.resolve();
+    // The shared files (networks, common env) live next to the stacks and link the same way.
+    const entries = [...this.resolve(), ...this.config.shared()];
 
     // prettier-ignore
     await Promise.all(
-      apps
-        .map(async app => await this.link(app)
-        .catch(ex => logger.error(`Failed to link app: ${app}`, { error: ex }))),
+      entries
+        .map(async entry => await this.link(entry)
+        .catch(ex => logger.error(`Failed to link: ${entry}`, { error: ex }))),
     );
   }
 
@@ -234,7 +235,9 @@ export class HangarStore {
     if (await this.isInstalled()) {
       await this.config.load();
 
-      const apps = await readdir(path.join(this.storePath, "store"), { recursive: false });
+      const shared = this.config.shared();
+      const entries = await readdir(path.join(this.storePath, "store"), { recursive: false });
+      const apps = entries.filter(entry => !shared.includes(entry));
       const installed = await readdir(this.installedPath, { recursive: false });
 
       // One malformed app must not take down the whole store: log it and skip it.

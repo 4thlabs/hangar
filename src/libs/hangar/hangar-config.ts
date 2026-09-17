@@ -13,6 +13,8 @@ const categorySchema = z.object({
 
 const configSchema = z.object({
   categories: z.array(categorySchema),
+  /** Files the store ships next to its stacks and every stack may reference (networks, common env) */
+  shared: z.array(z.string().min(1)).default([]),
 });
 
 export type Category = z.infer<typeof categorySchema>;
@@ -33,8 +35,14 @@ export class HangarConfig {
   /** The categories for the various stacks */
   private _categories: Category[] = [];
 
+  /** The files shared by every stack, linked next to them at install */
+  private _shared: string[] = [];
+
   /** Returns the categories */
   public categories = () => this._categories;
+
+  /** Returns the shared files */
+  public shared = () => this._shared;
 
   /**
    * Constructs the configuration for the given file. Does not read it:
@@ -63,6 +71,7 @@ export class HangarConfig {
     if (handle === undefined) {
       logger.warn(`No Hangar config at ${this._configFile}: the store declares no categories`);
       this._categories = [];
+      this._shared = [];
       return this;
     }
 
@@ -76,6 +85,7 @@ export class HangarConfig {
     }
 
     this._categories = parsed.data.categories;
+    this._shared = parsed.data.shared;
 
     return this;
   }
