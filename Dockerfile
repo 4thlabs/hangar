@@ -27,7 +27,7 @@ FROM node:24-alpine AS runner
 
 # Package versions are coupled to the Alpine base repository.
 # hadolint ignore=DL3018
-RUN apk add --no-cache docker-cli docker-cli-compose git
+RUN apk add --no-cache docker-cli docker-cli-compose git setpriv
 
 WORKDIR /app
 
@@ -37,6 +37,9 @@ WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3010 \
+    PUID=1000 \
+    PGID=1000 \
+    HOME=/app/data \
     HANGAR_DATA_DIR=/app/data \
     HANGAR_DB_HOST=/app/data/app-data/hangar/hangar.db
 
@@ -47,6 +50,7 @@ COPY --from=builder /app/node_modules ./node_modules
 # classes straight from `src/` through the `#libs/*` map in package.json. All three must ship.
 COPY package.json sidequest.jobs.js ./
 COPY src ./src
+COPY --chmod=755 docker-entrypoint.sh /
 
 VOLUME ["/app/data"]
 EXPOSE 3010
@@ -54,8 +58,5 @@ EXPOSE 3010
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["wget", "--quiet", "--spider", "http://127.0.0.1:3010/login"]
 
-# Runs as root: the app drives the host's Docker socket, which is root-owned and mode 660, so
-# a dropped privilege would only lose it - and socket access is root-equivalent on the host
-# regardless. Migrations run before the server so a fresh volume gets its tables; `exec` keeps
-# the server on PID 1 so it still receives signals.
-CMD ["sh", "-c", "node src/libs/db/utils/migrate.ts && exec node dist/serve-node.js"]
+# Starts as root to take the data directory, then hands off as PUID:PGID - see the entrypoint.
+ENTRYPOINT ["/docker-entrypoint.sh"]
