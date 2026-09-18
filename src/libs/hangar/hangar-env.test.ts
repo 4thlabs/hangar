@@ -167,6 +167,43 @@ describe("HangarEnv", () => {
     expect(await env.read()).toEqual({ ALPHA_APP_KEY: "", ALPHA_APP_TAG: "v1" });
   });
 
+  it("reads one variable, and treats a seeded-but-empty one as unset", async () => {
+    await env.write({ DOMAIN: "example.com", ALPHA_APP_KEY: "" });
+
+    expect(await env.get("DOMAIN")).toBe("example.com");
+    expect(await env.get("ALPHA_APP_KEY")).toBeUndefined();
+    expect(await env.get("NEVER_SET")).toBeUndefined();
+  });
+
+  it("serves a looked-up variable from memory, until a write changes it", async () => {
+    await env.write({ DOMAIN: "example.com" });
+
+    expect(await env.get("DOMAIN")).toBe("example.com");
+
+    // Straight to disk, behind the cache's back: the lookup still answers from memory.
+    await writeFile(file, "DOMAIN=stale.com\n", "utf8");
+
+    expect(await env.get("DOMAIN")).toBe("example.com");
+
+    await env.write({ TZ: "Europe/Paris" });
+
+    expect(await env.get("DOMAIN")).toBe("stale.com");
+  });
+
+  it("answers a lookup with undefined when the file cannot be read, and recovers once it can", async () => {
+    // A directory where the file belongs: readFile fails with EISDIR, which is not "not there yet".
+    await mkdir(file);
+
+    // A widget asking for a token gets "not set", not an exception that takes the page down.
+    expect(await env.get("DOMAIN")).toBeUndefined();
+
+    await rm(file, { recursive: true });
+    await writeFile(file, "DOMAIN=example.com\n", "utf8");
+
+    // The failure was never cached, so the fix is picked up without a write.
+    expect(await env.get("DOMAIN")).toBe("example.com");
+  });
+
   it("keeps a variable added by hand since the caller last read the file", async () => {
     await env.write({ DOMAIN: "example.com" });
 
