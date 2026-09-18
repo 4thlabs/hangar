@@ -15,6 +15,7 @@ const envVariables = z.object({
   DOMAIN: z.string().min(1),
   ARCANE_API_KEY: z.string().min(1).optional(),
   FRIGATE_API_URL: z.url().optional(),
+  GITHUB_TOKEN: z.string().min(1).optional(),
   BETTER_AUTH_URL: z.url().optional(),
   BETTER_AUTH_SECRET: z.string().min(32).optional(),
 });

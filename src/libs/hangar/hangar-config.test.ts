@@ -49,6 +49,46 @@ shared: [networks.yml]
     expect(config.categories()).toEqual([]);
   });
 
+  it("loads the dashboard widgets the store declares", async () => {
+    const file = await configFile(`
+categories: []
+widgets:
+  - type: clock
+    column: 1
+  - type: github-releases
+    column: 3
+    repositories:
+      - glanceapp/glance
+      - immich-app/immich
+`);
+
+    const config = await new HangarConfig(file).load();
+
+    expect(config.widgets()).toEqual([
+      { type: "clock", column: 1 },
+      { type: "github-releases", column: 3, repositories: ["glanceapp/glance", "immich-app/immich"] },
+    ]);
+  });
+
+  it("falls back to the default dashboard when no widgets are declared", async () => {
+    const file = await configFile("categories: []\n");
+
+    const config = await new HangarConfig(file).load();
+
+    expect(config.widgets().map(widget => widget.type)).toEqual(["clock", "docker-general-stats", "frigate-events"]);
+  });
+
+  it("rejects an unknown widget type, naming the entry", async () => {
+    const file = await configFile(`
+categories: []
+widgets:
+  - type: relases
+    column: 3
+`);
+
+    await expect(new HangarConfig(file).load()).rejects.toThrow(/widgets\.0/);
+  });
+
   it("rejects a config missing categories, naming the file", async () => {
     const file = await configFile("store: https://github.com/example/store.git\n");
 

@@ -2,6 +2,7 @@ import { load } from "js-yaml";
 import { readFile } from "node:fs/promises";
 import { logger } from "#libs/logs";
 import * as z from "zod";
+import { defaultWidgets, widgetConfigSchema, type WidgetConfig } from "#libs/widgets/config.ts";
 import { HangarError } from "./hangar-error.ts";
 
 /** A Stack category */
@@ -15,6 +16,8 @@ const configSchema = z.object({
   categories: z.array(categorySchema),
   /** Files the store ships next to its stacks and every stack may reference (networks, common env) */
   shared: z.array(z.string().min(1)).default([]),
+  /** The dashboard: which widgets are shown, in which column */
+  widgets: z.array(widgetConfigSchema).default([...defaultWidgets]),
 });
 
 export type Category = z.infer<typeof categorySchema>;
@@ -38,11 +41,17 @@ export class HangarConfig {
   /** The files shared by every stack, linked next to them at install */
   private _shared: string[] = [];
 
+  /** The widgets the dashboard shows, in declaration order */
+  private _widgets: WidgetConfig[] = [...defaultWidgets];
+
   /** Returns the categories */
   public categories = () => this._categories;
 
   /** Returns the shared files */
   public shared = () => this._shared;
+
+  /** Returns the dashboard widgets */
+  public widgets = () => this._widgets;
 
   /**
    * Constructs the configuration for the given file. Does not read it:
@@ -72,6 +81,7 @@ export class HangarConfig {
       logger.warn(`No Hangar config at ${this._configFile}: the store declares no categories`);
       this._categories = [];
       this._shared = [];
+      this._widgets = [...defaultWidgets];
       return this;
     }
 
@@ -86,6 +96,7 @@ export class HangarConfig {
 
     this._categories = parsed.data.categories;
     this._shared = parsed.data.shared;
+    this._widgets = parsed.data.widgets;
 
     return this;
   }
