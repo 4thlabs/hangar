@@ -27,7 +27,7 @@ FROM node:24-alpine AS runner
 
 # Package versions are coupled to the Alpine base repository.
 # hadolint ignore=DL3018
-RUN apk add --no-cache docker-cli docker-cli-compose git su-exec
+RUN apk add --no-cache docker-cli docker-cli-compose git
 
 WORKDIR /app
 
@@ -37,8 +37,6 @@ WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3010 \
-    PUID=1000 \
-    PGID=1000 \
     HANGAR_DATA_DIR=/app/data \
     HANGAR_DB_HOST=/app/data/app-data/hangar/hangar.db
 
@@ -56,10 +54,8 @@ EXPOSE 3010
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["wget", "--quiet", "--spider", "http://127.0.0.1:3010/login"]
 
-# Starts as root only to take the data directory - a fresh volume or a bind mount arrives
-# root-owned - then drops to PUID:PGID, which stays settable at run time. Migrations run
-# before the server so a fresh volume gets its tables; `exec` keeps the server on PID 1 so
-# it still receives signals.
-CMD ["sh", "-c", "chown -R ${PUID}:${PGID} /app/data && \
-    su-exec ${PUID}:${PGID} node src/libs/db/utils/migrate.ts && \
-    exec su-exec ${PUID}:${PGID} node dist/serve-node.js"]
+# Runs as root: the app drives the host's Docker socket, which is root-owned and mode 660, so
+# a dropped privilege would only lose it - and socket access is root-equivalent on the host
+# regardless. Migrations run before the server so a fresh volume gets its tables; `exec` keeps
+# the server on PID 1 so it still receives signals.
+CMD ["sh", "-c", "node src/libs/db/utils/migrate.ts && exec node dist/serve-node.js"]
