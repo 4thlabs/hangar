@@ -1,3 +1,4 @@
+import { logger } from "#libs/logs";
 import { parse } from "dotenv";
 import { copyFile, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -50,6 +51,12 @@ export class HangarEnv {
   /** Values a new variable starts with, when Hangar already knows the answer */
   private readonly _defaults: Record<string, string>;
 
+  /**
+   * The file as last parsed, so repeated lookups do not hit the disk. A promise, so concurrent
+   * first lookups share one read instead of racing to do the same work.
+   */
+  private _cached: Promise<Record<string, string>> | undefined;
+
   /** Returns the path of the env file */
   public file = () => this._file;
 
@@ -81,6 +88,35 @@ export class HangarEnv {
   }
 
   /**
+   * One variable's value, or `undefined` when the operator has not provided it. A key seeded by
+   * `ensure()` and never filled in sits on disk as an empty string: that is "not set", not a value.
+   *
+   * Reads the file once and keeps it: every write here drops the cache, so a value changed from
+   * the settings page is picked up on the next lookup.
+   *
+   * An unreadable file answers `undefined` rather than throwing: the callers are widgets and
+   * pages asking whether the operator set a token, and a whole dashboard going blank is a worse
+   * answer than a card saying the token is missing. It is logged, and not cached, so the next
+   * lookup tries the disk again once the file is fixed. Everything else here — `write`, `ensure`,
+   * `required` — still fails loudly through `read`.
+   *
+   * ponytail: only this process's own writes invalidate it, so an edit made directly on disk — or
+   * by another Hangar process — is not seen until the next write; watch the file if that stops
+   * being the exception.
+   * @param key The variable to look up
+   */
+  async get(key: string) {
+    this._cached ??= this.read().catch((error: unknown) => {
+      this._cached = undefined;
+      logger.warn(`Cannot look up a variable in ${this._file}`, { error, key });
+
+      return {};
+    });
+
+    return (await this._cached)[key] || undefined;
+  }
+
+  /**
    * Merges `updates` into whatever is on disk *right now* and rewrites the file. Re-reading
    * inside the write is the point: a variable added by hand — or from another tab — between
    * the moment a caller read the file and the moment it saves must survive that save. Only
@@ -96,6 +132,7 @@ export class HangarEnv {
 
     await this.backup();
     await writeFile(this._file, serialize(next), "utf8");
+    this._cached = undefined;
 
     return next;
   }
