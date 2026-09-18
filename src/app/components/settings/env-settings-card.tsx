@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { ActionResult } from "#app/actions/action-result.ts";
 import type { EnvPayload } from "#app/actions/store/manage-env.ts";
-import { PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
+import { KeyRoundIcon, PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { Button } from "#app/components/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#app/components/ui/field.tsx";
@@ -16,6 +16,10 @@ type EnvSettingsCardProps = {
   variables: Record<string, string>;
   saveEnv: (payload: EnvPayload) => Promise<ActionResult>;
 };
+
+/** Same shape as `openssl rand -hex 32`. */
+const randomSecret = () =>
+  Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
 
 export function EnvSettingsCard({ variables, saveEnv }: EnvSettingsCardProps) {
   const router = useRouter();
@@ -74,6 +78,15 @@ export function EnvSettingsCard({ variables, saveEnv }: EnvSettingsCardProps) {
                 placeholder="à remplir"
                 onChange={event => setValues(previous => ({ ...previous, [key]: event.target.value }))}
               />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={`Générer un secret pour ${key}`}
+                onClick={() => setValues(previous => ({ ...previous, [key]: randomSecret() }))}
+              >
+                <KeyRoundIcon />
+              </Button>
               <Button
                 type="button"
                 variant="ghost"
