@@ -6,7 +6,21 @@ import { HangarError } from "./hangar-error.ts";
 /** Variables compose fills in by itself: they are not the operator's to provide */
 const COMPOSE_VARIABLES = ["PWD", "COMPOSE_PROJECT_NAME"];
 
+/** The files compose interpolates: its own fragments and the `env_file:` targets beside them */
+const INTERPOLATED = /\.(ya?ml|env)$/;
+
 const HEADER = "# Global Environment Variables\n# These variables are available to all projects\n";
+
+/**
+ * The prefixes an app owns: `sync-in` gives `SYNCIN_` and `SYNC_IN_`, because the store writes
+ * the name both ways.
+ *
+ * ponytail: derived from the directory name only, so an app whose variables go by another name
+ * — home-assistant publishing `HASS_*` — is missed; let apps declare extra prefixes in `x-hangar`
+ * if that stops being the exception.
+ */
+const prefixes = (app: string) =>
+  [app.replaceAll("-", ""), app.replaceAll("-", "_")].map(name => `${name.toUpperCase()}_`);
 
 /** Renders the variables the way the file has always looked: header, timestamp, sorted pairs. */
 const serialize = (variables: Record<string, string>) => {
@@ -30,8 +44,8 @@ export class HangarEnv {
   /** The env file */
   private readonly _file: string;
 
-  /** The directory holding the stacks whose compose files declare the variables */
-  private readonly _stacksPath: string;
+  /** The directory holding the installed apps, whose files declare the variables */
+  private readonly _installedPath: string;
 
   /** Values a new variable starts with, when Hangar already knows the answer */
   private readonly _defaults: Record<string, string>;
@@ -40,15 +54,14 @@ export class HangarEnv {
   public file = () => this._file;
 
   /**
-   * Constructs the environment for the given file. Does not read it: neither the file nor
-   * the stacks exist before the store has been installed.
-   * @param file The path to the global env file
-   * @param stacksPath The directory holding the store's stacks
+   * Constructs the environment for the installed apps. Does not read anything: neither the file
+   * nor the apps exist before the store has been installed.
+   * @param installedPath The directory holding the installed apps, and the env file with them
    * @param defaults Values to pre-fill the matching variables with when they first appear
    */
-  constructor(file: string, stacksPath: string, defaults: Record<string, string> = {}) {
-    this._file = file;
-    this._stacksPath = stacksPath;
+  constructor(installedPath: string, defaults: Record<string, string> = {}) {
+    this._installedPath = installedPath;
+    this._file = path.join(installedPath, ".env.global");
     this._defaults = defaults;
   }
 
@@ -87,39 +100,105 @@ export class HangarEnv {
   }
 
   /**
-   * The variables the stacks' compose files reference, `${VAR}` and `$VAR` alike. Compose
-   * substitutes these at run time, so each one is a value the operator has to provide here.
+   * The variables the installed apps reference, `${VAR}` and `$VAR` alike. Compose substitutes
+   * these at run time, so each one is a value the operator has to provide here. Unfiltered on
+   * purpose: this answers what the stacks ask for, not what Hangar seeds.
    */
   async required() {
-    // A store that ships no stacks yet asks for no variables: that is an empty list, not a failure.
-    const entries = await readdir(this._stacksPath, { recursive: true }).catch(() => []);
-    const files = entries.filter(entry => entry.endsWith(".yml"));
-
-    const keys = await Promise.all(
-      files.map(async file => {
-        const source = await readFile(path.join(this._stacksPath, file), "utf8").catch(() => "");
-
-        // `$$` is compose's escape for a literal dollar: strip those first, or `$$FOO` reads
-        // as a reference to FOO.
-        return [...source.replaceAll("$$", "").matchAll(/\$\{?([A-Za-z_][A-Za-z0-9_]*)/g)].map(match => match[1]!);
-      }),
-    );
-
-    return [...new Set(keys.flat())].filter(key => !COMPOSE_VARIABLES.includes(key)).sort();
+    return this.referenced(await this.files());
   }
 
   /**
-   * Adds every variable the stacks reference when it is absent, empty unless Hangar already
-   * knows the value, so the operator only sees what is left to fill. Never overwrites a
-   * filled value, never removes one.
+   * Seeds the variables the installed apps reference, or just the named one's — installing a
+   * single app has no reason to re-read every stack. Values start empty unless Hangar already
+   * knows the answer, so the operator only sees what is left to fill.
+   *
+   * Only the namespaced variables are seeded: `APP_*` for Hangar's own shared paths, and
+   * `<APP>_*` for any installed app — an app's file may well reference a neighbour's key, as
+   * glance does for gluetun. A bare name like `DOMAIN` belongs to no app and is left to the
+   * operator. This only ever adds: it never overwrites a filled value and never removes one.
+   * @param app The app whose files to read, or every installed app when absent
    */
-  async ensure() {
+  async ensure(app?: string) {
     const current = await this.read();
-    const missing = (await this.required())
-      .filter(key => !(key in current))
+    // Naming the apps is a directory listing; reading their files is what the scope saves.
+    const allowed = ["APP_", ...(await this.apps()).flatMap(prefixes)];
+
+    const missing = (await this.referenced(await this.files(app)))
+      .filter(key => !(key in current) && allowed.some(prefix => key.startsWith(prefix)))
       .map(key => [key, this._defaults[key] ?? ""] as const);
 
     return missing.length > 0 ? this.write(Object.fromEntries(missing)) : current;
+  }
+
+  /**
+   * The names of the installed apps. `app-installed` holds one symlink per app alongside the
+   * shared fragments, so an entry that reads as a directory is an app and one that does not —
+   * `networks.yml` — is not.
+   */
+  private async apps() {
+    const apps = await Promise.all(
+      (await this.entries()).map(async entry =>
+        (await readdir(path.join(this._installedPath, entry)).catch(() => null)) === null ? [] : [entry],
+      ),
+    );
+
+    return apps.flat();
+  }
+
+  /**
+   * The files compose reads for an app, or for every installed app. Only the app's own directory:
+   * `compose.yml` and its fragments sit there, as does every `env_file:` target, while anything
+   * under `config/` is the app's runtime configuration — glance's widgets, traefik's routers — which
+   * the app expands itself and compose never sees.
+   *
+   * ponytail: a compose file that `include:`s something from a subdirectory would be missed; walk
+   * the includes if one ever does.
+   * @param app The app to list, or every installed entry when absent
+   */
+  private async files(app?: string) {
+    const files = await Promise.all(
+      (app ? [app] : await this.entries()).map(async entry => {
+        const target = path.join(this._installedPath, entry);
+        const inner = await readdir(target).catch(() => null);
+
+        // Not a directory: a shared fragment like `networks.yml`, which is itself the file.
+        return inner === null ? [target] : inner.map(file => path.join(target, file));
+      }),
+    );
+
+    return files.flat();
+  }
+
+  /**
+   * What sits in `app-installed`, minus the env file and its backups. A store that ships no
+   * stacks yet lists nothing: that is an empty set, not a failure.
+   */
+  private async entries() {
+    const entries = await readdir(this._installedPath).catch(() => []);
+
+    return entries.filter(entry => !entry.startsWith("."));
+  }
+
+  /**
+   * The variables the given files reference. Compose interpolates its own fragments and the
+   * `env_file:` targets alike, so both are read the same way.
+   * @param paths The files to scan, absolute
+   */
+  private async referenced(paths: string[]) {
+    const keys = await Promise.all(
+      paths
+        .filter(file => INTERPOLATED.test(file))
+        .map(async file => {
+          const source = await readFile(file, "utf8").catch(() => "");
+
+          // `$$` is compose's escape for a literal dollar: strip those first, or `$$FOO` reads
+          // as a reference to FOO.
+          return [...source.replaceAll("$$", "").matchAll(/\$\{?([A-Za-z_][A-Za-z0-9_]*)/g)].map(match => match[1]!);
+        }),
+    );
+
+    return [...new Set(keys.flat())].filter(key => !COMPOSE_VARIABLES.includes(key)).sort();
   }
 
   /**
@@ -128,7 +207,9 @@ export class HangarEnv {
    * reason other than "there is nothing to back up yet" stops the write instead of gambling
    * with them.
    *
-   * ponytail: backups are never pruned; add a retention sweep if the directory grows.
+   * ponytail: backups are never pruned, and the stamp is millisecond-resolution, so two saves
+   * inside the same millisecond share one name; add a retention sweep and a counter if either
+   * ever bites.
    */
   private async backup() {
     // `:` is fine on Linux but not everywhere, and these names are read by humans.

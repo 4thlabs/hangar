@@ -138,15 +138,16 @@ describe("HangarStore", () => {
     await Promise.all([
       writeFile(
         path.join(alphaApp, "compose.yml"),
-        "services:\n  alpha:\n    image: alpha:${ALPHA_TAG:-latest}\n    working_dir: ${PWD}\n    environment:\n      DOMAIN: $DOMAIN\n      PRICE: $$5\n",
+        "services:\n  alpha:\n    image: alpha:${ALPHA_APP_TAG:-latest}\n    working_dir: ${PWD}\n    environment:\n      DOMAIN: $DOMAIN\n      DATA: ${APP_DATA_DIR}\n      PRICE: $$5\n",
       ),
       writeFile(path.join(store.storePath, "store", "networks.yml"), "networks:\n  web:\n    name: ${NETWORK}\n"),
     ]);
 
     await store.install();
 
-    // PWD is compose's to fill, `$$5` is an escaped dollar, everything else is the operator's.
-    expect(await store.env.read()).toEqual({ ALPHA_TAG: "", DOMAIN: "", NETWORK: "" });
+    // Only the namespaced variables are seeded: PWD is compose's, `$$5` an escaped dollar, and
+    // DOMAIN and NETWORK belong to no app, so they are the operator's to add.
+    expect(await store.env.read()).toEqual({ ALPHA_APP_TAG: "", APP_DATA_DIR: path.join(dataDir, "app-data") });
   });
 
   it("keeps shared files out of the app list", async () => {

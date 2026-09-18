@@ -24,6 +24,8 @@ export const installApp = async (appId: string): Promise<StoreActionResult> => {
   try {
     await hangar.store.link(app.id);
     await hangar.store.refresh();
+    // Only this app's files: the variables it needs must show up in settings without a store update.
+    await hangar.store.env.ensure(app.id);
 
     const installed = hangar.store.app(app.id)?.installed ?? false;
 
