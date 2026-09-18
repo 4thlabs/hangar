@@ -27,7 +27,7 @@ FROM node:24-alpine AS runner
 
 # Package versions are coupled to the Alpine base repository.
 # hadolint ignore=DL3018
-RUN apk add --no-cache docker-cli docker-cli-compose git
+RUN apk add --no-cache docker-cli docker-cli-compose git setpriv
 
 WORKDIR /app
 
@@ -37,23 +37,20 @@ WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3010 \
+    PUID=1000 \
+    PGID=1000 \
+    HOME=/app/data \
     HANGAR_DATA_DIR=/app/data \
     HANGAR_DB_HOST=/app/data/app-data/hangar/hangar.db
 
-COPY --from=builder --chown=node:node /app/dist ./dist
-COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
 
 # `manualJobResolution` makes the worker import `sidequest.jobs.js` at run time, which pulls the job
 # classes straight from `src/` through the `#libs/*` map in package.json. All three must ship.
-COPY --chown=node:node package.json sidequest.jobs.js ./
-COPY --chown=node:node src ./src
-
-# Docker seeds a fresh named volume from the image directory, ownership included. Without
-# this the mount point is created root-owned and nothing the app writes under it - the
-# database, the store - is permitted.
-RUN mkdir -p /app/data && chown node:node /app/data
-
-USER 1000:1000
+COPY package.json sidequest.jobs.js ./
+COPY src ./src
+COPY --chmod=755 docker-entrypoint.sh /
 
 VOLUME ["/app/data"]
 EXPOSE 3010
@@ -61,6 +58,5 @@ EXPOSE 3010
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["wget", "--quiet", "--spider", "http://127.0.0.1:3010/login"]
 
-# Migrations run before the server so a fresh volume gets its tables; `exec` keeps the
-# server on PID 1 so it still receives signals.
-CMD ["sh", "-c", "node src/libs/db/utils/migrate.ts && exec node dist/serve-node.js"]
+# Starts as root to take the data directory, then hands off as PUID:PGID - see the entrypoint.
+ENTRYPOINT ["/docker-entrypoint.sh"]
