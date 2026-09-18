@@ -37,23 +37,25 @@ WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3010 \
+    PUID=1000 \
+    PGID=1000 \
     HANGAR_DATA_DIR=/app/data \
     HANGAR_DB_HOST=/app/data/app-data/hangar/hangar.db
 
-COPY --from=builder --chown=node:node /app/dist ./dist
-COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=${PUID}:${PGID} /app/dist ./dist
+COPY --from=builder --chown=${PUID}:${PGID} /app/node_modules ./node_modules
 
 # `manualJobResolution` makes the worker import `sidequest.jobs.js` at run time, which pulls the job
 # classes straight from `src/` through the `#libs/*` map in package.json. All three must ship.
-COPY --chown=node:node package.json sidequest.jobs.js ./
-COPY --chown=node:node src ./src
+COPY --chown=${PUID}:${PGID} package.json sidequest.jobs.js ./
+COPY --chown=${PUID}:${PGID} src ./src
 
 # Docker seeds a fresh named volume from the image directory, ownership included. Without
 # this the mount point is created root-owned and nothing the app writes under it - the
 # database, the store - is permitted.
-RUN mkdir -p /app/data && chown node:node /app/data
+RUN mkdir -p /app/data && chown ${PUID}:${PGID} /app/data
 
-USER 1000:1000
+USER ${PUID}:${PGID}
 
 VOLUME ["/app/data"]
 EXPOSE 3010
