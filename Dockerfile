@@ -48,6 +48,11 @@ COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json sidequest.jobs.js ./
 COPY --chown=node:node src ./src
 
+# Docker seeds a fresh named volume from the image directory, ownership included. Without
+# this the mount point is created root-owned and nothing the app writes under it - the
+# database, the store - is permitted.
+RUN mkdir -p /app/data && chown node:node /app/data
+
 USER 1000:1000
 
 VOLUME ["/app/data"]
@@ -56,4 +61,6 @@ EXPOSE 3010
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["wget", "--quiet", "--spider", "http://127.0.0.1:3010/login"]
 
-CMD ["node", "dist/serve-node.js"]
+# Migrations run before the server so a fresh volume gets its tables; `exec` keeps the
+# server on PID 1 so it still receives signals.
+CMD ["sh", "-c", "node src/libs/db/utils/migrate.ts && exec node dist/serve-node.js"]
