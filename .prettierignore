@@ -8,7 +8,8 @@ package-lock.json
 # Vendored agent skill docs
 .agents
 
-# Generated: shadcn components, drizzle schema, waku route types
+# Generated: shadcn components, drizzle schema and migrations, waku route types
 src/app/components/ui
 src/libs/db/schemas/auth-schema.ts
+src/drizzle
 src/app/pages.gen.ts
