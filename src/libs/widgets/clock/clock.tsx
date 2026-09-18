@@ -1,54 +1,22 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import { ClockIcon } from "lucide-react";
-import { cn } from "cn";
-import { WidgetCard, WidgetContent, WidgetSkeleton } from "../shared/index.ts";
+import { ClockDisplay } from "./clock-display.tsx";
+import { defineWidget } from "../shared/define-widget.tsx";
 
-const timeFormatter = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
-const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "long" });
-const weekdayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "long" });
 const clockWidgetClassName = "h-20";
 
-export function ClockSkeleton() {
-  return <WidgetSkeleton className={clockWidgetClassName} icon={<ClockIcon />} title="Clock" />;
-}
-
-export function ClockWidget() {
-  const [now, setNow] = useState<Date>(new Date());
-
-  useEffect(() => {
-    const updateClock = () => setNow(new Date());
-
-    updateClock();
-    const interval = window.setInterval(updateClock, 1_000);
-
-    return () => window.clearInterval(interval);
-  }, []);
-
-  return (
-    <WidgetCard className={cn(clockWidgetClassName, "justify-center py-0 font-mono")}>
-      <WidgetContent className="flex items-center justify-between">
-        <div className="flex flex-col gap-0">
-          <p className="flex items-baseline gap-4 text-lg font-semibold">
-            <span className="tabular-nums">{now.getDate()}</span>
-            <span>{monthFormatter.format(now)}</span>
-          </p>
-          <p className="text-sm text-muted-foreground tabular-nums">{now.getFullYear()}</p>
-        </div>
-
-        <div className="flex flex-col items-end gap-0">
-          <time className="text-lg font-semibold tabular-nums" dateTime={now.toISOString()}>
-            {timeFormatter.format(now)}
-          </time>
-          <p className="text-sm text-muted-foreground">{weekdayFormatter.format(now)}</p>
-        </div>
-      </WidgetContent>
-    </WidgetCard>
-  );
-}
+/**
+ * The date and time, ticking in the browser.
+ *
+ * Nothing to load — the clock reads the visitor's own clock — but it still goes
+ * through `defineWidget` so its id, title, icon and size are declared once and
+ * it gets the same skeleton as every other widget.
+ */
+export const clockWidget = defineWidget({
+  id: "clock",
+  title: "Clock",
+  icon: <ClockIcon />,
+  className: clockWidgetClassName,
+  errorDescription: "The clock could not be rendered. The rest of the dashboard is still available.",
+  load: () => Promise.resolve(null),
+  render: () => <ClockDisplay className={clockWidgetClassName} />,
+});

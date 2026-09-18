@@ -10,6 +10,7 @@ import {
   WidgetList,
   WidgetListItem,
   WidgetMetadata,
+  formatRelativeTime,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
@@ -20,19 +21,8 @@ type FrigateEventsCardProps = {
   now?: number;
 };
 
-const relativeTimeFormatter = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 const frigateWidgetClassName = "min-h-88";
 const frigateIcon = <IconSelfh name="frigate" />;
-
-function formatRelativeTime(timestamp: number, now: number) {
-  const seconds = timestamp - now / 1_000;
-  const absoluteSeconds = Math.abs(seconds);
-
-  if (absoluteSeconds < 60) return relativeTimeFormatter.format(Math.round(seconds), "second");
-  if (absoluteSeconds < 3_600) return relativeTimeFormatter.format(Math.round(seconds / 60), "minute");
-  if (absoluteSeconds < 86_400) return relativeTimeFormatter.format(Math.round(seconds / 3_600), "hour");
-  return relativeTimeFormatter.format(Math.round(seconds / 86_400), "day");
-}
 
 function formatCameraName(camera: string) {
   return camera.replace(/^frigate_/, "").replaceAll("_", " ");
@@ -81,7 +71,7 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
                   }
                   trailing={
                     <time dateTime={eventDate.toISOString()} className="shrink-0 text-xs text-muted-foreground">
-                      {formatRelativeTime(event.start_time, now)}
+                      {formatRelativeTime(event.start_time * 1_000, now)}
                     </time>
                   }
                 >

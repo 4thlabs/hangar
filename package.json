@@ -5,6 +5,7 @@
   "private": true,
   "imports": {
     "#libs/docker/*": "./src/libs/docker/*",
+    "#libs/widgets/*": "./src/libs/widgets/*",
     "#libs/*": "./src/libs/*/index.ts",
     "#*": "./src/*"
   },
