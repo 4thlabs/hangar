@@ -27,7 +27,7 @@ FROM node:24-alpine AS runner
 
 # Package versions are coupled to the Alpine base repository.
 # hadolint ignore=DL3018
-RUN apk add --no-cache docker-cli docker-cli-compose git
+RUN apk add --no-cache docker-cli docker-cli-compose git su-exec
 
 WORKDIR /app
 
@@ -50,19 +50,16 @@ COPY --from=builder --chown=${PUID}:${PGID} /app/node_modules ./node_modules
 COPY --chown=${PUID}:${PGID} package.json sidequest.jobs.js ./
 COPY --chown=${PUID}:${PGID} src ./src
 
-# Docker seeds a fresh named volume from the image directory, ownership included. Without
-# this the mount point is created root-owned and nothing the app writes under it - the
-# database, the store - is permitted.
-RUN mkdir -p /app/data && chown ${PUID}:${PGID} /app/data
-
-USER ${PUID}:${PGID}
-
 VOLUME ["/app/data"]
 EXPOSE 3010
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["wget", "--quiet", "--spider", "http://127.0.0.1:3010/login"]
 
-# Migrations run before the server so a fresh volume gets its tables; `exec` keeps the
-# server on PID 1 so it still receives signals.
-CMD ["sh", "-c", "node src/libs/db/utils/migrate.ts && exec node dist/serve-node.js"]
+# Starts as root only to take the data directory - a fresh volume or a bind mount arrives
+# root-owned - then drops to PUID:PGID, which stays settable at run time. Migrations run
+# before the server so a fresh volume gets its tables; `exec` keeps the server on PID 1 so
+# it still receives signals.
+CMD ["sh", "-c", "chown -R ${PUID}:${PGID} /app/data && \
+    su-exec ${PUID}:${PGID} node src/libs/db/utils/migrate.ts && \
+    exec su-exec ${PUID}:${PGID} node dist/serve-node.js"]
