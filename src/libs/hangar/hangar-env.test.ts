@@ -8,20 +8,23 @@ import { HangarEnv } from "./hangar-env.ts";
 describe("HangarEnv", () => {
   let dir: string;
   let file: string;
-  let stacksPath: string;
+  let installedPath: string;
   let env: HangarEnv;
 
-  /** Writes a compose file for a stack, the only place the required variables come from. */
-  const stack = async (name: string, compose: string) => {
-    await mkdir(path.join(stacksPath, name), { recursive: true });
-    await writeFile(path.join(stacksPath, name, "compose.yml"), compose, "utf8");
+  /** Installs an app, with the files compose interpolates: its compose and an optional app.env. */
+  const stack = async (name: string, compose: string, appEnv?: string) => {
+    await mkdir(path.join(installedPath, name), { recursive: true });
+    await writeFile(path.join(installedPath, name, "compose.yml"), compose, "utf8");
+
+    if (appEnv !== undefined) await writeFile(path.join(installedPath, name, "app.env"), appEnv, "utf8");
   };
 
   beforeEach(async () => {
     dir = await mkdtemp(path.join(tmpdir(), "hangar-env-"));
-    file = path.join(dir, ".env.global");
-    stacksPath = path.join(dir, "store");
-    env = new HangarEnv(file, stacksPath);
+    installedPath = path.join(dir, "app-installed");
+    file = path.join(installedPath, ".env.global");
+    await mkdir(installedPath, { recursive: true });
+    env = new HangarEnv(installedPath);
   });
 
   afterEach(async () => {
@@ -32,54 +35,136 @@ describe("HangarEnv", () => {
     expect(await env.read()).toEqual({});
   });
 
-  it("collects the variables the compose files reference, and only those", async () => {
+  it("collects the variables the installed apps reference, and only those", async () => {
     await stack(
       "alpha-app",
-      "services:\n  alpha:\n    image: alpha:${ALPHA_TAG:-latest}\n    working_dir: ${PWD}\n    environment:\n      DOMAIN: $DOMAIN\n      PRICE: $$5\n",
+      "services:\n  alpha:\n    image: alpha:${ALPHA_APP_TAG:-latest}\n    working_dir: ${PWD}\n    environment:\n      DOMAIN: $DOMAIN\n      PRICE: $$5\n",
     );
-    await writeFile(path.join(stacksPath, "networks.yml"), "networks:\n  web:\n    name: ${NETWORK}\n", "utf8");
+    await writeFile(path.join(installedPath, "networks.yml"), "networks:\n  web:\n    name: ${NETWORK}\n", "utf8");
 
     // PWD is compose's to fill, `$$5` is an escaped dollar, everything else is the operator's.
-    expect(await env.required()).toEqual(["ALPHA_TAG", "DOMAIN", "NETWORK"]);
+    expect(await env.required()).toEqual(["ALPHA_APP_TAG", "DOMAIN", "NETWORK"]);
   });
 
-  it("asks for nothing when the store ships no stacks yet", async () => {
+  it("reads the env_file targets beside a compose file", async () => {
+    await stack(
+      "alpha-app",
+      "services:\n  alpha:\n    image: alpha\n    env_file: [./app.env]\n",
+      "UPLOAD=${APP_PHOTO_DIR}/alpha\nTOKEN=${ALPHA_APP_TOKEN}\n",
+    );
+
+    expect(await env.required()).toEqual(["ALPHA_APP_TOKEN", "APP_PHOTO_DIR"]);
+  });
+
+  it("leaves the app's own configuration alone", async () => {
+    await stack("alpha-app", "services:\n  alpha:\n    image: alpha:${ALPHA_APP_TAG}\n");
+    // What glance and traefik keep under config/: the app expands these itself, compose never
+    // reads them, so `${…}` in there asks nothing of the operator.
+    await mkdir(path.join(installedPath, "alpha-app", "config", "widgets"), { recursive: true });
+    await writeFile(
+      path.join(installedPath, "alpha-app", "config", "widgets", "card.yml"),
+      "url: ${ALPHA_APP_WIDGET_URL}\n",
+      "utf8",
+    );
+
+    expect(await env.required()).toEqual(["ALPHA_APP_TAG"]);
+  });
+
+  it("asks for nothing when no app is installed yet", async () => {
     expect(await env.required()).toEqual([]);
   });
 
-  it("creates the file with the keys the stacks expect, left empty to fill", async () => {
-    await stack(
-      "alpha-app",
-      "services:\n  alpha:\n    image: alpha\n    environment:\n      TZ: ${TZ}\n      DOMAIN: ${DOMAIN}\n",
+  it("ignores an app that sits in the store but was never installed", async () => {
+    await stack("alpha-app", "services:\n  alpha:\n    image: alpha:${ALPHA_APP_TAG}\n");
+    // Not linked into app-installed: the store carries it, this machine does not run it.
+    await mkdir(path.join(dir, "app-store", "store", "beta-app"), { recursive: true });
+    await writeFile(
+      path.join(dir, "app-store", "store", "beta-app", "compose.yml"),
+      "services:\n  beta:\n    image: beta:${BETA_APP_TAG}\n",
+      "utf8",
     );
 
     await env.ensure();
 
-    expect(await env.read()).toEqual({ DOMAIN: "", TZ: "" });
+    expect(await env.read()).toEqual({ ALPHA_APP_TAG: "" });
+  });
+
+  it("seeds the namespaced variables and leaves the bare ones to the operator", async () => {
+    await stack(
+      "alpha-app",
+      "services:\n  alpha:\n    image: alpha\n    volumes: [${APP_DATA_DIR}/alpha:/data]\n    environment:\n      TZ: ${TZ}\n      DOMAIN: ${DOMAIN}\n      KEY: ${ALPHA_APP_KEY}\n",
+    );
+
+    await env.ensure();
+
+    // TZ and DOMAIN belong to no app: they are the operator's to add, not Hangar's to guess.
+    expect(await env.read()).toEqual({ ALPHA_APP_KEY: "", APP_DATA_DIR: "" });
+  });
+
+  it("never removes a bare variable the operator filled in by hand", async () => {
+    await stack("alpha-app", "services:\n  alpha:\n    image: alpha\n    environment:\n      DOMAIN: ${DOMAIN}\n");
+    await env.write({ DOMAIN: "example.com" });
+
+    await env.ensure();
+
+    expect(await env.read()).toEqual({ DOMAIN: "example.com" });
+  });
+
+  it("takes the prefix from the app name with the hyphens dropped as well as kept", async () => {
+    await stack(
+      "sync-in",
+      "services:\n  sync-in:\n    image: sync-in\n    environment:\n      SECRET: ${SYNCIN_AUTH_SECRET}\n      PORT: ${SYNC_IN_PORT}\n",
+    );
+
+    await env.ensure();
+
+    expect(await env.read()).toEqual({ SYNCIN_AUTH_SECRET: "", SYNC_IN_PORT: "" });
+  });
+
+  it("reads only the named app's files, and still accepts the neighbours it references", async () => {
+    // What glance does: its own env file reaches for a key gluetun owns.
+    await stack("alpha-app", "services:\n  alpha:\n    image: alpha\n", "GLUETUN=${GLUETUN_API_KEY}\n");
+    await stack("gluetun", "services:\n  gluetun:\n    image: gluetun:${GLUETUN_TAG}\n");
+
+    await env.ensure("alpha-app");
+
+    // GLUETUN_API_KEY comes from alpha-app's own file; GLUETUN_TAG lives in a file never opened.
+    expect(await env.read()).toEqual({ GLUETUN_API_KEY: "" });
+  });
+
+  it("creates the file with the keys the apps expect, left empty to fill", async () => {
+    await stack(
+      "alpha-app",
+      "services:\n  alpha:\n    image: alpha\n    environment:\n      TAG: ${ALPHA_APP_TAG}\n      KEY: ${ALPHA_APP_KEY}\n",
+    );
+
+    await env.ensure();
+
+    expect(await env.read()).toEqual({ ALPHA_APP_KEY: "", ALPHA_APP_TAG: "" });
   });
 
   it("pre-fills a new variable Hangar already knows the value of", async () => {
-    env = new HangarEnv(file, stacksPath, { APP_DATA_DIR: "/srv/hangar/.data" });
+    env = new HangarEnv(installedPath, { APP_DATA_DIR: "/srv/hangar/.data" });
     await stack(
       "alpha-app",
-      "services:\n  alpha:\n    volumes: [${APP_DATA_DIR}/alpha:/data]\n    environment:\n      TZ: ${TZ}\n",
+      "services:\n  alpha:\n    volumes: [${APP_DATA_DIR}/alpha:/data]\n    environment:\n      TAG: ${ALPHA_APP_TAG}\n",
     );
 
     await env.ensure();
 
-    expect(await env.read()).toEqual({ APP_DATA_DIR: "/srv/hangar/.data", TZ: "" });
+    expect(await env.read()).toEqual({ ALPHA_APP_TAG: "", APP_DATA_DIR: "/srv/hangar/.data" });
   });
 
   it("never overwrites a value that is already filled in", async () => {
     await stack(
       "alpha-app",
-      "services:\n  alpha:\n    image: alpha\n    environment:\n      TZ: ${TZ}\n      DOMAIN: ${DOMAIN}\n",
+      "services:\n  alpha:\n    image: alpha\n    environment:\n      TAG: ${ALPHA_APP_TAG}\n      KEY: ${ALPHA_APP_KEY}\n",
     );
-    await env.write({ TZ: "Europe/Paris" });
+    await env.write({ ALPHA_APP_TAG: "v1" });
 
     await env.ensure();
 
-    expect(await env.read()).toEqual({ DOMAIN: "", TZ: "Europe/Paris" });
+    expect(await env.read()).toEqual({ ALPHA_APP_KEY: "", ALPHA_APP_TAG: "v1" });
   });
 
   it("keeps a variable added by hand since the caller last read the file", async () => {
@@ -102,14 +187,20 @@ describe("HangarEnv", () => {
   });
 
   it("keeps one timestamped backup per rewrite", async () => {
+    // The stamp has millisecond resolution, so saves have to land in different ones to keep
+    // their own copy. A human hitting save cannot do better; a loop can.
+    const tick = () => new Promise(resolve => setTimeout(resolve, 2));
+
     await env.write({ DOMAIN: "example.com" });
+    await tick();
     await env.write({ DOMAIN: "other.com" });
+    await tick();
     await env.write({ DOMAIN: "third.com" });
 
     // The first write had nothing to back up; the next two each kept the state they replaced.
-    const backups = (await readdir(dir)).filter(entry => entry.endsWith(".bak")).sort();
+    const backups = (await readdir(installedPath)).filter(entry => entry.endsWith(".bak")).sort();
     const contents = await Promise.all(
-      backups.map(async backup => parse(await readFile(path.join(dir, backup), "utf8"))),
+      backups.map(async backup => parse(await readFile(path.join(installedPath, backup), "utf8"))),
     );
 
     expect(backups).toHaveLength(2);
