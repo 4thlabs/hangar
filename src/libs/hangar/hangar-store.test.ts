@@ -296,7 +296,7 @@ describe("HangarStore.compose", () => {
       [
         "compose",
         "--env-file",
-        path.join(store.installedPath, ".env.global"),
+        path.join(store.dataPath, ".env.global"),
         "-f",
         path.join(store.installedPath, "alpha-app", "compose.yml"),
         "up",

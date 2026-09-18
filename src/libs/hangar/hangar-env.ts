@@ -33,8 +33,8 @@ const serialize = (variables: Record<string, string>) => {
 };
 
 /**
- * The global environment file every stack is composed with, living next to the installed
- * apps.
+ * The global environment file every stack is composed with, living at the root of the data
+ * directory.
  *
  * It is hand-edited as much as it is generated — secrets, mount points, ids — so nothing
  * here ever rewrites it from a caller's idea of its contents: a write merges into whatever
@@ -56,12 +56,13 @@ export class HangarEnv {
   /**
    * Constructs the environment for the installed apps. Does not read anything: neither the file
    * nor the apps exist before the store has been installed.
-   * @param installedPath The directory holding the installed apps, and the env file with them
+   * @param dataPath The data directory, holding the env file
+   * @param installedPath The directory holding the installed apps, whose files declare the variables
    * @param defaults Values to pre-fill the matching variables with when they first appear
    */
-  constructor(installedPath: string, defaults: Record<string, string> = {}) {
+  constructor(dataPath: string, installedPath: string, defaults: Record<string, string> = {}) {
     this._installedPath = installedPath;
-    this._file = path.join(installedPath, ".env.global");
+    this._file = path.join(dataPath, ".env.global");
     this._defaults = defaults;
   }
 

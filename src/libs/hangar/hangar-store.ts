@@ -68,7 +68,7 @@ export class HangarStore {
     this.config = new HangarConfig(path.join(this.storePath, "config", "hangar.yml"));
     // APP_DATA_DIR is the one variable Hangar can answer for the operator: the stacks keep
     // their data under the same resolved data directory Hangar itself uses.
-    this.env = new HangarEnv(this.installedPath, { APP_DATA_DIR: path.join(this.dataPath, "app-data") });
+    this.env = new HangarEnv(this.dataPath, this.installedPath, { APP_DATA_DIR: path.join(this.dataPath, "app-data") });
     this.runtime = runtime;
   }
 
@@ -138,7 +138,7 @@ export class HangarStore {
    */
   async install() {
     if (!(await exists(this.installedPath))) {
-      await mkdir(this.installedPath);
+      await mkdir(this.installedPath, { recursive: true });
     }
 
     if (await this.isInstalled()) {
