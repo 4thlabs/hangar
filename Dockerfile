@@ -42,13 +42,13 @@ ENV NODE_ENV=production \
     HANGAR_DATA_DIR=/app/data \
     HANGAR_DB_HOST=/app/data/app-data/hangar/hangar.db
 
-COPY --from=builder --chown=${PUID}:${PGID} /app/dist ./dist
-COPY --from=builder --chown=${PUID}:${PGID} /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
 
 # `manualJobResolution` makes the worker import `sidequest.jobs.js` at run time, which pulls the job
 # classes straight from `src/` through the `#libs/*` map in package.json. All three must ship.
-COPY --chown=${PUID}:${PGID} package.json sidequest.jobs.js ./
-COPY --chown=${PUID}:${PGID} src ./src
+COPY package.json sidequest.jobs.js ./
+COPY src ./src
 
 VOLUME ["/app/data"]
 EXPOSE 3010
