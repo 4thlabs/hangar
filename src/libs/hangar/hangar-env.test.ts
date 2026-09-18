@@ -22,9 +22,9 @@ describe("HangarEnv", () => {
   beforeEach(async () => {
     dir = await mkdtemp(path.join(tmpdir(), "hangar-env-"));
     installedPath = path.join(dir, "app-installed");
-    file = path.join(installedPath, ".env.global");
+    file = path.join(dir, ".env.global");
     await mkdir(installedPath, { recursive: true });
-    env = new HangarEnv(installedPath);
+    env = new HangarEnv(dir, installedPath);
   });
 
   afterEach(async () => {
@@ -144,7 +144,7 @@ describe("HangarEnv", () => {
   });
 
   it("pre-fills a new variable Hangar already knows the value of", async () => {
-    env = new HangarEnv(installedPath, { APP_DATA_DIR: "/srv/hangar/.data" });
+    env = new HangarEnv(dir, installedPath, { APP_DATA_DIR: "/srv/hangar/.data" });
     await stack(
       "alpha-app",
       "services:\n  alpha:\n    volumes: [${APP_DATA_DIR}/alpha:/data]\n    environment:\n      TAG: ${ALPHA_APP_TAG}\n",
@@ -198,9 +198,9 @@ describe("HangarEnv", () => {
     await env.write({ DOMAIN: "third.com" });
 
     // The first write had nothing to back up; the next two each kept the state they replaced.
-    const backups = (await readdir(installedPath)).filter(entry => entry.endsWith(".bak")).sort();
+    const backups = (await readdir(dir)).filter(entry => entry.endsWith(".bak")).sort();
     const contents = await Promise.all(
-      backups.map(async backup => parse(await readFile(path.join(installedPath, backup), "utf8"))),
+      backups.map(async backup => parse(await readFile(path.join(dir, backup), "utf8"))),
     );
 
     expect(backups).toHaveLength(2);
