@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { resolveWidgets, type DashboardColumn } from "#libs/widgets";
 import { hangar } from "#libs/hangar/server";
+import { env } from "#libs/env";
 
 const COLUMNS: readonly DashboardColumn[] = [1, 2, 3];
 
@@ -12,7 +13,14 @@ const COLUMN_CLASSNAME: Record<DashboardColumn, string> = {
 
 function Dashboard() {
   // The store owns the dashboard: its hangar.yml says which widgets go where.
-  const placements = resolveWidgets(hangar.store.config.widgets());
+  // An app the store does not carry — or any app at all during the build, which
+  // runs with no data directory — falls back to its own name, the address the
+  // dashboard used before it read the compose files.
+  const placements = resolveWidgets(hangar.store.config.widgets(), {
+    domain: env.DOMAIN,
+    containerName: app => hangar.store.app(app)?.containerName ?? app,
+    secret: container => hangar.store.env.appVar(container, "API_KEY"),
+  });
 
   return (
     <div className="animate-in grid grid-cols-1 items-start gap-4 fade-in-0 duration-200 md:grid-cols-2 xl:grid-cols-[1fr_3fr_1fr]">

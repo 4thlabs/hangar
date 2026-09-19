@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FrigateEvent, FrigateStats } from "./api/client.ts";
 import { FrigateEventsCard, frigateEvents } from "./events.tsx";
+import { aService } from "../mock/mock.ts";
+
+afterEach(() => vi.unstubAllGlobals());
 
 const now = 1_700_000_000_000;
 
@@ -60,8 +63,40 @@ describe("FrigateEventsCard", () => {
     expect(html).not.toContain("thumbnail.jpg");
   });
 
+  it("calls the container but points the browser at the public host", async () => {
+    // The whole reason the two URLs are told apart: the header link, the event
+    // deep links and the thumbnail <img> are all resolved by the visitor, who
+    // cannot reach the container network the API answers on.
+    const called: Request[] = [];
+
+    vi.stubGlobal("fetch", (request: Request) => {
+      called.push(request);
+
+      return Promise.resolve(
+        new Response(JSON.stringify(request.url.includes("/stats") ? stats : events), {
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+
+    const { Widget } = frigateEvents({
+      api: "http://frigate:5000",
+      link: "https://frigate.test.local",
+      apiKey: () => Promise.resolve("s3cret"),
+    });
+    const html = renderToStaticMarkup(<>{await Widget()}</>);
+
+    expect(called.every(request => request.url.startsWith("http://frigate:5000/api/"))).toBe(true);
+    // The key the operator put in .env.global has to reach the request, not just the factory.
+    expect(called.map(request => request.headers.get("x-api-key"))).toEqual(["s3cret", "s3cret"]);
+    expect(html).toContain("https://frigate.test.local/api/events/");
+    expect(html).toContain("https://frigate.test.local/explore?event_id=");
+    expect(html).not.toContain("frigate:5000");
+  });
+
   it("exposes a titled skeleton through the widget definition", () => {
-    const html = renderToStaticMarkup(<frigateEvents.Skeleton />);
+    const { Skeleton } = frigateEvents(aService());
+    const html = renderToStaticMarkup(<Skeleton />);
 
     expect(html).toContain("Frigate");
     expect(html).toContain('aria-busy="true"');

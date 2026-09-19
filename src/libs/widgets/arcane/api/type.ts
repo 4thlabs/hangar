@@ -1,29 +1,3 @@
-/** The Tag type */
-export interface Tag {
-  name: string;
-  color: string;
-  sources: string[];
-}
-
-/** The Project type */
-export interface Project {
-  id: string;
-  name: string;
-  dirName: string;
-  isArchived: boolean;
-  runningCount: number;
-  tags: Tag[];
-}
-
-/** The Pagination type */
-export interface Pagination {
-  totalPages: number;
-  totalItems: number;
-  currentPage: number;
-  itemsPerPage: number;
-  grandTotalItems: number;
-}
-
 /** An action item reported by the Arcane dashboard. */
 export interface DashboardActionItem {
   severity: string;
@@ -69,5 +43,4 @@ export interface Dashboard {
  * on a path where it does not exist.
  */
 export type ArcaneResult<T> =
-  | { success: true; data: T; pagination?: Pagination; detail?: string }
-  | { success: false; data?: undefined; pagination?: Pagination; detail?: string };
+  { success: true; data: T; detail?: string } | { success: false; data?: undefined; detail?: string };

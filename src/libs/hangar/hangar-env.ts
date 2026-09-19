@@ -117,6 +117,26 @@ export class HangarEnv {
   }
 
   /**
+   * One of an app's own variables, looked up under every prefix the app owns. `sync-in` asking
+   * for `API_KEY` tries `SYNCIN_API_KEY` then `SYNC_IN_API_KEY`, because `ensure()` seeds
+   * whichever spelling the app's own files reference and the store uses both.
+   *
+   * Callers name the suffix rather than the whole variable: spelling it out at the call site is
+   * how the name drifts from what `ensure()` writes.
+   * @param app The app the variable belongs to
+   * @param suffix The variable's name after the app prefix, e.g. `API_KEY`
+   */
+  async appVar(app: string, suffix: string) {
+    for (const prefix of prefixes(app)) {
+      const value = await this.get(`${prefix}${suffix}`);
+
+      if (value) return value;
+    }
+
+    return undefined;
+  }
+
+  /**
    * Merges `updates` into whatever is on disk *right now* and rewrites the file. Re-reading
    * inside the write is the point: a variable added by hand — or from another tab — between
    * the moment a caller read the file and the moment it saves must survive that save. Only

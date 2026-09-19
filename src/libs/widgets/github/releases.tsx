@@ -60,18 +60,13 @@ export function GithubReleasesCard({ releases, now = Date.now() }: GithubRelease
   );
 }
 
-/**
- * The latest release of each watched repository, newest first.
- *
- * Built per placement rather than exported as a singleton: the repositories come
- * from the `github-releases` entry in the store's `hangar.yml`.
- */
+/** The latest release of each watched repository, newest first. */
 export const githubReleases = (repositories: readonly string[]) =>
   defineWidget({
     id: "github-releases",
     title: "Releases",
     icon: githubIcon,
-    errorDescription: "The GitHub releases could not be loaded. The rest of the dashboard is still available.",
+    errorDescription: "The GitHub releases could not be loaded.",
     load: () => getLatestReleases(repositories),
     render: (releases: GithubRelease[]) => <GithubReleasesCard releases={releases} />,
   });

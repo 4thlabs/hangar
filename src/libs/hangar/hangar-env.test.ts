@@ -175,6 +175,22 @@ describe("HangarEnv", () => {
     expect(await env.get("NEVER_SET")).toBeUndefined();
   });
 
+  it("finds an app's variable under either spelling the store writes", async () => {
+    // `ensure()` seeds whichever spelling the app's own files reference, and the store uses both:
+    // sync-in publishes SYNCIN_*, while another app of the same shape would publish SYNC_IN_*.
+    await env.write({ SYNCIN_API_KEY: "squashed", ALPHA_APP_API_KEY: "underscored" });
+
+    expect(await env.appVar("sync-in", "API_KEY")).toBe("squashed");
+    expect(await env.appVar("alpha-app", "API_KEY")).toBe("underscored");
+  });
+
+  it("reports an app variable nobody filled in as unset", async () => {
+    await env.write({ SYNCIN_API_KEY: "" });
+
+    expect(await env.appVar("sync-in", "API_KEY")).toBeUndefined();
+    expect(await env.appVar("never-installed", "API_KEY")).toBeUndefined();
+  });
+
   it("serves a looked-up variable from memory, until a write changes it", async () => {
     await env.write({ DOMAIN: "example.com" });
 
