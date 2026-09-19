@@ -1,10 +1,12 @@
 import type { Widget } from "./shared/define-widget.tsx";
-import type { DashboardColumn, WidgetConfig } from "./config/config.ts";
-import { widgetService } from "./config/config.ts";
+import type { DashboardColumn, WidgetConfig, WidgetHost } from "./config/config.ts";
+import { serviceOf } from "./config/config.ts";
 import { arcaneGeneralStats } from "./arcane/general-stats.tsx";
 import { dockerGeneralStats } from "./docker/general-stats.tsx";
 import { frigateEvents } from "./frigate/events.tsx";
 import { gluetunVpnStatus } from "./gluetun/vpn-status.tsx";
+import { jellyfinLatest } from "./jellyfin/latest.tsx";
+import { jellyfinStats } from "./jellyfin/stats.tsx";
 import { githubReleases } from "./github/releases.tsx";
 import { clockWidget } from "./clock/clock.tsx";
 
@@ -28,24 +30,7 @@ export type WidgetPlacement = {
   widget: Widget;
 };
 
-/**
- * What the dashboard needs to know to address a service, passed in rather than
- * read here: resolving a container name means reaching for `#libs/hangar`, and
- * that would drag SQLite and Docker into the RSC graph this module sits in.
- */
-export type WidgetHost = {
-  domain: string;
-  /** The container a store app runs under, which names both its public host and its key. */
-  containerName: (app: string) => string;
-  /** The container's API key, as the store's global env spells it. */
-  secret: (container: string) => Promise<string | undefined>;
-};
-
-/** `frigate-events` → the `frigate` app: a widget type is prefixed by the app it reads. */
-const appOf = (type: string) => type.split("-")[0]!;
-
-const service = (config: { type: string; url?: string | undefined; link?: string | undefined }, host: WidgetHost) =>
-  widgetService(config, host.containerName(appOf(config.type)), host.domain, host.secret);
+export type { WidgetHost };
 
 function createWidget(config: WidgetConfig, host: WidgetHost): Widget {
   switch (config.type) {
@@ -54,11 +39,15 @@ function createWidget(config: WidgetConfig, host: WidgetHost): Widget {
     case "docker-general-stats":
       return dockerGeneralStats;
     case "arcane-general-stats":
-      return arcaneGeneralStats(service(config, host));
+      return arcaneGeneralStats(serviceOf(config, host));
     case "frigate-events":
-      return frigateEvents(service(config, host));
+      return frigateEvents(serviceOf(config, host));
     case "gluetun-vpn-status":
-      return gluetunVpnStatus(service(config, host));
+      return gluetunVpnStatus(serviceOf(config, host));
+    case "jellyfin-stats":
+      return jellyfinStats(serviceOf(config, host));
+    case "jellyfin-latest":
+      return jellyfinLatest(serviceOf(config, host), config.user);
     case "github-releases":
       return githubReleases(config.repositories);
   }
