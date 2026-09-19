@@ -27,6 +27,9 @@ export const sidequestBoot = () : MiddlewareHandler  => {
     // endpoint, which counts against Docker Hub's anonymous per-IP limit.
     await Sidequest.build(CheckImageVersion).schedule("0 */4 * * *");
 
+    // First launched
+    await Sidequest.build(CheckImageVersion).enqueue();
+
     configured = true;
   }
 }

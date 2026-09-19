@@ -1,0 +1,47 @@
+services:
+  hangar:
+    image: ghcr.io/4thlabs/hanger:latest
+    container_name: hangar
+    environment:
+      - PUID=${PUID:-1000}
+      - PUID=${PGID:-1000}
+      - DOMAIN={DOMAIN?required}
+      - HANGAR_DATA_DIR=${PWD}/.data
+      - HANGAR_STORE_URL=${HANGAR_STORE_URL?required}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL?required}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET?required}
+    volumes:
+      - ${PWD}/.data:/app/data
+      - ${PWD}/.data:${PWD}/.data
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 3010:3010
+    networks:
+      - default
+      - servarr
+    labels:
+      - traefik.enabled=true
+
+networks:
+  default:
+    name: hangar-main-net
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.25.0.0/24
+          gateway: 172.25.0.1
+
+  servarr:
+    name: hangar-servarr-net
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.24.0.0/24
+          gateway: 172.24.0.1
+
+  br0:
+    name: br0
+    external: true
+
