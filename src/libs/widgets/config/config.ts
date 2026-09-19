@@ -37,6 +37,7 @@ export const widgetConfigSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("docker-general-stats"), column: columnSchema }),
   z.object({ type: z.literal("arcane-general-stats"), column: columnSchema, ...serviceUrlFields }),
   z.object({ type: z.literal("frigate-events"), column: columnSchema, ...serviceUrlFields }),
+  z.object({ type: z.literal("gluetun-vpn-status"), column: columnSchema, ...serviceUrlFields }),
   z.object({
     type: z.literal("github-releases"),
     column: columnSchema,

@@ -4,6 +4,7 @@ import { widgetService } from "./config/config.ts";
 import { arcaneGeneralStats } from "./arcane/general-stats.tsx";
 import { dockerGeneralStats } from "./docker/general-stats.tsx";
 import { frigateEvents } from "./frigate/events.tsx";
+import { gluetunVpnStatus } from "./gluetun/vpn-status.tsx";
 import { githubReleases } from "./github/releases.tsx";
 import { clockWidget } from "./clock/clock.tsx";
 
@@ -56,6 +57,8 @@ function createWidget(config: WidgetConfig, host: WidgetHost): Widget {
       return arcaneGeneralStats(service(config, host));
     case "frigate-events":
       return frigateEvents(service(config, host));
+    case "gluetun-vpn-status":
+      return gluetunVpnStatus(service(config, host));
     case "github-releases":
       return githubReleases(config.repositories);
   }
