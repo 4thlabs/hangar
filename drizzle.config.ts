@@ -3,7 +3,7 @@ import { env } from "./src/libs/env/index.ts";
 
 export default defineConfig({
   out: "./src/drizzle",
-  schema: ["./src/libs/db/schemas/auth-schema.ts"],
+  schema: ["./src/libs/db/schemas/auth-schema.ts", "./src/libs/db/schemas/notification-schema.ts"],
   dialect: "sqlite",
   dbCredentials: {
     url: env.HANGAR_DB_HOST,

@@ -1,5 +1,5 @@
 import { Link } from "waku";
-import type { DockerOverview } from "#libs/docker/docker.ts";
+import type { DockerOverview } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { outdatedProjects } from "#libs/jobs";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";

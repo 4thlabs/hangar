@@ -187,6 +187,7 @@ const useToastManager = ToastPrimitive.useToastManager;
 export {
   Toaster,
   Toast,
+  ToastIcon,
   ToastAction,
   ToastClose,
   ToastContent,

@@ -12,7 +12,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#app/components/ui/empty.tsx";
-import { DockerNotFoundError } from "#libs/docker/compose.ts";
+import { DockerNotFoundError } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { outdatedProjects } from "#libs/jobs";
 import { logger } from "#libs/logs";

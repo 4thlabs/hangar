@@ -4,7 +4,7 @@ import { useSearch_UNSTABLE, useSetSearch_UNSTABLE } from "waku/router/client";
 import { statusLabel } from "#app/components/apps/status.ts";
 import { CheckboxFilterMenu } from "#app/components/common/checkbox-filter-menu.tsx";
 import { APP_STATUSES } from "#app/search-codecs.ts";
-import type { ComposeProjectStatus } from "#libs/docker/compose.ts";
+import type { ComposeProjectStatus } from "#libs/docker";
 
 type AppsStatusFilterProps = {
   /** How many projects carry each status, shown beside its checkbox. */

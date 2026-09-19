@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ComposeProjectSummary } from "#libs/docker/compose.ts";
+import type { ComposeProjectSummary } from "#libs/docker";
 import { countBy, filterProjects, nextSort } from "./filter.ts";
 
 const project = (name: string, status: ComposeProjectSummary["status"], category?: string): ComposeProjectSummary => ({

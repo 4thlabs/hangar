@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#
 import { formatBytes, formatPercent } from "#app/components/apps/format.ts";
 import type { ContainerStats } from "#app/hooks/use-docker-stats.ts";
 import { EMPTY_METRICS } from "#app/hooks/use-docker-stats.ts";
-import type { ComposeContainer, ContainerHealth } from "#libs/docker/compose.ts";
+import type { ComposeContainer, ContainerHealth } from "#libs/docker";
 
 const healthLabel: Record<ContainerHealth, string> = {
   healthy: "Healthy",

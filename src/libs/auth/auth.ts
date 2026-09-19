@@ -2,7 +2,7 @@ import "server-only";
 
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
-import { db } from "#libs/db";
+import { db } from "#libs/db/server";
 
 /**
  * Better Auth configuration for the Hangar project.

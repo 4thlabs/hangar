@@ -2,26 +2,21 @@
 
 import { useState } from "react";
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
-import { Link, useRouter } from "waku";
-import { ActionResult } from "#app/actions/action-result.ts";
-import { actionLabel, type AppOperation } from "#app/actions/apps/app-operation.ts";
+import { Link } from "waku";
+import { actionLabel } from "#app/actions/apps/app-operation.ts";
 import { categoryBadgeClass } from "#app/components/apps/category.ts";
 import { plural, s } from "#app/components/apps/format.ts";
-import {
-  ComposeConfirmDialog,
-  ComposeOperationButtons,
-  type DestructiveOperation,
-} from "#app/components/apps/compose-operations.tsx";
+import { ComposeConfirmDialog, ComposeOperationButtons } from "#app/components/apps/compose-operations.tsx";
+import { ComposeOutputSheet } from "#app/components/apps/compose-output-sheet.tsx";
+import { useComposeRun } from "#app/components/apps/use-compose-run.ts";
 import { statusLabel, statusVariant } from "#app/components/apps/status.ts";
 import { Badge } from "#app/components/ui/badge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#app/components/ui/table.tsx";
-import { useServerAction } from "#app/hooks/use-server-action.ts";
 import type { AppSortColumn, AppsSort } from "#app/search-codecs.ts";
-import type { ComposeProjectSummary } from "#libs/docker/compose.ts";
+import type { ComposeProjectSummary } from "#libs/docker";
 
 type AppsTableProps = {
   projects: ComposeProjectSummary[];
-  manageApp?: ((project: string, operation: AppOperation) => Promise<ActionResult>) | undefined;
   sort?: AppsSort;
   onSort?: (column: AppSortColumn) => void;
 };
@@ -53,16 +48,12 @@ function SortableHead({ column, label, sort, onSort, className }: SortableHeadPr
   );
 }
 
-export function AppsTable({ projects, manageApp, sort = null, onSort }: AppsTableProps) {
-  const router = useRouter();
+export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
-  const [confirmation, setConfirmation] = useState<DestructiveOperation | null>(null);
-  const [pendingOperation, setPendingOperation] = useState<AppOperation | null>(null);
-  const { run: runAction, isPending } = useServerAction();
 
   // The list re-renders while a selection is held, so drop names that disappeared meanwhile.
   const selected = projects.map(project => project.name).filter(name => selection.has(name));
-  const disabled = selected.length === 0 || !manageApp || isPending;
+  const { confirmation, setConfirmation, running, targets, run, disabled, close, finished } = useComposeRun(selected);
 
   function toggle(name: string, checked: boolean) {
     setSelection(current => {
@@ -71,38 +62,6 @@ export function AppsTable({ projects, manageApp, sort = null, onSort }: AppsTabl
       else next.delete(name);
       return next;
     });
-  }
-
-  function run(operation: AppOperation) {
-    if (!manageApp || selected.length === 0) return;
-
-    setConfirmation(null);
-    setPendingOperation(operation);
-    runAction(
-      // One toast for the batch: the outcome the user cares about is "did all of them work".
-      async () => {
-        const results: ActionResult[] = [];
-        // Sequential: compose commands against the same daemon are cheap but not worth racing.
-        for (const project of selected) results.push(await manageApp(project, operation));
-
-        const failures = results.filter(result => !result.success);
-
-        return failures.length === 0
-          ? ActionResult.success(`${plural(results.length, "application")} traitée${s(results.length)}.`)
-          : ActionResult.failure(
-              `${plural(failures.length, "échec")} sur ${results.length} : ${failures.map(failure => failure.message).join(" ")}`,
-            );
-      },
-      {
-        success: `${actionLabel[operation]} terminé`,
-        error: `${actionLabel[operation]} échoué`,
-        transport: "La commande n’a pas pu être transmise au serveur.",
-      },
-      async () => {
-        setPendingOperation(null);
-        await router.reload();
-      },
-    );
   }
 
   const confirmationTitle =
@@ -123,7 +82,7 @@ export function AppsTable({ projects, manageApp, sort = null, onSort }: AppsTabl
             : "Aucune sélection"}
         </span>
         <ComposeOperationButtons
-          running={pendingOperation}
+          running={running}
           disabled={disabled}
           size="sm"
           onRun={run}
@@ -202,6 +161,14 @@ export function AppsTable({ projects, manageApp, sort = null, onSort }: AppsTabl
         description={confirmationDescription}
         onConfirm={run}
         onCancel={() => setConfirmation(null)}
+      />
+
+      <ComposeOutputSheet
+        projects={targets}
+        operation={running}
+        label={running ? actionLabel[running] : ""}
+        onClose={close}
+        onFinished={finished}
       />
     </div>
   );

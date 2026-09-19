@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Lives here rather than beside the route: waku turns every file under `src/app/pages/` into a
-// route, test files included, which breaks the build. `docker-route.ts` next door is what the
+// route, test files included, which breaks the build. `api-route.ts` next door is what the
 // 401/404/503 assertions below actually exercise.
 const mocks = vi.hoisted(() => ({ getSession: vi.fn(), logger: { error: vi.fn() } }));
 
@@ -11,13 +11,13 @@ vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
 // One small singleton stands in for the whole layer: the class itself is tested against a fake
 // client in `src/libs/docker/docker.test.ts`.
 vi.mock("#libs/docker/server", async () => {
-  const { Docker } = await import("#libs/docker/docker.ts");
-  const { fakeApps, fakeDockerode } = await import("#libs/docker/docker-mock.ts");
+  const { Docker } = await import("#libs/docker");
+  const { fakeApps, fakeDockerode } = await import("#libs/docker/mock");
 
   return { docker: new Docker(fakeDockerode(), fakeApps("alpha")) };
 });
 
-const { containerSource, dockerMock, givenContainers } = await import("#libs/docker/docker-mock.ts");
+const { containerSource, dockerMock, givenContainers } = await import("#libs/docker/mock");
 const { GET } = await import("#app/pages/_api/api/docker/stats.ts");
 
 /** A stats sample whose CPU counters are `previous + delta`, so the second frame has a percentage. */

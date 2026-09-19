@@ -1,7 +1,7 @@
 import type Dockerode from "dockerode";
 import { vi } from "vitest";
-import type { ComposeContainerSource } from "./compose.ts";
-import type { InstalledApps } from "./docker.ts";
+import type { ComposeContainerSource } from "../compose.ts";
+import type { InstalledApps } from "../docker.ts";
 
 /**
  * The Engine API calls the {@link Docker} class makes, as vitest mocks. A test builds a client

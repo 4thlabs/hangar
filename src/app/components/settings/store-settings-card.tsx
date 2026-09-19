@@ -21,7 +21,9 @@ export function StoreSettingsCard({ storeUrl, initialInstalled, manageStore }: S
   const { run, isPending } = useServerAction();
 
   const handleManageStore = () =>
-    run(manageStore, { success: "Opération terminée", error: "Échec de l’opération" }, result => {
+    // The synchronisation itself runs detached server-side: this toast only says it started,
+    // and its outcome arrives later as a notification.
+    run(manageStore, { success: "Synchronisation lancée", error: "Échec du lancement" }, result => {
       // Only a returned result carries the new state; a transport failure leaves it as it was.
       if (result) setInstalled(result.installed);
     });

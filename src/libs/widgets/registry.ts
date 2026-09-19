@@ -1,5 +1,5 @@
 import type { Widget } from "./shared/define-widget.tsx";
-import type { DashboardColumn, WidgetConfig } from "./config.ts";
+import type { DashboardColumn, WidgetConfig } from "./config/config.ts";
 import { arcaneGeneralStats } from "./arcane/general-stats.tsx";
 import { dockerGeneralStats } from "./docker/general-stats.tsx";
 import { frigateEvents } from "./frigate/events.tsx";

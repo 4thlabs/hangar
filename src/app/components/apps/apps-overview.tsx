@@ -13,8 +13,6 @@ import {
 } from "lucide-react";
 import { useRouter } from "waku";
 import { useSetSearch_UNSTABLE } from "waku/router/client";
-import type { ActionResult } from "#app/actions/action-result.ts";
-import type { AppOperation } from "#app/actions/apps/app-operation.ts";
 import { AppsCategoryFilter } from "#app/components/apps/apps-category-filter.tsx";
 import { AppsStatusFilter } from "#app/components/apps/apps-status-filter.tsx";
 import { AppsTable } from "#app/components/apps/apps-table.tsx";
@@ -28,16 +26,15 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#a
 import { Spinner } from "#app/components/ui/spinner.tsx";
 import { useDockerStats } from "#app/hooks/use-docker-stats.ts";
 import type { AppSortColumn, AppsSearch } from "#app/search-codecs.ts";
-import type { ComposeProjectsSnapshot } from "#libs/docker/compose.ts";
+import type { ComposeProjectsSnapshot } from "#libs/docker";
 
 type AppsOverviewProps = {
   snapshot: ComposeProjectsSnapshot | null;
   error: string | null;
-  manageApp?: ((project: string, operation: AppOperation) => Promise<ActionResult>) | undefined;
   search: AppsSearch;
 };
 
-export function AppsOverview({ snapshot, error, manageApp, search }: AppsOverviewProps) {
+export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
   const router = useRouter();
   const [isRefreshing, setRefreshing] = useState(false);
   const setSearch = useSetSearch_UNSTABLE({ from: "/apps" });
@@ -119,7 +116,7 @@ export function AppsOverview({ snapshot, error, manageApp, search }: AppsOvervie
           </div>
 
           {visible.length > 0 ? (
-            <AppsTable projects={visible} manageApp={manageApp} sort={search.sort} onSort={onSort} />
+            <AppsTable projects={visible} sort={search.sort} onSort={onSort} />
           ) : (
             <Empty>
               <EmptyHeader>

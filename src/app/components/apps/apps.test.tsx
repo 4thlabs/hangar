@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { ComposeContainer, ComposeProjectsSnapshot } from "#libs/docker/compose.ts";
+import type { ComposeContainer, ComposeProjectsSnapshot } from "#libs/docker";
 
 vi.mock("waku", () => ({
   Link: ({ children }: { children: ReactNode }) => <a href="/apps/alpha">{children}</a>,
