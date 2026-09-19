@@ -90,7 +90,7 @@ export const dockerGeneralStats = defineWidget({
   title: "Local",
   icon: dockerIcon,
   className: dockerWidgetClassName,
-  errorDescription: "The local Docker statistics could not be loaded. The rest of the dashboard is still available.",
+  errorDescription: "The local Docker statistics could not be loaded.",
   skeleton: { withFooter: true, withSubtitle: true },
   load: async (): Promise<DockerGeneralStats> => {
     // `outdatedProjects` reads the last completed check; the widget never talks to a registry itself.

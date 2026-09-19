@@ -13,8 +13,6 @@ const envVariables = z.object({
   HANGAR_DATA_DIR: z.string().min(1),
   HANGAR_DB_HOST: z.string().min(1),
   DOMAIN: z.string().min(1),
-  ARCANE_API_KEY: z.string().min(1).optional(),
-  FRIGATE_API_URL: z.url().optional(),
   GITHUB_TOKEN: z.string().min(1).optional(),
   BETTER_AUTH_URL: z.url().optional(),
   BETTER_AUTH_SECRET: z.string().min(32).optional(),

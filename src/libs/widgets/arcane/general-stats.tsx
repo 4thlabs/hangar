@@ -1,10 +1,10 @@
-import type { Dashboard } from "#libs/api/arcane";
-import { arcaneUrl, getDashboard } from "#libs/api/arcane";
+import type { Dashboard } from "./api/type.ts";
+import { createArcaneClient } from "./api/client.ts";
+import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import {
   WidgetCard,
   WidgetContent,
-  WidgetError,
   WidgetFooter,
   WidgetHeader,
   WidgetMetadata,
@@ -95,20 +95,22 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
   );
 }
 
-export const arcaneGeneralStats = defineWidget({
-  id: "arcane-general-stats",
-  title: "Arcane",
-  icon: arcaneIcon,
-  className: arcaneWidgetClassName,
-  errorDescription: "The general statistics could not be loaded. The rest of the dashboard is still available.",
-  skeleton: { withFooter: true, withSubtitle: true },
-  load: async (environment: number = 0) => {
-    const response = await getDashboard(environment);
+/** Arcane's own view of the host, and the link into it. */
+export const arcaneGeneralStats = (service: WidgetService) =>
+  defineWidget({
+    id: "arcane-general-stats",
+    title: "Arcane",
+    icon: arcaneIcon,
+    className: arcaneWidgetClassName,
+    errorDescription: "The general statistics could not be loaded.",
+    skeleton: { withFooter: true, withSubtitle: true },
+    load: async (environment: number = 0) => {
+      const response = await (await createArcaneClient(service)).getDashboard(environment);
 
-    // The API answers 200 with success:false; treat that as a load failure.
-    if (!response.success) throw new Error(response.detail ?? "Unsuccessful response");
+      // The API answers 200 with success:false; treat that as a load failure.
+      if (!response.success) throw new Error(response.detail ?? "Unsuccessful response");
 
-    return response.data;
-  },
-  render: (dashboard: Dashboard) => <ArcaneGeneralStatsCard dashboard={dashboard} serviceUrl={arcaneUrl} />,
-});
+      return response.data;
+    },
+    render: (dashboard: Dashboard) => <ArcaneGeneralStatsCard dashboard={dashboard} serviceUrl={service.link} />,
+  });

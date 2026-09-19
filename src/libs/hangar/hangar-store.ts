@@ -19,6 +19,8 @@ export type HangarApp = {
   name: string;
   icon: string | undefined;
   installed: boolean;
+  /** The container the app's own service declares, which Traefik routes `<container>.<DOMAIN>` to. */
+  containerName: string;
 };
 
 /**
@@ -260,12 +262,19 @@ export class HangarStore {
             const source = await readFile(path.join(this.storePath, "store", app, "compose.yml"), "utf8");
             const yaml = load(source, { filename: "compose.yml" }) as Record<string, unknown> | undefined;
             const metadata = yaml?.["x-hangar"] as { icon?: string } | undefined;
+            const services = (yaml?.["services"] ?? {}) as Record<string, { container_name?: string } | undefined>;
+
+            // ponytail: the main service is the one named after the app, else the first declared;
+            // a multi-service app that names neither falls back to its own id, which is what the
+            // dashboard linked to before it read the compose file at all.
+            const service = services[app] ?? Object.values(services)[0];
 
             this.apps.add({
               id: app,
               name: (yaml?.["name"] as string | undefined) ?? capitalize(app),
               icon: metadata?.icon,
               installed: installed.indexOf(app) !== -1,
+              containerName: service?.container_name ?? app,
             });
           } catch (error) {
             logger.warn("Skipping store app: its compose.yml could not be read", { error, app });

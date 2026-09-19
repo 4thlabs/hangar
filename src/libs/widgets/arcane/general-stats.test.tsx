@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { Dashboard } from "#libs/api";
+import type { Dashboard } from "./api/type.ts";
 import { ArcaneGeneralStatsCard, arcaneGeneralStats } from "./general-stats.tsx";
+import { aService } from "../mock/mock.ts";
 
 const dashboard: Dashboard = {
   versionInfo: {
@@ -74,7 +75,8 @@ describe("ArcaneGeneralStatsCard", () => {
   });
 
   it("exposes a titled skeleton through the widget definition", () => {
-    const html = renderToStaticMarkup(<arcaneGeneralStats.Skeleton />);
+    const { Skeleton } = arcaneGeneralStats(aService());
+    const html = renderToStaticMarkup(<Skeleton />);
 
     expect(html).toContain("Arcane");
     expect(html).toContain('aria-busy="true"');

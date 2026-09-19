@@ -188,11 +188,37 @@ describe("HangarStore", () => {
 
     expect([...store.apps]).toEqual(
       expect.arrayContaining([
-        { id: "alpha-app", name: "Alpha App", icon: "alpha.svg", installed: true },
-        { id: "beta-app", name: "Beta-app", icon: "beta.svg", installed: false },
+        { id: "alpha-app", name: "Alpha App", icon: "alpha.svg", installed: true, containerName: "alpha-app" },
+        { id: "beta-app", name: "Beta-app", icon: "beta.svg", installed: false, containerName: "beta-app" },
       ]),
     );
     expect(store.apps).toHaveLength(2);
+  });
+
+  it("takes the container name from the app's own service, and only that one", async () => {
+    const store = await createStore(dataDir, createRuntime());
+    const named = path.join(store.storePath, "store", "frigate");
+    const sidecarFirst = path.join(store.storePath, "store", "immich");
+    await Promise.all([
+      mkdir(path.join(store.storePath, ".git"), { recursive: true }),
+      mkdir(named, { recursive: true }),
+      mkdir(sidecarFirst, { recursive: true }),
+      mkdir(store.installedPath, { recursive: true }),
+    ]);
+    await Promise.all([
+      // The container the reverse proxy routes to is not the app's directory name.
+      writeFile(path.join(named, "compose.yml"), "services:\n  frigate:\n    container_name: frigate-nvr\n"),
+      // The app's own service is picked over the one declared before it.
+      writeFile(
+        path.join(sidecarFirst, "compose.yml"),
+        "services:\n  redis:\n    container_name: immich-redis\n  immich:\n    container_name: immich-server\n",
+      ),
+    ]);
+
+    await store.refresh();
+
+    expect(store.app("frigate")?.containerName).toBe("frigate-nvr");
+    expect(store.app("immich")?.containerName).toBe("immich-server");
   });
 
   it("keeps going when an app has no x-arcane block or no compose.yml", async () => {
@@ -218,8 +244,14 @@ describe("HangarStore", () => {
 
     expect([...store.apps]).toEqual(
       expect.arrayContaining([
-        { id: "good-app", name: "Good", icon: "good.svg", installed: false },
-        { id: "no-metadata-app", name: "No Metadata", icon: undefined, installed: false },
+        { id: "good-app", name: "Good", icon: "good.svg", installed: false, containerName: "good-app" },
+        {
+          id: "no-metadata-app",
+          name: "No Metadata",
+          icon: undefined,
+          installed: false,
+          containerName: "no-metadata-app",
+        },
       ]),
     );
     expect(store.apps).toHaveLength(2);
@@ -227,7 +259,7 @@ describe("HangarStore", () => {
 
   it("clears stale app metadata when the store is absent", async () => {
     const store = await createStore(dataDir, createRuntime());
-    store.apps.add({ id: "old", name: "Old", icon: "old.svg", installed: true });
+    store.apps.add({ id: "old", name: "Old", icon: "old.svg", installed: true, containerName: "old" });
 
     await store.refresh();
 
@@ -236,15 +268,15 @@ describe("HangarStore", () => {
 
   it("returns only installed app ids", async () => {
     const store = await createStore(dataDir, createRuntime());
-    store.apps.add({ id: "a", name: "A", icon: undefined, installed: true });
-    store.apps.add({ id: "b", name: "B", icon: undefined, installed: false });
+    store.apps.add({ id: "a", name: "A", icon: undefined, installed: true, containerName: "a" });
+    store.apps.add({ id: "b", name: "B", icon: undefined, installed: false, containerName: "b" });
 
     expect(store.installedProjectIds()).toEqual(new Set(["a"]));
   });
 
   it("looks up a store app by id", async () => {
     const store = await createStore(dataDir, createRuntime());
-    store.apps.add({ id: "a", name: "A", icon: undefined, installed: true });
+    store.apps.add({ id: "a", name: "A", icon: undefined, installed: true, containerName: "a" });
 
     expect(store.app("a")).toMatchObject({ id: "a" });
     expect(store.app("missing")).toBeUndefined();

@@ -1,5 +1,5 @@
-import { createServiceClient } from "#libs/api/shared";
-import { env } from "#libs/env";
+import type { WidgetService } from "../../config/config.ts";
+import { serviceClient } from "../../shared/service-client.ts";
 
 /** The subset of a Frigate event displayed by Hangar. */
 export interface FrigateEvent {
@@ -22,20 +22,15 @@ export interface FrigateStats {
   detectors: Record<string, FrigateDetectorStats>;
 }
 
-const { url, client: apiClient } = createServiceClient({
-  service: "frigate",
-  baseUrl: env.FRIGATE_API_URL,
-});
+/** Talks to one Frigate instance. */
+export async function createFrigateClient(service: WidgetService) {
+  const client = await serviceClient(service);
 
-export const frigateUrl = url;
-export { apiClient };
+  return {
+    /** Gets the most recent Frigate events. */
+    getEvents: (limit: number = 5) => client.get<FrigateEvent[]>("events", { searchParams: { limit } }).json(),
 
-/** Gets the most recent Frigate events. */
-export async function getEvents(limit: number = 5) {
-  return await apiClient.get<FrigateEvent[]>("events", { searchParams: { limit } }).json();
-}
-
-/** Gets Frigate runtime statistics. */
-export async function getStats() {
-  return await apiClient.get<FrigateStats>("stats").json();
+    /** Gets Frigate runtime statistics. */
+    getStats: () => client.get<FrigateStats>("stats").json(),
+  };
 }

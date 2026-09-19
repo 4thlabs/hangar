@@ -1,11 +1,11 @@
 services:
   hangar:
-    image: ghcr.io/4thlabs/hanger:latest
+    image: ghcr.io/4thlabs/hangar:latest
     container_name: hangar
     environment:
       - PUID=${PUID:-1000}
-      - PUID=${PGID:-1000}
-      - DOMAIN={DOMAIN?required}
+      - PGID=${PGID:-1000}
+      - DOMAIN=${DOMAIN?required}
       - HANGAR_DATA_DIR=${PWD}/.data
       - HANGAR_STORE_URL=${HANGAR_STORE_URL?required}
       - BETTER_AUTH_URL=${BETTER_AUTH_URL?required}

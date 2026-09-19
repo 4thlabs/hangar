@@ -16,7 +16,7 @@ export const clockWidget = defineWidget({
   title: "Clock",
   icon: <ClockIcon />,
   className: clockWidgetClassName,
-  errorDescription: "The clock could not be rendered. The rest of the dashboard is still available.",
+  errorDescription: "The clock could not be rendered.",
   load: () => Promise.resolve(null),
   render: () => <ClockDisplay className={clockWidgetClassName} />,
 });

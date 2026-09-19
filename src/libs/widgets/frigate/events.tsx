@@ -1,11 +1,11 @@
 import type { FrigateEvent, FrigateStats } from "./api/client.ts";
-import { frigateUrl, getEvents, getStats } from "./api/client.ts";
+import { createFrigateClient } from "./api/client.ts";
+import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import {
   WidgetCard,
   WidgetContent,
   WidgetEmptyState,
-  WidgetError,
   WidgetHeader,
   WidgetList,
   WidgetListItem,
@@ -97,15 +97,27 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
   );
 }
 
-export const frigateEvents = defineWidget({
-  id: "frigate-events",
-  title: "Frigate",
-  icon: frigateIcon,
-  className: frigateWidgetClassName,
-  errorDescription: "The camera events could not be loaded. The rest of the dashboard is still available.",
-  skeleton: { withSubtitle: true },
-  load: () => Promise.all([getEvents(), getStats()]),
-  render: ([events, stats]: [FrigateEvent[], FrigateStats]) => (
-    <FrigateEventsCard events={events} stats={stats} serviceUrl={frigateUrl} />
-  ),
-});
+/**
+ * The latest camera events, and the link into Frigate itself.
+ *
+ * `link` reaches further here than in other cards: beyond the header link it also builds every
+ * per-event deep link and every thumbnail `<img>` source, all of which the visitor's browser
+ * resolves and none of which can point at the container network.
+ */
+export const frigateEvents = (service: WidgetService) =>
+  defineWidget({
+    id: "frigate-events",
+    title: "Frigate",
+    icon: frigateIcon,
+    className: frigateWidgetClassName,
+    errorDescription: "The camera events could not be loaded.",
+    skeleton: { withSubtitle: true },
+    load: async () => {
+      const client = await createFrigateClient(service);
+
+      return await Promise.all([client.getEvents(), client.getStats()]);
+    },
+    render: ([events, stats]: [FrigateEvent[], FrigateStats]) => (
+      <FrigateEventsCard events={events} stats={stats} serviceUrl={service.link} />
+    ),
+  });

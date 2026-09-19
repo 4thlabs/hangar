@@ -7,7 +7,7 @@ const base = {
   title: "Test",
   icon: null,
   className: "min-h-10",
-  errorDescription: "Could not load. The rest of the dashboard is still available.",
+  errorDescription: "Could not load.",
 };
 
 describe("defineWidget", () => {
