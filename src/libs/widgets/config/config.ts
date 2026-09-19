@@ -38,6 +38,14 @@ export const widgetConfigSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("arcane-general-stats"), column: columnSchema, ...serviceUrlFields }),
   z.object({ type: z.literal("frigate-events"), column: columnSchema, ...serviceUrlFields }),
   z.object({ type: z.literal("gluetun-vpn-status"), column: columnSchema, ...serviceUrlFields }),
+  z.object({ type: z.literal("jellyfin-stats"), column: columnSchema, ...serviceUrlFields }),
+  z.object({
+    type: z.literal("jellyfin-latest"),
+    column: columnSchema,
+    ...serviceUrlFields,
+    /** Jellyfin scopes "latest" to a user, so there is no server-wide answer to ask for. */
+    user: z.string().min(1),
+  }),
   z.object({
     type: z.literal("github-releases"),
     column: columnSchema,
@@ -80,6 +88,35 @@ export function widgetService(
 
   return { link, api: config.url ?? link, apiKey: () => secret(containerName) };
 }
+
+/**
+ * What resolving a widget's service needs to know, passed in rather than read here: reaching for
+ * `#libs/hangar` would drag SQLite and Docker into the RSC graph the registry sits in.
+ */
+export type WidgetHost = {
+  domain: string;
+  /** The container a store app runs under, which names both its public host and its key. */
+  containerName: (app: string) => string;
+  /** The container's API key, as the store's global env spells it. */
+  secret: (container: string) => Promise<string | undefined>;
+};
+
+/** `frigate-events` → the `frigate` app: a widget type is prefixed by the app it reads. */
+export const appOf = (type: string) => type.split("-")[0]!;
+
+/**
+ * The service a widget declaration points at, resolved against the host.
+ *
+ * Only some members of the union carry URLs — a clock addresses nothing — so the narrowing is
+ * what keeps `widgetService` honest about the two it may be handed.
+ */
+export const serviceOf = (config: WidgetConfig, host: WidgetHost): WidgetService =>
+  widgetService(
+    "url" in config ? { url: config.url, link: config.link } : {},
+    host.containerName(appOf(config.type)),
+    host.domain,
+    host.secret,
+  );
 
 /**
  * The dashboard a store gets when its `hangar.yml` declares no `widgets:`.

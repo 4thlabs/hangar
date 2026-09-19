@@ -4,8 +4,10 @@ import type { WidgetService } from "../config/config.ts";
 export type ServiceClientOptions = {
   /** Where the service answers, as `widgetService` resolved it from `hangar.yml`. */
   baseUrl: string;
-  /** Sent as X-API-Key when present. */
+  /** The key, sent when present. */
   apiKey?: string | undefined;
+  /** The header the key goes in. `X-API-Key` for most; Jellyfin wants `X-Emby-Token`. */
+  apiKeyHeader?: string;
   /** Where the service roots its API. `/api` for most; gluetun versions its own, `/v1`. */
   prefix?: string;
   /** Request timeout in ms. ky's own default (10s) when omitted. */
@@ -22,7 +24,14 @@ export type ServiceClientOptions = {
  * different addresses. `widgetService` owns that distinction; this only carries
  * the shape a self-hosted API answers on.
  */
-export function createServiceClient({ baseUrl, apiKey, prefix = "/api", timeout, retry = 1 }: ServiceClientOptions) {
+export function createServiceClient({
+  baseUrl,
+  apiKey,
+  apiKeyHeader = "X-API-Key",
+  prefix = "/api",
+  timeout,
+  retry = 1,
+}: ServiceClientOptions) {
   return ky.extend({
     baseUrl,
     prefix,
@@ -34,7 +43,7 @@ export function createServiceClient({ baseUrl, apiKey, prefix = "/api", timeout,
           hooks: {
             beforeRequest: [
               ({ request }: { request: Request }) => {
-                request.headers.set("X-API-Key", apiKey);
+                request.headers.set(apiKeyHeader, apiKey);
               },
             ],
           },
