@@ -1,5 +1,5 @@
 import { Sidequest } from "sidequest";
-import type { ImageUpdateReport } from "#libs/docker/compose.ts";
+import type { ImageUpdateReport } from "#libs/docker";
 import { logger } from "#libs/logs";
 
 /**

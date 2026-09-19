@@ -1,8 +1,7 @@
 import type { PageProps } from "waku/router";
-import { manageApp } from "#app/actions/apps/manage-app.ts";
 import { AppsOverview } from "#app/components/apps/apps-overview.tsx";
 import { appsSearchCodec } from "#app/search-codecs.ts";
-import type { ComposeProjectsSnapshot } from "#libs/docker/compose.ts";
+import type { ComposeProjectsSnapshot } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
 import { outdatedProjects } from "#libs/jobs";
@@ -39,7 +38,7 @@ export default async function AppsPage({ search }: PageProps<"/apps">) {
   return (
     <main>
       <title>Apps | Hangar</title>
-      <AppsOverview snapshot={snapshot} error={error} manageApp={manageApp} search={search} />
+      <AppsOverview snapshot={snapshot} error={error} search={search} />
     </main>
   );
 }

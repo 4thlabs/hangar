@@ -1,8 +1,8 @@
 import type { ApiContext } from "waku/router";
-import { dockerRoute, dockerStream } from "#app/api/docker-route.ts";
+import { apiRoute, apiStream } from "#app/api/api-route.ts";
 import { docker } from "#libs/docker/server";
 
-export const GET = dockerRoute<ApiContext<"/api/docker/apps/[project]/containers/[container]/logs">>(
+export const GET = apiRoute<ApiContext<"/api/docker/apps/[project]/containers/[container]/logs">>(
   {
     log: "Failed to stream Docker container logs",
     unavailable: "Les logs Docker sont indisponibles.",
@@ -10,5 +10,5 @@ export const GET = dockerRoute<ApiContext<"/api/docker/apps/[project]/containers
   },
   async (request, { params }) =>
     // The request signal kills `docker logs -f`: closing the tab must not leave the child behind.
-    dockerStream(await docker.openLogs(params.project, params.container, request.signal)),
+    apiStream(await docker.openLogs(params.project, params.container, request.signal)),
 );

@@ -1,9 +1,11 @@
 import Dockerode from "dockerode";
 import { Job } from "sidequest";
-import type { ImageUpdateReport } from "#libs/docker/compose.ts";
-import { Docker } from "#libs/docker/docker.ts";
+import type { ImageUpdateReport } from "#libs/docker";
+import { Docker } from "#libs/docker";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
+import { db } from "#libs/db";
+import { Notifications } from "#libs/notifications";
 
 /**
  * Asks every installed app's registry whether it serves something newer than what is running.
@@ -20,6 +22,20 @@ export class CheckImageVersion extends Job {
     // In the message, not in metadata: the log format only ever prints `message` and `error`.
     const outdated = updates.filter(update => update.status === "outdated").length;
     logger.info(`Checked ${updates.length} app images for updates: ${outdated} outdated`);
+
+    // Every four hours, for whoever is signed up. The dedupe key means the run rewrites its own
+    // notification instead of stacking six identical ones a day.
+    if (outdated > 0) {
+      // Its own instance rather than `#libs/notifications/server`: that module is `server-only`,
+      // and a job is imported by a plain Node process. Same reason as the Docker client above.
+      await new Notifications(db).notify({
+        level: "info",
+        title: "Mises à jour disponibles",
+        description: `${outdated} application${outdated > 1 ? "s ont" : " a"} une image plus récente en registre.`,
+        href: "/apps",
+        dedupeKey: "image-updates",
+      });
+    }
 
     return { checkedAt: new Date().toISOString(), updates };
   }

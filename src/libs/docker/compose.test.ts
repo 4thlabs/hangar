@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ComposeProjects } from "./compose.ts";
-import { containerSource } from "./docker-mock.ts";
+import { containerSource } from "./mock/index.ts";
 
 const { project: PROJECT, service: SERVICE } = ComposeProjects.LABEL;
 /** Shorthand for the shared fixture, which already defaults to one `alpha`/`web` container. */

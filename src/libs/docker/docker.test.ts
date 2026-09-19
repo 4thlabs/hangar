@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const { containerSource, dockerMock, fakeApps, fakeDockerode, givenContainers } = await import("./docker-mock.ts");
+const { containerSource, dockerMock, fakeApps, fakeDockerode, givenContainers } = await import("./mock/index.ts");
 const { Docker } = await import("./docker.ts");
 const { DockerNotFoundError } = await import("./compose.ts");
 

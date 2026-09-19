@@ -1,9 +1,8 @@
-import { Readable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
-import { dockerRoute, dockerStream } from "#app/api/docker-route.ts";
-import type { Samples } from "#libs/docker/docker.ts";
+import { apiRoute, sseEvent, sseStream } from "#app/api/api-route.ts";
+import type { Samples } from "#libs/docker";
 import { docker } from "#libs/docker/server";
-import { ContainerStats } from "#libs/docker/stats.ts";
+import { ContainerStats } from "#libs/docker";
 
 /** How often a frame goes out. Also the window the CPU percentage is measured over. */
 const INTERVAL = 1_000;
@@ -12,7 +11,7 @@ const INTERVAL = 1_000;
 function frame(current: Samples, previous: Samples) {
   const metrics = [...current].map(([id, raw]) => [id, new ContainerStats(raw, previous.get(id)).metrics()]);
 
-  return `data: ${JSON.stringify(Object.fromEntries(metrics))}\n\n`;
+  return sseEvent(Object.fromEntries(metrics));
 }
 
 /**
@@ -43,18 +42,13 @@ async function* frames(first: Samples, signal: AbortSignal) {
  * keyed by full container id, so the same stream serves one app's container table and the
  * whole-inventory totals — a caller reads the ids it happens to be showing.
  */
-export const GET = dockerRoute(
+export const GET = apiRoute(
   { log: "Failed to stream Docker container statistics", unavailable: "Les statistiques Docker sont indisponibles." },
   async request => {
     // Sampled before the response so an unreachable daemon surfaces as a 503 with a message,
     // rather than as a 200 that streams nothing and has the browser reconnect forever.
     const first = await docker.sampleStats();
 
-    // `objectMode: false` so the frames reach the response as bytes; the default would hand
-    // `Response` raw strings, which it rejects.
-    return dockerStream(
-      Readable.from(frames(first, request.signal), { objectMode: false }),
-      "text/event-stream; charset=utf-8",
-    );
+    return sseStream(frames(first, request.signal));
   },
 );

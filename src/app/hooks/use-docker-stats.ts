@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ContainerMetrics } from "#libs/docker/stats.ts";
+import type { ContainerMetrics } from "#libs/docker";
 
 export type ContainerStats = Record<string, ContainerMetrics>;
 

@@ -31,8 +31,8 @@ type ComposeOperationButtonsProps = {
 /**
  * The Up / Force recreate / Down triplet, shared by the apps table and the app detail page.
  *
- * Presentation only: the two callers execute an operation very differently (the table loops over
- * the server action, the detail page streams the compose route), so only the buttons are shared.
+ * Presentation only: what the two callers target differs (a selection, or the app being shown),
+ * so only the buttons are shared. The state behind them lives in `useComposeRun`.
  */
 export function ComposeOperationButtons({ running, disabled, size, onRun, onConfirm }: ComposeOperationButtonsProps) {
   const icon = (operation: AppOperation, Idle: typeof PowerIcon) =>

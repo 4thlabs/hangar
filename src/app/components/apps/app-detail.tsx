@@ -11,7 +11,7 @@ import { AutoReload } from "#app/components/common/auto-reload.tsx";
 import { Badge } from "#app/components/ui/badge.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import { useDockerStats } from "#app/hooks/use-docker-stats.ts";
-import type { ComposeProjectDetail } from "#libs/docker/compose.ts";
+import type { ComposeProjectDetail } from "#libs/docker";
 
 export function AppDetail({ detail }: { detail: ComposeProjectDetail }) {
   const { stats, total } = useDockerStats(detail.containerIds);

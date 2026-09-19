@@ -75,11 +75,12 @@ function MobileSearch() {
   );
 }
 
+/** The burger and the search sheet, which only exist below `md`. */
 export function MobileNavbarActions() {
   return (
-    <>
+    <div className="flex items-center gap-1 md:hidden">
       <MobileNavigation />
       <MobileSearch />
-    </>
+    </div>
   );
 }

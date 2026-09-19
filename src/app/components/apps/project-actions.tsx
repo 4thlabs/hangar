@@ -1,53 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { useRouter } from "waku";
-import { ActionResult } from "#app/actions/action-result.ts";
-import { actionLabel, type AppOperation } from "#app/actions/apps/app-operation.ts";
-import {
-  ComposeConfirmDialog,
-  ComposeOperationButtons,
-  type DestructiveOperation,
-} from "#app/components/apps/compose-operations.tsx";
+import { useMemo } from "react";
+import { actionLabel } from "#app/actions/apps/app-operation.ts";
+import { ComposeConfirmDialog, ComposeOperationButtons } from "#app/components/apps/compose-operations.tsx";
 import { ComposeOutputSheet } from "#app/components/apps/compose-output-sheet.tsx";
-import { useServerAction } from "#app/hooks/use-server-action.ts";
+import { useComposeRun } from "#app/components/apps/use-compose-run.ts";
 
 export function ProjectActions({ project }: { project: string }) {
-  const router = useRouter();
-  const { run: report } = useServerAction();
-  const [confirmation, setConfirmation] = useState<DestructiveOperation | null>(null);
-  const [running, setRunning] = useState<AppOperation | null>(null);
-  const disabled = running !== null;
-
-  function run(operation: AppOperation) {
-    setConfirmation(null);
-    setRunning(operation);
-  }
-
-  // The command keeps running server-side after the sheet closes, so the outcome is
-  // reported from the stream's exit marker rather than from the panel being open.
-  const finished = useCallback(
-    (operation: AppOperation, code: number | null) => {
-      const label = actionLabel[operation];
-
-      report(
-        async () =>
-          code === 0
-            ? ActionResult.success(`${project} : la commande s’est terminée.`)
-            : ActionResult.failure(
-                code === null
-                  ? "Le flux de sortie a été interrompu."
-                  : `Docker Compose a terminé avec le code ${code}.`,
-              ),
-        {
-          success: `${label} terminé`,
-          error: code === null ? `${label} interrompu` : `${label} échoué`,
-        },
-        () => router.reload(),
-      );
-    },
-    [project, report, router],
-  );
+  const projects = useMemo(() => [project], [project]);
+  const { confirmation, setConfirmation, running, targets, run, disabled, close, finished } = useComposeRun(projects);
 
   const confirmationTitle = confirmation === "down" ? `Arrêter ${project} ?` : `Recréer ${project} ?`;
   const confirmationDescription =
@@ -68,11 +29,11 @@ export function ProjectActions({ project }: { project: string }) {
       />
 
       <ComposeOutputSheet
-        project={project}
+        projects={targets}
         operation={running}
         label={running ? actionLabel[running] : ""}
-        onClose={() => setRunning(null)}
-        onFinished={code => running && finished(running, code)}
+        onClose={close}
+        onFinished={finished}
       />
     </div>
   );

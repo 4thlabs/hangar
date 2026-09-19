@@ -2,7 +2,7 @@ import { Readable } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Lives here rather than beside the route: waku turns every file under `src/app/pages/` into a
-// route, test files included, which breaks the build. `docker-route.ts` next door is what the
+// route, test files included, which breaks the build. `api-route.ts` next door is what the
 // 401/404/503 assertions below actually exercise.
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock("#libs/docker/server", () => ({ docker: { openLogs: mocks.openLogs } }))
 vi.mock("#libs/hangar/server", () => ({ hangar: { runtime: mocks.runtime } }));
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
 
-const { DockerNotFoundError } = await import("#libs/docker/compose.ts");
+const { DockerNotFoundError } = await import("#libs/docker");
 const { GET } = await import("#app/pages/_api/api/docker/apps/[project]/containers/[container]/logs.ts");
 const context = { params: { project: "alpha", container: "a".repeat(64) } };
 

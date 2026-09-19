@@ -4,22 +4,28 @@ import { useEffect, useRef } from "react";
 import { composeExitCode } from "#app/actions/apps/compose-stream.ts";
 import { type AppOperation } from "#app/actions/apps/app-operation.ts";
 import { streamStatusLabel, useStreamText } from "#app/hooks/use-stream-text.ts";
+import { plural } from "#app/components/apps/format.ts";
 import { Badge } from "#app/components/ui/badge.tsx";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "#app/components/ui/sheet.tsx";
 
 type ComposeOutputSheetProps = {
-  project: string;
+  /** The apps the command runs over, in order. */
+  projects: string[];
   /** The running operation, or `null` when nothing runs and the sheet stays closed */
   operation: AppOperation | null;
   label: string;
   onClose: () => void;
-  /** Called once when the command finished, with its exit code (`null` if the stream broke) */
+  /** Called once when the command finished, with the number of failed apps (`null` if the stream broke) */
   onFinished: (code: number | null) => void;
 };
 
-export function ComposeOutputSheet({ project, operation, label, onClose, onFinished }: ComposeOutputSheetProps) {
+export function ComposeOutputSheet({ projects, operation, label, onClose, onFinished }: ComposeOutputSheetProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
-  const endpoint = operation ? `/api/docker/apps/${encodeURIComponent(project)}/compose?operation=${operation}` : null;
+  const subject = projects.length === 1 ? projects[0] : plural(projects.length, "application");
+  const endpoint =
+    operation && projects.length > 0
+      ? `/api/docker/apps/compose?operation=${operation}&projects=${projects.map(encodeURIComponent).join(",")}`
+      : null;
   const { text, status, error } = useStreamText(endpoint, "POST");
 
   // Follow the output, it is short-lived and always worth showing the tail of.
@@ -48,12 +54,13 @@ export function ComposeOutputSheet({ project, operation, label, onClose, onFinis
         <SheetHeader>
           <div className="flex flex-wrap items-center gap-2 pr-8">
             <SheetTitle>
-              {label} · {project}
+              {label} · {subject}
             </SheetTitle>
             <Badge variant={status === "error" ? "destructive" : "secondary"}>{streamStatusLabel[status]}</Badge>
           </div>
           <SheetDescription>
-            Sortie de Docker Compose en direct. Fermer ce panneau n’interrompt pas la commande.
+            Sortie de Docker Compose en direct. Fermer ce panneau n’interrompt rien : les commandes vont à leur terme
+            côté serveur et chacune dépose une notification.
           </SheetDescription>
         </SheetHeader>
 
