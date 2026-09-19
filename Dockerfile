@@ -40,8 +40,9 @@ ENV NODE_ENV=production \
     PUID=1000 \
     PGID=1000 \
     HOME=/app/data \
-    HANGAR_DATA_DIR=/app/data \
-    HANGAR_DB_HOST=/app/data/app-data/hangar/hangar.db
+    HANGAR_DATA_DIR=/app/data
+
+ENV HANGAR_DB_HOST=${HANGAR_DATA_DIR}/app-data/hangar/hangar.db
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
@@ -53,6 +54,7 @@ COPY src ./src
 COPY --chmod=755 docker-entrypoint.sh /
 
 VOLUME ["/app/data"]
+
 EXPOSE 3010
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
