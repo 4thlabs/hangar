@@ -68,26 +68,69 @@ export class Docker {
   /** What Hangar installed; read per call, so a freshly installed app shows up without a restart. */
   private readonly apps: InstalledApps;
 
+  /** Default {@link ttl}: long enough to cover one page's renders, short enough to feel live. */
+  private static readonly TTL = 5_000;
+
+  /** How long a settled sweep is served again, in milliseconds. */
+  private readonly ttl: number;
+
+  /** One entry per label filter. See {@link inspectContainers}. */
+  private readonly sweeps = new Map<string, { containers: Promise<ComposeContainerSource[]>; until: number }>();
+
   /**
    * @param docker An Engine API client; injected so the composition root owns the connection
    * @param apps The installed-app lookup, satisfied by `hangar.store`
+   * @param ttl How long a container sweep is reused; injected so a test can drive it
    */
-  constructor(docker: Dockerode, apps: InstalledApps) {
+  constructor(docker: Dockerode, apps: InstalledApps, ttl = Docker.TTL) {
     this.docker = docker;
     this.apps = apps;
+    this.ttl = ttl;
   }
 
   /**
    * Lists every Compose-labeled container, or just one project's, in both API views. The daemon
    * applies the label filter itself, and an inspect costs a few milliseconds over the socket, so
    * they all go out at once.
+   *
+   * Cached per label filter, because this is `1 + N` round trips and nothing above it is cheap
+   * about asking: the apps page re-renders itself every 30 seconds, per open tab. A sweep still
+   * in flight never expires, so concurrent callers share one — that part is free, staleness only
+   * begins once it has settled. A failed sweep is dropped rather than cached.
+   *
    * @param project When set, only that Compose project's containers
    */
   private async inspectContainers(project?: string): Promise<ComposeContainerSource[]> {
     const label = project ? `${ComposeProjects.LABEL.project}=${project}` : ComposeProjects.LABEL.project;
-    const listed = await this.docker.listContainers({ all: true, filters: { label: [label] } });
+    const cached = this.sweeps.get(label);
 
-    return Promise.all(listed.map(async info => ({ info, detail: await this.docker.getContainer(info.Id).inspect() })));
+    if (cached && Date.now() < cached.until) return cached.containers;
+
+    const containers = (async () => {
+      const listed = await this.docker.listContainers({ all: true, filters: { label: [label] } });
+
+      return Promise.all(
+        listed.map(async info => ({ info, detail: await this.docker.getContainer(info.Id).inspect() })),
+      );
+    })();
+
+    const sweep = { containers, until: Number.POSITIVE_INFINITY };
+    this.sweeps.set(label, sweep);
+
+    containers.then(
+      () => (sweep.until = Date.now() + this.ttl),
+      () => this.sweeps.delete(label),
+    );
+
+    return containers;
+  }
+
+  /**
+   * Drops every cached container sweep. Called after a Compose command, which is the one moment
+   * the page behind it is guaranteed to ask again and must not be told what was true before.
+   */
+  invalidate() {
+    this.sweeps.clear();
   }
 
   /**
@@ -169,7 +212,12 @@ export class Docker {
     };
   }
 
-  /** Lists every app Hangar installed, as lightweight summaries of their Docker state. */
+  /**
+   * Lists every app Hangar installed, as lightweight summaries of their Docker state.
+   * ponytail: the sweep is unfiltered, so it inspects every Compose container on the host and
+   * throws away the ones Hangar did not install. Filter the daemon-side label query by
+   * `installedProjectIds()` if N ever hurts more than the cache absorbs.
+   */
   async listProjects(): Promise<ComposeProjectsSnapshot> {
     const compose = new ComposeProjects(await this.inspectContainers());
 

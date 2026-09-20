@@ -310,3 +310,56 @@ describe("Docker.overview", () => {
     expect(overview.volumes).toEqual({ total: 0, inUse: 0, unused: 0 });
   });
 });
+
+describe("Docker container sweeps", () => {
+  it("serves one daemon sweep to concurrent callers and to the next render", async () => {
+    givenContainers([container()]);
+    const docker = client("alpha");
+
+    await Promise.all([docker.listProjects(), docker.listProjects()]);
+    await docker.listProjects();
+
+    expect(dockerMock.listContainers).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps one project's sweep apart from the whole host's", async () => {
+    givenContainers([container()]);
+    const docker = client("alpha");
+
+    await docker.listProjects();
+    await docker.projectDetail("alpha");
+
+    expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks again once the sweep has expired", async () => {
+    givenContainers([container()]);
+    const docker = new Docker(fakeDockerode(), fakeApps("alpha"), 0);
+
+    await docker.listProjects();
+    await docker.listProjects();
+
+    expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks again after a Compose command invalidates it", async () => {
+    givenContainers([container()]);
+    const docker = client("alpha");
+
+    await docker.listProjects();
+    docker.invalidate();
+    await docker.listProjects();
+
+    expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cache a failed sweep", async () => {
+    const docker = client("alpha");
+    dockerMock.listContainers.mockRejectedValueOnce(new Error("socket gone"));
+
+    await expect(docker.listProjects()).rejects.toThrow("socket gone");
+    givenContainers([container()]);
+
+    await expect(docker.listProjects()).resolves.toMatchObject({ projects: [{ name: "alpha" }] });
+  });
+});

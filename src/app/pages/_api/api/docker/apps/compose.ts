@@ -4,6 +4,7 @@ import { actionLabel, isAppOperation, operationOutcome } from "#app/actions/apps
 import { appOperationArguments, refuseAppOperation } from "#app/actions/apps/app-operations.ts";
 import { COMPOSE_EXIT_MARKER } from "#app/actions/apps/compose-stream.ts";
 import { apiError, apiRoute, apiStream } from "#app/api/api-route.ts";
+import { docker } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { notifications } from "#libs/notifications/server";
@@ -55,6 +56,9 @@ export const POST = apiRoute(
       for (const project of projects) {
         output.write(`\n$ docker compose ${appOperationArguments[operation].join(" ")} — ${project}\n`);
 
+        // The client reloads the page the moment this batch ends, and a sweep cached before the
+        // command would hand it back exactly the state the command just changed. Unconditional:
+        // a compose run that fails half-way still leaves containers it did start.
         try {
           await hangar.store.compose(project, [...appOperationArguments[operation]], { pipe: output });
           await notifications.notify({
@@ -74,6 +78,8 @@ export const POST = apiRoute(
             description: `La commande Docker Compose a échoué pour ${project}. ${SERVER_LOG_HINT}`,
             href: `/apps/${project}`,
           });
+        } finally {
+          docker.invalidate();
         }
       }
 
