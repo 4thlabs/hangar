@@ -2,7 +2,7 @@ import type { JellyfinItem } from "./api/client.ts";
 import { createJellyfinClient } from "./api/client.ts";
 import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
-import { WidgetCard, WidgetContent, WidgetEmptyState, WidgetHeader } from "../shared/index.ts";
+import { WidgetCard, WidgetContent, WidgetEmptyState, WidgetHeader, widgetImageUrl } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
 /** How many posters the row holds. */
@@ -60,7 +60,7 @@ export function JellyfinLatestCard({ items, serviceUrl }: JellyfinLatestCardProp
                 >
                   {/* Relayed by Hangar: a direct Jellyfin poster URL carries the API key. */}
                   <img
-                    src={`/api/jellyfin/poster/${encodeURIComponent(item.id)}`}
+                    src={widgetImageUrl("jellyfin-latest", item.id)}
                     alt=""
                     loading="lazy"
                     className="aspect-2/3 w-full rounded-sm bg-muted object-cover"

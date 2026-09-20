@@ -46,7 +46,7 @@ describe("JellyfinLatestCard", () => {
   it("relays posters through Hangar and links the visitor to Jellyfin", () => {
     const html = renderToStaticMarkup(<JellyfinLatestCard items={items} serviceUrl="https://jellyfin.test.local" />);
 
-    expect(html).toContain('src="/api/jellyfin/poster/series-9"');
+    expect(html).toContain('src="/api/widgets/jellyfin-latest/image/series-9"');
     expect(html).toContain("https://jellyfin.test.local/web/#/details?id=series-9");
   });
 
@@ -88,7 +88,7 @@ describe("jellyfinLatest", () => {
     ]);
     // The whole reason the poster is proxied: the key must not reach the page.
     expect(html).not.toContain("s3cret");
-    expect(html).toContain("/api/jellyfin/poster/m-1");
+    expect(html).toContain("/api/widgets/jellyfin-latest/image/m-1");
   });
 
   it("degrades to the error card when the configured user does not exist", async () => {

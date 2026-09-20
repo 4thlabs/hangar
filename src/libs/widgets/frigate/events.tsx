@@ -11,6 +11,7 @@ import {
   WidgetListItem,
   WidgetMetadata,
   formatRelativeTime,
+  widgetImageUrl,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
@@ -55,7 +56,9 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
           <WidgetList>
             {events.map(event => {
               const eventUrl = `${serviceUrl}/explore?event_id=${encodeURIComponent(event.id)}`;
-              const thumbnailUrl = `${serviceUrl}/api/events/${encodeURIComponent(event.id)}/thumbnail.jpg`;
+              // Relayed by Hangar: the public Frigate host sits behind the OIDC middleware, which
+              // answers an `<img>` with a login redirect rather than a picture.
+              const thumbnailUrl = widgetImageUrl("frigate-events", event.id);
               const eventDate = new Date(event.start_time * 1_000);
 
               return (
@@ -101,8 +104,9 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
  * The latest camera events, and the link into Frigate itself.
  *
  * `link` reaches further here than in other cards: beyond the header link it also builds every
- * per-event deep link and every thumbnail `<img>` source, all of which the visitor's browser
- * resolves and none of which can point at the container network.
+ * per-event deep link, which the visitor's browser resolves and so cannot point at the container
+ * network. Thumbnails go the other way, through Hangar's own relay: an `<img>` cannot answer the
+ * OIDC challenge the public host puts in front of the API.
  */
 export const frigateEvents = (service: WidgetService) =>
   defineWidget({
