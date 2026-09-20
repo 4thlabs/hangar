@@ -13,28 +13,42 @@ const jellyfinIcon = <IconSelfh name="jellyfin" />;
 
 /** One poster, already resolved to what the card shows. */
 export type LatestItem = {
-  /** The item the poster and the link point at — the series, for an episode. */
+  /** The item the link points at — the series, for an episode. */
   id: string;
+  /** The item whose poster to ask for, or nothing: plenty of libraries have items with no art. */
+  imageId: string | undefined;
   title: string;
   subtitle: string | undefined;
 };
 
 /**
+ * Which item carries the poster.
+ *
+ * Not the item the card links to: an episode has its own still while the card points at the show,
+ * and an album with no cover of its own borrows the one Jellyfin resolved for its parent. Asking
+ * for a poster Jellyfin never had is a 404 and a broken image, so `ImageTags` decides.
+ */
+const imageOf = (item: JellyfinItem) => (item.ImageTags?.Primary ? item.Id : item.ParentPrimaryImageItemId);
+
+/**
  * What a library item looks like on the card.
  *
  * An episode resolves to its series: "latest" lists episodes, but a row of ten stills from the
- * same show is noise where one poster is the answer. Glance's widget makes the same substitution.
+ * same show is noise where one poster is the answer. Glance's widget makes the same substitution
+ * — and so does Jellyfin itself, which returns the series outright when items are grouped.
  */
 export function displayItem(item: JellyfinItem): LatestItem {
+  const imageId = imageOf(item);
+
   if (item.Type === "Episode") {
-    return { id: item.SeriesId ?? item.Id, title: item.SeriesName ?? item.Name, subtitle: undefined };
+    return { id: item.SeriesId ?? item.Id, imageId, title: item.SeriesName ?? item.Name, subtitle: undefined };
   }
 
   if (item.Type === "MusicAlbum") {
-    return { id: item.Id, title: item.Name, subtitle: item.AlbumArtist };
+    return { id: item.Id, imageId, title: item.Name, subtitle: item.AlbumArtist };
   }
 
-  return { id: item.Id, title: item.Name, subtitle: item.ProductionYear?.toString() };
+  return { id: item.Id, imageId, title: item.Name, subtitle: item.ProductionYear?.toString() };
 }
 
 type JellyfinLatestCardProps = {
@@ -58,13 +72,18 @@ export function JellyfinLatestCard({ items, serviceUrl }: JellyfinLatestCardProp
                   rel="noreferrer"
                   className="group block"
                 >
-                  {/* Relayed by Hangar: a direct Jellyfin poster URL carries the API key. */}
-                  <img
-                    src={widgetImageUrl("jellyfin-latest", item.id)}
-                    alt=""
-                    loading="lazy"
-                    className="aspect-2/3 w-full rounded-sm bg-muted object-cover"
-                  />
+                  {/* Relayed by Hangar: a direct Jellyfin poster URL carries the API key. An item
+                      with no artwork keeps the frame, which is what Jellyfin's own library shows. */}
+                  {item.imageId ? (
+                    <img
+                      src={widgetImageUrl("jellyfin-latest", item.imageId)}
+                      alt=""
+                      loading="lazy"
+                      className="aspect-2/3 w-full rounded-sm bg-muted object-cover"
+                    />
+                  ) : (
+                    <div className="aspect-2/3 w-full rounded-sm bg-muted" />
+                  )}
                   <p className="mt-1 truncate text-xs font-medium text-primary group-hover:underline">{item.title}</p>
                   {item.subtitle && <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>}
                 </a>

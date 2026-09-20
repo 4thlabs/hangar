@@ -20,9 +20,15 @@ describe("displayItem", () => {
       Type: "Episode",
       SeriesId: "series-9",
       SeriesName: "Severance",
+      ImageTags: { Primary: "tag" },
     };
 
-    expect(displayItem(episode)).toEqual({ id: "series-9", title: "Severance", subtitle: undefined });
+    expect(displayItem(episode)).toEqual({
+      id: "series-9",
+      imageId: "ep-1",
+      title: "Severance",
+      subtitle: undefined,
+    });
   });
 
   it("falls back to the episode itself when Jellyfin reports no series", () => {
@@ -30,6 +36,14 @@ describe("displayItem", () => {
       id: "ep-1",
       title: "Chapter One",
     });
+  });
+
+  it("asks for no poster when the item has none, and borrows the parent's when it has one", () => {
+    // A series Jellyfin never found art for: asking anyway is a 404 and a broken image.
+    expect(displayItem({ Id: "s-1", Name: "Drifters", Type: "Series", ImageTags: {} }).imageId).toBeUndefined();
+    expect(
+      displayItem({ Id: "a-1", Name: "Rumours", Type: "MusicAlbum", ParentPrimaryImageItemId: "artist-3" }).imageId,
+    ).toBe("artist-3");
   });
 
   it("credits an album to its artist and a movie to its year", () => {
@@ -41,13 +55,26 @@ describe("displayItem", () => {
 });
 
 describe("JellyfinLatestCard", () => {
-  const items = [{ id: "series-9", title: "Severance", subtitle: undefined }];
+  const items = [{ id: "series-9", imageId: "ep-1", title: "Severance", subtitle: undefined }];
 
   it("relays posters through Hangar and links the visitor to Jellyfin", () => {
     const html = renderToStaticMarkup(<JellyfinLatestCard items={items} serviceUrl="https://jellyfin.test.local" />);
 
-    expect(html).toContain('src="/api/widgets/jellyfin-latest/image/series-9"');
+    expect(html).toContain('src="/api/widgets/jellyfin-latest/image/ep-1"');
     expect(html).toContain("https://jellyfin.test.local/web/#/details?id=series-9");
+  });
+
+  it("keeps the frame, without an <img>, for an item Jellyfin has no art for", () => {
+    const html = renderToStaticMarkup(
+      <JellyfinLatestCard
+        items={[{ id: "s-1", imageId: undefined, title: "Drifters", subtitle: undefined }]}
+        serviceUrl="https://jellyfin.test.local"
+      />,
+    );
+
+    expect(html).toContain("Drifters");
+    // The widget icon is an <img> of its own, so it is the relay that must not be asked.
+    expect(html).not.toContain("/api/widgets/jellyfin-latest/image/");
   });
 
   it("says so when a library has nothing new", () => {
@@ -77,7 +104,7 @@ describe("jellyfinLatest", () => {
         { Id: "u-1", Name: "someone-else" },
         { Id: "u-2", Name: "thomas" },
       ],
-      [{ Id: "m-1", Name: "Dune", Type: "Movie", ProductionYear: 2021 }],
+      [{ Id: "m-1", Name: "Dune", Type: "Movie", ProductionYear: 2021, ImageTags: { Primary: "tag" } }],
     );
 
     const html = renderToStaticMarkup(<>{await jellyfinLatest(service, "thomas").Widget()}</>);

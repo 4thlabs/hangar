@@ -24,6 +24,10 @@ export interface JellyfinItem {
   SeriesName?: string;
   AlbumArtist?: string;
   ProductionYear?: number;
+  /** Which images the item carries. An item with no `Primary` has no poster to ask for. */
+  ImageTags?: Record<string, string>;
+  /** Where the poster lives when the item has none of its own — an album's, a season's. */
+  ParentPrimaryImageItemId?: string;
 }
 
 /** What "latest" means here: the media types the carousel mixes, as Glance's widget does. */
