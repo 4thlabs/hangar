@@ -180,10 +180,14 @@ export class HangarStore {
       throw new HangarRuntimeError(1, `Failed to find project: ${stack}`);
     }
 
+    // `-p` pins the project to the stack name: the compose file's `name:` is a display label
+    // ("Home Assistant"), and compose would derive the project from it by dropping everything
+    // outside [a-z0-9_-] ("homeassistant"), so its containers no longer match the installed app.
     // prettier-ignore
     return this.runtime.run("docker", [
       "compose",
       "--env-file", this.env.file(),
+      "-p", stack,
       "-f", compose,
       ...args,
     ], options);

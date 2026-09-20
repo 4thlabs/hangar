@@ -329,6 +329,31 @@ describe("HangarStore.compose", () => {
         "compose",
         "--env-file",
         path.join(store.dataPath, ".env.global"),
+        "-p",
+        "alpha-app",
+        "-f",
+        path.join(store.installedPath, "alpha-app", "compose.yml"),
+        "up",
+        "-d",
+      ],
+      undefined,
+    );
+  });
+
+  it("pins the project name to the stack, not the compose file's display name", async () => {
+    const { store, runtime } = await withStacks("alpha-app");
+    await writeFile(path.join(store.installedPath, "alpha-app", "compose.yml"), "name: Alpha App\nservices: {}\n");
+
+    await store.compose("alpha-app", ["up", "-d"]);
+
+    expect(runtime.run).toHaveBeenCalledWith(
+      "docker",
+      [
+        "compose",
+        "--env-file",
+        path.join(store.dataPath, ".env.global"),
+        "-p",
+        "alpha-app",
         "-f",
         path.join(store.installedPath, "alpha-app", "compose.yml"),
         "up",
