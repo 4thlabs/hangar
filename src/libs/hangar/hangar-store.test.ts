@@ -329,6 +329,8 @@ describe("HangarStore.compose", () => {
         "compose",
         "--env-file",
         path.join(store.dataPath, ".env.global"),
+        "-p",
+        "alpha-app",
         "-f",
         path.join(store.installedPath, "alpha-app", "compose.yml"),
         "up",
@@ -336,6 +338,16 @@ describe("HangarStore.compose", () => {
       ],
       undefined,
     );
+  });
+
+  it("pins the project name to the stack, not the compose file's display name", async () => {
+    const { store, runtime } = await withStacks("alpha-app");
+    await writeFile(path.join(store.installedPath, "alpha-app", "compose.yml"), "name: Alpha App\nservices: {}\n");
+
+    await store.compose("alpha-app", ["up", "-d"]);
+
+    const args = runtime.run.mock.calls[0]?.[1] ?? [];
+    expect(args[args.indexOf("-p") + 1]).toBe("alpha-app");
   });
 
   it("reverses the order for down", async () => {
