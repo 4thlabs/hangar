@@ -50,7 +50,7 @@ describe("FrigateEventsCard", () => {
     expect(html).toContain("front door");
     expect(html).toContain("garden");
     expect(html).toContain("2 minutes ago");
-    expect(html).toContain("https://frigate.example.com/api/events/1699999880.0-person/thumbnail.jpg");
+    expect(html).toContain('src="/api/widgets/frigate-events/image/1699999880.0-person"');
     expect(html).toContain("https://frigate.example.com/explore?event_id=1699999880.0-person");
   });
 
@@ -60,7 +60,7 @@ describe("FrigateEventsCard", () => {
     );
 
     expect(html).toContain("No recent events.");
-    expect(html).not.toContain("thumbnail.jpg");
+    expect(html).not.toContain("/api/widgets/frigate-events/image/");
   });
 
   it("calls the container but points the browser at the public host", async () => {
@@ -89,7 +89,7 @@ describe("FrigateEventsCard", () => {
     expect(called.every(request => request.url.startsWith("http://frigate:5000/api/"))).toBe(true);
     // The key the operator put in .env.global has to reach the request, not just the factory.
     expect(called.map(request => request.headers.get("x-api-key"))).toEqual(["s3cret", "s3cret"]);
-    expect(html).toContain("https://frigate.test.local/api/events/");
+    expect(html).toContain('src="/api/widgets/frigate-events/image/');
     expect(html).toContain("https://frigate.test.local/explore?event_id=");
     expect(html).not.toContain("frigate:5000");
   });

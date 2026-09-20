@@ -46,7 +46,7 @@ describe("JellyfinLatestCard", () => {
   it("relays posters through Hangar and links the visitor to Jellyfin", () => {
     const html = renderToStaticMarkup(<JellyfinLatestCard items={items} serviceUrl="https://jellyfin.test.local" />);
 
-    expect(html).toContain('src="/api/jellyfin/poster/series-9"');
+    expect(html).toContain('src="/api/widgets/jellyfin-latest/image/series-9"');
     expect(html).toContain("https://jellyfin.test.local/web/#/details?id=series-9");
   });
 
@@ -63,7 +63,7 @@ describe("jellyfinLatest", () => {
 
     vi.stubGlobal("fetch", (request: Request) => {
       called.push(request.url);
-      const body = request.url.includes("/Users/") ? latest : users;
+      const body = request.url.includes("/Items/Latest") ? latest : users;
 
       return Promise.resolve(new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } }));
     });
@@ -84,11 +84,11 @@ describe("jellyfinLatest", () => {
 
     expect(called).toEqual([
       "http://jellyfin:8096/Users",
-      "http://jellyfin:8096/Users/u-2/Items/Latest?Limit=10&IncludeItemTypes=Movie%2CEpisode%2CMusicAlbum&GroupItems=true",
+      "http://jellyfin:8096/Items/Latest?userId=u-2&limit=10&includeItemTypes=Movie%2CEpisode%2CMusicAlbum&groupItems=true",
     ]);
     // The whole reason the poster is proxied: the key must not reach the page.
     expect(html).not.toContain("s3cret");
-    expect(html).toContain("/api/jellyfin/poster/m-1");
+    expect(html).toContain("/api/widgets/jellyfin-latest/image/m-1");
   });
 
   it("degrades to the error card when the configured user does not exist", async () => {

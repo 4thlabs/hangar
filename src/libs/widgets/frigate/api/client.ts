@@ -32,5 +32,8 @@ export async function createFrigateClient(service: WidgetService) {
 
     /** Gets Frigate runtime statistics. */
     getStats: () => client.get<FrigateStats>("stats").json(),
+
+    /** Fetches one event's thumbnail as raw bytes, for Hangar to relay. */
+    getThumbnail: (eventId: string) => client.get(`events/${eventId}/thumbnail.jpg`),
   };
 }

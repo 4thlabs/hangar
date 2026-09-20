@@ -33,10 +33,17 @@ const MEDIA_TYPES = "Movie,Episode,MusicAlbum";
  * Talks to one Jellyfin server.
  *
  * Two things set Jellyfin apart from the other services here: it serves its API at the root
- * rather than under `/api`, and it rejects `X-API-Key` — the key goes in `X-Emby-Token`.
+ * rather than under `/api`, and it takes no key header of its own — since 12.0 the only scheme
+ * left is `Authorization: MediaBrowser Token="..."`, the legacy `X-Emby-Token` and `api_key`
+ * having been dropped, so an otherwise valid key sent the old way answers 401 on every call.
  */
 export async function createJellyfinClient(service: WidgetService) {
-  const client = await serviceClient(service, { prefix: "", apiKeyHeader: "X-Emby-Token" });
+  const token = async () => {
+    const key = await service.apiKey();
+
+    return key === undefined ? undefined : `MediaBrowser Token="${key}"`;
+  };
+  const client = await serviceClient({ ...service, apiKey: token }, { prefix: "", apiKeyHeader: "Authorization" });
 
   return {
     /** Gets the server-wide library totals. */
@@ -49,12 +56,13 @@ export async function createJellyfinClient(service: WidgetService) {
      * Gets the newest items across every library for one user.
      *
      * Per-user on purpose, and not a detail we can skip: Jellyfin's "latest" is scoped to what
-     * that user may see, so there is no server-wide answer to ask for.
+     * that user may see, so there is no server-wide answer to ask for — 12.0 moved that scope
+     * from the path (`Users/{id}/Items/Latest`, now gone) to the `userId` parameter.
      */
     getLatest: (userId: string, limit: number) =>
       client
-        .get<JellyfinItem[]>(`Users/${userId}/Items/Latest`, {
-          searchParams: { Limit: limit, IncludeItemTypes: MEDIA_TYPES, GroupItems: "true" },
+        .get<JellyfinItem[]>("Items/Latest", {
+          searchParams: { userId, limit, includeItemTypes: MEDIA_TYPES, groupItems: "true" },
         })
         .json(),
 
