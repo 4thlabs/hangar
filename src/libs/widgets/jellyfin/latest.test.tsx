@@ -63,7 +63,7 @@ describe("jellyfinLatest", () => {
 
     vi.stubGlobal("fetch", (request: Request) => {
       called.push(request.url);
-      const body = request.url.includes("/Users/") ? latest : users;
+      const body = request.url.includes("/Items/Latest") ? latest : users;
 
       return Promise.resolve(new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } }));
     });
@@ -84,7 +84,7 @@ describe("jellyfinLatest", () => {
 
     expect(called).toEqual([
       "http://jellyfin:8096/Users",
-      "http://jellyfin:8096/Users/u-2/Items/Latest?Limit=10&IncludeItemTypes=Movie%2CEpisode%2CMusicAlbum&GroupItems=true",
+      "http://jellyfin:8096/Items/Latest?userId=u-2&limit=10&includeItemTypes=Movie%2CEpisode%2CMusicAlbum&groupItems=true",
     ]);
     // The whole reason the poster is proxied: the key must not reach the page.
     expect(html).not.toContain("s3cret");

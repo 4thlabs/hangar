@@ -18,9 +18,9 @@ describe("JellyfinStatsCard", () => {
     expect(html).toContain("https://jellyfin.test.local");
   });
 
-  it("calls Jellyfin at the root with an Emby token, not /api with X-API-Key", async () => {
-    // Jellyfin serves its API at the root and rejects X-API-Key; both are easy to get wrong
-    // because every other service here does the opposite.
+  it("calls Jellyfin at the root with a MediaBrowser token, not /api with X-API-Key", async () => {
+    // Jellyfin serves its API at the root and takes its key as `Authorization: MediaBrowser
+    // Token="..."`; both are easy to get wrong because every other service here does the opposite.
     const called: Request[] = [];
 
     vi.stubGlobal("fetch", (request: Request) => {
@@ -36,8 +36,9 @@ describe("JellyfinStatsCard", () => {
     const html = renderToStaticMarkup(<>{await Widget()}</>);
 
     expect(called.map(request => request.url)).toEqual(["http://jellyfin:8096/Items/Counts"]);
-    expect(called[0]?.headers.get("x-emby-token")).toBe("s3cret");
+    expect(called[0]?.headers.get("authorization")).toBe('MediaBrowser Token="s3cret"');
     expect(called[0]?.headers.get("x-api-key")).toBeNull();
+    expect(called[0]?.headers.get("x-emby-token")).toBeNull();
     expect(html).not.toContain("jellyfin:8096");
   });
 
