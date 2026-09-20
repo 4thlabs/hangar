@@ -20,7 +20,7 @@ services:
       - default
       - servarr
     labels:
-      - traefik.enabled=true
+      - traefik.enable=true
 
 networks:
   default:
