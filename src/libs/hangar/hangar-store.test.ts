@@ -346,8 +346,21 @@ describe("HangarStore.compose", () => {
 
     await store.compose("alpha-app", ["up", "-d"]);
 
-    const args = runtime.run.mock.calls[0]?.[1] ?? [];
-    expect(args[args.indexOf("-p") + 1]).toBe("alpha-app");
+    expect(runtime.run).toHaveBeenCalledWith(
+      "docker",
+      [
+        "compose",
+        "--env-file",
+        path.join(store.dataPath, ".env.global"),
+        "-p",
+        "alpha-app",
+        "-f",
+        path.join(store.installedPath, "alpha-app", "compose.yml"),
+        "up",
+        "-d",
+      ],
+      undefined,
+    );
   });
 
   it("reverses the order for down", async () => {
