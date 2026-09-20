@@ -27,7 +27,7 @@ FROM node:24-alpine AS runner
 
 # Package versions are coupled to the Alpine base repository.
 # hadolint ignore=DL3018
-RUN apk add --no-cache docker-cli docker-cli-compose git setpriv
+RUN apk add --no-cache docker-cli docker-cli-compose git
 
 WORKDIR /app
 
@@ -60,5 +60,5 @@ EXPOSE 3010
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["wget", "--quiet", "--spider", "http://127.0.0.1:3010/login"]
 
-# Starts as root to take the data directory, then hands off as PUID:PGID - see the entrypoint.
+# Runs as root; PUID:PGID are passed through to the stacks - see the entrypoint.
 ENTRYPOINT ["/docker-entrypoint.sh"]
