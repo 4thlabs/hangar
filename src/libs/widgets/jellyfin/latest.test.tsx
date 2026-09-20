@@ -85,6 +85,9 @@ describe("JellyfinLatestCard", () => {
 });
 
 describe("jellyfinLatest", () => {
+  /** How many posters the rendered row holds; every cell is one `snap-start` list item. */
+  const cells = (html: string) => html.split("snap-start").length - 1;
+
   const stub = (users: unknown, latest: unknown) => {
     const called: string[] = [];
 
@@ -111,11 +114,39 @@ describe("jellyfinLatest", () => {
 
     expect(called).toEqual([
       "http://jellyfin:8096/Users",
-      "http://jellyfin:8096/Items/Latest?userId=u-2&limit=10&includeItemTypes=Movie%2CEpisode%2CMusicAlbum&groupItems=true",
+      "http://jellyfin:8096/Items/Latest?userId=u-2&limit=100&includeItemTypes=Movie%2CEpisode%2CMusicAlbum&groupItems=true&enableImageTypes=Primary",
     ]);
     // The whole reason the poster is proxied: the key must not reach the page.
     expect(html).not.toContain("s3cret");
     expect(html).toContain("/api/widgets/jellyfin-latest/image/m-1");
+  });
+
+  it("fills the row from an over-fetched list, because Jellyfin groups after it cuts", async () => {
+    // The bug this widget shipped with: the limit was the row length, so a run of episodes from
+    // one series grouped down to a single cell. Asking for ten times as many is what leaves
+    // enough behind, and the trimming happens here.
+    const many = Array.from({ length: 25 }, (_, index) => ({
+      Id: `m-${index}`,
+      Name: `Film ${index}`,
+      Type: "Movie",
+      ImageTags: { Primary: "tag" },
+    }));
+    stub([{ Id: "u-2", Name: "thomas" }], many);
+
+    const html = renderToStaticMarkup(<>{await jellyfinLatest(service, "thomas").Widget()}</>);
+
+    expect(cells(html)).toBe(10);
+    expect(html).toContain("Film 0");
+    expect(html).not.toContain("Film 10");
+  });
+
+  it("counts two episodes of one series once, so the row keys stay unique", async () => {
+    const episode = (Id: string) => ({ Id, Name: Id, Type: "Episode", SeriesId: "s-1", SeriesName: "Severance" });
+    stub([{ Id: "u-2", Name: "thomas" }], [episode("ep-1"), episode("ep-2")]);
+
+    const html = renderToStaticMarkup(<>{await jellyfinLatest(service, "thomas").Widget()}</>);
+
+    expect(cells(html)).toBe(1);
   });
 
   it("degrades to the error card when the configured user does not exist", async () => {

@@ -2,6 +2,7 @@ import type { JellyfinItem } from "./api/client.ts";
 import { createJellyfinClient } from "./api/client.ts";
 import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
+import { ScrollArea } from "#app/components/ui/scroll-area.tsx";
 import { WidgetCard, WidgetContent, WidgetEmptyState, WidgetHeader, widgetImageUrl } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
@@ -63,33 +64,37 @@ export function JellyfinLatestCard({ items, serviceUrl }: JellyfinLatestCardProp
 
       <WidgetContent>
         {items.length > 0 ? (
-          <ul className="flex snap-x gap-3 overflow-x-auto pb-1">
-            {items.map(item => (
-              <li key={item.id} className="w-28 shrink-0 snap-start">
-                <a
-                  href={`${serviceUrl}/web/#/details?id=${encodeURIComponent(item.id)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group block"
-                >
-                  {/* Relayed by Hangar: a direct Jellyfin poster URL carries the API key. An item
-                      with no artwork keeps the frame, which is what Jellyfin's own library shows. */}
-                  {item.imageId ? (
-                    <img
-                      src={widgetImageUrl("jellyfin-latest", item.imageId)}
-                      alt=""
-                      loading="lazy"
-                      className="aspect-2/3 w-full rounded-sm bg-muted object-cover"
-                    />
-                  ) : (
-                    <div className="aspect-2/3 w-full rounded-sm bg-muted" />
-                  )}
-                  <p className="mt-1 truncate text-xs font-medium text-primary group-hover:underline">{item.title}</p>
-                  {item.subtitle && <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>}
-                </a>
-              </li>
-            ))}
-          </ul>
+          // The viewport owns the scrolling, so the row itself no longer sets `overflow-x`. The
+          // padding is what the scrollbar sits in, below the titles rather than over them.
+          <ScrollArea orientation="horizontal" className="w-full">
+            <ul className="flex snap-x gap-3 pb-3">
+              {items.map(item => (
+                <li key={item.id} className="w-28 shrink-0 snap-start">
+                  <a
+                    href={`${serviceUrl}/web/#/details?id=${encodeURIComponent(item.id)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="group block"
+                  >
+                    {/* Relayed by Hangar: a direct Jellyfin poster URL carries the API key. An item
+                        with no artwork keeps the frame, which is what Jellyfin's own library shows. */}
+                    {item.imageId ? (
+                      <img
+                        src={widgetImageUrl("jellyfin-latest", item.imageId)}
+                        alt=""
+                        loading="lazy"
+                        className="aspect-2/3 w-full rounded-sm bg-muted object-cover"
+                      />
+                    ) : (
+                      <div className="aspect-2/3 w-full rounded-sm bg-muted" />
+                    )}
+                    <p className="mt-1 truncate text-xs font-medium text-primary group-hover:underline">{item.title}</p>
+                    {item.subtitle && <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </ScrollArea>
         ) : (
           <WidgetEmptyState>No items found.</WidgetEmptyState>
         )}
@@ -118,7 +123,13 @@ export const jellyfinLatest = (service: WidgetService, user: string) =>
       // Naming the operator's own typo beats an error card that says only "could not be loaded".
       if (!account) throw new Error(`No Jellyfin user named ${user}`);
 
-      return (await client.getLatest(account.Id, ITEM_COUNT)).map(displayItem);
+      const items = (await client.getLatest(account.Id, ITEM_COUNT)).map(displayItem);
+
+      // The client over-fetches, because Jellyfin groups only after it has cut the list, so the
+      // row is trimmed here instead. The dedupe is for the React key rather than for a bug on
+      // record: a grouped response still carries the odd bare episode, and two from one series
+      // would both resolve to that series id. Nothing in the current library collides.
+      return [...new Map(items.map(item => [item.id, item])).values()].slice(0, ITEM_COUNT);
     },
     render: (items: LatestItem[]) => <JellyfinLatestCard items={items} serviceUrl={service.link} />,
   });

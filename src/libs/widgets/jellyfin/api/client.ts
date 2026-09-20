@@ -34,6 +34,16 @@ export interface JellyfinItem {
 const MEDIA_TYPES = "Movie,Episode,MusicAlbum";
 
 /**
+ * How many raw items to ask for per item wanted.
+ *
+ * Jellyfin applies `limit` *before* `groupItems`, so a run of episodes from one series collapses
+ * into a single row after the cut: asking for ten returned exactly one here, the whole reason
+ * this exists. Measured against a real library — ten raw items grouped to 1, sixty to 10, a
+ * hundred to 43. Ten per item wanted leaves room for a season added in one go.
+ */
+const OVERFETCH = 10;
+
+/**
  * Talks to one Jellyfin server.
  *
  * Two things set Jellyfin apart from the other services here: it serves its API at the root
@@ -66,7 +76,16 @@ export async function createJellyfinClient(service: WidgetService) {
     getLatest: (userId: string, limit: number) =>
       client
         .get<JellyfinItem[]>("Items/Latest", {
-          searchParams: { userId, limit, includeItemTypes: MEDIA_TYPES, groupItems: "true" },
+          searchParams: {
+            userId,
+            // Grouping happens after the cut, so the caller trims what comes back. See OVERFETCH.
+            limit: limit * OVERFETCH,
+            includeItemTypes: MEDIA_TYPES,
+            groupItems: "true",
+            // Not a fix, a trim: the response carries a tag per image type and the card reads
+            // only the poster. Worth the parameter now that the limit is ten times what it was.
+            enableImageTypes: "Primary",
+          },
         })
         .json(),
 
