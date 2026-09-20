@@ -5,10 +5,15 @@ import { widgetHost } from "#libs/widgets/server";
 
 const COLUMNS: readonly DashboardColumn[] = [1, 2, 3];
 
+// `min-w-0` is load-bearing: a grid item's automatic minimum size is its min-content width, and
+// the Jellyfin row of ten posters measures ~1228px there. Without it the column refuses to go
+// below that, the track grows to match and the whole page scrolls sideways instead of the row
+// scrolling inside its own card. `minmax(0, …)` on the template does not help — the floor belongs
+// to the item, not the track.
 const COLUMN_CLASSNAME: Record<DashboardColumn, string> = {
-  1: "flex flex-col gap-4 md:col-start-1",
-  2: "flex flex-col gap-4 md:col-start-2",
-  3: "flex flex-col gap-4 md:col-start-2 xl:col-start-3",
+  1: "flex min-w-0 flex-col gap-4 md:col-start-1",
+  2: "flex min-w-0 flex-col gap-4 md:col-start-2",
+  3: "flex min-w-0 flex-col gap-4 md:col-start-2 xl:col-start-3",
 };
 
 function Dashboard() {
