@@ -34,6 +34,7 @@ describe("appsSearchCodec", () => {
       q: "",
       status: ["running", "unhealthy"],
       category: [],
+      update: [],
       sort: null,
     });
   });
@@ -43,26 +44,37 @@ describe("appsSearchCodec", () => {
       q: "",
       status: [],
       category: ["media", "unknown"],
+      update: [],
       sort: null,
     });
   });
 
   it("treats a missing or empty category as no filter", () => {
-    expect(appsSearchCodec.parse("category=")).toEqual({ q: "", status: [], category: [], sort: null });
-    expect(appsSearchCodec.parse("category=,,")).toEqual({ q: "", status: [], category: [], sort: null });
+    expect(appsSearchCodec.parse("category=")).toEqual({ q: "", status: [], category: [], update: [], sort: null });
+    expect(appsSearchCodec.parse("category=,,")).toEqual({ q: "", status: [], category: [], update: [], sort: null });
   });
 
   it("treats a missing or empty status as no filter", () => {
-    expect(appsSearchCodec.parse("")).toEqual({ q: "", status: [], category: [], sort: null });
-    expect(appsSearchCodec.parse("status=")).toEqual({ q: "", status: [], category: [], sort: null });
+    expect(appsSearchCodec.parse("")).toEqual({ q: "", status: [], category: [], update: [], sort: null });
+    expect(appsSearchCodec.parse("status=")).toEqual({ q: "", status: [], category: [], update: [], sort: null });
   });
 
   it("keeps the default state out of the URL", () => {
-    expect(appsSearchCodec.serialize({ q: "", status: [], category: [], sort: null })).toBe("");
+    expect(appsSearchCodec.serialize({ q: "", status: [], category: [], update: [], sort: null })).toBe("");
+  });
+
+  it("keeps only real update states", () => {
+    expect(appsSearchCodec.parse("update=current,garbage")).toEqual({
+      q: "",
+      status: [],
+      category: [],
+      update: ["current"],
+      sort: null,
+    });
   });
 
   it("round-trips a query and a selection", () => {
-    const query = "q=next&status=running%2Cstopped&category=media%2Cinfra";
+    const query = "q=next&status=running%2Cstopped&category=media%2Cinfra&update=available";
     expect(appsSearchCodec.serialize(appsSearchCodec.parse(query))).toBe(query);
   });
 });
