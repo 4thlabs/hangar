@@ -108,9 +108,10 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
  * network. Thumbnails go the other way, through Hangar's own relay: an `<img>` cannot answer the
  * OIDC challenge the public host puts in front of the API.
  */
-export const frigateEvents = (service: WidgetService) =>
+export const frigateEvents = (service: WidgetService, ttl?: number) =>
   defineWidget({
     id: "frigate-events",
+    ttl,
     title: "Frigate",
     icon: frigateIcon,
     className: frigateWidgetClassName,

@@ -61,9 +61,10 @@ export function GithubReleasesCard({ releases, now = Date.now() }: GithubRelease
 }
 
 /** The latest release of each watched repository, newest first. */
-export const githubReleases = (repositories: readonly string[]) =>
+export const githubReleases = (repositories: readonly string[], ttl?: number) =>
   defineWidget({
     id: "github-releases",
+    ttl,
     title: "Releases",
     icon: githubIcon,
     errorDescription: "The GitHub releases could not be loaded.",

@@ -32,23 +32,34 @@ const serviceUrl = z.url({ protocol: /^https?$/ });
 
 const serviceUrlFields = { url: serviceUrl.optional(), link: serviceUrl.optional() };
 
+/**
+ * How long this widget's data stays fresh, in seconds.
+ *
+ * Seconds because that is what an operator writes; the widget layer works in milliseconds and
+ * converts once, in `registry.ts`. Absent means the widget layer's own default. Not offered to the
+ * clock, which loads nothing, so there is nothing for a TTL to hold.
+ */
+const ttlField = { ttl: z.int().positive().optional() };
+
 export const widgetConfigSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("clock"), column: columnSchema }),
-  z.object({ type: z.literal("docker-general-stats"), column: columnSchema }),
-  z.object({ type: z.literal("arcane-general-stats"), column: columnSchema, ...serviceUrlFields }),
-  z.object({ type: z.literal("frigate-events"), column: columnSchema, ...serviceUrlFields }),
-  z.object({ type: z.literal("gluetun-vpn-status"), column: columnSchema, ...serviceUrlFields }),
-  z.object({ type: z.literal("jellyfin-stats"), column: columnSchema, ...serviceUrlFields }),
+  z.object({ type: z.literal("docker-general-stats"), column: columnSchema, ...ttlField }),
+  z.object({ type: z.literal("arcane-general-stats"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
+  z.object({ type: z.literal("frigate-events"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
+  z.object({ type: z.literal("gluetun-vpn-status"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
+  z.object({ type: z.literal("jellyfin-stats"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
   z.object({
     type: z.literal("jellyfin-latest"),
     column: columnSchema,
     ...serviceUrlFields,
+    ...ttlField,
     /** Jellyfin scopes "latest" to a user, so there is no server-wide answer to ask for. */
     user: z.string().min(1),
   }),
   z.object({
     type: z.literal("github-releases"),
     column: columnSchema,
+    ...ttlField,
     repositories: z.array(repositorySchema).min(1),
   }),
 ]);

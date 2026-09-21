@@ -109,9 +109,10 @@ export function JellyfinLatestCard({ items, serviceUrl }: JellyfinLatestCardProp
  * Takes a user name because Jellyfin's "latest" is scoped to what that user may see — there is no
  * server-wide answer to ask for, so the operator names one in `hangar.yml`.
  */
-export const jellyfinLatest = (service: WidgetService, user: string) =>
+export const jellyfinLatest = (service: WidgetService, user: string, ttl?: number) =>
   defineWidget({
     id: "jellyfin-latest",
+    ttl,
     title: "Latest additions",
     icon: jellyfinIcon,
     className: latestWidgetClassName,
