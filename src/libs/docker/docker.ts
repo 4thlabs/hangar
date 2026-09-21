@@ -10,6 +10,7 @@ import {
   type ImageUpdateStatus,
 } from "./compose.ts";
 import { logger } from "#libs/logs";
+import { Snapshots } from "#libs/cache";
 import type { ContainerStatsSample } from "./stats.ts";
 
 /** Raw stats samples keyed by full container id. */
@@ -47,9 +48,6 @@ export interface InstalledApps {
   installedProjectIds(): Set<string>;
 }
 
-/** One cached read: the promise as it was handed out, and when it stops being fresh. */
-type CacheEntry = { value: Promise<unknown>; until: number };
-
 /**
  * The Docker Engine API, scoped to the apps Hangar installed. Talks to the socket directly
  * rather than shelling out: an inspect costs ~5ms instead of a process spawn, and a stats sample
@@ -75,23 +73,23 @@ export class Docker {
   private static readonly TTL = 5_000;
 
   /**
-   * How long past its TTL a sweep is still handed out while it reloads behind the caller. Sized
-   * to the apps page's own 30s `AutoReload`: a reader never waits on the daemon, and never sees
-   * anything older than one reload of what it was going to be shown anyway.
+   * How long past its TTL a sweep is still handed out while it reloads behind the caller. Comfortably
+   * longer than the warm loop's tick, so a page render still finds a snapshot when a tick runs late
+   * or fails — the moment it does not, `/apps` goes back to waiting on the daemon.
    */
-  private static readonly GRACE = 30_000;
+  private static readonly GRACE = 120_000;
 
-  /** The host counts move slowly, and the dashboard reads them once per visit, not on a timer. */
-  private static readonly OVERVIEW_TTL = 60_000;
+  /** `df` is the slowest call the daemon has, and these counts move slowly. */
+  private static readonly OVERVIEW_TTL = 300_000;
 
   /** Longer grace than the sweep: nothing here changes fast enough to be worth blocking a paint. */
-  private static readonly OVERVIEW_GRACE = 300_000;
+  private static readonly OVERVIEW_GRACE = 3_600_000;
 
   /** How long a settled sweep is served again, in milliseconds. */
   private readonly ttl: number;
 
-  /** One entry per cached read. See {@link cached}. */
-  private readonly cache = new Map<string, CacheEntry>();
+  /** The daemon reads this client serves from a snapshot. */
+  private readonly snapshots = new Snapshots();
 
   /**
    * @param docker An Engine API client; injected so the composition root owns the connection
@@ -105,77 +103,6 @@ export class Docker {
   }
 
   /**
-   * Serves a daemon read from the last snapshot, and refreshes it behind the caller once it goes
-   * stale. A read inside `ttl` is the snapshot; a read within `grace` past it is *still* the
-   * snapshot, handed back at once with a reload started behind it; past that the caller waits on
-   * the daemon and gets its error. Nothing is on a timer, so nobody reading means nothing asking.
-   *
-   * `grace` therefore has one plain meaning: how long a dead daemon stays hidden. A reload that
-   * fails restores the entry it replaced, timestamp and all, so the snapshot keeps ageing and the
-   * next read past `ttl + grace` surfaces the real error rather than a stale answer forever.
-   *
-   * Only raw daemon reads belong in here, never anything derived: {@link DockerNotFoundError} is
-   * thrown downstream of the sweep, by `ComposeProjects`, so a 404 can never be cached.
-   *
-   * ponytail: while a reload is in flight the slot holds *its* promise, so a second reader
-   * arriving inside that window waits on it instead of getting the snapshot. One reader per
-   * render, one window per reload. Split the slot into `{ settled, inflight }` if that ever shows.
-   *
-   * @param key Which read this is; also the unit {@link invalidate} drops
-   * @param ttl How long the value is fresh, in milliseconds
-   * @param grace How long past `ttl` it is still served while reloading
-   * @param load Fetches a new value from the daemon
-   */
-  private cached<T>(key: string, ttl: number, grace: number, load: () => Promise<T>): Promise<T> {
-    const entry = this.cache.get(key);
-    const now = Date.now();
-
-    if (entry && now < entry.until) return entry.value as Promise<T>;
-
-    // Stale but inside the grace window: hand back what we have, reload behind it. The floating
-    // promise is safe only because `refresh` attaches its own handler to it — without that, a
-    // daemon restart would surface as an unhandled rejection, which by default kills the process.
-    if (entry && now < entry.until + grace) {
-      void this.refresh(key, entry, ttl, load);
-
-      return entry.value as Promise<T>;
-    }
-
-    return this.refresh(key, entry, ttl, load);
-  }
-
-  /**
-   * Loads a fresh value into `key` and publishes it once it settles.
-   *
-   * Both handlers check they still own the slot before touching it: a load started before an
-   * {@link invalidate} can settle after it, and must not publish what the compose command just
-   * made untrue.
-   *
-   * @param previous The entry being replaced, restored as-is if the load fails
-   */
-  private refresh<T>(key: string, previous: CacheEntry | undefined, ttl: number, load: () => Promise<T>): Promise<T> {
-    const value = load();
-    const entry: CacheEntry = { value, until: Number.POSITIVE_INFINITY };
-
-    // In flight it never expires, so concurrent callers share one round trip; staleness only
-    // starts once it has settled.
-    this.cache.set(key, entry);
-
-    value.then(
-      () => {
-        if (this.cache.get(key) === entry) entry.until = Date.now() + ttl;
-      },
-      () => {
-        if (this.cache.get(key) !== entry) return;
-        if (previous) this.cache.set(key, previous);
-        else this.cache.delete(key);
-      },
-    );
-
-    return value;
-  }
-
-  /**
    * Lists every Compose-labeled container on the host, in both API views. One sweep for everyone:
    * the apps list, one project's detail and a log stream all read the same snapshot, because the
    * callers that want one project narrow it in memory through `ComposeProjects`.
@@ -186,26 +113,46 @@ export class Docker {
    * after a `compose down`, not an edge one.
    */
   private inspectContainers(): Promise<ComposeContainerSource[]> {
-    return this.cached("containers", this.ttl, Docker.GRACE, async () => {
-      const listed = await this.docker.listContainers({
-        all: true,
-        filters: { label: [ComposeProjects.LABEL.project] },
-      });
-      const inspected = await Promise.allSettled(
-        listed.map(async info => ({ info, detail: await this.docker.getContainer(info.Id).inspect() })),
-      );
+    return this.snapshots.read("containers", this.ttl, Docker.GRACE, this.sweep);
+  }
 
-      return inspected.filter(result => result.status === "fulfilled").map(result => result.value);
+  /** The sweep itself, as a field so {@link peekProjects} can name the same loader `read` caches under. */
+  private readonly sweep = async (): Promise<ComposeContainerSource[]> => {
+    const listed = await this.docker.listContainers({
+      all: true,
+      filters: { label: [ComposeProjects.LABEL.project] },
     });
+    const inspected = await Promise.allSettled(
+      listed.map(async info => ({ info, detail: await this.docker.getContainer(info.Id).inspect() })),
+    );
+
+    return inspected.filter(result => result.status === "fulfilled").map(result => result.value);
+  };
+
+  /**
+   * {@link listProjects} without awaiting, when the sweep is already in hand.
+   *
+   * The apps page renders this synchronously so it needs no Suspense boundary, and so paints the
+   * list instead of a spinner. `undefined` means the snapshot is cold or too old to use, and the
+   * caller should go back to `listProjects` and suspend.
+   */
+  peekProjects(): ComposeProjectsSnapshot | undefined {
+    const ready = this.snapshots.peek<ComposeContainerSource[]>("containers", this.ttl, Docker.GRACE, this.sweep);
+
+    return ready && { projects: new ComposeProjects(ready.data).summaries(this.apps.installedProjectIds()) };
   }
 
   /**
    * Drops every cached daemon read. Called after a Compose command, which is the one moment the
    * page behind it is guaranteed to ask again and must not be told what was true before. The
    * overview goes too: a compose command changes the container counts `info` reports.
+   *
+   * Does not reach the dashboard's Docker widget, which caches its own render one layer up: its
+   * counts stay up to a widget TTL stale after a compose command. Compose runs from `/apps`, not
+   * the dashboard, and wiring the two caches together would couple the libraries over a badge.
    */
   invalidate() {
-    this.cache.clear();
+    this.snapshots.clear();
   }
 
   /**
@@ -269,7 +216,7 @@ export class Docker {
    * daemon version, `df` the disk usage (which images nothing runs, which volumes nothing mounts).
    */
   overview(): Promise<DockerOverview> {
-    return this.cached("overview", Docker.OVERVIEW_TTL, Docker.OVERVIEW_GRACE, async () => {
+    return this.snapshots.read("overview", Docker.OVERVIEW_TTL, Docker.OVERVIEW_GRACE, async () => {
       const [info, usage] = (await Promise.all([this.docker.info(), this.docker.df()])) as [
         SystemInfo,
         SystemDiskUsage,
