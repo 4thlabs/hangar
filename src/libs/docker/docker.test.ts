@@ -231,6 +231,42 @@ describe("Docker.imageUpdates", () => {
     expect(dockerMock.distribution).not.toHaveBeenCalled();
   });
 
+  it("reads the image the container runs, not what its tag points at now", async () => {
+    givenContainers([container()]);
+    givenDigests("sha256:same", "sha256:same");
+
+    await client("alpha").imageUpdates();
+
+    // A pull moves `nginx:alpine` onto the new image while the container keeps the old one:
+    // inspecting the reference would call it current, which is the whole bug.
+    expect(dockerMock.imageInspect).toHaveBeenCalledWith("sha256:running");
+    expect(dockerMock.imageInspect).not.toHaveBeenCalledWith("nginx:alpine");
+  });
+
+  it("separates two containers on one tag that run different images", async () => {
+    givenContainers([
+      container(),
+      container({
+        Id: "container-2",
+        labels: { [LABEL.project]: "beta", [LABEL.service]: "web" },
+        imageId: "sha256:old",
+      }),
+    ]);
+    dockerMock.imageInspect.mockImplementation((id: string) =>
+      Promise.resolve({ RepoDigests: [id === "sha256:running" ? "nginx@sha256:remote" : "nginx@sha256:before"] }),
+    );
+    dockerMock.distribution.mockResolvedValue({ Descriptor: { digest: "sha256:remote" } });
+
+    const updates = await client("alpha", "beta").imageUpdates();
+
+    expect(updates).toEqual([
+      { project: "alpha", image: "nginx:alpine", status: "current" },
+      { project: "beta", image: "nginx:alpine", status: "outdated" },
+    ]);
+    // Still one registry round trip: they share the reference, only the running image differs.
+    expect(dockerMock.distribution).toHaveBeenCalledTimes(1);
+  });
+
   it("does not claim an update when the registry cannot be reached", async () => {
     givenContainers([container()]);
     dockerMock.imageInspect.mockResolvedValue({ RepoDigests: ["nginx@sha256:local"] });
@@ -247,7 +283,8 @@ describe("Docker.imageUpdates", () => {
     expect(await client("alpha").imageUpdates()).toEqual([
       { project: "alpha", image: "nginx@sha256:pinned", status: "current" },
     ]);
-    expect(dockerMock.imageInspect).not.toHaveBeenCalled();
+    // The local inspect still happens — it is free, and batched by image id across containers.
+    // What a pinned reference must never cost is the rate-limited registry round trip.
     expect(dockerMock.distribution).not.toHaveBeenCalled();
   });
 
