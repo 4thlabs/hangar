@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Warm } from "#app/components/common/warm.tsx";
 import { resolveWidgets, type DashboardColumn } from "#libs/widgets";
 import { hangar } from "#libs/hangar/server";
 import { widgetHost } from "#libs/widgets/server";
@@ -28,21 +28,13 @@ function Dashboard() {
 
         return (
           <div key={column} className={COLUMN_CLASSNAME[column]}>
-            {columnPlacements.map(({ widget: { id, Widget, Skeleton, ready } }) =>
-              // A warm widget renders inline, with no boundary at all. Wrapping it in one anyway
-              // would put its skeleton in the shell and stream the card in behind it, because that
-              // is what a boundary does whether or not its child ever suspends — which is a
-              // skeleton on screen for data the server already had in hand.
-              ready() ? (
-                <Widget key={id} />
-              ) : (
-                // Cold, or its service is down: back behind a boundary, so it streams in on its own
-                // instead of holding up the rest of the grid.
-                <Suspense key={id} fallback={<Skeleton />}>
-                  <Widget />
-                </Suspense>
-              ),
-            )}
+            {columnPlacements.map(({ widget: { id, Widget, Skeleton, ready } }) => (
+              // Cold, or its service is down: behind a boundary, so it streams in on its own
+              // instead of holding up the rest of the grid. Warm, it renders inline — see `Warm`.
+              <Warm key={id} ready={ready()} fallback={<Skeleton />}>
+                <Widget />
+              </Warm>
+            ))}
           </div>
         );
       })}

@@ -18,11 +18,16 @@ function respond(byRepository: Record<string, unknown>) {
   });
 }
 
+/** A fixed point to move away from; the cache only reads the clock, nothing in it is on a timer. */
+const START = 1_700_000_000_000;
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] }).setSystemTime(START);
   clearReleaseCache();
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -54,8 +59,9 @@ describe("getLatestReleases", () => {
     const fetcher = respond({ "glanceapp/glance": release("v0.8.4", "2026-09-18T10:00:00Z") });
     vi.stubGlobal("fetch", fetcher);
 
-    await getLatestReleases(["glanceapp/glance"], 1_000);
-    await getLatestReleases(["glanceapp/glance"], 1_000 + 29 * 60 * 1_000);
+    await getLatestReleases(["glanceapp/glance"]);
+    vi.setSystemTime(START + 29 * 60 * 1_000);
+    await getLatestReleases(["glanceapp/glance"]);
 
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
@@ -64,21 +70,23 @@ describe("getLatestReleases", () => {
     const fetcher = respond({ "glanceapp/glance": release("v0.8.4", "2026-09-18T10:00:00Z") });
     vi.stubGlobal("fetch", fetcher);
 
-    await getLatestReleases(["glanceapp/glance"], 1_000);
-    await getLatestReleases(["glanceapp/glance"], 1_000 + 31 * 60 * 1_000);
+    await getLatestReleases(["glanceapp/glance"]);
+    vi.setSystemTime(START + 31 * 60 * 1_000);
+    await getLatestReleases(["glanceapp/glance"]);
 
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("keeps serving a stale release when GitHub rate-limits the refresh", async () => {
     vi.stubGlobal("fetch", respond({ "glanceapp/glance": release("v0.8.4", "2026-09-18T10:00:00Z") }));
-    await getLatestReleases(["glanceapp/glance"], 1_000);
+    await getLatestReleases(["glanceapp/glance"]);
 
     vi.stubGlobal(
       "fetch",
       vi.fn(() => Promise.resolve(new Response("rate limited", { status: 403 }))),
     );
-    const releases = await getLatestReleases(["glanceapp/glance"], 1_000 + 31 * 60 * 1_000);
+    vi.setSystemTime(START + 31 * 60 * 1_000);
+    const releases = await getLatestReleases(["glanceapp/glance"]);
 
     expect(releases[0]?.tag).toBe("v0.8.4");
   });

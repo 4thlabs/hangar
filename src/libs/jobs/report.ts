@@ -12,19 +12,25 @@ const snapshots = new Snapshots();
 const TTL = 60_000;
 const GRACE = 3_600_000;
 
-/** The last image check, if it has already been read. `undefined` means "ask properly". */
-export function peekOutdatedProjects(): Set<string> | undefined {
-  return snapshots.peek("outdated", TTL, GRACE, read)?.data;
-}
-
 /**
  * The apps the last completed image check found behind their registry.
  *
  * Empty when no check has run yet, when it found nothing, or when the report could not be read:
  * the badge is an extra, never a reason for the Apps page to fail.
+ *
+ * Exported as the handle rather than only as functions, so a caller that composes it with another
+ * snapshot — `src/app/snapshots.ts` — gets the same declaration the readers below use.
  */
+export const outdatedSnapshot = snapshots.define("outdated", TTL, GRACE, read);
+
+/** The last image check, if it has already been read. `undefined` means "ask properly". */
+export function peekOutdatedProjects(): Set<string> | undefined {
+  return outdatedSnapshot.peek()?.data;
+}
+
+/** {@link outdatedSnapshot}, awaited. */
 export function outdatedProjects(): Promise<Set<string>> {
-  return snapshots.read("outdated", TTL, GRACE, read);
+  return outdatedSnapshot.read();
 }
 
 async function read(): Promise<Set<string>> {

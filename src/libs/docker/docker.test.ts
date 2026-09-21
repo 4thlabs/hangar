@@ -21,11 +21,11 @@ const LABEL = {
 
 beforeEach(() => vi.clearAllMocks());
 
-describe("Docker.listProjects", () => {
+describe("Docker.projects", () => {
   it("covers every installed app, including one with no container yet", async () => {
     givenContainers([container()]);
 
-    const { projects } = await client("alpha", "gamma").listProjects();
+    const { projects } = await client("alpha", "gamma").projects.read();
 
     expect(projects.map(project => project.name)).toEqual(["alpha", "gamma"]);
     expect(projects[1]).toMatchObject({ status: "stopped", containerCount: 0 });
@@ -37,7 +37,7 @@ describe("Docker.listProjects", () => {
       container({ Id: "beta-1", labels: { [LABEL.project]: "beta", [LABEL.service]: "api" } }),
     ]);
 
-    const { projects } = await client("alpha").listProjects();
+    const { projects } = await client("alpha").projects.read();
 
     expect(projects.map(project => project.name)).toEqual(["alpha"]);
   });
@@ -316,8 +316,8 @@ describe("Docker container sweeps", () => {
     givenContainers([container()]);
     const docker = client("alpha");
 
-    await Promise.all([docker.listProjects(), docker.listProjects()]);
-    await docker.listProjects();
+    await Promise.all([docker.projects.read(), docker.projects.read()]);
+    await docker.projects.read();
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(1);
   });
@@ -326,7 +326,7 @@ describe("Docker container sweeps", () => {
     givenContainers([container()]);
     const docker = client("alpha");
 
-    await docker.listProjects();
+    await docker.projects.read();
     await docker.projectDetail("alpha");
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(1);
@@ -344,7 +344,7 @@ describe("Docker container sweeps", () => {
         : Promise.resolve(sources.find(entry => entry.info.Id === id)?.detail),
     );
 
-    const { projects } = await client("alpha").listProjects();
+    const { projects } = await client("alpha").projects.read();
 
     expect(projects[0]).toMatchObject({ name: "alpha", containerCount: 1 });
   });
@@ -353,8 +353,8 @@ describe("Docker container sweeps", () => {
     givenContainers([container()]);
     const docker = new Docker(fakeDockerode(), fakeApps("alpha"), 0);
 
-    await docker.listProjects();
-    await docker.listProjects();
+    await docker.projects.read();
+    await docker.projects.read();
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
   });
@@ -363,9 +363,9 @@ describe("Docker container sweeps", () => {
     givenContainers([container()]);
     const docker = client("alpha");
 
-    await docker.listProjects();
+    await docker.projects.read();
     docker.invalidate();
-    await docker.listProjects();
+    await docker.projects.read();
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
   });
@@ -374,10 +374,10 @@ describe("Docker container sweeps", () => {
     const docker = client("alpha");
     dockerMock.listContainers.mockRejectedValueOnce(new Error("socket gone"));
 
-    await expect(docker.listProjects()).rejects.toThrow("socket gone");
+    await expect(docker.projects.read()).rejects.toThrow("socket gone");
     givenContainers([container()]);
 
-    await expect(docker.listProjects()).resolves.toMatchObject({ projects: [{ name: "alpha" }] });
+    await expect(docker.projects.read()).resolves.toMatchObject({ projects: [{ name: "alpha" }] });
   });
 });
 
@@ -444,9 +444,9 @@ describe("Docker snapshot staleness", () => {
     givenContainers([container()]);
     const docker = client("alpha");
 
-    await docker.listProjects();
+    await docker.projects.read();
     vi.setSystemTime(START + 6_000);
-    await docker.listProjects();
+    await docker.projects.read();
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
   });

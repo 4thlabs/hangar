@@ -10,7 +10,7 @@ import {
   type ImageUpdateStatus,
 } from "./compose.ts";
 import { logger } from "#libs/logs";
-import { Snapshots } from "#libs/cache";
+import { join, Snapshots, type Snapshot } from "#libs/cache";
 import type { ContainerStatsSample } from "./stats.ts";
 
 /** Raw stats samples keyed by full container id. */
@@ -85,11 +85,29 @@ export class Docker {
   /** Longer grace than the sweep: nothing here changes fast enough to be worth blocking a paint. */
   private static readonly OVERVIEW_GRACE = 3_600_000;
 
-  /** How long a settled sweep is served again, in milliseconds. */
-  private readonly ttl: number;
-
   /** The daemon reads this client serves from a snapshot. */
   private readonly snapshots = new Snapshots();
+
+  /**
+   * One sweep of every Compose-labeled container, in both API views. One read for everyone: the
+   * apps list, one project's detail and a log stream all narrow this in memory through
+   * `ComposeProjects` rather than asking the daemon again.
+   */
+  private readonly containers: Snapshot<ComposeContainerSource[]>;
+
+  /**
+   * Every app Hangar installed, as lightweight summaries of their Docker state.
+   *
+   * Public as the handle rather than as a `listProjects()` / `peekProjects()` pair: those were one
+   * read described twice, and each rebuilt the projection in its own words. A caller that can wait
+   * calls `read()`, one that must not calls `peek()`, and both are the same declaration.
+   *
+   * ponytail: the sweep inspects every Compose container on the host and throws away the ones
+   * Hangar did not install. There is no daemon-side fix: Docker ANDs repeated `label` filters, so
+   * asking for several projects at once matches a container in *all* of them, i.e. nothing.
+   * Narrowing would mean one list call per installed project, which is worse. Left as is.
+   */
+  readonly projects: Snapshot<ComposeProjectsSnapshot>;
 
   /**
    * @param docker An Engine API client; injected so the composition root owns the connection
@@ -99,24 +117,20 @@ export class Docker {
   constructor(docker: Dockerode, apps: InstalledApps, ttl = Docker.TTL) {
     this.docker = docker;
     this.apps = apps;
-    this.ttl = ttl;
+    this.containers = this.snapshots.define("containers", ttl, Docker.GRACE, this.sweep);
+    this.projects = join(this.containers, sources => ({
+      projects: new ComposeProjects(sources).summaries(this.apps.installedProjectIds()),
+    }));
   }
 
   /**
-   * Lists every Compose-labeled container on the host, in both API views. One sweep for everyone:
-   * the apps list, one project's detail and a log stream all read the same snapshot, because the
-   * callers that want one project narrow it in memory through `ComposeProjects`.
+   * The sweep behind {@link containers}.
    *
    * An inspect costs a few milliseconds over the socket, so they all go out at once — and with
    * `allSettled`, because a container that exits between the list and its inspect answers 404,
    * and one container going away must not cost the whole sweep. That is the common case right
    * after a `compose down`, not an edge one.
    */
-  private inspectContainers(): Promise<ComposeContainerSource[]> {
-    return this.snapshots.read("containers", this.ttl, Docker.GRACE, this.sweep);
-  }
-
-  /** The sweep itself, as a field so {@link peekProjects} can name the same loader `read` caches under. */
   private readonly sweep = async (): Promise<ComposeContainerSource[]> => {
     const listed = await this.docker.listContainers({
       all: true,
@@ -128,19 +142,6 @@ export class Docker {
 
     return inspected.filter(result => result.status === "fulfilled").map(result => result.value);
   };
-
-  /**
-   * {@link listProjects} without awaiting, when the sweep is already in hand.
-   *
-   * The apps page renders this synchronously so it needs no Suspense boundary, and so paints the
-   * list instead of a spinner. `undefined` means the snapshot is cold or too old to use, and the
-   * caller should go back to `listProjects` and suspend.
-   */
-  peekProjects(): ComposeProjectsSnapshot | undefined {
-    const ready = this.snapshots.peek<ComposeContainerSource[]>("containers", this.ttl, Docker.GRACE, this.sweep);
-
-    return ready && { projects: new ComposeProjects(ready.data).summaries(this.apps.installedProjectIds()) };
-  }
 
   /**
    * Drops every cached daemon read. Called after a Compose command, which is the one moment the
@@ -169,7 +170,7 @@ export class Docker {
     const installed = this.apps.installedProjectIds();
     const pairs = new Map<string, { project: string; image: string }>();
 
-    for (const { info } of await this.inspectContainers()) {
+    for (const { info } of await this.containers.read()) {
       const project = info.Labels[ComposeProjects.LABEL.project] ?? "";
 
       if (installed.has(project)) pairs.set(`${project}\u0000${info.Image}`, { project, image: info.Image });
@@ -240,20 +241,6 @@ export class Docker {
   }
 
   /**
-   * Lists every app Hangar installed, as lightweight summaries of their Docker state.
-   *
-   * ponytail: the sweep inspects every Compose container on the host and throws away the ones
-   * Hangar did not install. There is no daemon-side fix: Docker ANDs repeated `label` filters, so
-   * asking for several projects at once matches a container in *all* of them, i.e. nothing.
-   * Narrowing would mean one list call per installed project, which is worse. Left as is.
-   */
-  async listProjects(): Promise<ComposeProjectsSnapshot> {
-    const compose = new ComposeProjects(await this.inspectContainers());
-
-    return { projects: compose.summaries(this.apps.installedProjectIds()) };
-  }
-
-  /**
    * Fetches the topology (services, containers, ports) of one installed app. No resource usage:
    * that is sampled separately and arrives over the stats stream.
    * An installed app with no container yet resolves to a stopped project with no service.
@@ -261,7 +248,7 @@ export class Docker {
    * @throws {DockerNotFoundError} if the project is not an installed app
    */
   async projectDetail(project: string): Promise<ComposeProjectDetail> {
-    const compose = new ComposeProjects(await this.inspectContainers(), project);
+    const compose = new ComposeProjects(await this.containers.read(), project);
 
     return compose.detail(project, this.apps.installedProjectIds());
   }
@@ -281,7 +268,7 @@ export class Docker {
     // project is indistinguishable from one that doesn't exist: no cross-project probing. The
     // filter is `ComposeProjects`' rather than the daemon's, and `find` only ever searches what it
     // kept, so the guarantee is the same one — it just no longer costs its own sweep.
-    const compose = new ComposeProjects(await this.inspectContainers(), project);
+    const compose = new ComposeProjects(await this.containers.read(), project);
     const container = compose.find(containerId);
 
     if (!container) throw new DockerNotFoundError(`container ${containerId}`);

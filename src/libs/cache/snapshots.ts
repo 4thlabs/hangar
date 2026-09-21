@@ -9,10 +9,32 @@
 type CacheEntry = { value: Promise<unknown>; settled?: { data: unknown } | undefined; until: number };
 
 /**
+ * One cached read, with its key, TTL, grace and loader already bound — see {@link Snapshots.define}.
+ *
+ * This is what a consumer holds. Repeating the four arguments at every call site is how the same
+ * read ends up cached under two slightly different descriptions, so they are spelled once and the
+ * three ways of asking for the value all come from that one declaration.
+ */
+export type Snapshot<T> = {
+  /** The value, awaiting a load when there is nothing usable cached. */
+  read(): Promise<T>;
+  /** The value without awaiting anything, or `undefined` to say "ask properly". */
+  peek(): { data: T } | undefined;
+  /**
+   * Fills the snapshot ahead of a render.
+   *
+   * Never rejects, and that is the point: a source being down is the render's to report, through
+   * whatever fallback it already has, and an unhandled rejection in a background tick would take
+   * the process with it.
+   */
+  warm(): Promise<void>;
+};
+
+/**
  * Reads that answer from the last snapshot and refresh themselves behind the caller.
  *
  * Nothing in here is on a timer: a value is only reloaded because somebody asked for it. Filling
- * it *before* anyone asks is a caller's job — see `src/app/middleware/warm-cache.ts`, which is
+ * it *before* anyone asks is a caller's job — see `src/app/middleware/cache-warm.ts`, which is
  * what keeps a first page render from waiting on anything.
  *
  * Holds no state of its own beyond the map, so a composition root can own one per concern: the
@@ -121,8 +143,62 @@ export class Snapshots {
     return value;
   }
 
+  /**
+   * Binds one read's key, TTL, grace and loader into a handle.
+   *
+   * Prefer this to calling {@link read} and {@link peek} directly: those take the same four
+   * arguments, so every consumer that wants both spells them twice and nothing stops the two
+   * copies drifting apart.
+   */
+  define<T>(key: string, ttl: number, grace: number, load: () => Promise<T>): Snapshot<T> {
+    return {
+      read: () => this.read(key, ttl, grace, load),
+      peek: () => this.peek(key, ttl, grace, load),
+      warm: () =>
+        this.read(key, ttl, grace, load).then(
+          () => undefined,
+          () => undefined,
+        ),
+    };
+  }
+
   /** Drops every snapshot, so the next read goes back to the source. */
   clear() {
     this.entries.clear();
   }
+}
+
+/**
+ * A snapshot derived from one or two others.
+ *
+ * Caches nothing of its own — the sources do that, and `project` is a pure rearrangement run per
+ * read. That is what keeps a projection from becoming a second cached copy of the same data, with
+ * its own TTL to fall out of step.
+ *
+ * @param project Builds the derived value; must stay pure, since it runs on every read and peek
+ */
+export function join<A, B>(a: Snapshot<A>, project: (a: A) => B): Snapshot<B>;
+export function join<A, B, C>(a: Snapshot<A>, b: Snapshot<B>, project: (a: A, b: B) => C): Snapshot<C>;
+export function join(...args: readonly unknown[]): Snapshot<unknown> {
+  const project = args[args.length - 1] as (...values: readonly unknown[]) => unknown;
+  const sources = args.slice(0, -1) as readonly Snapshot<unknown>[];
+
+  return {
+    read: async () => project(...(await Promise.all(sources.map(source => source.read())))),
+    peek: () => {
+      // Every source is peeked before anything is decided: a peek is what starts a stale entry's
+      // reload, so returning early on the first cold one would leave the rest ageing untouched.
+      const ready = sources.map(source => source.peek());
+      const values: unknown[] = [];
+
+      for (const entry of ready) {
+        if (!entry) return undefined;
+
+        values.push(entry.data);
+      }
+
+      return { data: project(...values) };
+    },
+    warm: () => Promise.all(sources.map(source => source.warm())).then(() => undefined),
+  };
 }

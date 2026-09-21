@@ -1,4 +1,5 @@
 import ky from "ky";
+import { Snapshots } from "#libs/cache";
 import { env } from "#libs/env";
 
 /** The subset of a GitHub release displayed by Hangar. */
@@ -29,9 +30,18 @@ interface LatestRelease {
  * Move the refresh into a sidequest job (like CheckImageVersion) if Hangar ever
  * runs more than one instance.
  */
-const CACHE_TTL_MS = 30 * 60 * 1_000;
+const TTL = 30 * 60 * 1_000;
 
-const cache = new Map<string, { at: number; release: GithubRelease }>();
+/**
+ * How long a release that GitHub has stopped answering for keeps being served.
+ *
+ * "A half-hour-old tag beats no tag at all" — but not forever: past this the card says it could
+ * not load, rather than showing a tag nobody can tell is a year stale.
+ */
+const GRACE = 24 * 60 * 60 * 1_000;
+
+/** One entry per repository. The widget layer caches the rendered card; this caches the calls. */
+const snapshots = new Snapshots();
 
 const client = ky.extend({
   baseUrl: "https://api.github.com",
@@ -45,29 +55,14 @@ const client = ky.extend({
   },
 });
 
-async function fetchLatestRelease(repository: string, now: number): Promise<GithubRelease> {
-  const cached = cache.get(repository);
-
-  if (cached && now - cached.at < CACHE_TTL_MS) return cached.release;
-
-  try {
+function fetchLatestRelease(repository: string): Promise<GithubRelease> {
+  // A rate limit or a blip must not blank a card that already has an answer, which is what `GRACE`
+  // buys: a stale release is handed back at once and the retry goes out behind it.
+  return snapshots.read(repository, TTL, GRACE, async () => {
     const latest = await client.get<LatestRelease>(`repos/${repository}/releases/latest`).json();
-    const release: GithubRelease = {
-      repository,
-      tag: latest.tag_name,
-      url: latest.html_url,
-      publishedAt: latest.published_at,
-    };
 
-    cache.set(repository, { at: now, release });
-
-    return release;
-  } catch (error: unknown) {
-    // A rate limit or a blip must not blank a card that already has an answer:
-    // a half-hour-old tag beats no tag at all.
-    if (cached) return cached.release;
-    throw error;
-  }
+    return { repository, tag: latest.tag_name, url: latest.html_url, publishedAt: latest.published_at };
+  });
 }
 
 /**
@@ -76,11 +71,8 @@ async function fetchLatestRelease(repository: string, now: number): Promise<Gith
  * A repository that has no release, was renamed or is private simply drops out:
  * one bad entry in `hangar.yml` must not take the whole card down.
  */
-export async function getLatestReleases(
-  repositories: readonly string[],
-  now: number = Date.now(),
-): Promise<GithubRelease[]> {
-  const settled = await Promise.allSettled(repositories.map(repository => fetchLatestRelease(repository, now)));
+export async function getLatestReleases(repositories: readonly string[]): Promise<GithubRelease[]> {
+  const settled = await Promise.allSettled(repositories.map(repository => fetchLatestRelease(repository)));
 
   return settled
     .filter((result): result is PromiseFulfilledResult<GithubRelease> => result.status === "fulfilled")
@@ -90,5 +82,5 @@ export async function getLatestReleases(
 
 /** Drops every cached release. Tests only. */
 export function clearReleaseCache() {
-  cache.clear();
+  snapshots.clear();
 }

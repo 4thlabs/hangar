@@ -40,7 +40,8 @@ export type Widget = {
 /**
  * Every widget's data, cached in one place. Shared rather than per widget, because `resolveWidgets`
  * rebuilds most widget objects on every render — a cache closed over by one `defineWidget` call
- * would be thrown away with it and cache nothing.
+ * would be thrown away with it and cache nothing. The per-call handle below is only the bound
+ * key, TTL, grace and loader; the entries it reads live here, so a rebuilt widget finds them.
  *
  * Process-global, keyed by widget id, and therefore only safe while no widget renders per-session
  * data. None does; the day one needs to, it must not read through here.
@@ -70,6 +71,7 @@ export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
   const { id, title, icon, className, errorDescription, load, render, skeleton } = definition;
 
   const fallback = () => <WidgetError className={className} icon={icon} name={title} description={errorDescription} />;
+  const snapshot = snapshots.define(id, TTL, GRACE, load);
 
   return {
     id,
@@ -86,27 +88,21 @@ export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
       // Synchronously, when the snapshot is warm. An async component suspends, and a suspended
       // boundary puts its skeleton in the shell no matter how fast the data arrives — so this,
       // not the cache alone, is what keeps the dashboard from painting skeletons at all.
-      const ready = snapshots.peek<T>(id, TTL, GRACE, load);
+      const ready = snapshot.peek();
 
       if (ready) return show(ready.data);
 
       return (async () => {
         try {
-          return show(await snapshots.read(id, TTL, GRACE, load));
+          return show(await snapshot.read());
         } catch (error: unknown) {
           logger.error(`Failed to load the ${title} widget`, { error, widget: id });
           return fallback();
         }
       })();
     },
-    // Both outcomes swallowed: a service being down is the render's problem to report, not the
-    // warm loop's, and an unhandled rejection in a background tick would take the process with it.
-    warm: () =>
-      snapshots.read(id, TTL, GRACE, load).then(
-        () => undefined,
-        () => undefined,
-      ),
-    ready: () => snapshots.peek<T>(id, TTL, GRACE, load) !== undefined,
+    warm: snapshot.warm,
+    ready: () => snapshot.peek() !== undefined,
     Skeleton: () => (
       <WidgetSkeleton
         className={className}
