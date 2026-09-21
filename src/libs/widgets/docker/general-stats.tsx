@@ -85,20 +85,26 @@ export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStat
   );
 }
 
-export const dockerGeneralStats = defineWidget({
-  id: "docker-general-stats",
-  title: "Local",
-  icon: dockerIcon,
-  className: dockerWidgetClassName,
-  errorDescription: "The local Docker statistics could not be loaded.",
-  skeleton: { withFooter: true, withSubtitle: true },
-  load: async (): Promise<DockerGeneralStats> => {
-    // `outdatedProjects` reads the last completed check; the widget never talks to a registry itself.
-    const [overview, outdated] = await Promise.all([docker.overview(), outdatedProjects()]);
+/**
+ * A factory rather than a singleton only so its placement can set a TTL: the cache lives in the
+ * widget layer's own map, keyed by id, so a rebuilt widget still finds what the last one loaded.
+ */
+export const dockerGeneralStats = (ttl?: number) =>
+  defineWidget({
+    id: "docker-general-stats",
+    ttl,
+    title: "Local",
+    icon: dockerIcon,
+    className: dockerWidgetClassName,
+    errorDescription: "The local Docker statistics could not be loaded.",
+    skeleton: { withFooter: true, withSubtitle: true },
+    load: async (): Promise<DockerGeneralStats> => {
+      // `outdatedProjects` reads the last completed check; the widget never talks to a registry itself.
+      const [overview, outdated] = await Promise.all([docker.overview(), outdatedProjects()]);
 
-    return { overview, outdated: [...outdated].sort() };
-  },
-  render: ({ overview, outdated }: DockerGeneralStats) => (
-    <DockerGeneralStatsCard overview={overview} outdated={outdated} />
-  ),
-});
+      return { overview, outdated: [...outdated].sort() };
+    },
+    render: ({ overview, outdated }: DockerGeneralStats) => (
+      <DockerGeneralStatsCard overview={overview} outdated={outdated} />
+    ),
+  });

@@ -96,9 +96,10 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
 }
 
 /** Arcane's own view of the host, and the link into it. */
-export const arcaneGeneralStats = (service: WidgetService) =>
+export const arcaneGeneralStats = (service: WidgetService, ttl?: number) =>
   defineWidget({
     id: "arcane-general-stats",
+    ttl,
     title: "Arcane",
     icon: arcaneIcon,
     className: arcaneWidgetClassName,

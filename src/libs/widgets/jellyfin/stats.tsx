@@ -38,9 +38,10 @@ export function JellyfinStatsCard({ counts, serviceUrl }: JellyfinStatsCardProps
 }
 
 /** What the library holds, server-wide. */
-export const jellyfinStats = (service: WidgetService) =>
+export const jellyfinStats = (service: WidgetService, ttl?: number) =>
   defineWidget({
     id: "jellyfin-stats",
+    ttl,
     title: "Jellyfin",
     icon: jellyfinIcon,
     className: jellyfinWidgetClassName,

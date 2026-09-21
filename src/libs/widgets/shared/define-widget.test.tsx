@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearWidgetCache, defineWidget } from "./define-widget.tsx";
 
 const base = {
@@ -114,6 +114,35 @@ describe("defineWidget caching", () => {
     const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
 
     await expect(widget.warm()).resolves.toBeUndefined();
+  });
+});
+
+describe("defineWidget freshness", () => {
+  const START = new Date("2026-01-01T00:00:00Z").getTime();
+
+  beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }).setSystemTime(START));
+  afterEach(() => vi.useRealTimers());
+
+  it("reloads once past the TTL its placement declared", async () => {
+    const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
+    const widget = defineWidget({ ...base, ttl: 5_000, load, render: data => <p>{data}</p> });
+
+    await widget.Widget();
+    vi.setSystemTime(START + 6_000);
+    await widget.Widget();
+
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("holds a widget that declared none for the default minute", async () => {
+    const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
+    const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
+
+    await widget.Widget();
+    vi.setSystemTime(START + 6_000);
+    await widget.Widget();
+
+    expect(load).toHaveBeenCalledTimes(1);
   });
 });
 

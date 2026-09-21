@@ -21,8 +21,8 @@ import { clockWidget } from "./clock/clock.tsx";
  *
  * A widget's API client lives beside it, in `widgets/<service>/api/`.
  *
- * A widget needing per-placement configuration is a factory over its own entry in `hangar.yml`;
- * the rest are singletons. One backed by a self-hosted service takes a `WidgetService`: it calls
+ * A widget needing per-placement configuration is a factory over its own entry in `hangar.yml` —
+ * which, since a placement may set its own cache `ttl`, is every widget that loads anything. One backed by a self-hosted service takes a `WidgetService`: it calls
  * `api` and renders `link`, which are the same address only until the operator says otherwise.
  */
 export type WidgetPlacement = {
@@ -32,24 +32,35 @@ export type WidgetPlacement = {
 
 export type { WidgetHost };
 
+/**
+ * The freshness the declaration asks for, in milliseconds.
+ *
+ * `hangar.yml` says seconds — that is what an operator writes — and this is the one place it is
+ * converted. `undefined` leaves the widget layer's own default in place. The narrowing is for the
+ * clock, the one member of the union that carries no `ttl`.
+ */
+const ttlOf = (config: WidgetConfig) => ("ttl" in config && config.ttl !== undefined ? config.ttl * 1000 : undefined);
+
 function createWidget(config: WidgetConfig, host: WidgetHost): Widget {
+  const ttl = ttlOf(config);
+
   switch (config.type) {
     case "clock":
       return clockWidget;
     case "docker-general-stats":
-      return dockerGeneralStats;
+      return dockerGeneralStats(ttl);
     case "arcane-general-stats":
-      return arcaneGeneralStats(serviceOf(config, host));
+      return arcaneGeneralStats(serviceOf(config, host), ttl);
     case "frigate-events":
-      return frigateEvents(serviceOf(config, host));
+      return frigateEvents(serviceOf(config, host), ttl);
     case "gluetun-vpn-status":
-      return gluetunVpnStatus(serviceOf(config, host));
+      return gluetunVpnStatus(serviceOf(config, host), ttl);
     case "jellyfin-stats":
-      return jellyfinStats(serviceOf(config, host));
+      return jellyfinStats(serviceOf(config, host), ttl);
     case "jellyfin-latest":
-      return jellyfinLatest(serviceOf(config, host), config.user);
+      return jellyfinLatest(serviceOf(config, host), config.user, ttl);
     case "github-releases":
-      return githubReleases(config.repositories);
+      return githubReleases(config.repositories, ttl);
   }
 }
 

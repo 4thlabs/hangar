@@ -24,6 +24,8 @@ export type WidgetDefinition<T> = {
   load: () => Promise<T>;
   /** Renders the loaded data. Return null to fall back to the error state. */
   render: (data: T) => ReactNode;
+  /** How long the loaded data stays fresh, in milliseconds. Defaults to {@link TTL}. */
+  ttl?: number | undefined;
   skeleton?: { withFooter?: boolean; withSubtitle?: boolean } | undefined;
 };
 
@@ -47,14 +49,17 @@ export type Widget = {
  * data. None does; the day one needs to, it must not read through here.
  *
  * ponytail: a widget id is not unique — `hangar.yml` accepts two `github-releases` blocks with
- * different repositories, and both would read one entry. Give `WidgetDefinition` an optional
+ * different repositories, and both would read one entry, under whichever `ttl:` bound it first. Give `WidgetDefinition` an optional
  * `cacheKey` defaulting to `id`, set to `${id}:${service.api}` by the service factories, when that
  * happens. Do not uniquify `widget.id` in `resolveWidgets` instead: the clock and Docker widgets
  * are shared module singletons, so assigning to `.id` would corrupt them for every later render.
  */
 const snapshots = new Snapshots();
 
-/** How long a widget's data is fresh. The dashboard has no auto-reload, so this is what a visit sees. */
+/**
+ * How long a widget's data is fresh, when its `hangar.yml` entry does not say. The dashboard has no
+ * auto-reload, so this is what a visit sees.
+ */
 const TTL = 60_000;
 
 /** How long a service that has stopped answering keeps rendering its last good card. */
@@ -68,10 +73,10 @@ export const clearWidgetCache = () => snapshots.clear();
  * A failing widget degrades to its own card; the rest of the dashboard stands.
  */
 export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
-  const { id, title, icon, className, errorDescription, load, render, skeleton } = definition;
+  const { id, title, icon, className, errorDescription, load, render, skeleton, ttl } = definition;
 
   const fallback = () => <WidgetError className={className} icon={icon} name={title} description={errorDescription} />;
-  const snapshot = snapshots.define(id, TTL, GRACE, load);
+  const snapshot = snapshots.define(id, ttl ?? TTL, GRACE, load);
 
   return {
     id,

@@ -80,4 +80,14 @@ describe("widgetConfigSchema", () => {
 
     expect(parsed.success).toBe(false);
   });
+
+  it("takes a cache TTL in whole seconds", () => {
+    const parsed = widgetConfigSchema.safeParse({ type: "frigate-events", column: 3, ttl: 15 });
+
+    expect(parsed.success && parsed.data).toMatchObject({ ttl: 15 });
+  });
+
+  it.each([0, -1, 1.5, "15"])("rejects %o as a TTL", value => {
+    expect(widgetConfigSchema.safeParse({ type: "frigate-events", column: 3, ttl: value }).success).toBe(false);
+  });
 });

@@ -50,9 +50,10 @@ export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
  * No header link: gluetun's control server answers JSON and nothing else, and the stack carries no
  * Traefik router, so there is no page to send anyone to.
  */
-export const gluetunVpnStatus = (service: WidgetService) =>
+export const gluetunVpnStatus = (service: WidgetService, ttl?: number) =>
   defineWidget({
     id: "gluetun-vpn-status",
+    ttl,
     title: "Gluetun",
     icon: gluetunIcon,
     className: gluetunWidgetClassName,
