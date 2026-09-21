@@ -12,7 +12,7 @@ import {
   WidgetMetadata,
   WidgetTime,
   formatBytes,
-  formatRelativeTime,
+  formatCompactTime,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
@@ -102,10 +102,13 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
                   )}
                 />
               }
-              trailing={repo.lastRunAt !== undefined && <WidgetTime at={repo.lastRunAt} now={now} />}
+              trailing={repo.lastRunAt !== undefined && <WidgetTime at={repo.lastRunAt} now={now} compact />}
             >
               <p className="truncate font-medium text-primary">{repo.id}</p>
 
+              {/* One line, not two: everything a repository has to say fits beside everything
+                  else once the clock is written `18h` instead of `18 hours ago`. It wraps rather
+                  than truncating, so a narrow column loses nothing. */}
               <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                 <WidgetMetadata>
                   <span className={repo.status !== undefined && !repo.ok ? "text-destructive" : undefined}>
@@ -113,13 +116,8 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
                   </span>
                   <span>{repo.successes} ok / 30d</span>
                   <span>{formatBytes(repo.bytesAdded)} added</span>
-                </WidgetMetadata>
-              </p>
-
-              <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                <WidgetMetadata>
                   <span>{formatBytes(repo.protectedBytes)} protected</span>
-                  {repo.nextBackupAt !== undefined && <span>next {formatRelativeTime(repo.nextBackupAt, now)}</span>}
+                  {repo.nextBackupAt !== undefined && <span>next {formatCompactTime(repo.nextBackupAt, now)}</span>}
                 </WidgetMetadata>
               </p>
             </WidgetListItem>

@@ -89,8 +89,9 @@ describe("BackrestSummaryCard", () => {
     expect(html).toContain("28 ok / 30d");
     expect(html).toContain("4.2 GB added");
     expect(html).toContain("612.0 GB protected");
-    expect(html).toContain("2 hours ago");
-    expect(html).toContain("next in 22 hours");
+    // Compact, as Glance writes it: a row carrying five other facts cannot spend "2 hours ago".
+    expect(html).toContain("2h");
+    expect(html).toContain("next in 22h");
   });
 
   it("marks a failed repository in words, not only in colour", () => {
