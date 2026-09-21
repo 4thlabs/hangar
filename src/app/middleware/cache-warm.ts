@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from "hono/types";
-import { docker } from "#libs/docker/server";
+import { appsSnapshot } from "#app/snapshots.ts";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { resolveWidgets } from "#libs/widgets";
@@ -26,10 +26,9 @@ function tick() {
 
   // Failures are the render's to report, not the loop's: a service that is down leaves nothing
   // cached and the widget falls back to its error card, exactly as it would without warming.
-  void Promise.all([
-    docker.listProjects().catch(() => undefined),
-    ...widgets.map(placement => placement.widget.warm()),
-  ]);
+  // Each page contributes one snapshot, so this list cannot fall behind what a page actually
+  // reads the way a hand-written list of ingredients did.
+  void Promise.all([appsSnapshot.warm(), ...widgets.map(placement => placement.widget.warm())]);
 }
 
 /**
