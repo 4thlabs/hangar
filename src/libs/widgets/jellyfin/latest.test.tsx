@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clearWidgetCache } from "../mock/index.ts";
 import type { JellyfinItem } from "./api/client.ts";
 import { JellyfinLatestCard, displayItem, jellyfinLatest } from "./latest.tsx";
 import { aService } from "../mock/mock.ts";
@@ -11,6 +12,8 @@ const service = {
   link: "https://jellyfin.test.local",
   apiKey: () => Promise.resolve("s3cret"),
 };
+
+beforeEach(clearWidgetCache);
 
 describe("displayItem", () => {
   it("shows an episode as its series, so ten stills of one show become one poster", () => {

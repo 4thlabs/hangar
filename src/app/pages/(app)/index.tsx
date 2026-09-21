@@ -28,13 +28,21 @@ function Dashboard() {
 
         return (
           <div key={column} className={COLUMN_CLASSNAME[column]}>
-            {columnPlacements.map(({ widget: { id, Widget, Skeleton } }) => (
-              // Per-widget boundary: each streams in behind its own skeleton
-              // instead of the whole grid blocking on the slowest one.
-              <Suspense key={id} fallback={<Skeleton />}>
-                <Widget />
-              </Suspense>
-            ))}
+            {columnPlacements.map(({ widget: { id, Widget, Skeleton, ready } }) =>
+              // A warm widget renders inline, with no boundary at all. Wrapping it in one anyway
+              // would put its skeleton in the shell and stream the card in behind it, because that
+              // is what a boundary does whether or not its child ever suspends — which is a
+              // skeleton on screen for data the server already had in hand.
+              ready() ? (
+                <Widget key={id} />
+              ) : (
+                // Cold, or its service is down: back behind a boundary, so it streams in on its own
+                // instead of holding up the rest of the grid.
+                <Suspense key={id} fallback={<Skeleton />}>
+                  <Widget />
+                </Suspense>
+              ),
+            )}
           </div>
         );
       })}
