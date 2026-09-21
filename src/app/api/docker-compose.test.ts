@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   apps: new Set<{ id: string; installed: boolean }>(),
   notify: vi.fn(),
   logger: { warn: vi.fn(), error: vi.fn() },
+  markUpdated: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -22,6 +23,7 @@ vi.mock("#libs/hangar/server", () => ({
   },
 }));
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
+vi.mock("#libs/jobs", () => ({ markUpdated: mocks.markUpdated }));
 vi.mock("#libs/notifications/server", () => ({ notifications: { notify: mocks.notify } }));
 
 const { POST } = await import("#app/pages/_api/api/docker/apps/compose.ts");
@@ -88,6 +90,21 @@ describe("POST Docker Compose stream", () => {
     );
     // No failure, so the marker the client reads as an exit code is zero.
     expect(body).toContain("[hangar] exit=0");
+  });
+
+  it("notes each updated app, so its badge stops lying without a registry call", async () => {
+    const response = await call("operation=update&projects=alpha,beta");
+    await response.text();
+
+    expect(mocks.markUpdated.mock.calls.flat()).toEqual(["alpha", "beta"]);
+  });
+
+  it("notes nothing for an app whose update failed, or for an operation that never pulls", async () => {
+    mocks.compose.mockRejectedValueOnce(new Error("boom"));
+    await (await call("operation=update&projects=alpha")).text();
+    await (await call("operation=up&projects=beta")).text();
+
+    expect(mocks.markUpdated).not.toHaveBeenCalled();
   });
 
   it("carries on after a failed app and counts it in the exit marker", async () => {

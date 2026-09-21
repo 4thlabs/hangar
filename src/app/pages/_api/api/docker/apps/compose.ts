@@ -8,6 +8,7 @@ import { docker } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { notifications } from "#libs/notifications/server";
+import { markUpdated } from "#libs/jobs";
 
 /**
  * Streams `docker compose <operation>` over one or more apps as plain text, live.
@@ -61,6 +62,11 @@ export const POST = apiRoute(
         // a compose run that fails half-way still leaves containers it did start.
         try {
           await hangar.store.compose(project, [...appOperationArguments[operation]], { pipe: output });
+
+          // It just pulled, so the "Mise à jour" badge is answering from a report that is now
+          // wrong. Recorded locally rather than re-checked: see `markUpdated`.
+          if (operation === "update") markUpdated(project);
+
           await notifications.notify({
             userId: session.user.id,
             level: "success",

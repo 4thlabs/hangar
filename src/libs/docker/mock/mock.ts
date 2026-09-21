@@ -55,6 +55,7 @@ type Overrides = {
   ports?: Dockerode.Port[];
   tty?: boolean;
   image?: string;
+  imageId?: string;
 };
 
 /**
@@ -74,9 +75,10 @@ export function containerSource({
   ports = [{ IP: "127.0.0.1", PrivatePort: 80, PublicPort: 8080, Type: "tcp" }],
   tty = false,
   image = "nginx:alpine",
+  imageId = "sha256:running",
 }: Overrides = {}): ComposeContainerSource {
   return {
-    info: { Id, Names: [name], Image: image, Labels: labels, State: state, Ports: ports },
+    info: { Id, Names: [name], Image: image, ImageID: imageId, Labels: labels, State: state, Ports: ports },
     detail: {
       Id,
       Name: name,

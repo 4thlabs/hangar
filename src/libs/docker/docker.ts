@@ -168,45 +168,91 @@ export class Docker {
    */
   async imageUpdates(): Promise<ImageUpdate[]> {
     const installed = this.apps.installedProjectIds();
-    const pairs = new Map<string, { project: string; image: string }>();
+    const pairs = new Map<string, { project: string; image: string; imageId: string }>();
 
+    // Keyed by the running image too, not only the reference: a pull moves the tag while the
+    // containers keep the image they were created with, so two of them on one tag can differ.
     for (const { info } of await this.containers.read()) {
       const project = info.Labels[ComposeProjects.LABEL.project] ?? "";
+      const pair = { project, image: info.Image, imageId: info.ImageID };
 
-      if (installed.has(project)) pairs.set(`${project}\u0000${info.Image}`, { project, image: info.Image });
+      if (installed.has(project)) pairs.set(`${project}\u0000${info.Image}\u0000${info.ImageID}`, pair);
     }
 
-    const references = [...new Set([...pairs.values()].map(pair => pair.image))];
-    const statuses = new Map(
-      await Promise.all(references.map(async image => [image, await this.imageStatus(image)] as const)),
+    const running = [...pairs.values()];
+
+    // Local first, and it decides who gets a registry call: an image built here carries no
+    // registry digest to compare against, and asking about it would spend a rate-limited round
+    // trip to learn nothing.
+    const ids = [...new Set(running.map(pair => pair.imageId))];
+    const locals = new Map(await Promise.all(ids.map(async id => [id, await this.localDigests(id)] as const)));
+
+    const references = [...new Set(running.filter(pair => locals.get(pair.imageId)?.length).map(pair => pair.image))];
+    const remotes = new Map(
+      await Promise.all(references.map(async image => [image, await this.remoteDigest(image)] as const)),
     );
 
-    return [...pairs.values()].map(pair => ({ ...pair, status: statuses.get(pair.image) ?? "unknown" }));
+    return running.map(({ project, image, imageId }) => ({
+      project,
+      image,
+      status: Docker.imageStatus(image, locals.get(imageId) ?? null, remotes.get(image) ?? null),
+    }));
   }
 
   /**
-   * One reference's verdict against its registry.
-   * @param image The reference as Compose runs it, e.g. `nginx:alpine`
+   * The registry digests of the image a container is *running*, looked up by id and never by
+   * reference. `docker compose pull` moves the tag and leaves the containers on the image they
+   * were created with, so resolving the tag would report an app current while it still runs the
+   * old one — and the tag is what Hangar itself moves, every time it pulls.
+   *
+   * `null` when the image could not be read; an empty list when it was never pulled.
    */
-  private async imageStatus(image: string): Promise<ImageUpdateStatus> {
-    // Pinned to a digest, or named by id: the reference already denotes one exact image.
-    if (image.includes("@sha256:") || image.startsWith("sha256:")) return "current";
+  private async localDigests(imageId: string): Promise<string[] | null> {
+    // Compose never filled it in, or the daemon did not report one: nothing to inspect.
+    if (!imageId) return null;
 
     try {
-      const local = await this.docker.getImage(image).inspect();
+      return (await this.docker.getImage(imageId).inspect()).RepoDigests ?? [];
+    } catch (error) {
+      logger.warn("Could not read the image a container runs", { error, imageId });
 
-      // An image built here was never pulled, so it carries no registry digest to compare against.
-      if (!local.RepoDigests?.length) return "unknown";
+      return null;
+    }
+  }
 
+  /**
+   * What the registry serves for this reference, or `null` when it could not say.
+   * One call per reference: replicas of a service share an image, and two apps may share one too.
+   * @param image The reference as Compose runs it, e.g. `nginx:alpine`
+   */
+  private async remoteDigest(image: string): Promise<string | null> {
+    // Pinned to a digest, or named by id: the reference already denotes one exact image.
+    if (image.includes("@sha256:") || image.startsWith("sha256:")) return null;
+
+    try {
       const remote = await this.docker.getImage(image).distribution({ abortSignal: AbortSignal.timeout(10_000) });
 
-      return local.RepoDigests.some(digest => digest.endsWith(`@${remote.Descriptor.digest}`)) ? "current" : "outdated";
+      return remote.Descriptor.digest;
     } catch (error) {
       // Unreachable registry, rate limit, private image with no credentials: all say "don't know".
       logger.warn("Could not check an image for updates", { error, image });
 
-      return "unknown";
+      return null;
     }
+  }
+
+  /**
+   * One container's verdict, from what it runs and what the registry serves. Pure: both lookups
+   * already happened, which is what lets them be batched and deduplicated above.
+   */
+  private static imageStatus(image: string, local: string[] | null, remote: string | null): ImageUpdateStatus {
+    // Pinned to a digest, or named by id: the reference already denotes one exact image.
+    if (image.includes("@sha256:") || image.startsWith("sha256:")) return "current";
+
+    // Unreadable image, one built here rather than pulled, or a registry that could not answer.
+    if (!local?.length || !remote) return "unknown";
+
+    return local.some(digest => digest.endsWith(`@${remote}`)) ? "current" : "outdated";
   }
 
   /**
