@@ -8,6 +8,8 @@ import { docker } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { notifications } from "#libs/notifications/server";
+import { CheckImageVersion } from "#libs/jobs";
+import { Sidequest } from "sidequest";
 
 /**
  * Streams `docker compose <operation>` over one or more apps as plain text, live.
@@ -81,6 +83,16 @@ export const POST = apiRoute(
         } finally {
           docker.invalidate();
         }
+      }
+
+      // The "Mise à jour" badge is a projection of the last image check, not of live state, so a
+      // batch that just pulled leaves it claiming updates that no longer exist. Re-check once for
+      // the batch — `docker.invalidate()` above cannot do it: that report is not a Docker read.
+      // Guarded: the client is waiting on the marker below, and a stale badge is the smaller loss.
+      try {
+        await Sidequest.build(CheckImageVersion).enqueue();
+      } catch (error) {
+        logger.error("Could not queue an image check after a Compose batch", { error });
       }
 
       // The marker carries the number of failed apps, so `composeExitCode` keeps its meaning:

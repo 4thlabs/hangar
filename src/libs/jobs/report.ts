@@ -35,11 +35,17 @@ export function outdatedProjects(): Promise<Set<string>> {
 
 async function read(): Promise<Set<string>> {
   try {
-    // Jobs list newest first, so one row is the last completed run.
-    const [last] = await Sidequest.job.list({ jobClass: "CheckImageVersion", state: "completed", limit: 1 });
+    // Jobs list by row id, descending — which is *not* run order: rerunning one from the Jobs
+    // settings page resets the row it was run from and keeps its id, so a fresh result can sit
+    // below an older one. Take the last few and pick by the timestamp the report itself carries.
+    const runs = await Sidequest.job.list({ jobClass: "CheckImageVersion", state: "completed", limit: 10 });
     // JSON read back out of SQLite: trusted no further than the one shape we wrote.
-    const report = last?.result as ImageUpdateReport | undefined;
-    const updates = Array.isArray(report?.updates) ? report.updates : [];
+    const reports = runs.map(run => run.result as ImageUpdateReport | undefined);
+    const last = reports.reduce<ImageUpdateReport | undefined>(
+      (newest, report) => (report?.checkedAt && (!newest || report.checkedAt > newest.checkedAt) ? report : newest),
+      undefined,
+    );
+    const updates = Array.isArray(last?.updates) ? last.updates : [];
 
     return new Set(updates.filter(update => update.status === "outdated").map(update => update.project));
   } catch (error) {

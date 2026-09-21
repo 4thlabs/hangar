@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   apps: new Set<{ id: string; installed: boolean }>(),
   notify: vi.fn(),
   logger: { warn: vi.fn(), error: vi.fn() },
+  enqueue: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -22,6 +23,11 @@ vi.mock("#libs/hangar/server", () => ({
   },
 }));
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
+// Partial: the route reaches `Sidequest` through `#libs/jobs`, whose job classes extend `Job`.
+vi.mock("sidequest", async importOriginal => ({
+  ...(await importOriginal<typeof import("sidequest")>()),
+  Sidequest: { build: () => ({ enqueue: mocks.enqueue }) },
+}));
 vi.mock("#libs/notifications/server", () => ({ notifications: { notify: mocks.notify } }));
 
 const { POST } = await import("#app/pages/_api/api/docker/apps/compose.ts");
@@ -37,6 +43,7 @@ describe("POST Docker Compose stream", () => {
     mocks.getSession.mockResolvedValue({ user: { id: "1" } });
     mocks.compose.mockResolvedValue(undefined);
     mocks.notify.mockResolvedValue(undefined);
+    mocks.enqueue.mockResolvedValue(undefined);
   });
 
   it("returns 401 before running anything", async () => {
@@ -87,6 +94,22 @@ describe("POST Docker Compose stream", () => {
       expect.objectContaining({ userId: "1", level: "success", href: "/apps/alpha" }),
     );
     // No failure, so the marker the client reads as an exit code is zero.
+    expect(body).toContain("[hangar] exit=0");
+  });
+
+  it("queues one image check for the batch, so the update badge stops lying", async () => {
+    const response = await call("operation=update&projects=alpha,beta");
+    await response.text();
+
+    expect(mocks.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it("still ends the stream when the image check cannot be queued", async () => {
+    mocks.enqueue.mockRejectedValueOnce(new Error("engine down"));
+
+    const response = await call("operation=update&projects=alpha");
+    const body = await response.text();
+
     expect(body).toContain("[hangar] exit=0");
   });
 
