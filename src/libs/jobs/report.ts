@@ -33,6 +33,29 @@ export function outdatedProjects(): Promise<Set<string>> {
   return outdatedSnapshot.read();
 }
 
+/**
+ * When each app was last pulled to its newest image from this process.
+ *
+ * An update pulls by definition, so the app is current the moment it succeeds — and the last
+ * report, which is up to four hours old, still says otherwise. Re-running the check to learn
+ * what we already know would spend a registry round trip per reference, every click, against
+ * the rate limit the four-hourly schedule exists to respect. So the answer is recorded here
+ * and the report is read through it.
+ *
+ * ponytail: in memory, so a restart falls back to the last report and the badge is briefly
+ * wrong again. Persist it only if that is ever noticed.
+ */
+const updatedAt = new Map<string, number>();
+
+/**
+ * Records that `project` now runs what its registry serves, and drops the cached set so the
+ * badge goes at the next read rather than at the end of its TTL.
+ */
+export function markUpdated(project: string) {
+  updatedAt.set(project, Date.now());
+  snapshots.clear();
+}
+
 async function read(): Promise<Set<string>> {
   try {
     // Jobs list by row id, descending — which is *not* run order: rerunning one from the Jobs
@@ -46,8 +69,17 @@ async function read(): Promise<Set<string>> {
       undefined,
     );
     const updates = Array.isArray(last?.updates) ? last.updates : [];
+    const checkedAt = Date.parse(last?.checkedAt ?? "") || 0;
 
-    return new Set(updates.filter(update => update.status === "outdated").map(update => update.project));
+    // A check that ran after the update has the newer answer, whatever it is; the note has done
+    // its job and would otherwise hide a genuine update found since.
+    for (const [project, at] of updatedAt) if (at <= checkedAt) updatedAt.delete(project);
+
+    return new Set(
+      updates
+        .filter(update => update.status === "outdated" && (updatedAt.get(update.project) ?? 0) <= checkedAt)
+        .map(update => update.project),
+    );
   } catch (error) {
     logger.error("Failed to read the last image check", { error });
 
