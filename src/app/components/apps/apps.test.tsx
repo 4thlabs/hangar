@@ -8,11 +8,11 @@ vi.mock("waku", () => ({
   useRouter: () => ({ reload: async () => {} }),
 }));
 vi.mock("waku/router/client", () => ({
-  useSearch_UNSTABLE: () => ({ q: "", status: [], category: [], sort: null }),
+  useSearch_UNSTABLE: () => ({ q: "", status: [], category: [], update: [], sort: null }),
   useSetSearch_UNSTABLE: () => () => {},
 }));
 
-const noSearch = { q: "", status: [], category: [], sort: null };
+const noSearch = { q: "", status: [], category: [], update: [], sort: null };
 
 const { AppsTable } = await import("./apps-table.tsx");
 const { AppsOverview } = await import("./apps-overview.tsx");

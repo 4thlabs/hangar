@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
+import type { AppsSearch } from "#app/search-codecs.ts";
 import type { ComposeProjectSummary } from "#libs/docker";
-import { countBy, filterProjects, nextSort } from "./filter.ts";
+import { countBy, filterProjects, nextSort, updateState } from "./filter.ts";
+
+/** The `/apps` search params, defaulting every dimension to "no filter". */
+const search = (selected: Partial<AppsSearch> = {}): AppsSearch => ({
+  q: "",
+  status: [],
+  category: [],
+  update: [],
+  sort: null,
+  ...selected,
+});
 
 const project = (name: string, status: ComposeProjectSummary["status"], category?: string): ComposeProjectSummary => ({
   name,
@@ -29,45 +40,44 @@ const classified = [
   project("audiobookshelf", "partial", "infra"),
 ];
 
+/** The same four apps after a version check: two behind, one current, one never checked. */
+const checked = [
+  { ...project("nextcloud", "running"), updateAvailable: true },
+  { ...project("gitea", "stopped"), updateAvailable: false },
+  { ...project("immich", "unhealthy"), updateAvailable: true },
+  project("audiobookshelf", "partial"),
+];
+
 const names = (result: ComposeProjectSummary[]) => result.map(entry => entry.name);
 
 describe("filterProjects", () => {
   it("shows everything, alphabetically, when nothing is selected", () => {
-    expect(names(filterProjects(projects, { q: "", status: [], category: [], sort: null }))).toEqual([
-      "audiobookshelf",
-      "gitea",
-      "immich",
-      "nextcloud",
-    ]);
+    expect(names(filterProjects(projects, search()))).toEqual(["audiobookshelf", "gitea", "immich", "nextcloud"]);
   });
 
   it("narrows to one selected status", () => {
-    expect(names(filterProjects(projects, { q: "", status: ["running"], category: [], sort: null }))).toEqual([
-      "nextcloud",
-    ]);
+    expect(names(filterProjects(projects, search({ status: ["running"] })))).toEqual(["nextcloud"]);
   });
 
   it("shows the union of several selected statuses", () => {
-    const result = filterProjects(projects, { q: "", status: ["unhealthy", "partial"], category: [], sort: null });
+    const result = filterProjects(projects, search({ status: ["unhealthy", "partial"] }));
 
     expect(names(result)).toEqual(["audiobookshelf", "immich"]);
   });
 
   it("matches names loosely, and by subsequence", () => {
-    expect(names(filterProjects(projects, { q: "next", status: [], category: [], sort: null }))).toEqual(["nextcloud"]);
-    expect(names(filterProjects(projects, { q: "abs", status: [], category: [], sort: null }))).toEqual([
-      "audiobookshelf",
-    ]);
+    expect(names(filterProjects(projects, search({ q: "next" })))).toEqual(["nextcloud"]);
+    expect(names(filterProjects(projects, search({ q: "abs" })))).toEqual(["audiobookshelf"]);
   });
 
   it("applies the status filter before the query", () => {
     // "nextcloud" matches the query but is running, so the stopped-only filter wins.
-    expect(filterProjects(projects, { q: "next", status: ["stopped"], category: [], sort: null })).toEqual([]);
+    expect(filterProjects(projects, search({ q: "next", status: ["stopped"] }))).toEqual([]);
   });
 
   it("leaves the caller's array untouched", () => {
     const original = [...projects];
-    filterProjects(projects, { q: "", status: [], category: [], sort: null });
+    filterProjects(projects, search());
 
     expect(projects).toEqual(original);
   });
@@ -75,7 +85,7 @@ describe("filterProjects", () => {
 
 describe("sorting", () => {
   const sorted = (column: Parameters<typeof nextSort>[1], descending: boolean) =>
-    names(filterProjects(projects, { q: "", status: [], category: [], sort: { column, descending } }));
+    names(filterProjects(projects, search({ sort: { column, descending } })));
 
   it("sorts by name in both directions", () => {
     expect(sorted("name", false)).toEqual(["audiobookshelf", "gitea", "immich", "nextcloud"]);
@@ -92,12 +102,7 @@ describe("sorting", () => {
       { ...project("a", "running"), containerCount: 9 },
       { ...project("b", "running"), containerCount: 10 },
     ];
-    const result = filterProjects(wide, {
-      q: "",
-      status: [],
-      category: [],
-      sort: { column: "containers", descending: true },
-    });
+    const result = filterProjects(wide, search({ sort: { column: "containers", descending: true } }));
 
     // A string compare would put "9" after "10".
     expect(names(result)).toEqual(["b", "a"]);
@@ -110,10 +115,8 @@ describe("sorting", () => {
   });
 
   it("overrides search relevance when a column is chosen", () => {
-    const relevance = names(filterProjects(projects, { q: "i", status: [], category: [], sort: null }));
-    const byName = names(
-      filterProjects(projects, { q: "i", status: [], category: [], sort: { column: "name", descending: true } }),
-    );
+    const relevance = names(filterProjects(projects, search({ q: "i" })));
+    const byName = names(filterProjects(projects, search({ q: "i", sort: { column: "name", descending: true } })));
 
     expect(byName).toEqual([...relevance].sort((left, right) => right.localeCompare(left)));
   });
@@ -121,14 +124,11 @@ describe("sorting", () => {
 
 describe("category filter", () => {
   it("keeps only the selected category", () => {
-    expect(names(filterProjects(classified, { q: "", status: [], category: ["media"], sort: null }))).toEqual([
-      "immich",
-      "nextcloud",
-    ]);
+    expect(names(filterProjects(classified, search({ category: ["media"] })))).toEqual(["immich", "nextcloud"]);
   });
 
   it("unions several categories, and drops the apps in none of them", () => {
-    expect(names(filterProjects(classified, { q: "", status: [], category: ["media", "infra"], sort: null }))).toEqual([
+    expect(names(filterProjects(classified, search({ category: ["media", "infra"] })))).toEqual([
       "audiobookshelf",
       "immich",
       "nextcloud",
@@ -136,26 +136,45 @@ describe("category filter", () => {
   });
 
   it("combines with the status filter", () => {
-    expect(names(filterProjects(classified, { q: "", status: ["running"], category: ["media"], sort: null }))).toEqual([
+    expect(names(filterProjects(classified, search({ status: ["running"], category: ["media"] })))).toEqual([
       "nextcloud",
     ]);
   });
 
   it("sorts by category, grouping the unclassified last and breaking ties on the name", () => {
-    expect(
-      names(
-        filterProjects(classified, {
-          q: "",
-          status: [],
-          category: [],
-          sort: { column: "category", descending: false },
-        }),
-      ),
-    ).toEqual(["audiobookshelf", "immich", "nextcloud", "gitea"]);
+    expect(names(filterProjects(classified, search({ sort: { column: "category", descending: false } })))).toEqual([
+      "audiobookshelf",
+      "immich",
+      "nextcloud",
+      "gitea",
+    ]);
   });
 
   it("yields nothing for a category no app carries", () => {
-    expect(filterProjects(classified, { q: "", status: [], category: ["gaming"], sort: null })).toEqual([]);
+    expect(filterProjects(classified, search({ category: ["gaming"] }))).toEqual([]);
+  });
+});
+
+describe("update filter", () => {
+  it("keeps only the apps with an update", () => {
+    expect(names(filterProjects(checked, search({ update: ["available"] })))).toEqual(["immich", "nextcloud"]);
+  });
+
+  it("counts the never-checked apps as up to date", () => {
+    // `audiobookshelf` has no `updateAvailable` at all, and its row shows no badge either.
+    expect(names(filterProjects(checked, search({ update: ["current"] })))).toEqual(["audiobookshelf", "gitea"]);
+  });
+
+  it("filters nothing when both states are selected", () => {
+    expect(names(filterProjects(checked, search({ update: ["available", "current"] })))).toEqual(
+      names(filterProjects(checked, search())),
+    );
+  });
+
+  it("combines with the status filter", () => {
+    expect(names(filterProjects(checked, search({ status: ["running"], update: ["available"] })))).toEqual([
+      "nextcloud",
+    ]);
   });
 });
 
@@ -188,5 +207,9 @@ describe("countBy", () => {
 
   it("leaves apps in no category out of the category counts", () => {
     expect(countBy(classified, entry => entry.category?.name)).toEqual({ media: 2, infra: 1 });
+  });
+
+  it("splits the update states in two", () => {
+    expect(countBy(checked, updateState)).toEqual({ available: 2, current: 2 });
   });
 });

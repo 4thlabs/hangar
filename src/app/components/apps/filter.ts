@@ -1,5 +1,11 @@
 import { searchByName } from "#app/search.ts";
-import { APP_STATUSES, type AppSortColumn, type AppsSearch, type AppsSort } from "#app/search-codecs.ts";
+import {
+  APP_STATUSES,
+  type AppSortColumn,
+  type AppsSearch,
+  type AppsSort,
+  type AppUpdate,
+} from "#app/search-codecs.ts";
 import type { ComposeProjectSummary } from "#libs/docker";
 
 /** What each sortable column compares on. Status sorts by severity, i.e. `APP_STATUSES` order. */
@@ -29,7 +35,15 @@ function sortProjects(projects: ComposeProjectSummary[], { column, descending }:
 }
 
 /**
- * Narrows the app list to the selected categories and statuses, then to the search query.
+ * Which side of the update filter a project falls on. `updateAvailable` is `undefined` until the
+ * version check has run, and an app nobody has looked at yet counts as up to date — the same call
+ * the row badge already makes.
+ */
+export const updateState = (project: ComposeProjectSummary): AppUpdate =>
+  project.updateAvailable ? "available" : "current";
+
+/**
+ * Narrows the app list to the selected categories, statuses and update states, then to the query.
  * An empty list means no filter on that dimension, so the unfiltered view needs no special case.
  * A stack missing from every `hangar.yml` category can only show up unfiltered.
  * @param projects The current snapshot's projects
@@ -37,7 +51,7 @@ function sortProjects(projects: ComposeProjectSummary[], { column, descending }:
  */
 export function filterProjects(
   projects: ComposeProjectSummary[],
-  { q, status, category, sort }: AppsSearch,
+  { q, status, category, update, sort }: AppsSearch,
 ): ComposeProjectSummary[] {
   const classified =
     category.length === 0
@@ -46,7 +60,9 @@ export function filterProjects(
 
   const matching = status.length === 0 ? classified : classified.filter(project => status.includes(project.status));
 
-  const found = searchByName(q, matching);
+  const fresh = update.length === 0 ? matching : matching.filter(project => update.includes(updateState(project)));
+
+  const found = searchByName(q, fresh);
 
   // An explicit column wins over relevance: the user asked for that order.
   return sort ? sortProjects(found, sort) : found;
