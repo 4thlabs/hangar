@@ -1,5 +1,5 @@
 import { PassThrough } from "node:stream";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -322,14 +322,31 @@ describe("Docker container sweeps", () => {
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps one project's sweep apart from the whole host's", async () => {
+  it("serves the same sweep to the apps list and to one project's detail", async () => {
     givenContainers([container()]);
     const docker = client("alpha");
 
     await docker.listProjects();
     await docker.projectDetail("alpha");
 
-    expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
+    expect(dockerMock.listContainers).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the containers it could inspect when one has gone away mid-sweep", async () => {
+    const sources = [container(), container({ Id: "container-2", name: "/alpha-web-2" })];
+    givenContainers(sources);
+
+    // A container that exits between the list and its inspect answers 404, which is the common
+    // case right after a `compose down` — not a reason to fail the whole page.
+    dockerMock.inspect.mockImplementation((id: string) =>
+      id === "container-2"
+        ? Promise.reject(new Error("no such container"))
+        : Promise.resolve(sources.find(entry => entry.info.Id === id)?.detail),
+    );
+
+    const { projects } = await client("alpha").listProjects();
+
+    expect(projects[0]).toMatchObject({ name: "alpha", containerCount: 1 });
   });
 
   it("asks again once the sweep has expired", async () => {
@@ -361,5 +378,77 @@ describe("Docker container sweeps", () => {
     givenContainers([container()]);
 
     await expect(docker.listProjects()).resolves.toMatchObject({ projects: [{ name: "alpha" }] });
+  });
+});
+
+describe("Docker snapshot staleness", () => {
+  /** A fixed point to move away from; the cache reads the clock, nothing here is on a timer. */
+  const START = 1_700_000_000_000;
+
+  /** Only `Date` is faked: every `await` in here still settles on real microtasks. */
+  beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }).setSystemTime(START));
+
+  afterEach(() => {
+    vi.useRealTimers();
+    dockerMock.info.mockReset();
+    dockerMock.df.mockReset();
+  });
+
+  /** The two calls `overview` makes, answering with the given daemon version. */
+  const givenDaemon = (version: string) => {
+    dockerMock.info.mockResolvedValue({
+      ServerVersion: version,
+      Containers: 1,
+      ContainersRunning: 1,
+      ContainersStopped: 0,
+    });
+    dockerMock.df.mockResolvedValue({ LayersSize: 0, Images: null, Volumes: null });
+  };
+
+  it("serves a stale overview at once and refreshes behind it", async () => {
+    const docker = client("alpha");
+    givenDaemon("27.3.1");
+
+    expect((await docker.overview()).version).toBe("27.3.1");
+
+    givenDaemon("28.0.0");
+    vi.setSystemTime(START + 61_000);
+
+    // Past its TTL but inside the grace window: the caller gets the snapshot without waiting on
+    // the daemon, and the reload goes out behind it.
+    expect((await docker.overview()).version).toBe("27.3.1");
+    expect(dockerMock.df).toHaveBeenCalledTimes(2);
+
+    await vi.waitFor(() => expect(dockerMock.df).toHaveBeenCalledTimes(2));
+
+    expect((await docker.overview()).version).toBe("28.0.0");
+  });
+
+  it("stops serving a stale overview once the daemon has been down past the grace window", async () => {
+    const docker = client("alpha");
+    givenDaemon("27.3.1");
+    await docker.overview();
+
+    dockerMock.info.mockRejectedValue(new Error("socket gone"));
+    dockerMock.df.mockRejectedValue(new Error("socket gone"));
+
+    // Inside the grace window the failed reload puts the snapshot back, timestamp and all...
+    vi.setSystemTime(START + 61_000);
+    await expect(docker.overview()).resolves.toMatchObject({ version: "27.3.1" });
+
+    // ...so it keeps ageing, and past it the caller gets the daemon's real error instead.
+    vi.setSystemTime(START + 400_000);
+    await expect(docker.overview()).rejects.toThrow("socket gone");
+  });
+
+  it("serves a stale sweep at once rather than waiting on the daemon", async () => {
+    givenContainers([container()]);
+    const docker = client("alpha");
+
+    await docker.listProjects();
+    vi.setSystemTime(START + 6_000);
+    await docker.listProjects();
+
+    expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
   });
 });
