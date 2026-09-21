@@ -136,7 +136,7 @@ function UserMenu({ user }: { user: AvatarUser }) {
       <DropdownMenuTrigger
         render={
           <Button
-            className="cursor-pointer md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
+            className="cursor-pointer lg:h-9 lg:w-auto lg:gap-1.5 lg:px-2.5"
             variant="ghost"
             size="icon"
             aria-label={`Menu utilisateur de ${user.name}`}
@@ -144,8 +144,8 @@ function UserMenu({ user }: { user: AvatarUser }) {
         }
       >
         <UserAvatar user={user} />
-        <span className="hidden max-w-36 truncate md:inline">{user.name}</span>
-        <ChevronDownIcon data-icon="inline-end" className="hidden md:block" />
+        <span className="hidden max-w-36 truncate lg:inline">{user.name}</span>
+        <ChevronDownIcon data-icon="inline-end" className="hidden lg:block" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={6} className="min-w-56">
         <DropdownMenuGroup>
@@ -186,12 +186,17 @@ export function AppNavbar({ user, notifications }: AppNavbarProps) {
   return (
     <header className="shrink-0 border-b border-sidebar-border bg-sidebar text-sidebar-foreground [--background:var(--sidebar)] [--foreground:var(--sidebar-foreground)] [--input:var(--sidebar-border)] [--muted:var(--sidebar-accent)] [--ring:var(--sidebar-ring)] [--secondary:var(--sidebar-accent)] [--secondary-foreground:var(--sidebar-accent-foreground)]">
       {/*
+        The centre track is sized before the `1fr` ones, so a `minmax(…,32rem)` search takes its
+        512px first and leaves the side tracks whatever is left — at `md` that was ~96px each and
+        the nav painted over the field. `max-content` floors the sides on their real width
+        (`min-w-0` would let them collapse again), so the search gets the leftover instead.
+
         One grid for both layouts, not one each. A second tree hidden with `md:hidden` is still
         mounted: every control inside it would run twice, with its own state, its own effects and
         its own subscriptions — two user menus, two notification streams.
       */}
-      <div className="relative grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 md:grid-cols-[minmax(0,1fr)_minmax(16rem,32rem)_minmax(0,1fr)] md:gap-4 md:px-4">
-        <div className="col-start-1 flex h-full min-w-0 items-center justify-start gap-2">
+      <div className="relative grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 md:grid-cols-[minmax(max-content,1fr)_minmax(0,32rem)_minmax(max-content,1fr)] md:gap-4 md:px-4">
+        <div className="col-start-1 flex h-full items-center justify-start gap-2">
           <MobileNavbarActions />
           <Brand />
           <DesktopNavigation />
@@ -203,7 +208,7 @@ export function AppNavbar({ user, notifications }: AppNavbarProps) {
           <NavbarSearch id="navbar-search-desktop" />
         </div>
 
-        <div className="col-start-3 flex min-w-0 items-center justify-end gap-2">
+        <div className="col-start-3 flex items-center justify-end gap-2">
           <NotificationsMenu initial={notifications} />
           <SettingsButton />
           <UserMenu user={user} />
