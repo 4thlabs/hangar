@@ -412,16 +412,15 @@ describe("Docker snapshot staleness", () => {
     expect((await docker.overview()).version).toBe("27.3.1");
 
     givenDaemon("28.0.0");
-    vi.setSystemTime(START + 61_000);
+    vi.setSystemTime(START + 310_000);
 
     // Past its TTL but inside the grace window: the caller gets the snapshot without waiting on
     // the daemon, and the reload goes out behind it.
     expect((await docker.overview()).version).toBe("27.3.1");
     expect(dockerMock.df).toHaveBeenCalledTimes(2);
 
-    await vi.waitFor(() => expect(dockerMock.df).toHaveBeenCalledTimes(2));
-
-    expect((await docker.overview()).version).toBe("28.0.0");
+    // Once that reload settles, the snapshot is the new one.
+    await vi.waitFor(async () => expect((await docker.overview()).version).toBe("28.0.0"));
   });
 
   it("stops serving a stale overview once the daemon has been down past the grace window", async () => {
@@ -433,11 +432,11 @@ describe("Docker snapshot staleness", () => {
     dockerMock.df.mockRejectedValue(new Error("socket gone"));
 
     // Inside the grace window the failed reload puts the snapshot back, timestamp and all...
-    vi.setSystemTime(START + 61_000);
+    vi.setSystemTime(START + 310_000);
     await expect(docker.overview()).resolves.toMatchObject({ version: "27.3.1" });
 
     // ...so it keeps ageing, and past it the caller gets the daemon's real error instead.
-    vi.setSystemTime(START + 400_000);
+    vi.setSystemTime(START + 4_000_000);
     await expect(docker.overview()).rejects.toThrow("socket gone");
   });
 

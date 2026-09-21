@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { clearWidgetCache } from "../mock/index.ts";
 import { ClockDisplay } from "./clock-display.tsx";
 import { clockWidget } from "./clock.tsx";
+
+beforeEach(clearWidgetCache);
 
 describe("clockWidget", () => {
   it("renders the date and time of the moment it is rendered", async () => {

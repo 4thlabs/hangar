@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Snapshots } from "#libs/cache";
 import { logger } from "#libs/logs";
 import { WidgetError } from "./widget-error.tsx";
 import { WidgetSkeleton } from "./widget-skeleton.tsx";
@@ -30,7 +31,36 @@ export type Widget = {
   id: string;
   Widget: () => ReactNode | Promise<ReactNode>;
   Skeleton: () => ReactNode;
+  /** Loads into the snapshot ahead of a render, so the dashboard never paints a skeleton. */
+  warm: () => Promise<void>;
+  /** Whether {@link Widget} can render without suspending, i.e. whether it needs a boundary at all. */
+  ready: () => boolean;
 };
+
+/**
+ * Every widget's data, cached in one place. Shared rather than per widget, because `resolveWidgets`
+ * rebuilds most widget objects on every render — a cache closed over by one `defineWidget` call
+ * would be thrown away with it and cache nothing.
+ *
+ * Process-global, keyed by widget id, and therefore only safe while no widget renders per-session
+ * data. None does; the day one needs to, it must not read through here.
+ *
+ * ponytail: a widget id is not unique — `hangar.yml` accepts two `github-releases` blocks with
+ * different repositories, and both would read one entry. Give `WidgetDefinition` an optional
+ * `cacheKey` defaulting to `id`, set to `${id}:${service.api}` by the service factories, when that
+ * happens. Do not uniquify `widget.id` in `resolveWidgets` instead: the clock and Docker widgets
+ * are shared module singletons, so assigning to `.id` would corrupt them for every later render.
+ */
+const snapshots = new Snapshots();
+
+/** How long a widget's data is fresh. The dashboard has no auto-reload, so this is what a visit sees. */
+const TTL = 60_000;
+
+/** How long a service that has stopped answering keeps rendering its last good card. */
+const GRACE = 900_000;
+
+/** Drops every cached widget load. Tests only, so one test's data cannot leak into the next. */
+export const clearWidgetCache = () => snapshots.clear();
 
 /**
  * Wraps a data-backed widget: one try/catch, one log, one error fallback.
@@ -43,15 +73,40 @@ export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
 
   return {
     id,
-    async Widget() {
-      try {
-        const data = await load();
-        return render(data) ?? fallback();
-      } catch (error: unknown) {
-        logger.error(`Failed to load the ${title} widget`, { error, widget: id });
-        return fallback();
-      }
+    Widget() {
+      const show = (data: T) => {
+        try {
+          return render(data) ?? fallback();
+        } catch (error: unknown) {
+          logger.error(`Failed to render the ${title} widget`, { error, widget: id });
+          return fallback();
+        }
+      };
+
+      // Synchronously, when the snapshot is warm. An async component suspends, and a suspended
+      // boundary puts its skeleton in the shell no matter how fast the data arrives — so this,
+      // not the cache alone, is what keeps the dashboard from painting skeletons at all.
+      const ready = snapshots.peek<T>(id, TTL, GRACE, load);
+
+      if (ready) return show(ready.data);
+
+      return (async () => {
+        try {
+          return show(await snapshots.read(id, TTL, GRACE, load));
+        } catch (error: unknown) {
+          logger.error(`Failed to load the ${title} widget`, { error, widget: id });
+          return fallback();
+        }
+      })();
     },
+    // Both outcomes swallowed: a service being down is the render's problem to report, not the
+    // warm loop's, and an unhandled rejection in a background tick would take the process with it.
+    warm: () =>
+      snapshots.read(id, TTL, GRACE, load).then(
+        () => undefined,
+        () => undefined,
+      ),
+    ready: () => snapshots.peek<T>(id, TTL, GRACE, load) !== undefined,
     Skeleton: () => (
       <WidgetSkeleton
         className={className}
