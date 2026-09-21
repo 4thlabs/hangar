@@ -17,8 +17,8 @@ import { defineWidget } from "../shared/define-widget.tsx";
 /** How many posters the row holds. */
 const ITEM_COUNT = 10;
 
-const latestWidgetClassName = "min-h-64";
-const jellyfinIcon = <IconSelfh name="jellyfin" />;
+/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
+const chrome = { title: "Jellyfin", icon: <IconSelfh name="jellyfin" />, className: "min-h-64" };
 
 /** One poster, already resolved to what the card shows. */
 export type LatestItem = {
@@ -68,13 +68,13 @@ type JellyfinLatestCardProps = {
 
 export function JellyfinLatestCard({ counts, items, serviceUrl }: JellyfinLatestCardProps) {
   return (
-    <WidgetCard className={latestWidgetClassName}>
+    <WidgetCard className={chrome.className}>
       {/* The library totals label the row rather than taking a card of their own: they are what
           the posters are the newest of. `description` draws the divider `bordered` used to. */}
       <WidgetHeader
         href={serviceUrl}
-        icon={jellyfinIcon}
-        title="Jellyfin"
+        icon={chrome.icon}
+        title={chrome.title}
         description={
           <WidgetMetadata>
             <span>{integerFormatter.format(counts.MovieCount)} movies</span>
@@ -137,9 +137,7 @@ export const jellyfinLatest = (service: WidgetService, user: string, ttl?: numbe
   defineWidget({
     id: "jellyfin-latest",
     ttl,
-    title: "Jellyfin",
-    icon: jellyfinIcon,
-    className: latestWidgetClassName,
+    ...chrome,
     errorDescription: "The Jellyfin library could not be loaded.",
     skeleton: { withSubtitle: true },
     load: async () => {

@@ -6,18 +6,18 @@ import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import {
   WidgetCard,
   WidgetContent,
-  WidgetEmptyState,
   WidgetHeader,
   WidgetList,
   WidgetListItem,
   WidgetMetadata,
+  WidgetTime,
   formatBytes,
   formatRelativeTime,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
-const backrestWidgetClassName = "min-h-40";
-const backrestIcon = <IconSelfh name="backrest" />;
+/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
+const chrome = { title: "Backrest", icon: <IconSelfh name="backrest" />, className: "min-h-40" };
 
 /** One repository, already resolved to what the card shows. */
 export type RepoBackup = {
@@ -70,11 +70,11 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
   const protectedBytes = repos.reduce((total, repo) => total + repo.protectedBytes, 0);
 
   return (
-    <WidgetCard className={backrestWidgetClassName}>
+    <WidgetCard className={chrome.className}>
       <WidgetHeader
         href={serviceUrl}
-        icon={backrestIcon}
-        title="Backrest"
+        icon={chrome.icon}
+        title={chrome.title}
         description={
           <WidgetMetadata>
             <span>
@@ -86,58 +86,45 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
       />
 
       <WidgetContent>
-        {repos.length > 0 ? (
-          <WidgetList>
-            {repos.map(repo => (
-              <WidgetListItem
-                key={repo.id}
-                className="items-start"
-                media={
-                  // The dot repeats what the status word below already says: colour alone is never
-                  // the status. Muted for a repository that has not run, which is neither.
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "mt-1.5 size-2 shrink-0 rounded-full",
-                      repo.status === undefined ? "bg-muted-foreground" : repo.ok ? "bg-primary" : "bg-destructive",
-                    )}
-                  />
-                }
-                trailing={
-                  repo.lastRunAt !== undefined && (
-                    <time
-                      dateTime={new Date(repo.lastRunAt).toISOString()}
-                      className="shrink-0 text-xs text-muted-foreground"
-                    >
-                      {formatRelativeTime(repo.lastRunAt, now)}
-                    </time>
-                  )
-                }
-              >
-                <p className="truncate font-medium text-primary">{repo.id}</p>
+        <WidgetList empty="No repositories configured.">
+          {repos.map(repo => (
+            <WidgetListItem
+              key={repo.id}
+              className="items-start"
+              media={
+                // The dot repeats what the status word below already says: colour alone is never
+                // the status. Muted for a repository that has not run, which is neither.
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "mt-1.5 size-2 shrink-0 rounded-full",
+                    repo.status === undefined ? "bg-muted-foreground" : repo.ok ? "bg-primary" : "bg-destructive",
+                  )}
+                />
+              }
+              trailing={repo.lastRunAt !== undefined && <WidgetTime at={repo.lastRunAt} now={now} />}
+            >
+              <p className="truncate font-medium text-primary">{repo.id}</p>
 
-                <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                  <WidgetMetadata>
-                    <span className={repo.status !== undefined && !repo.ok ? "text-destructive" : undefined}>
-                      {repo.status ?? "No backup yet"}
-                    </span>
-                    <span>{repo.successes} ok / 30d</span>
-                    <span>{formatBytes(repo.bytesAdded)} added</span>
-                  </WidgetMetadata>
-                </p>
+              <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                <WidgetMetadata>
+                  <span className={repo.status !== undefined && !repo.ok ? "text-destructive" : undefined}>
+                    {repo.status ?? "No backup yet"}
+                  </span>
+                  <span>{repo.successes} ok / 30d</span>
+                  <span>{formatBytes(repo.bytesAdded)} added</span>
+                </WidgetMetadata>
+              </p>
 
-                <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                  <WidgetMetadata>
-                    <span>{formatBytes(repo.protectedBytes)} protected</span>
-                    {repo.nextBackupAt !== undefined && <span>next {formatRelativeTime(repo.nextBackupAt, now)}</span>}
-                  </WidgetMetadata>
-                </p>
-              </WidgetListItem>
-            ))}
-          </WidgetList>
-        ) : (
-          <WidgetEmptyState>No repositories configured.</WidgetEmptyState>
-        )}
+              <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                <WidgetMetadata>
+                  <span>{formatBytes(repo.protectedBytes)} protected</span>
+                  {repo.nextBackupAt !== undefined && <span>next {formatRelativeTime(repo.nextBackupAt, now)}</span>}
+                </WidgetMetadata>
+              </p>
+            </WidgetListItem>
+          ))}
+        </WidgetList>
       </WidgetContent>
     </WidgetCard>
   );
@@ -155,9 +142,7 @@ export const backrestSummary = (service: WidgetService, ttl?: number) =>
   defineWidget({
     id: "backrest-summary",
     ttl,
-    title: "Backrest",
-    icon: backrestIcon,
-    className: backrestWidgetClassName,
+    ...chrome,
     errorDescription: "The backup status could not be loaded.",
     skeleton: { withSubtitle: true },
     load: async () => ((await (await createBackrestClient(service)).getSummary()).repoSummaries ?? []).map(displayRepo),

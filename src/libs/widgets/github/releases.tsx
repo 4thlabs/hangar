@@ -1,15 +1,7 @@
 import type { GithubRelease } from "./api/client.ts";
 import { getLatestReleases } from "./api/client.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
-import {
-  WidgetCard,
-  WidgetContent,
-  WidgetEmptyState,
-  WidgetHeader,
-  WidgetList,
-  WidgetListItem,
-  formatRelativeTime,
-} from "../shared/index.ts";
+import { WidgetCard, WidgetContent, WidgetHeader, WidgetList, WidgetListItem, WidgetTime } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
 type GithubReleasesCardProps = {
@@ -17,44 +9,33 @@ type GithubReleasesCardProps = {
   now?: number;
 };
 
-const githubIcon = <IconSelfh name="github" />;
+/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
+const chrome = { title: "Releases", icon: <IconSelfh name="github" /> };
 
 export function GithubReleasesCard({ releases, now = Date.now() }: GithubReleasesCardProps) {
   return (
     <WidgetCard>
-      <WidgetHeader icon={githubIcon} title="Releases" bordered={releases.length > 0} />
+      <WidgetHeader icon={chrome.icon} title={chrome.title} bordered={releases.length > 0} />
 
       <WidgetContent>
-        {releases.length > 0 ? (
-          <WidgetList>
-            {releases.map(release => {
-              const publishedAt = new Date(release.publishedAt);
-
-              return (
-                <WidgetListItem
-                  key={release.repository}
-                  trailing={
-                    <time dateTime={release.publishedAt} className="shrink-0 text-xs text-muted-foreground">
-                      {formatRelativeTime(publishedAt.getTime(), now)}
-                    </time>
-                  }
-                >
-                  <a
-                    href={release.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block truncate font-medium text-primary hover:underline"
-                  >
-                    {release.repository}
-                  </a>
-                  <p className="truncate text-xs tabular-nums text-muted-foreground">{release.tag}</p>
-                </WidgetListItem>
-              );
-            })}
-          </WidgetList>
-        ) : (
-          <WidgetEmptyState>No releases found.</WidgetEmptyState>
-        )}
+        <WidgetList empty="No releases found.">
+          {releases.map(release => (
+            <WidgetListItem
+              key={release.repository}
+              trailing={<WidgetTime at={Date.parse(release.publishedAt)} now={now} />}
+            >
+              <a
+                href={release.url}
+                target="_blank"
+                rel="noreferrer"
+                className="block truncate font-medium text-primary hover:underline"
+              >
+                {release.repository}
+              </a>
+              <p className="truncate text-xs tabular-nums text-muted-foreground">{release.tag}</p>
+            </WidgetListItem>
+          ))}
+        </WidgetList>
       </WidgetContent>
     </WidgetCard>
   );
@@ -65,8 +46,7 @@ export const githubReleases = (repositories: readonly string[], ttl?: number) =>
   defineWidget({
     id: "github-releases",
     ttl,
-    title: "Releases",
-    icon: githubIcon,
+    ...chrome,
     errorDescription: "The GitHub releases could not be loaded.",
     load: () => getLatestReleases(repositories),
     render: (releases: GithubRelease[]) => <GithubReleasesCard releases={releases} />,

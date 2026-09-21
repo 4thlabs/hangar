@@ -11,6 +11,7 @@ import {
   WidgetMetadata,
   WidgetMetric,
   WidgetMetricGrid,
+  WidgetTime,
 } from "./widget.tsx";
 
 describe("widget primitives", () => {
@@ -59,5 +60,32 @@ describe("widget primitives", () => {
     expect(html).toContain("Nothing here.");
     expect(html).toContain("Status");
     expect(html).toContain('data-slot="card-footer"');
+  });
+
+  it("formats a metric given a number, and leaves a string alone", () => {
+    const html = renderToStaticMarkup(
+      <WidgetMetricGrid>
+        <WidgetMetric label="Episodes" value={4512} />
+        <WidgetMetric label="Version" value="1.0.0" />
+      </WidgetMetricGrid>,
+    );
+
+    expect(html).toContain("4,512");
+    expect(html).toContain("1.0.0");
+  });
+
+  it("says what an empty list is empty of, and renders no <ul> for it", () => {
+    const html = renderToStaticMarkup(<WidgetList empty="No releases found.">{[].map(() => null)}</WidgetList>);
+
+    expect(html).toContain("No releases found.");
+    expect(html).not.toContain("<ul");
+  });
+
+  it("writes a moment as a machine-readable date and a readable phrase", () => {
+    const now = Date.UTC(2026, 8, 21, 12, 0, 0);
+    const html = renderToStaticMarkup(<WidgetTime at={now - 7_200_000} now={now} />);
+
+    expect(html).toContain('dateTime="2026-09-21T10:00:00.000Z"');
+    expect(html).toContain("2 hours ago");
   });
 });

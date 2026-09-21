@@ -11,7 +11,7 @@ import {
   WidgetMetadata,
   WidgetMetric,
   WidgetMetricGrid,
-  formatGigabytes,
+  formatBytes,
   integerFormatter,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
@@ -25,17 +25,17 @@ type DockerGeneralStatsCardProps = {
 /** What the widget loads: the host counts, plus the apps due an image update. */
 type DockerGeneralStats = DockerGeneralStatsCardProps;
 
-const dockerWidgetClassName = "@container min-h-64";
-const dockerIcon = <IconSelfh name="docker" />;
+/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
+const chrome = { title: "Local", icon: <IconSelfh name="docker" />, className: "@container min-h-64" };
 
 export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStatsCardProps) {
   const { version, containers, images, volumes } = overview;
 
   return (
-    <WidgetCard className={dockerWidgetClassName}>
+    <WidgetCard className={chrome.className}>
       <WidgetHeader
-        icon={dockerIcon}
-        title="Local"
+        icon={chrome.icon}
+        title={chrome.title}
         description={
           <WidgetMetadata>
             <span>Docker {version}</span>
@@ -46,20 +46,20 @@ export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStat
 
       <WidgetContent>
         <WidgetMetricGrid>
-          <WidgetMetric label="Running" value={integerFormatter.format(containers.running)} />
+          <WidgetMetric label="Running" value={containers.running} />
           <WidgetMetric
             label="Stopped"
-            value={integerFormatter.format(containers.stopped)}
+            value={containers.stopped}
             tone={containers.stopped > 0 ? "destructive" : "default"}
           />
           <WidgetMetric
             label="Images"
-            value={integerFormatter.format(images.total)}
-            detail={`${integerFormatter.format(images.unused)} unused · ${formatGigabytes(images.size)}`}
+            value={images.total}
+            detail={`${integerFormatter.format(images.unused)} unused · ${formatBytes(images.size)}`}
           />
           <WidgetMetric
             label="Volumes"
-            value={integerFormatter.format(volumes.total)}
+            value={volumes.total}
             detail={`${integerFormatter.format(volumes.inUse)} in use · ${integerFormatter.format(volumes.unused)} unused`}
           />
         </WidgetMetricGrid>
@@ -93,9 +93,7 @@ export const dockerGeneralStats = (ttl?: number) =>
   defineWidget({
     id: "docker-general-stats",
     ttl,
-    title: "Local",
-    icon: dockerIcon,
-    className: dockerWidgetClassName,
+    ...chrome,
     errorDescription: "The local Docker statistics could not be loaded.",
     skeleton: { withFooter: true, withSubtitle: true },
     load: async (): Promise<DockerGeneralStats> => {

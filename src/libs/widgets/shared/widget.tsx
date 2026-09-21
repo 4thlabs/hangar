@@ -2,6 +2,8 @@ import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
 import { ExternalLinkIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { cn } from "cn";
+import { formatRelativeTime } from "#libs/format";
+import { integerFormatter } from "./format.ts";
 
 export function WidgetCard({ className, ...props }: ComponentProps<typeof Card>) {
   return <Card className={cn("w-full gap-3 bg-background pt-0", className)} {...props} />;
@@ -76,6 +78,7 @@ type WidgetMetricProps = Omit<ComponentProps<"div">, "title"> & {
   detail?: ReactNode;
   label: ReactNode;
   tone?: "default" | "destructive";
+  /** A number is formatted here, so no caller has to remember to — and none can forget. */
   value: ReactNode;
 };
 
@@ -89,15 +92,26 @@ export function WidgetMetric({ className, detail, label, tone = "default", value
           tone === "destructive" && "text-destructive",
         )}
       >
-        {value}
+        {typeof value === "number" ? integerFormatter.format(value) : value}
       </dd>
       {detail && <dd className="truncate text-xs leading-tight text-muted-foreground">{detail}</dd>}
     </div>
   );
 }
 
-export function WidgetList({ className, ...props }: ComponentProps<"ul">) {
-  return <ul className={cn("flex flex-col gap-3", className)} {...props} />;
+type WidgetListProps = ComponentProps<"ul"> & {
+  /** What to say instead of an empty list. Absent renders the empty `<ul>`. */
+  empty?: ReactNode;
+};
+
+export function WidgetList({ children, className, empty, ...props }: WidgetListProps) {
+  if (empty !== undefined && Children.count(children) === 0) return <WidgetEmptyState>{empty}</WidgetEmptyState>;
+
+  return (
+    <ul className={cn("flex flex-col gap-3", className)} {...props}>
+      {children}
+    </ul>
+  );
 }
 
 type WidgetListItemProps = ComponentProps<"li"> & {
@@ -112,6 +126,22 @@ export function WidgetListItem({ children, className, media, trailing, ...props 
       <div className="min-w-0 grow">{children}</div>
       {trailing}
     </li>
+  );
+}
+
+type WidgetTimeProps = {
+  /** When it happened, or is due, in milliseconds. Future moments read as "in 22 hours". */
+  at: number;
+  /** Passed by a card that takes its own `now`, so a test can pin the clock. */
+  now?: number;
+};
+
+/** A moment, as every widget's trailing column writes one. */
+export function WidgetTime({ at, now = Date.now() }: WidgetTimeProps) {
+  return (
+    <time dateTime={new Date(at).toISOString()} className="shrink-0 text-xs text-muted-foreground">
+      {formatRelativeTime(at, now)}
+    </time>
   );
 }
 
