@@ -69,6 +69,7 @@ describe("POST Docker Compose stream", () => {
     ["up", ["up", "-d"]],
     ["down", ["down"]],
     ["recreate", ["up", "-d", "--force-recreate"]],
+    ["update", ["up", "-d", "--pull", "always"]],
   ])("maps %s to the expected Compose command", async (operation, args) => {
     const response = await call(`operation=${operation}&projects=alpha`);
     await response.text();

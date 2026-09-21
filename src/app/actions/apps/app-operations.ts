@@ -8,6 +8,7 @@ export const appOperationArguments: Record<AppOperation, readonly string[]> = {
   up: ["up", "-d"],
   down: ["down"],
   recreate: ["up", "-d", "--force-recreate"],
+  update: ["up", "-d", "--pull", "always"],
 };
 
 /** Why a compose command was refused, or `null` when it may run */

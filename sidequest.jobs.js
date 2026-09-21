@@ -4,3 +4,4 @@
 // points the worker at this file instead: a plain module, outside the bundle, exporting every job
 // class under its real name.
 export { CheckImageVersion } from "./src/libs/jobs/jobs/check-image-version.ts";
+export { UpdateOutdatedApps } from "./src/libs/jobs/jobs/update-outdated-apps.ts";
