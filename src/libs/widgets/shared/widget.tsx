@@ -2,7 +2,7 @@ import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
 import { ExternalLinkIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { cn } from "cn";
-import { formatRelativeTime } from "#libs/format";
+import { formatCompactTime, formatRelativeTime } from "#libs/format";
 import { integerFormatter } from "./format.ts";
 
 export function WidgetCard({ className, ...props }: ComponentProps<typeof Card>) {
@@ -134,13 +134,15 @@ type WidgetTimeProps = {
   at: number;
   /** Passed by a card that takes its own `now`, so a test can pin the clock. */
   now?: number;
+  /** `18h` rather than `18 hours ago`, for a row that has other things to say. */
+  compact?: boolean;
 };
 
 /** A moment, as every widget's trailing column writes one. */
-export function WidgetTime({ at, now = Date.now() }: WidgetTimeProps) {
+export function WidgetTime({ at, compact = false, now = Date.now() }: WidgetTimeProps) {
   return (
     <time dateTime={new Date(at).toISOString()} className="shrink-0 text-xs text-muted-foreground">
-      {formatRelativeTime(at, now)}
+      {compact ? formatCompactTime(at, now) : formatRelativeTime(at, now)}
     </time>
   );
 }

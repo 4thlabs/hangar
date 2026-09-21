@@ -16,10 +16,10 @@ describe("GluetunVpnStatusCard", () => {
   it("shows where the tunnel comes out when it is up", () => {
     const html = renderToStaticMarkup(<GluetunVpnStatusCard publicIp={connected} />);
 
-    expect(html).toContain("Connected");
-    expect(html).not.toContain("Not connected");
-    expect(html).toContain("203.0.113.42");
-    expect(html).toContain("Zurich, Switzerland");
+    expect(html).toContain("Your VPN is connected!");
+    expect(html).not.toContain("not connected");
+    // One line, as Glance writes it: the address and where it comes out belong together.
+    expect(html).toContain("203.0.113.42 - Zurich, Switzerland");
   });
 
   it("reads an empty address as a tunnel that is down", () => {
@@ -27,7 +27,7 @@ describe("GluetunVpnStatusCard", () => {
     // recognise it: a 200 is not the same as a connection.
     const html = renderToStaticMarkup(<GluetunVpnStatusCard publicIp={{ public_ip: "", city: "", country: "" }} />);
 
-    expect(html).toContain("Not connected");
+    expect(html).toContain("Your VPN is not connected!");
     expect(html).toContain("text-destructive");
   });
 
@@ -36,9 +36,8 @@ describe("GluetunVpnStatusCard", () => {
       <GluetunVpnStatusCard publicIp={{ public_ip: "203.0.113.42", city: "", country: "" }} />,
     );
 
-    expect(html).toContain("203.0.113.42");
-    // No empty line, and no stray comma from joining two blanks.
-    expect(html).not.toContain("text-muted-foreground");
+    // No trailing separator, and no stray comma from joining two blanks.
+    expect(html).toContain(">203.0.113.42</p>");
   });
 
   it("calls the control server under /v1, with the key, and never links anywhere", async () => {

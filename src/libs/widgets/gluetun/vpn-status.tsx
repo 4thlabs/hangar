@@ -11,7 +11,7 @@ type GluetunVpnStatusCardProps = {
 };
 
 /** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
-const chrome = { title: "Gluetun", icon: <IconSelfh name="gluetun" />, className: "min-h-36" };
+const chrome = { title: "Gluetun", icon: <IconSelfh name="gluetun" />, className: "min-h-32" };
 
 export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
   const { public_ip: address, city, country } = publicIp;
@@ -25,19 +25,21 @@ export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
 
       <WidgetContent className="flex flex-col gap-1">
         <p className="flex items-center gap-2 font-medium">
-          {/* The dot repeats what the label already says: colour alone is never the status. */}
+          <span className={cn(!connected && "text-destructive")}>
+            Your VPN is {connected ? "connected" : "not connected"}!
+          </span>
+          {/* The dot repeats what the sentence already says: colour alone is never the status. */}
           <span
             aria-hidden="true"
             className={cn("size-2 shrink-0 rounded-full", connected ? "bg-primary" : "bg-destructive")}
           />
-          <span className={cn(!connected && "text-destructive")}>{connected ? "Connected" : "Not connected"}</span>
         </p>
 
+        {/* One line, not two: an address without the city it comes out in is half an answer. */}
         {connected && (
-          <>
-            <p className="truncate tabular-nums text-primary">{address}</p>
-            {location.length > 0 && <p className="truncate text-xs text-muted-foreground">{location}</p>}
-          </>
+          <p className="truncate tabular-nums text-muted-foreground">
+            {[address, location].filter(part => part.length > 0).join(" - ")}
+          </p>
         )}
       </WidgetContent>
     </WidgetCard>

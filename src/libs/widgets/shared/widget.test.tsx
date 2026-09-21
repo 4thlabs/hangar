@@ -88,4 +88,10 @@ describe("widget primitives", () => {
     expect(html).toContain('dateTime="2026-09-21T10:00:00.000Z"');
     expect(html).toContain("2 hours ago");
   });
+
+  it("writes the same moment short when the row cannot spare the words", () => {
+    const now = Date.UTC(2026, 8, 21, 12, 0, 0);
+
+    expect(renderToStaticMarkup(<WidgetTime at={now - 7_200_000} now={now} compact />)).toContain(">2h<");
+  });
 });
