@@ -6,7 +6,11 @@ import { Link } from "waku";
 import { actionLabel } from "#app/actions/apps/app-operation.ts";
 import { categoryBadgeClass } from "#app/components/apps/category.ts";
 import { plural, s } from "#app/components/apps/format.ts";
-import { ComposeConfirmDialog, ComposeOperationButtons } from "#app/components/apps/compose-operations.tsx";
+import {
+  ComposeConfirmDialog,
+  ComposeOperationButtons,
+  type DestructiveOperation,
+} from "#app/components/apps/compose-operations.tsx";
 import { ComposeOutputSheet } from "#app/components/apps/compose-output-sheet.tsx";
 import { useComposeRun } from "#app/components/apps/use-compose-run.ts";
 import { statusLabel, statusVariant } from "#app/components/apps/status.ts";
@@ -64,14 +68,17 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
     });
   }
 
-  const confirmationTitle =
-    confirmation === "down"
-      ? `Arrêter ${plural(selected.length, "application")} ?`
-      : `Recréer ${plural(selected.length, "application")} ?`;
-  const confirmationDescription =
-    confirmation === "down"
-      ? "Docker Compose supprimera les conteneurs et réseaux de ces applications. Elles resteront listées, à l’arrêt."
-      : "Tous les conteneurs de ces applications seront recréés, même si leur configuration n’a pas changé.";
+  const subject = plural(selected.length, "application");
+  const confirmationTitle: Record<DestructiveOperation, string> = {
+    down: `Arrêter ${subject} ?`,
+    recreate: `Recréer ${subject} ?`,
+    update: `Mettre à jour ${subject} ?`,
+  };
+  const confirmationDescription: Record<DestructiveOperation, string> = {
+    down: "Docker Compose supprimera les conteneurs et réseaux de ces applications. Elles resteront listées, à l’arrêt.",
+    recreate: "Tous les conteneurs de ces applications seront recréés, même si leur configuration n’a pas changé.",
+    update: "Les images seront retirées du registre et les conteneurs recréés avec la nouvelle version.",
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -157,8 +164,8 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
 
       <ComposeConfirmDialog
         operation={confirmation}
-        title={confirmationTitle}
-        description={confirmationDescription}
+        title={confirmation ? confirmationTitle[confirmation] : ""}
+        description={confirmation ? confirmationDescription[confirmation] : ""}
         onConfirm={run}
         onCancel={() => setConfirmation(null)}
       />

@@ -1,6 +1,6 @@
 "use client";
 
-import { PowerIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
+import { ArrowUpFromLineIcon, PowerIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { actionLabel, type AppOperation } from "#app/actions/apps/app-operation.ts";
 import {
   AlertDialog,
@@ -15,7 +15,7 @@ import {
 import { Button } from "#app/components/ui/button.tsx";
 import { Spinner } from "#app/components/ui/spinner.tsx";
 
-/** Operations that destroy containers, so the ones that need confirming before they run. */
+/** Operations that replace or destroy containers, so the ones that need confirming before they run. */
 export type DestructiveOperation = Exclude<AppOperation, "up">;
 
 type ComposeOperationButtonsProps = {
@@ -23,7 +23,7 @@ type ComposeOperationButtonsProps = {
   running: AppOperation | null;
   disabled: boolean;
   size?: "sm" | undefined;
-  /** `up` runs straight away; the destructive two are handed over for confirmation first. */
+  /** `up` runs straight away; the other three are handed over for confirmation first. */
   onRun: (operation: "up") => void;
   onConfirm: (operation: DestructiveOperation) => void;
 };
@@ -43,6 +43,17 @@ export function ComposeOperationButtons({ running, disabled, size, onRun, onConf
       <Button type="button" size={size} disabled={disabled} onClick={() => onRun("up")} title="docker compose up -d">
         {icon("up", PowerIcon)}
         {actionLabel.up}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size={size}
+        disabled={disabled}
+        onClick={() => onConfirm("update")}
+        title="docker compose up -d --pull always"
+      >
+        {icon("update", ArrowUpFromLineIcon)}
+        {actionLabel.update}
       </Button>
       <Button
         type="button"

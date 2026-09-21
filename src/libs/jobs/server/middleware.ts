@@ -1,15 +1,15 @@
 import { Sidequest } from "sidequest";
 import { CheckImageVersion } from "../jobs/check-image-version.ts";
+import { UpdateOutdatedApps } from "../jobs/update-outdated-apps.ts";
 import { MiddlewareHandler } from "hono/types";
 
 let configured: boolean = false;
 
-export const sidequestBoot = () : MiddlewareHandler  => {
+export const sidequestBoot = (): MiddlewareHandler => {
   return async (c, next) => {
     await next();
 
-    if (configured)
-      return;
+    if (configured) return;
 
     await Sidequest.configure({
       backend: {
@@ -30,8 +30,10 @@ export const sidequestBoot = () : MiddlewareHandler  => {
     // First launched
     await Sidequest.build(CheckImageVersion).enqueue();
 
+    // Nightly, at an hour nobody is using the stacks: each app it touches is a pull and a
+    // recreate, so the containers go down and back up.
+    await Sidequest.build(UpdateOutdatedApps).schedule("0 4 * * *");
+
     configured = true;
-  }
-}
-
-
+  };
+};
