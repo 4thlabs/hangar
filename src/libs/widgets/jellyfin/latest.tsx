@@ -1,16 +1,24 @@
-import type { JellyfinItem } from "./api/client.ts";
+import type { JellyfinCounts, JellyfinItem } from "./api/client.ts";
 import { createJellyfinClient } from "./api/client.ts";
 import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import { ScrollArea } from "#app/components/ui/scroll-area.tsx";
-import { WidgetCard, WidgetContent, WidgetEmptyState, WidgetHeader, widgetImageUrl } from "../shared/index.ts";
+import {
+  WidgetCard,
+  WidgetContent,
+  WidgetEmptyState,
+  WidgetHeader,
+  WidgetMetadata,
+  integerFormatter,
+  widgetImageUrl,
+} from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
 /** How many posters the row holds. */
 const ITEM_COUNT = 10;
 
-const latestWidgetClassName = "min-h-64";
-const jellyfinIcon = <IconSelfh name="jellyfin" />;
+/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
+const chrome = { title: "Jellyfin", icon: <IconSelfh name="jellyfin" />, className: "min-h-64" };
 
 /** One poster, already resolved to what the card shows. */
 export type LatestItem = {
@@ -53,14 +61,29 @@ export function displayItem(item: JellyfinItem): LatestItem {
 }
 
 type JellyfinLatestCardProps = {
+  counts: JellyfinCounts;
   items: LatestItem[];
   serviceUrl: string;
 };
 
-export function JellyfinLatestCard({ items, serviceUrl }: JellyfinLatestCardProps) {
+export function JellyfinLatestCard({ counts, items, serviceUrl }: JellyfinLatestCardProps) {
   return (
-    <WidgetCard className={latestWidgetClassName}>
-      <WidgetHeader bordered href={serviceUrl} icon={jellyfinIcon} title="Latest additions" />
+    <WidgetCard className={chrome.className}>
+      {/* The library totals label the row rather than taking a card of their own: they are what
+          the posters are the newest of. `description` draws the divider `bordered` used to. */}
+      <WidgetHeader
+        href={serviceUrl}
+        icon={chrome.icon}
+        title={chrome.title}
+        description={
+          <WidgetMetadata>
+            <span>{integerFormatter.format(counts.MovieCount)} movies</span>
+            <span>{integerFormatter.format(counts.SeriesCount)} shows</span>
+            <span>{integerFormatter.format(counts.EpisodeCount)} episodes</span>
+            <span>{integerFormatter.format(counts.SongCount)} songs</span>
+          </WidgetMetadata>
+        }
+      />
 
       <WidgetContent>
         {items.length > 0 ? (
@@ -104,22 +127,24 @@ export function JellyfinLatestCard({ items, serviceUrl }: JellyfinLatestCardProp
 }
 
 /**
- * The newest items across every library.
+ * The library, as one card: what it holds, and what landed in it last.
  *
  * Takes a user name because Jellyfin's "latest" is scoped to what that user may see — there is no
- * server-wide answer to ask for, so the operator names one in `hangar.yml`.
+ * server-wide answer to ask for, so the operator names one in `hangar.yml`. The totals are the one
+ * thing here that *is* server-wide, which is why they read as the header's subtitle.
  */
 export const jellyfinLatest = (service: WidgetService, user: string, ttl?: number) =>
   defineWidget({
     id: "jellyfin-latest",
     ttl,
-    title: "Latest additions",
-    icon: jellyfinIcon,
-    className: latestWidgetClassName,
-    errorDescription: "The latest Jellyfin additions could not be loaded.",
+    ...chrome,
+    errorDescription: "The Jellyfin library could not be loaded.",
+    skeleton: { withSubtitle: true },
     load: async () => {
       const client = await createJellyfinClient(service);
-      const account = (await client.getUsers()).find(candidate => candidate.Name === user);
+      // Independent calls, so they go together; only "latest" has to wait on the user lookup.
+      const [counts, users] = await Promise.all([client.getCounts(), client.getUsers()]);
+      const account = users.find(candidate => candidate.Name === user);
 
       // Naming the operator's own typo beats an error card that says only "could not be loaded".
       if (!account) throw new Error(`No Jellyfin user named ${user}`);
@@ -130,7 +155,9 @@ export const jellyfinLatest = (service: WidgetService, user: string, ttl?: numbe
       // row is trimmed here instead. The dedupe is for the React key rather than for a bug on
       // record: a grouped response still carries the odd bare episode, and two from one series
       // would both resolve to that series id. Nothing in the current library collides.
-      return [...new Map(items.map(item => [item.id, item])).values()].slice(0, ITEM_COUNT);
+      return { counts, items: [...new Map(items.map(item => [item.id, item])).values()].slice(0, ITEM_COUNT) };
     },
-    render: (items: LatestItem[]) => <JellyfinLatestCard items={items} serviceUrl={service.link} />,
+    render: ({ counts, items }: { counts: JellyfinCounts; items: LatestItem[] }) => (
+      <JellyfinLatestCard counts={counts} items={items} serviceUrl={service.link} />
+    ),
   });

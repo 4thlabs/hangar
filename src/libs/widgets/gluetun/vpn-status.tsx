@@ -10,8 +10,8 @@ type GluetunVpnStatusCardProps = {
   publicIp: GluetunPublicIp;
 };
 
-const gluetunWidgetClassName = "min-h-36";
-const gluetunIcon = <IconSelfh name="gluetun" />;
+/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
+const chrome = { title: "Gluetun", icon: <IconSelfh name="gluetun" />, className: "min-h-36" };
 
 export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
   const { public_ip: address, city, country } = publicIp;
@@ -20,8 +20,8 @@ export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
   const location = [city, country].filter(part => part.length > 0).join(", ");
 
   return (
-    <WidgetCard className={gluetunWidgetClassName}>
-      <WidgetHeader bordered icon={gluetunIcon} title="Gluetun" />
+    <WidgetCard className={chrome.className}>
+      <WidgetHeader bordered icon={chrome.icon} title={chrome.title} />
 
       <WidgetContent className="flex flex-col gap-1">
         <p className="flex items-center gap-2 font-medium">
@@ -54,9 +54,7 @@ export const gluetunVpnStatus = (service: WidgetService, ttl?: number) =>
   defineWidget({
     id: "gluetun-vpn-status",
     ttl,
-    title: "Gluetun",
-    icon: gluetunIcon,
-    className: gluetunWidgetClassName,
+    ...chrome,
     errorDescription: "The VPN status could not be read.",
     load: async () => (await createGluetunClient(service)).getPublicIp(),
     render: (publicIp: GluetunPublicIp) => <GluetunVpnStatusCard publicIp={publicIp} />,

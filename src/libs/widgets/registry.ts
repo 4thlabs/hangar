@@ -2,11 +2,11 @@ import type { Widget } from "./shared/define-widget.tsx";
 import type { DashboardColumn, WidgetConfig, WidgetHost } from "./config/config.ts";
 import { serviceOf } from "./config/config.ts";
 import { arcaneGeneralStats } from "./arcane/general-stats.tsx";
+import { backrestSummary } from "./backrest/summary.tsx";
 import { dockerGeneralStats } from "./docker/general-stats.tsx";
 import { frigateEvents } from "./frigate/events.tsx";
 import { gluetunVpnStatus } from "./gluetun/vpn-status.tsx";
 import { jellyfinLatest } from "./jellyfin/latest.tsx";
-import { jellyfinStats } from "./jellyfin/stats.tsx";
 import { githubReleases } from "./github/releases.tsx";
 import { clockWidget } from "./clock/clock.tsx";
 
@@ -51,12 +51,12 @@ function createWidget(config: WidgetConfig, host: WidgetHost): Widget {
       return dockerGeneralStats(ttl);
     case "arcane-general-stats":
       return arcaneGeneralStats(serviceOf(config, host), ttl);
+    case "backrest-summary":
+      return backrestSummary(serviceOf(config, host), ttl);
     case "frigate-events":
       return frigateEvents(serviceOf(config, host), ttl);
     case "gluetun-vpn-status":
       return gluetunVpnStatus(serviceOf(config, host), ttl);
-    case "jellyfin-stats":
-      return jellyfinStats(serviceOf(config, host), ttl);
     case "jellyfin-latest":
       return jellyfinLatest(serviceOf(config, host), config.user, ttl);
     case "github-releases":

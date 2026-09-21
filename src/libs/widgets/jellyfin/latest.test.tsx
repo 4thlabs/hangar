@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearWidgetCache } from "../mock/index.ts";
-import type { JellyfinItem } from "./api/client.ts";
+import type { JellyfinCounts, JellyfinItem } from "./api/client.ts";
 import { JellyfinLatestCard, displayItem, jellyfinLatest } from "./latest.tsx";
 import { aService } from "../mock/mock.ts";
 
@@ -14,6 +14,8 @@ const service = {
 };
 
 beforeEach(clearWidgetCache);
+
+const counts: JellyfinCounts = { MovieCount: 1284, SeriesCount: 97, EpisodeCount: 4512, SongCount: 8903 };
 
 describe("displayItem", () => {
   it("shows an episode as its series, so ten stills of one show become one poster", () => {
@@ -61,15 +63,29 @@ describe("JellyfinLatestCard", () => {
   const items = [{ id: "series-9", imageId: "ep-1", title: "Severance", subtitle: undefined }];
 
   it("relays posters through Hangar and links the visitor to Jellyfin", () => {
-    const html = renderToStaticMarkup(<JellyfinLatestCard items={items} serviceUrl="https://jellyfin.test.local" />);
+    const html = renderToStaticMarkup(
+      <JellyfinLatestCard counts={counts} items={items} serviceUrl="https://jellyfin.test.local" />,
+    );
 
     expect(html).toContain('src="/api/widgets/jellyfin-latest/image/ep-1"');
     expect(html).toContain("https://jellyfin.test.local/web/#/details?id=series-9");
   });
 
+  it("reads the library totals as a subtitle rather than a card of their own", () => {
+    const html = renderToStaticMarkup(
+      <JellyfinLatestCard counts={counts} items={items} serviceUrl="https://jellyfin.test.local" />,
+    );
+
+    expect(html).toContain("1,284 movies");
+    expect(html).toContain("97 shows");
+    expect(html).toContain("4,512 episodes");
+    expect(html).toContain("8,903 songs");
+  });
+
   it("keeps the frame, without an <img>, for an item Jellyfin has no art for", () => {
     const html = renderToStaticMarkup(
       <JellyfinLatestCard
+        counts={counts}
         items={[{ id: "s-1", imageId: undefined, title: "Drifters", subtitle: undefined }]}
         serviceUrl="https://jellyfin.test.local"
       />,
@@ -81,7 +97,9 @@ describe("JellyfinLatestCard", () => {
   });
 
   it("says so when a library has nothing new", () => {
-    const html = renderToStaticMarkup(<JellyfinLatestCard items={[]} serviceUrl="https://jellyfin.test.local" />);
+    const html = renderToStaticMarkup(
+      <JellyfinLatestCard counts={counts} items={[]} serviceUrl="https://jellyfin.test.local" />,
+    );
 
     expect(html).toContain("No items found.");
   });
@@ -92,17 +110,24 @@ describe("jellyfinLatest", () => {
   const cells = (html: string) => html.split("snap-start").length - 1;
 
   const stub = (users: unknown, latest: unknown) => {
-    const called: string[] = [];
+    const called: Request[] = [];
 
     vi.stubGlobal("fetch", (request: Request) => {
-      called.push(request.url);
-      const body = request.url.includes("/Items/Latest") ? latest : users;
+      called.push(request);
+      const body = request.url.includes("/Items/Counts")
+        ? counts
+        : request.url.includes("/Items/Latest")
+          ? latest
+          : users;
 
       return Promise.resolve(new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } }));
     });
 
     return called;
   };
+
+  /** The URLs the widget asked for, in order. */
+  const urls = (called: Request[]) => called.map(request => request.url);
 
   it("turns the configured user name into the id the API wants, and never leaks the key", async () => {
     const called = stub(
@@ -115,7 +140,8 @@ describe("jellyfinLatest", () => {
 
     const html = renderToStaticMarkup(<>{await jellyfinLatest(service, "thomas").Widget()}</>);
 
-    expect(called).toEqual([
+    expect(urls(called)).toEqual([
+      "http://jellyfin:8096/Items/Counts",
       "http://jellyfin:8096/Users",
       "http://jellyfin:8096/Items/Latest?userId=u-2&limit=100&includeItemTypes=Movie%2CEpisode%2CMusicAlbum&groupItems=true&enableImageTypes=Primary",
     ]);
@@ -160,7 +186,22 @@ describe("jellyfinLatest", () => {
     expect(html).toContain("unavailable");
   });
 
+  it("calls Jellyfin at the root with a MediaBrowser token, not /api with X-API-Key", async () => {
+    // Jellyfin serves its API at the root and takes its key as `Authorization: MediaBrowser
+    // Token="..."`; both are easy to get wrong because every other service here does the opposite.
+    const called = stub([{ Id: "u-2", Name: "thomas" }], []);
+
+    const html = renderToStaticMarkup(<>{await jellyfinLatest(service, "thomas").Widget()}</>);
+
+    expect(called[0]?.url).toBe("http://jellyfin:8096/Items/Counts");
+    expect(called[0]?.headers.get("authorization")).toBe('MediaBrowser Token="s3cret"');
+    expect(called[0]?.headers.get("x-api-key")).toBeNull();
+    expect(called[0]?.headers.get("x-emby-token")).toBeNull();
+    // The container address is Hangar's to reach, never the visitor's.
+    expect(html).not.toContain("jellyfin:8096");
+  });
+
   it("exposes a titled skeleton through the widget definition", () => {
-    expect(renderToStaticMarkup(<>{jellyfinLatest(aService(), "thomas").Skeleton()}</>)).toContain("Latest additions");
+    expect(renderToStaticMarkup(<>{jellyfinLatest(aService(), "thomas").Skeleton()}</>)).toContain("Jellyfin");
   });
 });

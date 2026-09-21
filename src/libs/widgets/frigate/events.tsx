@@ -5,12 +5,11 @@ import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import {
   WidgetCard,
   WidgetContent,
-  WidgetEmptyState,
   WidgetHeader,
   WidgetList,
   WidgetListItem,
   WidgetMetadata,
-  formatRelativeTime,
+  WidgetTime,
   widgetImageUrl,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
@@ -22,8 +21,8 @@ type FrigateEventsCardProps = {
   now?: number;
 };
 
-const frigateWidgetClassName = "min-h-88";
-const frigateIcon = <IconSelfh name="frigate" />;
+/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
+const chrome = { title: "Frigate", icon: <IconSelfh name="frigate" />, className: "min-h-88" };
 
 function formatCameraName(camera: string) {
   return camera.replace(/^frigate_/, "").replaceAll("_", " ");
@@ -33,11 +32,11 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
   const detectors = Object.entries(stats.detectors);
 
   return (
-    <WidgetCard className={frigateWidgetClassName}>
+    <WidgetCard className={chrome.className}>
       <WidgetHeader
         href={serviceUrl}
-        icon={frigateIcon}
-        title="Frigate"
+        icon={chrome.icon}
+        title={chrome.title}
         description={
           <WidgetMetadata>
             <span>{Object.keys(stats.cameras).length} cameras</span>
@@ -52,49 +51,40 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
       />
 
       <WidgetContent>
-        {events.length > 0 ? (
-          <WidgetList>
-            {events.map(event => {
-              const eventUrl = `${serviceUrl}/explore?event_id=${encodeURIComponent(event.id)}`;
-              // Relayed by Hangar: the public Frigate host sits behind the OIDC middleware, which
-              // answers an `<img>` with a login redirect rather than a picture.
-              const thumbnailUrl = widgetImageUrl("frigate-events", event.id);
-              const eventDate = new Date(event.start_time * 1_000);
+        <WidgetList empty="No recent events.">
+          {events.map(event => {
+            const eventUrl = `${serviceUrl}/explore?event_id=${encodeURIComponent(event.id)}`;
+            // Relayed by Hangar: the public Frigate host sits behind the OIDC middleware, which
+            // answers an `<img>` with a login redirect rather than a picture.
+            const thumbnailUrl = widgetImageUrl("frigate-events", event.id);
 
-              return (
-                <WidgetListItem
-                  key={event.id}
-                  media={
-                    <img
-                      src={thumbnailUrl}
-                      alt=""
-                      loading="lazy"
-                      className="aspect-video w-16 shrink-0 rounded-sm object-cover"
-                    />
-                  }
-                  trailing={
-                    <time dateTime={eventDate.toISOString()} className="shrink-0 text-xs text-muted-foreground">
-                      {formatRelativeTime(event.start_time * 1_000, now)}
-                    </time>
-                  }
+            return (
+              <WidgetListItem
+                key={event.id}
+                media={
+                  <img
+                    src={thumbnailUrl}
+                    alt=""
+                    loading="lazy"
+                    className="aspect-video w-16 shrink-0 rounded-sm object-cover"
+                  />
+                }
+                trailing={<WidgetTime at={event.start_time * 1_000} now={now} />}
+              >
+                <a
+                  href={eventUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block truncate font-medium text-primary hover:underline"
                 >
-                  <a
-                    href={eventUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block truncate font-medium text-primary hover:underline"
-                  >
-                    {event.label}
-                    {event.sub_label && ` · ${event.sub_label}`}
-                  </a>
-                  <p className="truncate text-xs text-muted-foreground">{formatCameraName(event.camera)}</p>
-                </WidgetListItem>
-              );
-            })}
-          </WidgetList>
-        ) : (
-          <WidgetEmptyState>No recent events.</WidgetEmptyState>
-        )}
+                  {event.label}
+                  {event.sub_label && ` · ${event.sub_label}`}
+                </a>
+                <p className="truncate text-xs text-muted-foreground">{formatCameraName(event.camera)}</p>
+              </WidgetListItem>
+            );
+          })}
+        </WidgetList>
       </WidgetContent>
     </WidgetCard>
   );
@@ -112,9 +102,7 @@ export const frigateEvents = (service: WidgetService, ttl?: number) =>
   defineWidget({
     id: "frigate-events",
     ttl,
-    title: "Frigate",
-    icon: frigateIcon,
-    className: frigateWidgetClassName,
+    ...chrome,
     errorDescription: "The camera events could not be loaded.",
     skeleton: { withSubtitle: true },
     load: async () => {

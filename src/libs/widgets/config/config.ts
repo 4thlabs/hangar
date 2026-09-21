@@ -45,9 +45,9 @@ export const widgetConfigSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("clock"), column: columnSchema }),
   z.object({ type: z.literal("docker-general-stats"), column: columnSchema, ...ttlField }),
   z.object({ type: z.literal("arcane-general-stats"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
+  z.object({ type: z.literal("backrest-summary"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
   z.object({ type: z.literal("frigate-events"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
   z.object({ type: z.literal("gluetun-vpn-status"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
-  z.object({ type: z.literal("jellyfin-stats"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
   z.object({
     type: z.literal("jellyfin-latest"),
     column: columnSchema,

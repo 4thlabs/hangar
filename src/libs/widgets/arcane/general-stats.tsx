@@ -10,7 +10,7 @@ import {
   WidgetMetadata,
   WidgetMetric,
   WidgetMetricGrid,
-  formatGigabytes,
+  formatBytes,
   integerFormatter,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
@@ -20,8 +20,8 @@ type ArcaneGeneralStatsCardProps = {
   serviceUrl: string;
 };
 
-const arcaneWidgetClassName = "@container min-h-64";
-const arcaneIcon = <IconSelfh name="arcane" />;
+/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
+const chrome = { title: "Arcane", icon: <IconSelfh name="arcane" />, className: "@container min-h-64" };
 
 function actionColor(severity: string) {
   if (severity === "critical") return "text-destructive";
@@ -34,11 +34,11 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
   const counts = containers.counts;
 
   return (
-    <WidgetCard className={arcaneWidgetClassName}>
+    <WidgetCard className={chrome.className}>
       <WidgetHeader
         href={serviceUrl}
-        icon={arcaneIcon}
-        title="Arcane"
+        icon={chrome.icon}
+        title={chrome.title}
         description={
           <WidgetMetadata>
             {versionInfo.updateAvailable ? (
@@ -60,20 +60,20 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
 
       <WidgetContent>
         <WidgetMetricGrid>
-          <WidgetMetric label="Running" value={integerFormatter.format(counts.runningContainers)} />
+          <WidgetMetric label="Running" value={counts.runningContainers} />
           <WidgetMetric
             label="Stopped"
-            value={integerFormatter.format(counts.stoppedContainers)}
+            value={counts.stoppedContainers}
             tone={counts.stoppedContainers > 0 ? "destructive" : "default"}
           />
           <WidgetMetric
             label="Images"
-            value={integerFormatter.format(imageUsageCounts.totalImages)}
-            detail={`${integerFormatter.format(imageUsageCounts.imagesUnused)} unused · ${formatGigabytes(imageUsageCounts.totalImageSize)}`}
+            value={imageUsageCounts.totalImages}
+            detail={`${integerFormatter.format(imageUsageCounts.imagesUnused)} unused · ${formatBytes(imageUsageCounts.totalImageSize)}`}
           />
           <WidgetMetric
             label="Volumes"
-            value={integerFormatter.format(volumeUsageCounts.total)}
+            value={volumeUsageCounts.total}
             detail={`${integerFormatter.format(volumeUsageCounts.inuse)} in use · ${integerFormatter.format(volumeUsageCounts.unused)} unused`}
           />
         </WidgetMetricGrid>
@@ -100,9 +100,7 @@ export const arcaneGeneralStats = (service: WidgetService, ttl?: number) =>
   defineWidget({
     id: "arcane-general-stats",
     ttl,
-    title: "Arcane",
-    icon: arcaneIcon,
-    className: arcaneWidgetClassName,
+    ...chrome,
     errorDescription: "The general statistics could not be loaded.",
     skeleton: { withFooter: true, withSubtitle: true },
     load: async (environment: number = 0) => {
