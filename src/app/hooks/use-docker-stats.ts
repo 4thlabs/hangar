@@ -22,6 +22,11 @@ export const EMPTY_METRICS: ContainerMetrics = {
  * cover the whole host, so `containerIds` is what scopes the totals to what the caller is showing
  * — one app's containers or every installed app's. `EventSource` reconnects on its own, and
  * carries the session cookie.
+ *
+ * Dropped while the tab is hidden, the way `AutoReload` skips its reload: one frame costs the
+ * daemon a stats call per running container, every second, and a tab left open in the background
+ * would go on paying that forever for a page nobody is looking at.
+ *
  * @param containerIds The containers the caller's totals cover
  * @returns The latest frame (empty until the first one arrives, about a second in), and a
  * totaliser over those ids that ignores the containers the stream has no sample for
@@ -30,11 +35,27 @@ export function useDockerStats(containerIds: readonly string[]) {
   const [stats, setStats] = useState<ContainerStats>({});
 
   useEffect(() => {
-    const source = new EventSource("/api/docker/stats");
+    let source: EventSource | undefined;
 
-    source.onmessage = event => setStats(JSON.parse(event.data as string) as ContainerStats);
+    const open = () => {
+      source ??= new EventSource("/api/docker/stats");
+      source.onmessage = event => setStats(JSON.parse(event.data as string) as ContainerStats);
+    };
 
-    return () => source.close();
+    const close = () => {
+      source?.close();
+      source = undefined;
+    };
+
+    const sync = () => (document.hidden ? close() : open());
+
+    sync();
+    document.addEventListener("visibilitychange", sync);
+
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+      close();
+    };
   }, []);
 
   const total = (pick: (metrics: ContainerMetrics) => number | null) => {

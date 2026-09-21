@@ -47,6 +47,9 @@ export interface InstalledApps {
   installedProjectIds(): Set<string>;
 }
 
+/** One cached read: the promise as it was handed out, and when it stops being fresh. */
+type CacheEntry = { value: Promise<unknown>; until: number };
+
 /**
  * The Docker Engine API, scoped to the apps Hangar installed. Talks to the socket directly
  * rather than shelling out: an inspect costs ~5ms instead of a process spawn, and a stats sample
@@ -71,11 +74,24 @@ export class Docker {
   /** Default {@link ttl}: long enough to cover one page's renders, short enough to feel live. */
   private static readonly TTL = 5_000;
 
+  /**
+   * How long past its TTL a sweep is still handed out while it reloads behind the caller. Sized
+   * to the apps page's own 30s `AutoReload`: a reader never waits on the daemon, and never sees
+   * anything older than one reload of what it was going to be shown anyway.
+   */
+  private static readonly GRACE = 30_000;
+
+  /** The host counts move slowly, and the dashboard reads them once per visit, not on a timer. */
+  private static readonly OVERVIEW_TTL = 60_000;
+
+  /** Longer grace than the sweep: nothing here changes fast enough to be worth blocking a paint. */
+  private static readonly OVERVIEW_GRACE = 300_000;
+
   /** How long a settled sweep is served again, in milliseconds. */
   private readonly ttl: number;
 
-  /** One entry per label filter. See {@link inspectContainers}. */
-  private readonly sweeps = new Map<string, { containers: Promise<ComposeContainerSource[]>; until: number }>();
+  /** One entry per cached read. See {@link cached}. */
+  private readonly cache = new Map<string, CacheEntry>();
 
   /**
    * @param docker An Engine API client; injected so the composition root owns the connection
@@ -89,48 +105,107 @@ export class Docker {
   }
 
   /**
-   * Lists every Compose-labeled container, or just one project's, in both API views. The daemon
-   * applies the label filter itself, and an inspect costs a few milliseconds over the socket, so
-   * they all go out at once.
+   * Serves a daemon read from the last snapshot, and refreshes it behind the caller once it goes
+   * stale. A read inside `ttl` is the snapshot; a read within `grace` past it is *still* the
+   * snapshot, handed back at once with a reload started behind it; past that the caller waits on
+   * the daemon and gets its error. Nothing is on a timer, so nobody reading means nothing asking.
    *
-   * Cached per label filter, because this is `1 + N` round trips and nothing above it is cheap
-   * about asking: the apps page re-renders itself every 30 seconds, per open tab. A sweep still
-   * in flight never expires, so concurrent callers share one — that part is free, staleness only
-   * begins once it has settled. A failed sweep is dropped rather than cached.
+   * `grace` therefore has one plain meaning: how long a dead daemon stays hidden. A reload that
+   * fails restores the entry it replaced, timestamp and all, so the snapshot keeps ageing and the
+   * next read past `ttl + grace` surfaces the real error rather than a stale answer forever.
    *
-   * @param project When set, only that Compose project's containers
+   * Only raw daemon reads belong in here, never anything derived: {@link DockerNotFoundError} is
+   * thrown downstream of the sweep, by `ComposeProjects`, so a 404 can never be cached.
+   *
+   * ponytail: while a reload is in flight the slot holds *its* promise, so a second reader
+   * arriving inside that window waits on it instead of getting the snapshot. One reader per
+   * render, one window per reload. Split the slot into `{ settled, inflight }` if that ever shows.
+   *
+   * @param key Which read this is; also the unit {@link invalidate} drops
+   * @param ttl How long the value is fresh, in milliseconds
+   * @param grace How long past `ttl` it is still served while reloading
+   * @param load Fetches a new value from the daemon
    */
-  private async inspectContainers(project?: string): Promise<ComposeContainerSource[]> {
-    const label = project ? `${ComposeProjects.LABEL.project}=${project}` : ComposeProjects.LABEL.project;
-    const cached = this.sweeps.get(label);
+  private cached<T>(key: string, ttl: number, grace: number, load: () => Promise<T>): Promise<T> {
+    const entry = this.cache.get(key);
+    const now = Date.now();
 
-    if (cached && Date.now() < cached.until) return cached.containers;
+    if (entry && now < entry.until) return entry.value as Promise<T>;
 
-    const containers = (async () => {
-      const listed = await this.docker.listContainers({ all: true, filters: { label: [label] } });
+    // Stale but inside the grace window: hand back what we have, reload behind it. The floating
+    // promise is safe only because `refresh` attaches its own handler to it — without that, a
+    // daemon restart would surface as an unhandled rejection, which by default kills the process.
+    if (entry && now < entry.until + grace) {
+      void this.refresh(key, entry, ttl, load);
 
-      return Promise.all(
-        listed.map(async info => ({ info, detail: await this.docker.getContainer(info.Id).inspect() })),
-      );
-    })();
+      return entry.value as Promise<T>;
+    }
 
-    const sweep = { containers, until: Number.POSITIVE_INFINITY };
-    this.sweeps.set(label, sweep);
-
-    containers.then(
-      () => (sweep.until = Date.now() + this.ttl),
-      () => this.sweeps.delete(label),
-    );
-
-    return containers;
+    return this.refresh(key, entry, ttl, load);
   }
 
   /**
-   * Drops every cached container sweep. Called after a Compose command, which is the one moment
-   * the page behind it is guaranteed to ask again and must not be told what was true before.
+   * Loads a fresh value into `key` and publishes it once it settles.
+   *
+   * Both handlers check they still own the slot before touching it: a load started before an
+   * {@link invalidate} can settle after it, and must not publish what the compose command just
+   * made untrue.
+   *
+   * @param previous The entry being replaced, restored as-is if the load fails
+   */
+  private refresh<T>(key: string, previous: CacheEntry | undefined, ttl: number, load: () => Promise<T>): Promise<T> {
+    const value = load();
+    const entry: CacheEntry = { value, until: Number.POSITIVE_INFINITY };
+
+    // In flight it never expires, so concurrent callers share one round trip; staleness only
+    // starts once it has settled.
+    this.cache.set(key, entry);
+
+    value.then(
+      () => {
+        if (this.cache.get(key) === entry) entry.until = Date.now() + ttl;
+      },
+      () => {
+        if (this.cache.get(key) !== entry) return;
+        if (previous) this.cache.set(key, previous);
+        else this.cache.delete(key);
+      },
+    );
+
+    return value;
+  }
+
+  /**
+   * Lists every Compose-labeled container on the host, in both API views. One sweep for everyone:
+   * the apps list, one project's detail and a log stream all read the same snapshot, because the
+   * callers that want one project narrow it in memory through `ComposeProjects`.
+   *
+   * An inspect costs a few milliseconds over the socket, so they all go out at once — and with
+   * `allSettled`, because a container that exits between the list and its inspect answers 404,
+   * and one container going away must not cost the whole sweep. That is the common case right
+   * after a `compose down`, not an edge one.
+   */
+  private inspectContainers(): Promise<ComposeContainerSource[]> {
+    return this.cached("containers", this.ttl, Docker.GRACE, async () => {
+      const listed = await this.docker.listContainers({
+        all: true,
+        filters: { label: [ComposeProjects.LABEL.project] },
+      });
+      const inspected = await Promise.allSettled(
+        listed.map(async info => ({ info, detail: await this.docker.getContainer(info.Id).inspect() })),
+      );
+
+      return inspected.filter(result => result.status === "fulfilled").map(result => result.value);
+    });
+  }
+
+  /**
+   * Drops every cached daemon read. Called after a Compose command, which is the one moment the
+   * page behind it is guaranteed to ask again and must not be told what was true before. The
+   * overview goes too: a compose command changes the container counts `info` reports.
    */
   invalidate() {
-    this.sweeps.clear();
+    this.cache.clear();
   }
 
   /**
@@ -193,30 +268,37 @@ export class Docker {
    * Two endpoints because neither answers alone: `info` carries the container tallies and the
    * daemon version, `df` the disk usage (which images nothing runs, which volumes nothing mounts).
    */
-  async overview(): Promise<DockerOverview> {
-    const [info, usage] = (await Promise.all([this.docker.info(), this.docker.df()])) as [SystemInfo, SystemDiskUsage];
-    const images = usage.Images ?? [];
-    const volumes = usage.Volumes ?? [];
-    const inUse = volumes.filter(volume => (volume.UsageData?.RefCount ?? 0) > 0).length;
+  overview(): Promise<DockerOverview> {
+    return this.cached("overview", Docker.OVERVIEW_TTL, Docker.OVERVIEW_GRACE, async () => {
+      const [info, usage] = (await Promise.all([this.docker.info(), this.docker.df()])) as [
+        SystemInfo,
+        SystemDiskUsage,
+      ];
+      const images = usage.Images ?? [];
+      const volumes = usage.Volumes ?? [];
+      const inUse = volumes.filter(volume => (volume.UsageData?.RefCount ?? 0) > 0).length;
 
-    return {
-      version: info.ServerVersion,
-      containers: { total: info.Containers, running: info.ContainersRunning, stopped: info.ContainersStopped },
-      // `LayersSize` rather than the sum of the images: layers shared between images are on disk once.
-      images: {
-        total: images.length,
-        unused: images.filter(image => image.Containers === 0).length,
-        size: usage.LayersSize,
-      },
-      volumes: { total: volumes.length, inUse, unused: volumes.length - inUse },
-    };
+      return {
+        version: info.ServerVersion,
+        containers: { total: info.Containers, running: info.ContainersRunning, stopped: info.ContainersStopped },
+        // `LayersSize` rather than the sum of the images: layers shared between images are on disk once.
+        images: {
+          total: images.length,
+          unused: images.filter(image => image.Containers === 0).length,
+          size: usage.LayersSize,
+        },
+        volumes: { total: volumes.length, inUse, unused: volumes.length - inUse },
+      };
+    });
   }
 
   /**
    * Lists every app Hangar installed, as lightweight summaries of their Docker state.
-   * ponytail: the sweep is unfiltered, so it inspects every Compose container on the host and
-   * throws away the ones Hangar did not install. Filter the daemon-side label query by
-   * `installedProjectIds()` if N ever hurts more than the cache absorbs.
+   *
+   * ponytail: the sweep inspects every Compose container on the host and throws away the ones
+   * Hangar did not install. There is no daemon-side fix: Docker ANDs repeated `label` filters, so
+   * asking for several projects at once matches a container in *all* of them, i.e. nothing.
+   * Narrowing would mean one list call per installed project, which is worse. Left as is.
    */
   async listProjects(): Promise<ComposeProjectsSnapshot> {
     const compose = new ComposeProjects(await this.inspectContainers());
@@ -232,7 +314,7 @@ export class Docker {
    * @throws {DockerNotFoundError} if the project is not an installed app
    */
   async projectDetail(project: string): Promise<ComposeProjectDetail> {
-    const compose = new ComposeProjects(await this.inspectContainers(project), project);
+    const compose = new ComposeProjects(await this.inspectContainers(), project);
 
     return compose.detail(project, this.apps.installedProjectIds());
   }
@@ -248,9 +330,11 @@ export class Docker {
   async openLogs(project: string, containerId: string, signal: AbortSignal): Promise<Readable> {
     if (!Docker.CONTAINER_ID.test(containerId)) throw new DockerNotFoundError(`container ${containerId}`);
 
-    // Listing by project label, rather than inspecting the id directly, means an id from another
-    // project is indistinguishable from one that doesn't exist: no cross-project probing.
-    const compose = new ComposeProjects(await this.inspectContainers(project), project);
+    // Narrowing to the project, rather than inspecting the id directly, means an id from another
+    // project is indistinguishable from one that doesn't exist: no cross-project probing. The
+    // filter is `ComposeProjects`' rather than the daemon's, and `find` only ever searches what it
+    // kept, so the guarantee is the same one — it just no longer costs its own sweep.
+    const compose = new ComposeProjects(await this.inspectContainers(), project);
     const container = compose.find(containerId);
 
     if (!container) throw new DockerNotFoundError(`container ${containerId}`);
@@ -281,10 +365,14 @@ export class Docker {
   /**
    * Takes one sample of every running Compose container, in parallel. Covers the whole host
    * rather than one app: the caller reads whichever ids it happens to be showing.
+   *
+   * Not cached: this is the source of a live stream, and its callers already pace themselves.
+   * `allSettled` because a container stopping mid-sample answers 404, and one exiting container
+   * must not end the stats stream for every open tab.
    */
   async sampleStats(): Promise<Samples> {
     const running = await this.docker.listContainers({ filters: { label: [ComposeProjects.LABEL.project] } });
-    const samples = await Promise.all(
+    const samples = await Promise.allSettled(
       running.map(
         async entry =>
           [
@@ -294,6 +382,10 @@ export class Docker {
       ),
     );
 
-    return new Map(samples.map(([id, raw]) => [id, raw as ContainerStatsSample]));
+    return new Map(
+      samples
+        .filter(sample => sample.status === "fulfilled")
+        .map(sample => [sample.value[0], sample.value[1] as ContainerStatsSample]),
+    );
   }
 }
