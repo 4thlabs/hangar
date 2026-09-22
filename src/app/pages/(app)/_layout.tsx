@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MobileTabBar } from "#app/components/navbar/navbar-mobile.tsx";
 import { AppNavbar } from "#app/components/navbar/navbar.tsx";
 import { requireSession } from "#libs/auth";
 import { notifications as centre } from "#libs/notifications/server";
@@ -15,6 +16,7 @@ export default async function AppLayout({ children }: AppLayoutProps) {
       <div className="flex flex-1 flex-col p-6 [&>main]:flex [&>main]:flex-1 [&>main]:flex-col [&>main]:gap-6">
         {children}
       </div>
+      <MobileTabBar />
     </div>
   );
 }
