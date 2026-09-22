@@ -14,6 +14,19 @@ export default function RootLayout({ children }: RootLayoutProps) {
       <div className="min-h-svh font-sans">
         <meta name="description" content="Hangar — vos applications auto-hébergées." />
         <link rel="icon" type="image/png" href="/images/favicon.png" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        {/* iOS only reads the manifest icons since 17.4; before that this tag is all it looks at. */}
+        <link rel="apple-touch-icon" href="/images/icon.png" />
+        {/* ponytail: pinned to Nord, while the app ships 8 palettes × light/dark — varying the tint
+            per palette would duplicate 16 values the CSS already holds. Revisit if the mismatch shows. */}
+        {theme === "system" ? (
+          <>
+            <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2e3440" />
+            <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eceff4" />
+          </>
+        ) : (
+          <meta name="theme-color" content={theme === "dark" ? "#2e3440" : "#eceff4"} />
+        )}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
