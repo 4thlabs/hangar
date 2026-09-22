@@ -44,7 +44,11 @@ export function ClockDisplay({ className }: { className?: string | undefined }) 
         </div>
 
         <div className="flex flex-col items-end gap-0">
-          <time className="text-lg font-semibold tabular-nums" dateTime={now.toISOString()}>
+          {/* The server stamps its own `new Date()`, the client another one milliseconds later, so
+              `dateTime` never matches on hydration — and React leaves a mismatched attribute as the
+              server wrote it. The effect below re-renders with the browser's clock right away; this
+              only silences the warning for the one node that differs on every single load. */}
+          <time className="text-lg font-semibold tabular-nums" dateTime={now.toISOString()} suppressHydrationWarning>
             {timeFormatter.format(now)}
           </time>
           <p className="text-sm text-muted-foreground">{weekdayFormatter.format(now)}</p>
