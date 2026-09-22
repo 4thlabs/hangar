@@ -1,0 +1,13 @@
+{
+  "id": "/",
+  "name": "Hangar",
+  "short_name": "Hangar",
+  "description": "Hangar — vos applications auto-hébergées.",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#eceff4",
+  "theme_color": "#eceff4",
+  "icons": [{ "src": "/images/icon.png", "sizes": "256x256", "type": "image/png" }]
+}
