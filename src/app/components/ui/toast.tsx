@@ -22,7 +22,10 @@ function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
     <ToastPrimitive.Viewport
       data-slot="toast-viewport"
       className={cn(
-        "pointer-events-none fixed inset-x-4 bottom-4 z-50 mx-auto w-auto max-w-sm outline-none sm:right-4 sm:left-auto sm:mx-0 sm:w-full",
+        // `bottom-20` clears the mobile tab bar (`h-16`) plus a gap; from `sm` the bar is gone and so
+        // is the offset. Auth pages have no bar and float a little high — cheaper than wiring a
+        // shared variable across two components for a screen that never toasts.
+        "pointer-events-none fixed inset-x-4 bottom-20 z-50 mx-auto w-auto max-w-sm outline-none sm:right-4 sm:bottom-4 sm:left-auto sm:mx-0 sm:w-full",
         className,
       )}
       {...props}

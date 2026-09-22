@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { ChevronDownIcon, LogOutIcon, SettingsIcon } from "lucide-react";
 import { Link, useRouter } from "waku";
-import { MobileNavbarActions } from "#app/components/navbar/navbar-mobile.tsx";
+import { MobileSearch } from "#app/components/navbar/navbar-mobile.tsx";
 import { NotificationsMenu } from "#app/components/notifications/notifications-menu.tsx";
 import { NavbarSearch } from "#app/components/navbar/searchbar.tsx";
 import { UserAvatar, type AvatarUser } from "#app/components/common/user-avatar.tsx";
-import { navigations } from "#app/navigations.ts";
+import { isNavigationActive, navigations } from "#app/navigations.ts";
 import { Button } from "#app/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -36,8 +36,8 @@ function Brand() {
       variant="ghost"
       size="lg"
       // Taken out of the flow to sit at the centre of the bar on small screens, back in the
-      // left-hand cluster from `md` up. Cheaper than a second header laid out differently.
-      className="absolute left-1/2 -translate-x-1/2 md:static md:translate-x-0"
+      // left-hand cluster from `sm` up. Cheaper than a second header laid out differently.
+      className="absolute left-1/2 -translate-x-1/2 sm:static sm:translate-x-0"
       render={
         <Link to="/" aria-label="Hangar — Dashboard">
           <img src="/images/icon.png" alt="" className="size-7" />
@@ -51,10 +51,13 @@ function Brand() {
 function DesktopNavigation() {
   const router = useRouter();
   const items = navigations.filter(category => category.position !== "bottom").flatMap(category => category.items);
+  // The tab strip matches on equality, so it is handed the active href rather than the raw path:
+  // `/apps/alpha` must still light up Apps. No item matches on `/settings` — that one is a button.
+  const active = items.find(item => isNavigationActive(router.path, item.href))?.href ?? "";
 
   return (
-    <nav className="hidden h-full md:block" aria-label="Navigation principale">
-      <Tabs value={router.path} className="h-full gap-0">
+    <nav className="hidden h-full sm:block" aria-label="Navigation principale">
+      <Tabs value={active} className="h-full gap-0">
         <TabsList variant="line" className="h-full! gap-2 p-0">
           {items.map(item => (
             <TabsTrigger
@@ -64,7 +67,7 @@ function DesktopNavigation() {
               render={
                 <Link
                   to={item.href}
-                  aria-current={router.path === item.href ? "page" : undefined}
+                  aria-current={active === item.href ? "page" : undefined}
                   onMouseEnter={item.prefetch ? () => router.prefetch(item.href) : undefined}
                 >
                   {item.label}
@@ -86,9 +89,9 @@ function SettingsButton() {
       <TooltipTrigger
         render={
           <Button
-            variant={router.path === "/settings" ? "secondary" : "ghost"}
+            variant={isNavigationActive(router.path, "/settings") ? "secondary" : "ghost"}
             size="icon"
-            className="hidden md:inline-flex"
+            className="hidden sm:inline-flex"
             render={
               <Link to="/settings" aria-label="Paramètres">
                 <SettingsIcon />
@@ -191,13 +194,17 @@ export function AppNavbar({ user, notifications }: AppNavbarProps) {
         the nav painted over the field. `max-content` floors the sides on their real width
         (`min-w-0` would let them collapse again), so the search gets the leftover instead.
 
-        One grid for both layouts, not one each. A second tree hidden with `md:hidden` is still
+        The template switches at `sm`, where the nav moves up from the tab bar, but the search
+        itself only appears at `md`: between the two the centre track holds nothing and collapses
+        to zero, which `1fr auto 1fr` cannot do without pushing the right-hand cluster off.
+
+        One grid for both layouts, not one each. A second tree hidden with `sm:hidden` is still
         mounted: every control inside it would run twice, with its own state, its own effects and
         its own subscriptions — two user menus, two notification streams.
       */}
-      <div className="relative grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 md:grid-cols-[minmax(max-content,1fr)_minmax(0,32rem)_minmax(max-content,1fr)] md:gap-4 md:px-4">
+      <div className="relative grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 sm:grid-cols-[minmax(max-content,1fr)_minmax(0,32rem)_minmax(max-content,1fr)] sm:gap-4 sm:px-4">
         <div className="col-start-1 flex h-full items-center justify-start gap-2">
-          <MobileNavbarActions />
+          <MobileSearch />
           <Brand />
           <DesktopNavigation />
         </div>
