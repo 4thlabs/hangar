@@ -104,7 +104,6 @@ export const frigateEvents = (service: WidgetService, ttl?: number) =>
     ttl,
     ...chrome,
     errorDescription: "The camera events could not be loaded.",
-    skeleton: { withSubtitle: true },
     load: async () => {
       const client = await createFrigateClient(service);
 

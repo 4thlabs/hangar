@@ -26,7 +26,6 @@ export type WidgetDefinition<T> = {
   render: (data: T) => ReactNode;
   /** How long the loaded data stays fresh, in milliseconds. Defaults to {@link TTL}. */
   ttl?: number | undefined;
-  skeleton?: { withFooter?: boolean; withSubtitle?: boolean } | undefined;
 };
 
 export type Widget = {
@@ -73,7 +72,7 @@ export const clearWidgetCache = () => snapshots.clear();
  * A failing widget degrades to its own card; the rest of the dashboard stands.
  */
 export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
-  const { id, title, icon, className, errorDescription, load, render, skeleton, ttl } = definition;
+  const { id, title, icon, className, errorDescription, load, render, ttl } = definition;
 
   const fallback = () => <WidgetError className={className} icon={icon} name={title} description={errorDescription} />;
   const snapshot = snapshots.define(id, ttl ?? TTL, GRACE, load);
@@ -108,14 +107,6 @@ export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
     },
     warm: snapshot.warm,
     ready: () => snapshot.peek() !== undefined,
-    Skeleton: () => (
-      <WidgetSkeleton
-        className={className}
-        icon={icon}
-        title={title}
-        withFooter={skeleton?.withFooter ?? false}
-        withSubtitle={skeleton?.withSubtitle ?? false}
-      />
-    ),
+    Skeleton: () => <WidgetSkeleton className={className} icon={icon} title={title} />,
   };
 }

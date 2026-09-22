@@ -95,7 +95,6 @@ export const dockerGeneralStats = (ttl?: number) =>
     ttl,
     ...chrome,
     errorDescription: "The local Docker statistics could not be loaded.",
-    skeleton: { withFooter: true, withSubtitle: true },
     load: async (): Promise<DockerGeneralStats> => {
       // `outdatedProjects` reads the last completed check; the widget never talks to a registry itself.
       const [overview, outdated] = await Promise.all([docker.overview(), outdatedProjects()]);
