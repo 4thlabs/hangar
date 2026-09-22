@@ -7,12 +7,6 @@ type NavigationItem = {
   label: string;
   href: NavigationPath;
   icon: LucideIcon;
-  /**
-   * Warms the route on hover. Reserve it for pages that are slow and never reload themselves:
-   * Waku keeps a prefetched payload for 60s and `router.reload()` reuses it, so a prefetched
-   * page backed by live data replays its pre-mutation state after an action.
-   */
-  prefetch?: boolean;
 };
 
 type NavigationCategory = {
@@ -25,7 +19,7 @@ export const navigations: readonly NavigationCategory[] = [
   {
     label: "Général",
     items: [
-      { label: "Dashboard", href: "/", icon: LayoutDashboardIcon, prefetch: true },
+      { label: "Dashboard", href: "/", icon: LayoutDashboardIcon },
       { label: "Apps", href: "/apps", icon: BoxesIcon },
       { label: "Store", href: "/store", icon: StoreIcon },
     ],

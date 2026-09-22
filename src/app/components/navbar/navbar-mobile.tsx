@@ -70,7 +70,6 @@ export function MobileTabBar() {
             key={item.href}
             to={item.href}
             aria-current={active ? "page" : undefined}
-            onMouseEnter={item.prefetch ? () => router.prefetch(item.href) : undefined}
             className={cn(
               "relative flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors",
               // The same hairline the header's tabs draw under themselves, on the other edge.

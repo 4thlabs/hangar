@@ -68,7 +68,6 @@ function DesktopNavigation() {
                 <Link
                   to={item.href}
                   aria-current={active === item.href ? "page" : undefined}
-                  onMouseEnter={item.prefetch ? () => router.prefetch(item.href) : undefined}
                 >
                   {item.label}
                 </Link>
