@@ -18,7 +18,17 @@ export default function Root({ children }: RootProps) {
         data-color-mode={theme}
         suppressHydrationWarning
       >
-        <head></head>
+        <head>
+          {/* The server cannot know the OS preference: without this the first paint is light and
+              the class lands only after hydration. Runs before paint, so no flash. */}
+          {theme === "system" ? (
+            <script
+              dangerouslySetInnerHTML={{
+                __html: `matchMedia("(prefers-color-scheme: dark)").matches&&document.documentElement.classList.add("dark")`,
+              }}
+            />
+          ) : null}
+        </head>
         <body>{children}</body>
       </html>
     </ErrorBoundary>
