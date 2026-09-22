@@ -142,7 +142,6 @@ export const backrestSummary = (service: WidgetService, ttl?: number) =>
     ttl,
     ...chrome,
     errorDescription: "The backup status could not be loaded.",
-    skeleton: { withSubtitle: true },
     load: async () => ((await (await createBackrestClient(service)).getSummary()).repoSummaries ?? []).map(displayRepo),
     render: (repos: RepoBackup[]) => <BackrestSummaryCard repos={repos} serviceUrl={service.link} />,
   });

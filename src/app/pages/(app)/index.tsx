@@ -21,7 +21,7 @@ function Dashboard() {
   const placements = resolveWidgets(hangar.store.config.widgets(), widgetHost);
 
   return (
-    <div className="animate-in grid grid-cols-1 items-start gap-4 fade-in-0 duration-200 md:grid-cols-2 xl:grid-cols-[1fr_3fr_1fr]">
+    <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[1fr_3fr_1fr]">
       {COLUMNS.map(column => {
         const columnPlacements = placements.filter(placement => placement.column === column);
         if (columnPlacements.length === 0) return null;

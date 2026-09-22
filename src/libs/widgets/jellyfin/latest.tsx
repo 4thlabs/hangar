@@ -139,7 +139,6 @@ export const jellyfinLatest = (service: WidgetService, user: string, ttl?: numbe
     ttl,
     ...chrome,
     errorDescription: "The Jellyfin library could not be loaded.",
-    skeleton: { withSubtitle: true },
     load: async () => {
       const client = await createJellyfinClient(service);
       // Independent calls, so they go together; only "latest" has to wait on the user lookup.

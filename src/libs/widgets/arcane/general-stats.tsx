@@ -102,7 +102,6 @@ export const arcaneGeneralStats = (service: WidgetService, ttl?: number) =>
     ttl,
     ...chrome,
     errorDescription: "The general statistics could not be loaded.",
-    skeleton: { withFooter: true, withSubtitle: true },
     load: async (environment: number = 0) => {
       const response = await (await createArcaneClient(service)).getDashboard(environment);
 
