@@ -281,6 +281,64 @@ describe("HangarStore", () => {
     expect(store.app("a")).toMatchObject({ id: "a" });
     expect(store.app("missing")).toBeUndefined();
   });
+
+  describe("saveApp", () => {
+    const COMPOSE = "name: Delta\nservices:\n  delta-app:\n    image: nginx\n";
+
+    it("adds a new app once docker compose accepts it", async () => {
+      const runtime = createRuntime();
+      const store = await createStore(dataDir, runtime);
+      await mkdir(store.installedPath, { recursive: true });
+      await mkdir(path.join(store.storePath, ".git"));
+
+      await store.saveApp("delta-app", COMPOSE, true);
+
+      expect(await store.appSource("delta-app")).toBe(COMPOSE);
+      expect(store.app("delta-app")?.name).toBe("Delta");
+      expect(runtime.run).toHaveBeenCalledWith(
+        "docker",
+        expect.arrayContaining([
+          "config",
+          "-q",
+          path.join(store.storePath, "store", "delta-app", ".compose.pending.yml"),
+        ]),
+        { capture: true },
+      );
+    });
+
+    it("leaves nothing behind when docker compose rejects a new app", async () => {
+      const runtime = createRuntime();
+      runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "services must be a mapping"));
+      const store = await createStore(dataDir, runtime);
+
+      await expect(store.saveApp("delta-app", "services: 3\n", true)).rejects.toThrow(/services must be a mapping/);
+      await expect(lstat(path.join(store.storePath, "store", "delta-app"))).rejects.toThrow(/ENOENT/);
+    });
+
+    it("keeps the current compose when an edit is rejected", async () => {
+      const runtime = createRuntime();
+      const store = await createStore(dataDir, runtime);
+      const folder = path.join(store.storePath, "store", "delta-app");
+      await mkdir(folder, { recursive: true });
+      await writeFile(path.join(folder, "compose.yml"), COMPOSE);
+      runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "invalid"));
+
+      await expect(store.saveApp("delta-app", "services: 3\n", false)).rejects.toThrow();
+
+      expect(await store.appSource("delta-app")).toBe(COMPOSE);
+      await expect(lstat(path.join(folder, ".compose.pending.yml"))).rejects.toThrow(/ENOENT/);
+    });
+
+    it("refuses ids that escape the store, shared files and mismatched create flags", async () => {
+      const store = await createStore(dataDir, createRuntime());
+      await mkdir(path.join(store.storePath, "store", "delta-app"), { recursive: true });
+
+      await expect(store.saveApp("../config", COMPOSE, true)).rejects.toThrow(/Invalid app id/);
+      await expect(store.saveApp("networks.yml", COMPOSE, true)).rejects.toThrow(/shared/);
+      await expect(store.saveApp("delta-app", COMPOSE, true)).rejects.toThrow(/already exists/);
+      await expect(store.saveApp("other-app", COMPOSE, false)).rejects.toThrow(/does not exist/);
+    });
+  });
 });
 
 describe("HangarStore.compose", () => {

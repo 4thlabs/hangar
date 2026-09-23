@@ -1,5 +1,8 @@
+import { PencilIcon } from "lucide-react";
+import { Link } from "waku";
 import type { StoreActionResult } from "#app/actions/store/store-action-result.ts";
 import { StoreAppButton } from "#app/components/store/store-app-button.tsx";
+import { buttonVariants } from "#app/components/ui/button.tsx";
 import { Card, CardContent, CardTitle } from "#app/components/ui/card.tsx";
 import { type HangarApp } from "#libs/hangar";
 
@@ -13,6 +16,17 @@ type StoreAppCardProps = {
 export function StoreAppCard({ app, installApp, uninstallApp }: StoreAppCardProps) {
   return (
     <Card className="relative w-38 gap-2 py-3">
+      <Link
+        to={`/store/${app.id}/edit`}
+        aria-label={`Modifier ${app.name}`}
+        className={buttonVariants({
+          variant: "ghost",
+          size: "icon-xs",
+          className: "absolute top-1.5 left-1.5 text-muted-foreground",
+        })}
+      >
+        <PencilIcon />
+      </Link>
       <CardContent className="flex flex-col items-center gap-2 px-2 text-center">
         {app.icon ? (
           <img src={app.icon} alt="" className="size-12 object-contain" />

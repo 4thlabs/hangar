@@ -1,6 +1,8 @@
 import { cancelJob, runJob } from "#app/actions/jobs/manage-job.ts";
+import { saveConfig } from "#app/actions/store/manage-config.ts";
 import { saveEnv } from "#app/actions/store/manage-env.ts";
 import { manageStore } from "#app/actions/store/manage-store.ts";
+import { ConfigSettingsCard } from "#app/components/settings/config-settings-card.tsx";
 import { EnvSettingsCard } from "#app/components/settings/env-settings-card.tsx";
 import { JobsSettingsCard } from "#app/components/settings/jobs-settings-card.tsx";
 import { StoreSettingsCard } from "#app/components/settings/store-settings-card.tsx";
@@ -12,6 +14,7 @@ export default async function SettingsPage() {
   const installed = await hangar.store.isInstalled();
   const jobs = await Sidequest.job.list({ limit: 50 });
   const variables = await hangar.store.env.read();
+  const config = await hangar.store.config.source();
 
   return (
     <main>
@@ -24,6 +27,7 @@ export default async function SettingsPage() {
         <TabsList className="self-center">
           <TabsTrigger value="store">Store</TabsTrigger>
           <TabsTrigger value="env">Environnement</TabsTrigger>
+          <TabsTrigger value="config">Configuration</TabsTrigger>
           <TabsTrigger value="jobs">Jobs</TabsTrigger>
         </TabsList>
         <TabsContent value="store">
@@ -31,6 +35,9 @@ export default async function SettingsPage() {
         </TabsContent>
         <TabsContent value="env">
           <EnvSettingsCard variables={variables} saveEnv={saveEnv} />
+        </TabsContent>
+        <TabsContent value="config">
+          <ConfigSettingsCard source={config} saveConfig={saveConfig} />
         </TabsContent>
         <TabsContent value="jobs">
           <JobsSettingsCard jobs={jobs} runJob={runJob} cancelJob={cancelJob} />

@@ -14,6 +14,10 @@ import type { getConfig as File_AppSettings_getConfig } from './pages/(app)/sett
 // prettier-ignore
 import type { getConfig as File_AppStore_getConfig } from './pages/(app)/store';
 // prettier-ignore
+import type { getConfig as File_AppStoreIdEdit_getConfig } from './pages/(app)/store/[id]/edit';
+// prettier-ignore
+import type { getConfig as File_AppStoreNew_getConfig } from './pages/(app)/store/new';
+// prettier-ignore
 import type { getConfig as File_AppUserSettings_getConfig } from './pages/(app)/user/settings';
 // prettier-ignore
 import type { getConfig as File_AuthLogin_getConfig } from './pages/(auth)/login';
@@ -29,6 +33,8 @@ type Page =
 | ({ path: '/' } & GetConfigResponse<typeof File_AppIndex_getConfig>)
 | ({ path: '/settings' } & GetConfigResponse<typeof File_AppSettings_getConfig>)
 | ({ path: '/store' } & GetConfigResponse<typeof File_AppStore_getConfig>)
+| ({ path: '/store/[id]/edit' } & GetConfigResponse<typeof File_AppStoreIdEdit_getConfig>)
+| ({ path: '/store/new' } & GetConfigResponse<typeof File_AppStoreNew_getConfig>)
 | ({ path: '/user/settings' } & GetConfigResponse<typeof File_AppUserSettings_getConfig>)
 | ({ path: '/login' } & GetConfigResponse<typeof File_AuthLogin_getConfig>)
 | ({ path: '/register' } & GetConfigResponse<typeof File_AuthRegister_getConfig>)

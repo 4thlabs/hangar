@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { HangarConfig } from "./hangar-config.ts";
@@ -103,5 +103,25 @@ categories:
 `);
 
     await expect(new HangarConfig(file).load()).rejects.toThrow(/categories\.0\.color/);
+  });
+
+  it("writes a valid config and applies it", async () => {
+    const file = await configFile("categories: []\n");
+    const config = await new HangarConfig(file).load();
+    const source = "categories:\n  - name: infra\n    color: blue\n    stacks: [traefik]\n";
+
+    await config.write(source);
+
+    expect(await readFile(file, "utf8")).toBe(source);
+    expect(config.categories()).toEqual([{ name: "infra", color: "blue", stacks: ["traefik"] }]);
+  });
+
+  it("refuses an invalid config without touching the file", async () => {
+    const file = await configFile("categories: []\n");
+    const config = await new HangarConfig(file).load();
+
+    await expect(config.write("categories: [")).rejects.toThrow(/Invalid YAML/);
+    await expect(config.write("widgets: []\n")).rejects.toThrow(/categories/);
+    expect(await readFile(file, "utf8")).toBe("categories: []\n");
   });
 });
