@@ -15,7 +15,7 @@ type StoreAppCardProps = {
 /** Server component: only the install button below is interactive. */
 export function StoreAppCard({ app, installApp, uninstallApp }: StoreAppCardProps) {
   return (
-    <Card className="relative w-38 gap-2 py-3">
+    <Card className="relative gap-2 py-3">
       <Link
         to={`/store/${app.id}/edit`}
         aria-label={`Modifier ${app.name}`}
