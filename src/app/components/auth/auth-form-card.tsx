@@ -4,11 +4,10 @@ import type { ComponentProps, ReactNode } from "react";
 import { CircleAlertIcon } from "lucide-react";
 import { Link } from "waku";
 import { Alert, AlertDescription, AlertTitle } from "#app/components/ui/alert.tsx";
-import { Button } from "#app/components/ui/button.tsx";
+import { PendingButton } from "#app/components/common/pending-button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { Field, FieldGroup, FieldLabel } from "#app/components/ui/field.tsx";
 import { Input } from "#app/components/ui/input.tsx";
-import { Spinner } from "#app/components/ui/spinner.tsx";
 
 type AuthFormCardProps = {
   title: string;
@@ -59,10 +58,9 @@ export function AuthFormCard({
           </FieldGroup>
         </CardContent>
         <CardFooter className="flex-col gap-3">
-          <Button type="submit" className="w-full" disabled={isPending}>
-            {isPending && <Spinner data-icon="inline-start" />}
-            {isPending ? pendingLabel : submitLabel}
-          </Button>
+          <PendingButton type="submit" className="w-full" pending={isPending} pendingLabel={pendingLabel}>
+            {submitLabel}
+          </PendingButton>
           <p className="text-sm text-muted-foreground">
             {alternatePrompt}{" "}
             <Link to={alternateHref} className="underline underline-offset-4">

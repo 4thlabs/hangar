@@ -27,7 +27,7 @@ const createRuntime = () =>
 
 /** A store whose configuration is already on disk and loaded, as after an install. */
 const createStore = async (dataDir: string, runtime: CommandRunner) => {
-  const store = await HangarStore.create(STORE_URL, dataDir, runtime);
+  const store = new HangarStore(STORE_URL, dataDir, runtime);
 
   await mkdir(path.join(store.storePath, "config"), { recursive: true });
   await writeFile(path.join(store.storePath, "config", "hangar.yml"), CATEGORIES);
@@ -64,7 +64,7 @@ describe("HangarStore", () => {
   });
 
   it("installs a store that ships no config", async () => {
-    const store = await HangarStore.create(STORE_URL, dataDir, createRuntime());
+    const store = new HangarStore(STORE_URL, dataDir, createRuntime());
 
     await expect(store.install()).resolves.toBeUndefined();
   });
@@ -113,7 +113,7 @@ describe("HangarStore", () => {
       }),
     };
     // No config up front: the categories it links by only arrive with the clone.
-    const store = await HangarStore.create(STORE_URL, dataDir, runtime);
+    const store = new HangarStore(STORE_URL, dataDir, runtime);
 
     await store.install();
 

@@ -86,7 +86,7 @@ widgets:
     column: 3
 `);
 
-    await expect(new HangarConfig(file).load()).rejects.toThrow(/widgets\.0/);
+    await expect(new HangarConfig(file).load()).rejects.toThrow(/widgets\[0\]/);
   });
 
   it("rejects a config missing categories, naming the file", async () => {
@@ -102,7 +102,7 @@ categories:
     stacks: [traefik]
 `);
 
-    await expect(new HangarConfig(file).load()).rejects.toThrow(/categories\.0\.color/);
+    await expect(new HangarConfig(file).load()).rejects.toThrow(/categories\[0\]\.color/);
   });
 
   it("writes a valid config and applies it", async () => {

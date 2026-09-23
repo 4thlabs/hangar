@@ -21,8 +21,7 @@ const envVariables = z.object({
 const parsed = envVariables.safeParse(process.env);
 
 if (!parsed.success) {
-  const issues = parsed.error.issues.map(issue => `  ${issue.path.join(".")}: ${issue.message}`).join("\n");
-  throw new Error(`Invalid environment configuration:\n${issues}`);
+  throw new Error(`Invalid environment configuration:\n${z.prettifyError(parsed.error)}`);
 }
 
 export const env = parsed.data;

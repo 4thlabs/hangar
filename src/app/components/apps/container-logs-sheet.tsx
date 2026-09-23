@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { EraserIcon, FileTextIcon, RefreshCwIcon } from "lucide-react";
-import { streamStatusLabel, useStreamText } from "#app/hooks/use-stream-text.ts";
-import { Badge } from "#app/components/ui/badge.tsx";
+import { useStreamText } from "#app/hooks/use-stream-text.ts";
+import { StreamOutput, StreamStatusBadge } from "#app/components/common/stream-output.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import {
   Sheet,
@@ -24,30 +24,11 @@ type ContainerLogsSheetProps = {
 export function ContainerLogsSheet({ project, containerId, containerName }: ContainerLogsSheetProps) {
   const [open, setOpen] = useState(false);
   const [following, setFollowing] = useState(true);
-  const viewportRef = useRef<HTMLDivElement>(null);
 
   const endpoint = open
     ? `/api/docker/apps/${encodeURIComponent(project)}/containers/${encodeURIComponent(containerId)}/logs`
     : null;
   const { text: logs, status, error, clear, reconnect } = useStreamText(endpoint);
-
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (viewport && following) viewport.scrollTop = viewport.scrollHeight;
-  }, [following, logs]);
-
-  function handleScroll() {
-    const viewport = viewportRef.current;
-    if (viewport) {
-      setFollowing(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 32);
-    }
-  }
-
-  function resumeFollowing() {
-    setFollowing(true);
-    const viewport = viewportRef.current;
-    if (viewport) viewport.scrollTop = viewport.scrollHeight;
-  }
 
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
@@ -71,7 +52,7 @@ export function ContainerLogsSheet({ project, containerId, containerName }: Cont
         <SheetHeader>
           <div className="flex flex-wrap items-center gap-2 pr-8">
             <SheetTitle>Logs de {containerName}</SheetTitle>
-            <Badge variant={status === "error" ? "destructive" : "secondary"}>{streamStatusLabel[status]}</Badge>
+            <StreamStatusBadge status={status} />
           </div>
           <SheetDescription>
             {project} · {containerId.slice(0, 12)} · 200 dernières lignes puis suivi en direct
@@ -98,20 +79,19 @@ export function ContainerLogsSheet({ project, containerId, containerName }: Cont
               Effacer
             </Button>
             {!following && (
-              <Button type="button" variant="ghost" size="sm" onClick={resumeFollowing}>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setFollowing(true)}>
                 Reprendre le suivi
               </Button>
             )}
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div
-            ref={viewportRef}
-            onScroll={handleScroll}
-            className="min-h-0 flex-1 overflow-auto rounded-lg bg-muted p-3"
-          >
-            <pre className="font-mono text-xs whitespace-pre-wrap">{logs || "En attente de logs…"}</pre>
-          </div>
+          <StreamOutput
+            text={logs}
+            error={error}
+            placeholder="En attente de logs…"
+            follow={following}
+            onScroll={({ currentTarget: v }) => setFollowing(v.scrollHeight - v.scrollTop - v.clientHeight < 32)}
+          />
         </div>
       </SheetContent>
     </Sheet>

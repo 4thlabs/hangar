@@ -67,34 +67,30 @@ export class HangarConfig {
    * @returns HangarConfig instance with the loaded configuration
    */
   async load() {
-    const handle = await readFile(this._configFile, "utf8").catch((error: NodeJS.ErrnoException) => {
-      // A store without a hangar.yml is a store without categories, not a
-      // failure: it still installs, its apps are just left ungrouped.
-      if (error.code === "ENOENT") return undefined;
+    const source = await this.read();
 
-      // An unreadable config is an operator error, not a defect: report the
-      // path, not a filesystem stack trace.
-      throw new HangarError(`Cannot read the Hangar config at ${this._configFile}: ${error.code ?? error.message}`);
-    });
+    // A store without a hangar.yml is a store without categories, not a
+    // failure: it still installs, its apps are just left ungrouped.
+    if (source === undefined) logger.warn(`No Hangar config at ${this._configFile}: the store declares no categories`);
 
-    if (handle === undefined) {
-      logger.warn(`No Hangar config at ${this._configFile}: the store declares no categories`);
-      this._categories = [];
-      this._shared = [];
-      this._widgets = [...defaultWidgets];
-      return this;
-    }
-
-    this.apply(this.parse(handle));
+    this.apply(source === undefined ? configSchema.parse({ categories: [] }) : this.parse(source));
 
     return this;
   }
 
   /** The raw file, `""` when the store ships none. */
   async source() {
+    return (await this.read()) ?? "";
+  }
+
+  /** The raw file, `undefined` when the store ships none. */
+  private read() {
     return readFile(this._configFile, "utf8").catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return "";
-      throw error;
+      if (error.code === "ENOENT") return undefined;
+
+      // An unreadable config is an operator error, not a defect: report the
+      // path, not a filesystem stack trace.
+      throw new HangarError(`Cannot read the Hangar config at ${this._configFile}: ${error.code ?? error.message}`);
     });
   }
 
@@ -125,8 +121,7 @@ export class HangarConfig {
     const parsed = configSchema.safeParse(yaml);
 
     if (!parsed.success) {
-      const issues = parsed.error.issues.map(issue => `  ${issue.path.join(".") || "(root)"}: ${issue.message}`);
-      throw new HangarError(`Invalid Hangar config at ${this._configFile}:\n${issues.join("\n")}`);
+      throw new HangarError(`Invalid Hangar config at ${this._configFile}:\n${z.prettifyError(parsed.error)}`);
     }
 
     return parsed.data;

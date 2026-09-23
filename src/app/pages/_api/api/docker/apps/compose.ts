@@ -25,7 +25,6 @@ export const POST = apiRoute(
     const operation = parameters.get("operation") ?? "";
     const projects = (parameters.get("projects") ?? "").split(",").filter(Boolean);
 
-    // Checked before `refuseAppOperation` so `operation` narrows to an `AppOperation` below.
     if (!isAppOperation(operation) || projects.length === 0) {
       logger.warn("Docker Compose stream rejected", { operation, projects: projects.join(" ") });
       return apiError("La commande Docker Compose est invalide.", 400);
@@ -34,7 +33,7 @@ export const POST = apiRoute(
     // Every app is checked before any of them runs: a batch that would be refused half-way is
     // refused whole, rather than leaving the caller to work out where it stopped.
     for (const project of projects) {
-      const refusal = refuseAppOperation(project, operation);
+      const refusal = refuseAppOperation(project);
 
       if (refusal) {
         logger.warn("Docker Compose stream rejected", { project, operation, reason: refusal.reason });

@@ -4,12 +4,10 @@ import { useState } from "react";
 import { SaveIcon } from "lucide-react";
 import { useRouter } from "waku";
 import type { ActionResult } from "#app/actions/action-result.ts";
-import { Button } from "#app/components/ui/button.tsx";
-import { CodeEditor } from "#app/components/ui/code-editor.tsx";
+import { PendingButton } from "#app/components/common/pending-button.tsx";
+import { useYamlEditor } from "#app/components/common/use-yaml-editor.tsx";
 import { Field, FieldDescription, FieldLabel } from "#app/components/ui/field.tsx";
 import { Input } from "#app/components/ui/input.tsx";
-import { Spinner } from "#app/components/ui/spinner.tsx";
-import { useServerAction } from "#app/hooks/use-server-action.ts";
 
 type AppEditorProps = {
   /** The app being edited; absent when adding one, whose id is then typed in */
@@ -21,26 +19,18 @@ type AppEditorProps = {
 /** Edits a store app's compose.yml, or writes a new app's. */
 export function AppEditor({ id, source, saveApp }: AppEditorProps) {
   const router = useRouter();
-  const { run, isPending } = useServerAction();
   const [newId, setNewId] = useState("");
-  const [value, setValue] = useState(source);
-  // docker compose explains itself over several lines: keep them under the editor, not in a toast.
-  const [error, setError] = useState<string | null>(null);
   const create = id === undefined;
   const appId = id ?? newId;
 
-  const handleSave = () =>
-    run(
-      () => saveApp(appId, value, create),
-      { success: "Application enregistrée", error: "Application refusée" },
-      result => {
-        setError(result && !result.success ? result.message : null);
-        if (!result?.success) return;
-        // A new app gets its own editor, so a second save edits it instead of re-creating it.
-        if (create) router.push(`/store/${appId}/edit`);
-        else router.reload();
-      },
-    );
+  const { editor, handleSave, isPending } = useYamlEditor({
+    source,
+    save: value => saveApp(appId, value, create),
+    titles: { success: "Application enregistrée", error: "Application refusée" },
+    // A new app gets its own editor, so a second save edits it instead of re-creating it.
+    onSaved: () => (create ? router.push(`/store/${appId}/edit`) : router.reload()),
+    className: "h-[65vh]",
+  });
 
   return (
     <div className="flex flex-col gap-3">
@@ -57,12 +47,18 @@ export function AppEditor({ id, source, saveApp }: AppEditorProps) {
           <FieldDescription>Le dossier de l’app dans le store, et le nom de son projet compose.</FieldDescription>
         </Field>
       )}
-      <CodeEditor defaultValue={source} onChange={setValue} className="h-[65vh]" />
-      {error && <pre className="text-sm whitespace-pre-wrap text-destructive">{error}</pre>}
-      <Button type="button" className="self-start" disabled={isPending || appId.length === 0} onClick={handleSave}>
-        {isPending ? <Spinner data-icon="inline-start" /> : <SaveIcon data-icon="inline-start" />}
-        {isPending ? "Validation…" : "Enregistrer"}
-      </Button>
+      {editor}
+      <PendingButton
+        type="button"
+        className="self-start"
+        pending={isPending}
+        pendingLabel="Validation…"
+        icon={<SaveIcon data-icon="inline-start" />}
+        disabled={appId.length === 0}
+        onClick={handleSave}
+      >
+        Enregistrer
+      </PendingButton>
     </div>
   );
 }

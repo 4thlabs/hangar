@@ -3,15 +3,9 @@
 import { useState } from "react";
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
 import { Link } from "waku";
-import { actionLabel } from "#app/actions/apps/app-operation.ts";
 import { categoryBadgeClass } from "#app/components/apps/category.ts";
 import { plural, s } from "#app/components/apps/format.ts";
-import {
-  ComposeConfirmDialog,
-  ComposeOperationButtons,
-  type DestructiveOperation,
-} from "#app/components/apps/compose-operations.tsx";
-import { ComposeOutputSheet } from "#app/components/apps/compose-output-sheet.tsx";
+import { ComposeOperationButtons, ComposeRunDialogs } from "#app/components/apps/compose-operations.tsx";
 import { useComposeRun } from "#app/components/apps/use-compose-run.ts";
 import { statusLabel, statusVariant } from "#app/components/apps/status.ts";
 import { Badge } from "#app/components/ui/badge.tsx";
@@ -57,7 +51,7 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
 
   // The list re-renders while a selection is held, so drop names that disappeared meanwhile.
   const selected = projects.map(project => project.name).filter(name => selection.has(name));
-  const { confirmation, setConfirmation, running, targets, run, disabled, close, finished } = useComposeRun(selected);
+  const compose = useComposeRun(selected);
 
   function toggle(name: string, checked: boolean) {
     setSelection(current => {
@@ -68,18 +62,6 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
     });
   }
 
-  const subject = plural(selected.length, "application");
-  const confirmationTitle: Record<DestructiveOperation, string> = {
-    down: `Arrêter ${subject} ?`,
-    recreate: `Recréer ${subject} ?`,
-    update: `Mettre à jour ${subject} ?`,
-  };
-  const confirmationDescription: Record<DestructiveOperation, string> = {
-    down: "Docker Compose supprimera les conteneurs et réseaux de ces applications. Elles resteront listées, à l’arrêt.",
-    recreate: "Tous les conteneurs de ces applications seront recréés, même si leur configuration n’a pas changé.",
-    update: "Les images seront retirées du registre et les conteneurs recréés avec la nouvelle version.",
-  };
-
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -89,11 +71,11 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
             : "Aucune sélection"}
         </span>
         <ComposeOperationButtons
-          running={running}
-          disabled={disabled}
+          running={compose.running}
+          disabled={compose.disabled}
           size="sm"
-          onRun={run}
-          onConfirm={setConfirmation}
+          onRun={compose.run}
+          onConfirm={compose.setConfirmation}
         />
       </div>
 
@@ -162,21 +144,7 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
         </TableBody>
       </Table>
 
-      <ComposeConfirmDialog
-        operation={confirmation}
-        title={confirmation ? confirmationTitle[confirmation] : ""}
-        description={confirmation ? confirmationDescription[confirmation] : ""}
-        onConfirm={run}
-        onCancel={() => setConfirmation(null)}
-      />
-
-      <ComposeOutputSheet
-        projects={targets}
-        operation={running}
-        label={running ? actionLabel[running] : ""}
-        onClose={close}
-        onFinished={finished}
-      />
+      <ComposeRunDialogs compose={compose} subject={plural(selected.length, "application")} many />
     </div>
   );
 }

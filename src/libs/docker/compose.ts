@@ -202,32 +202,19 @@ export class ComposeProjects {
    * @param installed Project names Hangar installed and can run compose commands against
    */
   summaries(installed: ReadonlySet<string>): ComposeProjectSummary[] {
-    const projects = new Map<string, Aggregate>();
+    const projects = new Map<string, Aggregate>(
+      [...installed].map(name => [name, { services: new Set(), containerIds: [], runningCount: 0, unhealthyCount: 0 }]),
+    );
 
     for (const container of this.containers) {
       const labels = container.info.Labels;
-      const project = labels[ComposeProjects.LABEL.project] ?? "";
+      const aggregate = projects.get(labels[ComposeProjects.LABEL.project] ?? "");
+      if (!aggregate) continue;
 
-      if (installed.has(project)) {
-        const aggregate = projects.get(project) ?? {
-          services: new Set<string>(),
-          containerIds: [],
-          runningCount: 0,
-          unhealthyCount: 0,
-        };
-
-        aggregate.services.add(labels[ComposeProjects.LABEL.service] ?? "");
-        aggregate.containerIds.push(container.info.Id);
-        aggregate.runningCount += container.info.State === "running" ? 1 : 0;
-        aggregate.unhealthyCount += ComposeProjects.health(container) === "unhealthy" ? 1 : 0;
-        projects.set(project, aggregate);
-      }
-    }
-
-    for (const name of installed) {
-      if (!projects.has(name)) {
-        projects.set(name, { services: new Set(), containerIds: [], runningCount: 0, unhealthyCount: 0 });
-      }
+      aggregate.services.add(labels[ComposeProjects.LABEL.service] ?? "");
+      aggregate.containerIds.push(container.info.Id);
+      aggregate.runningCount += container.info.State === "running" ? 1 : 0;
+      aggregate.unhealthyCount += ComposeProjects.health(container) === "unhealthy" ? 1 : 0;
     }
 
     return [...projects.entries()]

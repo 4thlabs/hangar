@@ -23,11 +23,6 @@ const GRACE = 3_600_000;
  */
 export const outdatedSnapshot = snapshots.define("outdated", TTL, GRACE, read);
 
-/** The last image check, if it has already been read. `undefined` means "ask properly". */
-export function peekOutdatedProjects(): Set<string> | undefined {
-  return outdatedSnapshot.peek()?.data;
-}
-
 /** {@link outdatedSnapshot}, awaited. */
 export function outdatedProjects(): Promise<Set<string>> {
   return outdatedSnapshot.read();

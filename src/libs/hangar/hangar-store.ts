@@ -65,7 +65,7 @@ export class HangarStore {
    * @param url URL of the store repository
    * @param dataDir Directory for storing data
    */
-  private constructor(url: string, dataDir: string, runtime: CommandRunner) {
+  constructor(url: string, dataDir: string, runtime: CommandRunner) {
     this.url = url;
     this.dataPath = path.resolve(dataDir);
     this.storePath = path.join(this.dataPath, "app-store");
@@ -75,15 +75,6 @@ export class HangarStore {
     // their data under the same resolved data directory Hangar itself uses.
     this.env = new HangarEnv(this.dataPath, this.installedPath, { APP_DATA_DIR: path.join(this.dataPath, "app-data") });
     this.runtime = runtime;
-  }
-
-  /**
-   * Creates the store
-   * @returns The instance of the store
-   */
-  static async create(url: string, dataDir: string, runtime: CommandRunner) {
-    const store = new HangarStore(url, dataDir, runtime);
-    return store;
   }
 
   /**
