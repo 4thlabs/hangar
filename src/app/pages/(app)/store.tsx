@@ -37,7 +37,7 @@ export default function StorePage({ search }: PageProps<"/store">) {
         </div>
       </div>
       {apps.length > 0 ? (
-        <div className="flex flex-wrap gap-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3">
           {apps.map(app => (
             <StoreAppCard key={app.id} app={app} installApp={installApp} uninstallApp={uninstallApp} />
           ))}
