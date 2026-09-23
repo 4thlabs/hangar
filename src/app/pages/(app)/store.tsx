@@ -1,7 +1,10 @@
+import { PlusIcon } from "lucide-react";
+import { Link } from "waku";
 import type { PageProps } from "waku/router";
 import { installApp } from "#app/actions/store/install-app.ts";
 import { uninstallApp } from "#app/actions/store/uninstall-app.ts";
 import { StoreAppCard } from "#app/components/store/store-app-card.tsx";
+import { buttonVariants } from "#app/components/ui/button.tsx";
 import { StoreFilterMenu } from "#app/components/store/store-filter-menu.tsx";
 import { searchByName } from "#app/search.ts";
 import { storeSearchCodec } from "#app/search-codecs.ts";
@@ -25,7 +28,13 @@ export default function StorePage({ search }: PageProps<"/store">) {
       <title>Store | Hangar</title>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Store</h1>
-        <StoreFilterMenu counts={counts} />
+        <div className="flex items-center gap-2">
+          <StoreFilterMenu counts={counts} />
+          <Link to="/store/new" className={buttonVariants({ variant: "outline" })}>
+            <PlusIcon data-icon="inline-start" />
+            Nouvelle app
+          </Link>
+        </div>
       </div>
       {apps.length > 0 ? (
         <div className="flex flex-wrap gap-3">

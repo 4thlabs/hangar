@@ -1,15 +1,18 @@
 import { HangarConfig } from "./hangar-config.ts";
 import { HangarEnv } from "./hangar-env.ts";
-import { mkdir, readdir, readFile, symlink, unlink } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { logger } from "#libs/logs";
 import { load } from "js-yaml";
 import { type CommandRunner, type RunOptions } from "./runtime/runtime.ts";
 import { exists } from "./runtime/utils.ts";
-import { HangarRuntimeError } from "./hangar-error.ts";
+import { HangarError, HangarRuntimeError } from "./hangar-error.ts";
 
 /** True when the compose args ask for detached mode */
 const detached = (args: string[]) => args.includes("-d") || args.includes("--detach");
+
+/** A stack id is a folder name under `store/` (`llama.cpp`): no separator, no leading dot, nothing to climb out with */
+const STACK_ID = /^[a-z0-9][a-z0-9._-]*$/;
 
 /** Capitalize first letter of a string */
 const capitalize = (s: string) => s && String(s[0]).toUpperCase() + String(s).slice(1);
@@ -234,6 +237,60 @@ export class HangarStore {
   app(id: string): HangarApp | undefined {
     for (const app of this.apps) if (app.id === id) return app;
     return undefined;
+  }
+
+  /** The raw compose.yml of a store app. */
+  async appSource(id: string) {
+    return readFile(path.join(this.stackPath(id), "compose.yml"), "utf8");
+  }
+
+  /**
+   * Writes a store app's compose.yml once `docker compose config` accepts it: a rejected source
+   * leaves the app untouched, and a new app is not created at all.
+   * @param id The app id, its folder under `store/`
+   * @param source The compose YAML
+   * @param create True to add a new app, which must not exist yet
+   */
+  async saveApp(id: string, source: string, create: boolean) {
+    const folder = this.stackPath(id);
+
+    if (this.config.shared().includes(id)) {
+      throw new HangarError(`${id} is a shared file, not an app`);
+    }
+
+    if (create === (await exists(folder))) {
+      throw new HangarError(create ? `The app ${id} already exists` : `The app ${id} does not exist`);
+    }
+
+    // Next to the real file, so the paths it references resolve the same way.
+    const pending = path.join(folder, ".compose.pending.yml");
+
+    // No `-p`: compose rejects some folder names as project names (`llama.cpp`), and a
+    // validation does not need one.
+    try {
+      await mkdir(folder, { recursive: true });
+      await writeFile(pending, source, "utf8");
+
+      // prettier-ignore
+      await this.runtime.run("docker", [
+        "compose",
+        "--env-file", this.env.file(),
+        "-f", pending,
+        "config", "-q",
+      ], { capture: true });
+    } catch (error) {
+      await rm(create ? folder : pending, { recursive: true, force: true });
+      throw error;
+    }
+
+    await rename(pending, path.join(folder, "compose.yml"));
+    await this.refresh();
+  }
+
+  /** The folder of a store app, once its id is known not to escape `store/`. */
+  private stackPath(id: string) {
+    if (!STACK_ID.test(id)) throw new HangarError(`Invalid app id: ${id}`);
+    return path.join(this.storePath, "store", id);
   }
 
   /**

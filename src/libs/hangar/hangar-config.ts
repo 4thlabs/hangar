@@ -1,5 +1,5 @@
 import { load } from "js-yaml";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { logger } from "#libs/logs";
 import * as z from "zod";
 import { defaultWidgets, widgetConfigSchema, type WidgetConfig } from "#libs/widgets/config";
@@ -85,19 +85,56 @@ export class HangarConfig {
       return this;
     }
 
-    // hangar.yml is user-authored: validate here, or a missing `categories`
-    // surfaces much later as a crash inside HangarStore.resolve().
-    const parsed = configSchema.safeParse(load(handle));
+    this.apply(this.parse(handle));
+
+    return this;
+  }
+
+  /** The raw file, `""` when the store ships none. */
+  async source() {
+    return readFile(this._configFile, "utf8").catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return "";
+      throw error;
+    });
+  }
+
+  /**
+   * Validates then writes the configuration: an invalid source throws and leaves the file untouched.
+   * @param source The YAML to write
+   */
+  async write(source: string) {
+    const config = this.parse(source);
+    await writeFile(this._configFile, source, "utf8");
+    this.apply(config);
+  }
+
+  /**
+   * Parses and validates a configuration.
+   * hangar.yml is user-authored: validate here, or a missing `categories`
+   * surfaces much later as a crash inside HangarStore.resolve().
+   */
+  private parse(source: string): Config {
+    let yaml: unknown;
+
+    try {
+      yaml = load(source);
+    } catch (error) {
+      throw new HangarError(`Invalid YAML in the Hangar config at ${this._configFile}:\n${(error as Error).message}`);
+    }
+
+    const parsed = configSchema.safeParse(yaml);
 
     if (!parsed.success) {
       const issues = parsed.error.issues.map(issue => `  ${issue.path.join(".") || "(root)"}: ${issue.message}`);
       throw new HangarError(`Invalid Hangar config at ${this._configFile}:\n${issues.join("\n")}`);
     }
 
-    this._categories = parsed.data.categories;
-    this._shared = parsed.data.shared;
-    this._widgets = parsed.data.widgets;
+    return parsed.data;
+  }
 
-    return this;
+  private apply(config: Config) {
+    this._categories = config.categories;
+    this._shared = config.shared;
+    this._widgets = config.widgets;
   }
 }
