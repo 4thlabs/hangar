@@ -3,7 +3,9 @@
 import { useEffect, useRef } from "react";
 import { basicSetup, EditorView } from "codemirror";
 import { yaml } from "@codemirror/lang-yaml";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { indentLess, indentMore } from "@codemirror/commands";
+import { HighlightStyle, indentUnit, syntaxHighlighting } from "@codemirror/language";
+import { keymap, type Command } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { cn } from "cn";
 
@@ -28,6 +30,16 @@ const highlight = HighlightStyle.define([
   { tag: [tags.lineComment, tags.meta], color: "var(--muted-foreground)", fontStyle: "italic" },
 ]);
 
+/**
+ * Tab types the indent unit (spaces: YAML refuses tabs) at the cursor, or indents the selected
+ * lines. Escape then Tab still leaves the editor, CodeMirror's own way out of a Tab-bound editor.
+ */
+const insertIndent: Command = view => {
+  if (view.state.selection.ranges.some(range => !range.empty)) return indentMore(view);
+  view.dispatch(view.state.replaceSelection(view.state.facet(indentUnit)), { scrollIntoView: true, userEvent: "input" });
+  return true;
+};
+
 type CodeEditorProps = {
   /** The initial document: the editor owns the text afterwards */
   defaultValue: string;
@@ -48,6 +60,7 @@ export function CodeEditor({ defaultValue, onChange, className }: CodeEditorProp
       parent: parent.current!,
       extensions: [
         basicSetup,
+        keymap.of([{ key: "Tab", run: insertIndent, shift: indentLess }]),
         yaml(),
         theme,
         syntaxHighlighting(highlight),
