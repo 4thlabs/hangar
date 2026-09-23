@@ -4,11 +4,11 @@ import { useState } from "react";
 import type { ActionResult } from "#app/actions/action-result.ts";
 import type { EnvPayload } from "#app/actions/store/manage-env.ts";
 import { KeyRoundIcon, PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
+import { PendingButton } from "#app/components/common/pending-button.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#app/components/ui/field.tsx";
 import { Input } from "#app/components/ui/input.tsx";
-import { Spinner } from "#app/components/ui/spinner.tsx";
 import { useServerAction } from "#app/hooks/use-server-action.ts";
 import { useRouter } from "waku";
 
@@ -124,10 +124,15 @@ export function EnvSettingsCard({ variables, saveEnv }: EnvSettingsCardProps) {
         </FieldGroup>
       </CardContent>
       <CardFooter>
-        <Button type="button" disabled={isPending} onClick={handleSave}>
-          {isPending ? <Spinner data-icon="inline-start" /> : <SaveIcon data-icon="inline-start" />}
-          {isPending ? "Enregistrement…" : "Enregistrer"}
-        </Button>
+        <PendingButton
+          type="button"
+          pending={isPending}
+          pendingLabel="Enregistrement…"
+          icon={<SaveIcon data-icon="inline-start" />}
+          onClick={handleSave}
+        >
+          Enregistrer
+        </PendingButton>
       </CardFooter>
     </Card>
   );

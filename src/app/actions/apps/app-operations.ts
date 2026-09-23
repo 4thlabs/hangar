@@ -1,5 +1,5 @@
 import { hangar } from "#libs/hangar/server";
-import { isAppOperation, type AppOperation } from "./app-operation.ts";
+import type { AppOperation } from "./app-operation.ts";
 
 const COMPOSE_PROJECT_NAME = /^[a-z0-9][a-z0-9_-]*$/;
 
@@ -12,20 +12,18 @@ export const appOperationArguments: Record<AppOperation, readonly string[]> = {
 };
 
 /** Why a compose command was refused, or `null` when it may run */
-export type AppOperationRefusal = {
+type AppOperationRefusal = {
   reason: "invalid" | "unmanaged";
   message: string;
 };
 
 /**
- * Checks a compose command is well formed and targets an app Hangar installed and manages.
- * Both the server action and the streaming route go through this: a second copy of the
- * check is a second place for it to drift.
+ * Checks a compose command targets a well-formed name of an app Hangar installed and manages.
+ * The operation itself is already narrowed by the caller.
  * @param project The Compose project name
- * @param operation The requested operation
  */
-export function refuseAppOperation(project: string, operation: string): AppOperationRefusal | null {
-  if (!COMPOSE_PROJECT_NAME.test(project) || !isAppOperation(operation)) {
+export function refuseAppOperation(project: string): AppOperationRefusal | null {
+  if (!COMPOSE_PROJECT_NAME.test(project)) {
     return { reason: "invalid", message: "La commande Docker Compose est invalide." };
   }
 

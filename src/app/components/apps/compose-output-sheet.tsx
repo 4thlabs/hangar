@@ -3,9 +3,9 @@
 import { useEffect, useRef } from "react";
 import { composeExitCode } from "#app/actions/apps/compose-stream.ts";
 import { type AppOperation } from "#app/actions/apps/app-operation.ts";
-import { streamStatusLabel, useStreamText } from "#app/hooks/use-stream-text.ts";
+import { useStreamText } from "#app/hooks/use-stream-text.ts";
 import { plural } from "#app/components/apps/format.ts";
-import { Badge } from "#app/components/ui/badge.tsx";
+import { StreamOutput, StreamStatusBadge } from "#app/components/common/stream-output.tsx";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "#app/components/ui/sheet.tsx";
 
 type ComposeOutputSheetProps = {
@@ -20,19 +20,12 @@ type ComposeOutputSheetProps = {
 };
 
 export function ComposeOutputSheet({ projects, operation, label, onClose, onFinished }: ComposeOutputSheetProps) {
-  const viewportRef = useRef<HTMLDivElement>(null);
   const subject = projects.length === 1 ? projects[0] : plural(projects.length, "application");
   const endpoint =
     operation && projects.length > 0
       ? `/api/docker/apps/compose?operation=${operation}&projects=${projects.map(encodeURIComponent).join(",")}`
       : null;
   const { text, status, error } = useStreamText(endpoint, "POST");
-
-  // Follow the output, it is short-lived and always worth showing the tail of.
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (viewport) viewport.scrollTop = viewport.scrollHeight;
-  }, [text]);
 
   const finishedRef = useRef(false);
   useEffect(() => {
@@ -56,7 +49,7 @@ export function ComposeOutputSheet({ projects, operation, label, onClose, onFini
             <SheetTitle>
               {label} · {subject}
             </SheetTitle>
-            <Badge variant={status === "error" ? "destructive" : "secondary"}>{streamStatusLabel[status]}</Badge>
+            <StreamStatusBadge status={status} />
           </div>
           <SheetDescription>
             Sortie de Docker Compose en direct. Fermer ce panneau n’interrompt rien : les commandes vont à leur terme
@@ -65,10 +58,7 @@ export function ComposeOutputSheet({ projects, operation, label, onClose, onFini
         </SheetHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4">
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div ref={viewportRef} className="min-h-0 flex-1 overflow-auto rounded-lg bg-muted p-3">
-            <pre className="font-mono text-xs whitespace-pre-wrap">{text || "Démarrage de la commande…"}</pre>
-          </div>
+          <StreamOutput text={text} error={error} placeholder="Démarrage de la commande…" />
         </div>
       </SheetContent>
     </Sheet>

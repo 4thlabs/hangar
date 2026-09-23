@@ -1,49 +1,22 @@
 "use client";
 
 import { useMemo } from "react";
-import { actionLabel } from "#app/actions/apps/app-operation.ts";
-import {
-  ComposeConfirmDialog,
-  ComposeOperationButtons,
-  type DestructiveOperation,
-} from "#app/components/apps/compose-operations.tsx";
-import { ComposeOutputSheet } from "#app/components/apps/compose-output-sheet.tsx";
+import { ComposeOperationButtons, ComposeRunDialogs } from "#app/components/apps/compose-operations.tsx";
 import { useComposeRun } from "#app/components/apps/use-compose-run.ts";
 
 export function ProjectActions({ project }: { project: string }) {
   const projects = useMemo(() => [project], [project]);
-  const { confirmation, setConfirmation, running, targets, run, disabled, close, finished } = useComposeRun(projects);
-
-  const confirmationTitle: Record<DestructiveOperation, string> = {
-    down: `Arrêter ${project} ?`,
-    recreate: `Recréer ${project} ?`,
-    update: `Mettre à jour ${project} ?`,
-  };
-  const confirmationDescription: Record<DestructiveOperation, string> = {
-    down: "Docker Compose supprimera les conteneurs et réseaux de cette application. Elle restera listée, à l’arrêt, tant qu’elle ne sera pas relancée.",
-    recreate: "Tous les conteneurs de cette application seront recréés, même si leur configuration n’a pas changé.",
-    update: "Les images seront retirées du registre et les conteneurs recréés avec la nouvelle version.",
-  };
+  const compose = useComposeRun(projects);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <ComposeOperationButtons running={running} disabled={disabled} onRun={run} onConfirm={setConfirmation} />
-
-      <ComposeConfirmDialog
-        operation={confirmation}
-        title={confirmation ? confirmationTitle[confirmation] : ""}
-        description={confirmation ? confirmationDescription[confirmation] : ""}
-        onConfirm={run}
-        onCancel={() => setConfirmation(null)}
+      <ComposeOperationButtons
+        running={compose.running}
+        disabled={compose.disabled}
+        onRun={compose.run}
+        onConfirm={compose.setConfirmation}
       />
-
-      <ComposeOutputSheet
-        projects={targets}
-        operation={running}
-        label={running ? actionLabel[running] : ""}
-        onClose={close}
-        onFinished={finished}
-      />
+      <ComposeRunDialogs compose={compose} subject={project} many={false} />
     </div>
   );
 }

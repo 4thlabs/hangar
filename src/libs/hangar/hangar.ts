@@ -29,7 +29,7 @@ export class Hangar {
    */
   static async create(url: string, dataDir: string) {
     const runtime = new Runtime();
-    const store = await HangarStore.create(url, dataDir, runtime);
+    const store = new HangarStore(url, dataDir, runtime);
 
     return new Hangar(runtime, store);
   }

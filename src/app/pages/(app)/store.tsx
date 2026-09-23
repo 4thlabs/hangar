@@ -1,8 +1,7 @@
 import { PlusIcon } from "lucide-react";
 import { Link } from "waku";
 import type { PageProps } from "waku/router";
-import { installApp } from "#app/actions/store/install-app.ts";
-import { uninstallApp } from "#app/actions/store/uninstall-app.ts";
+import { installApp, uninstallApp } from "#app/actions/store/store-apps.ts";
 import { StoreAppCard } from "#app/components/store/store-app-card.tsx";
 import { buttonVariants } from "#app/components/ui/button.tsx";
 import { StoreFilterMenu } from "#app/components/store/store-filter-menu.tsx";

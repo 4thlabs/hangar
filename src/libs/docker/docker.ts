@@ -48,6 +48,9 @@ export interface InstalledApps {
   installedProjectIds(): Set<string>;
 }
 
+/** Pinned to a digest, or named by id: the reference already denotes one exact image. */
+const pinned = (image: string) => image.includes("@sha256:") || image.startsWith("sha256:");
+
 /**
  * The Docker Engine API, scoped to the apps Hangar installed. Talks to the socket directly
  * rather than shelling out: an inspect costs ~5ms instead of a process spawn, and a stats sample
@@ -226,8 +229,7 @@ export class Docker {
    * @param image The reference as Compose runs it, e.g. `nginx:alpine`
    */
   private async remoteDigest(image: string): Promise<string | null> {
-    // Pinned to a digest, or named by id: the reference already denotes one exact image.
-    if (image.includes("@sha256:") || image.startsWith("sha256:")) return null;
+    if (pinned(image)) return null;
 
     try {
       const remote = await this.docker.getImage(image).distribution({ abortSignal: AbortSignal.timeout(10_000) });
@@ -246,8 +248,7 @@ export class Docker {
    * already happened, which is what lets them be batched and deduplicated above.
    */
   private static imageStatus(image: string, local: string[] | null, remote: string | null): ImageUpdateStatus {
-    // Pinned to a digest, or named by id: the reference already denotes one exact image.
-    if (image.includes("@sha256:") || image.startsWith("sha256:")) return "current";
+    if (pinned(image)) return "current";
 
     // Unreadable image, one built here rather than pulled, or a registry that could not answer.
     if (!local?.length || !remote) return "unknown";

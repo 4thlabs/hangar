@@ -3,11 +3,10 @@
 import { useState } from "react";
 import type { StoreActionResult } from "#app/actions/store/store-action-result.ts";
 import { DownloadIcon, RefreshCwIcon } from "lucide-react";
-import { Button } from "#app/components/ui/button.tsx";
+import { PendingButton } from "#app/components/common/pending-button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#app/components/ui/field.tsx";
 import { Input } from "#app/components/ui/input.tsx";
-import { Spinner } from "#app/components/ui/spinner.tsx";
 import { useServerAction } from "#app/hooks/use-server-action.ts";
 
 type StoreSettingsCardProps = {
@@ -46,16 +45,15 @@ export function StoreSettingsCard({ storeUrl, initialInstalled, manageStore }: S
         </FieldGroup>
       </CardContent>
       <CardFooter>
-        <Button type="button" disabled={isPending} onClick={handleManageStore}>
-          {isPending ? (
-            <Spinner data-icon="inline-start" />
-          ) : installed ? (
-            <RefreshCwIcon data-icon="inline-start" />
-          ) : (
-            <DownloadIcon data-icon="inline-start" />
-          )}
-          {isPending ? "Synchronisation…" : installed ? "Mettre à jour" : "Installer"}
-        </Button>
+        <PendingButton
+          type="button"
+          pending={isPending}
+          pendingLabel="Synchronisation…"
+          icon={installed ? <RefreshCwIcon data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />}
+          onClick={handleManageStore}
+        >
+          {installed ? "Mettre à jour" : "Installer"}
+        </PendingButton>
       </CardFooter>
     </Card>
   );

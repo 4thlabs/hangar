@@ -8,11 +8,11 @@ import { env } from "#libs/env";
 /**
  * The container runs this before the server so a fresh volume gets its tables.
  *
- * It deliberately does not import `../client.ts`: that module is `server-only`,
+ * It deliberately does not import `#libs/db/server`: that entry is `server-only`,
  * which throws outside the `react-server` condition. Migrations need a
  * connection, not the schema, so open a plain one.
  */
-export const MIGRATIONS_FOLDER = fileURLToPath(new URL("../../../drizzle", import.meta.url));
+const MIGRATIONS_FOLDER = fileURLToPath(new URL("../../../drizzle", import.meta.url));
 
 export function migrateDb(source = env.HANGAR_DB_HOST) {
   // The image points HANGAR_DB_HOST at a nested path inside the /app/data volume,

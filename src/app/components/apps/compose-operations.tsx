@@ -14,6 +14,8 @@ import {
 } from "#app/components/ui/alert-dialog.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import { Spinner } from "#app/components/ui/spinner.tsx";
+import { ComposeOutputSheet } from "#app/components/apps/compose-output-sheet.tsx";
+import type { useComposeRun } from "#app/components/apps/use-compose-run.ts";
 
 /** Operations that replace or destroy containers, so the ones that need confirming before they run. */
 export type DestructiveOperation = Exclude<AppOperation, "up">;
@@ -117,5 +119,48 @@ export function ComposeConfirmDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+type ComposeRunDialogsProps = {
+  compose: ReturnType<typeof useComposeRun>;
+  /** How the confirmation names its target: an app's name, or "3 applications". */
+  subject: string;
+  /** Several apps are targeted, which the confirmation's wording follows. */
+  many: boolean;
+};
+
+/** The confirmation and the output sheet behind `ComposeOperationButtons`, for either caller. */
+export function ComposeRunDialogs({ compose, subject, many }: ComposeRunDialogsProps) {
+  const { confirmation, setConfirmation, running, targets, run, close, finished } = compose;
+  const apps = many ? "ces applications" : "cette application";
+  const title: Record<DestructiveOperation, string> = {
+    down: `Arrêter ${subject} ?`,
+    recreate: `Recréer ${subject} ?`,
+    update: `Mettre à jour ${subject} ?`,
+  };
+  const description: Record<DestructiveOperation, string> = {
+    down: `Docker Compose supprimera les conteneurs et réseaux de ${apps}. ${many ? "Elles resteront listées" : "Elle restera listée"}, à l’arrêt.`,
+    recreate: `Tous les conteneurs de ${apps} seront recréés, même si leur configuration n’a pas changé.`,
+    update: "Les images seront retirées du registre et les conteneurs recréés avec la nouvelle version.",
+  };
+
+  return (
+    <>
+      <ComposeConfirmDialog
+        operation={confirmation}
+        title={confirmation ? title[confirmation] : ""}
+        description={confirmation ? description[confirmation] : ""}
+        onConfirm={run}
+        onCancel={() => setConfirmation(null)}
+      />
+      <ComposeOutputSheet
+        projects={targets}
+        operation={running}
+        label={running ? actionLabel[running] : ""}
+        onClose={close}
+        onFinished={finished}
+      />
+    </>
   );
 }
