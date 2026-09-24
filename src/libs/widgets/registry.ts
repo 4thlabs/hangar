@@ -8,6 +8,7 @@ import { dockerGeneralStats } from "./docker/general-stats.tsx";
 import { frigateEvents } from "./frigate/events.tsx";
 import { gluetunVpnStatus } from "./gluetun/vpn-status.tsx";
 import { jellyfinLatest } from "./jellyfin/latest.tsx";
+import { minifluxEntries } from "./miniflux/entries.tsx";
 import { githubReleases } from "./github/releases.tsx";
 import { clockWidget } from "./clock/clock.tsx";
 
@@ -58,6 +59,8 @@ function createWidget(config: WidgetConfig, host: WidgetHost): Widget {
       return beszelServerStats(serviceOf(config, host), ttl);
     case "frigate-events":
       return frigateEvents(serviceOf(config, host), ttl);
+    case "miniflux-entries":
+      return minifluxEntries(serviceOf(config, host), ttl);
     case "gluetun-vpn-status":
       return gluetunVpnStatus(serviceOf(config, host), ttl);
     case "jellyfin-latest":
