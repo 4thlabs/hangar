@@ -49,6 +49,7 @@ export const widgetConfigSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("beszel-server-stats"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
   z.object({ type: z.literal("frigate-events"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
   z.object({ type: z.literal("gluetun-vpn-status"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
+  z.object({ type: z.literal("miniflux-entries"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
   z.object({
     type: z.literal("jellyfin-latest"),
     column: columnSchema,
