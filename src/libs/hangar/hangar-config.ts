@@ -18,6 +18,8 @@ const configSchema = z.object({
   shared: z.array(z.string().min(1)).default([]),
   /** The dashboard: which widgets are shown, in which column */
   widgets: z.array(widgetConfigSchema).default([...defaultWidgets]),
+  /** Pause between two registry calls in the image update check, in ms: Hub and ghcr rate-limit a burst */
+  registryThrottling: z.int().nonnegative().default(100),
 });
 
 export type Category = z.infer<typeof categorySchema>;
@@ -44,6 +46,9 @@ export class HangarConfig {
   /** The widgets the dashboard shows, in declaration order */
   private _widgets: WidgetConfig[] = [...defaultWidgets];
 
+  /** The pause between two registry calls in the image update check, in ms */
+  private _registryThrottling = 100;
+
   /** Returns the categories */
   public categories = () => this._categories;
 
@@ -52,6 +57,9 @@ export class HangarConfig {
 
   /** Returns the dashboard widgets */
   public widgets = () => this._widgets;
+
+  /** Returns the pause between two registry calls, in ms */
+  public registryThrottling = () => this._registryThrottling;
 
   /**
    * Constructs the configuration for the given file. Does not read it:
@@ -131,5 +139,6 @@ export class HangarConfig {
     this._categories = config.categories;
     this._shared = config.shared;
     this._widgets = config.widgets;
+    this._registryThrottling = config.registryThrottling;
   }
 }
