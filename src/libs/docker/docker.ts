@@ -58,7 +58,7 @@ const pinned = (image: string) => image.includes("@sha256:") || image.startsWith
  * ponytail: a single gap shared by every registry, not a bucket per registry. Split them if a
  * host that mixes Hub and ghcr makes the check noticeably slow.
  */
-const REGISTRY_GAP_MS = 200;
+const REGISTRY_GAP_MS = 20;
 
 /** What {@link Docker.remoteDigest} returns once the registry says "too many requests". */
 const RATE_LIMITED = Symbol("rate-limited");
