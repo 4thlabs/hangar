@@ -23,7 +23,7 @@ export const sidequestBoot = (): MiddlewareHandler => {
 
     await Sidequest.start();
 
-    // Hourly, not the every-10s of the stub: each check makes the daemon hit the registry's manifest
+    // Every four hours, not the every-10s of the stub: each check makes the daemon hit the registry's manifest
     // endpoint, which counts against Docker Hub's anonymous per-IP limit.
     await Sidequest.build(CheckImageVersion).schedule("0 */4 * * *");
 

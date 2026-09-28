@@ -1,4 +1,5 @@
 import { PassThrough, type Readable } from "node:stream";
+import { setTimeout as sleep } from "node:timers/promises";
 import type Dockerode from "dockerode";
 import {
   ComposeProjects,
@@ -50,6 +51,20 @@ export interface InstalledApps {
 
 /** Pinned to a digest, or named by id: the reference already denotes one exact image. */
 const pinned = (image: string) => image.includes("@sha256:") || image.startsWith("sha256:");
+
+/**
+ * Pause between two registry calls. The daemon asks the registry once per call, and Docker Hub
+ * and ghcr.io both rate-limit a burst from one IP.
+ * ponytail: a single gap shared by every registry, not a bucket per registry. Split them if a
+ * host that mixes Hub and ghcr makes the check noticeably slow.
+ */
+const REGISTRY_GAP_MS = 200;
+
+/** What {@link Docker.remoteDigest} returns once the registry says "too many requests". */
+const RATE_LIMITED = Symbol("rate-limited");
+
+const rateLimited = (error: unknown) =>
+  (error as { statusCode?: number })?.statusCode === 429 || /toomanyrequests|429/i.test(String(error));
 
 /**
  * The Docker Engine API, scoped to the apps Hangar installed. Talks to the socket directly
@@ -191,9 +206,26 @@ export class Docker {
     const locals = new Map(await Promise.all(ids.map(async id => [id, await this.localDigests(id)] as const)));
 
     const references = [...new Set(running.filter(pair => locals.get(pair.imageId)?.length).map(pair => pair.image))];
-    const remotes = new Map(
-      await Promise.all(references.map(async image => [image, await this.remoteDigest(image)] as const)),
-    );
+    const remotes = new Map<string, string | null>();
+
+    // One at a time and spaced out, not a burst: the calls count against a per-IP limit. Once the
+    // registry says "too many requests", every call after it would be refused too and would
+    // still spend quota, so the rest stay unknown until the next run.
+    for (const [index, image] of references.entries()) {
+      if (index > 0) await sleep(REGISTRY_GAP_MS);
+
+      const digest = await this.remoteDigest(image);
+
+      if (digest === RATE_LIMITED) {
+        logger.warn("Registry rate limit hit, skipping the remaining image checks", {
+          image,
+          skipped: references.length - index - 1,
+        });
+        break;
+      }
+
+      remotes.set(image, digest);
+    }
 
     return running.map(({ project, image, imageId }) => ({
       project,
@@ -224,11 +256,12 @@ export class Docker {
   }
 
   /**
-   * What the registry serves for this reference, or `null` when it could not say.
+   * What the registry serves for this reference, `null` when it could not say, or
+   * {@link RATE_LIMITED} when it refused to answer at all.
    * One call per reference: replicas of a service share an image, and two apps may share one too.
    * @param image The reference as Compose runs it, e.g. `nginx:alpine`
    */
-  private async remoteDigest(image: string): Promise<string | null> {
+  private async remoteDigest(image: string): Promise<string | null | typeof RATE_LIMITED> {
     if (pinned(image)) return null;
 
     try {
@@ -236,7 +269,10 @@ export class Docker {
 
       return remote.Descriptor.digest;
     } catch (error) {
-      // Unreachable registry, rate limit, private image with no credentials: all say "don't know".
+      // A rate limit stops the whole run, see the caller.
+      if (rateLimited(error)) return RATE_LIMITED;
+
+      // Unreachable registry, private image with no credentials: both say "don't know".
       logger.warn("Could not check an image for updates", { error, image });
 
       return null;

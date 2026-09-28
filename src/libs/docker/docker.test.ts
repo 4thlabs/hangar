@@ -2,6 +2,8 @@ import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+// The pause between registry calls is real seconds in production; here it is only an ordering point.
+vi.mock("node:timers/promises", () => ({ setTimeout: () => Promise.resolve() }));
 
 const { containerSource, dockerMock, fakeApps, fakeDockerode, givenContainers } = await import("./mock/index.ts");
 const { Docker } = await import("./docker.ts");
@@ -275,6 +277,45 @@ describe("Docker.imageUpdates", () => {
     expect(await client("alpha").imageUpdates()).toEqual([
       { project: "alpha", image: "nginx:alpine", status: "unknown" },
     ]);
+  });
+
+  it("asks the registry one image at a time, never in a burst", async () => {
+    givenContainers(["a", "b", "c"].map(n => container({ Id: n, image: `${n}:latest` })));
+    dockerMock.imageInspect.mockResolvedValue({ RepoDigests: ["x@sha256:local"] });
+    let inFlight = 0;
+    let peak = 0;
+    dockerMock.distribution.mockImplementation(async () => {
+      peak = Math.max(peak, ++inFlight);
+      await Promise.resolve();
+      inFlight--;
+      return { Descriptor: { digest: "sha256:remote" } };
+    });
+
+    await client("alpha").imageUpdates();
+
+    expect(dockerMock.distribution).toHaveBeenCalledTimes(3);
+    expect(peak).toBe(1);
+  });
+
+  it("stops asking once the registry rate-limits, and reports the rest as unknown", async () => {
+    givenContainers(["a", "b", "c"].map(n => container({ Id: n, image: `${n}:latest` })));
+    dockerMock.imageInspect.mockResolvedValue({ RepoDigests: ["x@sha256:local"] });
+    dockerMock.distribution.mockRejectedValue(new Error("toomanyrequests: You have reached your pull rate limit"));
+
+    const updates = await client("alpha").imageUpdates();
+
+    expect(dockerMock.distribution).toHaveBeenCalledTimes(1);
+    expect(updates.map(update => update.status)).toEqual(["unknown", "unknown", "unknown"]);
+  });
+
+  it("keeps asking past a registry that is only unreachable", async () => {
+    givenContainers(["a", "b"].map(n => container({ Id: n, image: `${n}:latest` })));
+    dockerMock.imageInspect.mockResolvedValue({ RepoDigests: ["b@sha256:remote"] });
+    dockerMock.distribution
+      .mockRejectedValueOnce(new Error("connect ECONNREFUSED"))
+      .mockResolvedValueOnce({ Descriptor: { digest: "sha256:remote" } });
+
+    expect((await client("alpha").imageUpdates()).map(update => update.status)).toEqual(["unknown", "current"]);
   });
 
   it("leaves a digest-pinned reference alone: it already names one exact image", async () => {
