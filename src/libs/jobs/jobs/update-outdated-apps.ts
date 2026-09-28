@@ -22,7 +22,7 @@ export class UpdateOutdatedApps extends Job {
 
     // Asked here rather than read off the last `CheckImageVersion` result: that report is up to
     // four hours old, and pulling for an app already up to date is a recreate for nothing.
-    const updates = await docker.imageUpdates();
+    const updates = await docker.imageUpdates(hangar.store.config.registryThrottling());
     const projects = [...new Set(updates.filter(update => update.status === "outdated").map(u => u.project))];
 
     const updated: string[] = [];

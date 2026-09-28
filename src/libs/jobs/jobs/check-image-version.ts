@@ -17,7 +17,7 @@ export class CheckImageVersion extends Job {
   async run(): Promise<ImageUpdateReport> {
     // Its own client rather than `#libs/docker/server`: that module is `server-only`, and a job
     // is imported by a plain Node process. Same two arguments the web server passes.
-    const updates = await new Docker(new Dockerode(), hangar.store).imageUpdates();
+    const updates = await new Docker(new Dockerode(), hangar.store).imageUpdates(hangar.store.config.registryThrottling());
 
     // In the message, not in metadata: the log format only ever prints `message` and `error`.
     const outdated = updates.filter(update => update.status === "outdated").length;
