@@ -58,7 +58,7 @@ const pinned = (image: string) => image.includes("@sha256:") || image.startsWith
  * ponytail: a single gap shared by every registry, not a bucket per registry. Split them if a
  * host that mixes Hub and ghcr makes the check noticeably slow.
  */
-const REGISTRY_GAP_MS = 20;
+const REGISTRY_GAP_MS = 100;
 
 /** What {@link Docker.remoteDigest} returns once the registry says "too many requests". */
 const RATE_LIMITED = Symbol("rate-limited");
@@ -184,7 +184,7 @@ export class Docker {
    * reads as `unknown` rather than throwing, so one unreachable registry does not cost the report
    * — and, more importantly, never renders as a false "update available".
    */
-  async imageUpdates(): Promise<ImageUpdate[]> {
+  async imageUpdates(gap = REGISTRY_GAP_MS): Promise<ImageUpdate[]> {
     const installed = this.apps.installedProjectIds();
     const pairs = new Map<string, { project: string; image: string; imageId: string }>();
 
@@ -212,7 +212,7 @@ export class Docker {
     // registry says "too many requests", every call after it would be refused too and would
     // still spend quota, so the rest stay unknown until the next run.
     for (const [index, image] of references.entries()) {
-      if (index > 0) await sleep(REGISTRY_GAP_MS);
+      if (index > 0) await sleep(gap);
 
       const digest = await this.remoteDigest(image);
 

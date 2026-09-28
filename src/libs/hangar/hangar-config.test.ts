@@ -37,6 +37,14 @@ shared: [networks.yml]
     expect(config.shared()).toEqual(["networks.yml"]);
   });
 
+  it("loads the registry throttling, 100ms when absent", async () => {
+    const set = await new HangarConfig(await configFile("categories: []\nregistryThrottling: 50\n")).load();
+    const unset = await new HangarConfig(await configFile("categories: []\n")).load();
+
+    expect(set.registryThrottling()).toBe(50);
+    expect(unset.registryThrottling()).toBe(100);
+  });
+
   it("starts empty, before anything is loaded", () => {
     expect(new HangarConfig("/nowhere/hangar.yml").categories()).toEqual([]);
   });
