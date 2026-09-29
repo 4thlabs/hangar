@@ -24,15 +24,18 @@ export const sidequestBoot = (): MiddlewareHandler => {
     await Sidequest.start();
 
     // Every four hours, not the every-10s of the stub: each check makes the daemon hit the registry's manifest
-    // endpoint, which counts against Docker Hub's anonymous per-IP limit.
-    await Sidequest.build(CheckImageVersion).schedule("0 */4 * * *");
+    // endpoint, which counts against Docker Hub's anonymous per-IP limit. Off the hour: at :00 every
+    // other cron on the internet polls the registries too, and every run there came back rate
+    // limited or timed out, while the same check a few minutes later went through.
+    await Sidequest.build(CheckImageVersion).schedule("17 */4 * * *");
 
     // First launched
     await Sidequest.build(CheckImageVersion).enqueue();
 
     // Nightly, at an hour nobody is using the stacks: each app it touches is a pull and a
-    // recreate, so the containers go down and back up.
-    await Sidequest.build(UpdateOutdatedApps).schedule("0 4 * * *");
+    // recreate, so the containers go down and back up. Off the hour and clear of the 04:17 check,
+    // for the same rate-limit reason.
+    await Sidequest.build(UpdateOutdatedApps).schedule("47 4 * * *");
 
     configured = true;
   };
