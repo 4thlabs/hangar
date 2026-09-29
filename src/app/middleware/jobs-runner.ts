@@ -1,4 +1,4 @@
-import { sidequestBoot } from "#libs/jobs/server"
-import { MiddlewareHandler } from "hono/types"
+import { sidequestBoot } from "#libs/jobs/server";
+import { MiddlewareHandler } from "hono/types";
 
-export default () : MiddlewareHandler => sidequestBoot();
+export default (): MiddlewareHandler => sidequestBoot.middleware();

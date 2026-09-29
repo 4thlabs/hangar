@@ -1,7 +1,7 @@
 import { Link } from "waku";
 import type { DockerOverview } from "#libs/docker";
 import { docker } from "#libs/docker/server";
-import { outdatedProjects } from "#libs/jobs";
+import { imageCheckReport } from "#libs/jobs";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import {
   WidgetCard,
@@ -11,8 +11,7 @@ import {
   WidgetMetadata,
   WidgetMetric,
   WidgetMetricGrid,
-  formatBytes,
-  integerFormatter,
+  Units,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
@@ -39,7 +38,7 @@ export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStat
         description={
           <WidgetMetadata>
             <span>Docker {version}</span>
-            <span>{integerFormatter.format(containers.total)} containers</span>
+            <span>{Units.Integer.format(containers.total)} containers</span>
           </WidgetMetadata>
         }
       />
@@ -55,12 +54,12 @@ export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStat
           <WidgetMetric
             label="Images"
             value={images.total}
-            detail={`${integerFormatter.format(images.unused)} unused · ${formatBytes(images.size)}`}
+            detail={`${Units.Integer.format(images.unused)} unused · ${Units.bytes(images.size)}`}
           />
           <WidgetMetric
             label="Volumes"
             value={volumes.total}
-            detail={`${integerFormatter.format(volumes.inUse)} in use · ${integerFormatter.format(volumes.unused)} unused`}
+            detail={`${Units.Integer.format(volumes.inUse)} in use · ${Units.Integer.format(volumes.unused)} unused`}
           />
         </WidgetMetricGrid>
       </WidgetContent>
@@ -96,8 +95,8 @@ export const dockerGeneralStats = (ttl?: number) =>
     ...chrome,
     errorDescription: "The local Docker statistics could not be loaded.",
     load: async (): Promise<DockerGeneralStats> => {
-      // `outdatedProjects` reads the last completed check; the widget never talks to a registry itself.
-      const [overview, outdated] = await Promise.all([docker.overview(), outdatedProjects()]);
+      // `imageCheckReport` reads the last completed check; the widget never talks to a registry itself.
+      const [overview, outdated] = await Promise.all([docker.overview(), imageCheckReport.outdated()]);
 
       return { overview, outdated: [...outdated].sort() };
     },

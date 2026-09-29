@@ -4,18 +4,8 @@ import { mkdir, readdir, readFile, rename, rm, symlink, unlink, writeFile } from
 import path from "node:path";
 import { logger } from "#libs/logs";
 import { load } from "js-yaml";
-import { type CommandRunner, type RunOptions } from "./runtime/runtime.ts";
-import { exists } from "./runtime/utils.ts";
+import { Runtime, type CommandRunner, type RunOptions } from "./runtime/runtime.ts";
 import { HangarError, HangarRuntimeError } from "./hangar-error.ts";
-
-/** True when the compose args ask for detached mode */
-const detached = (args: string[]) => args.includes("-d") || args.includes("--detach");
-
-/** A stack id is a folder name under `store/` (`llama.cpp`): no separator, no leading dot, nothing to climb out with */
-const STACK_ID = /^[a-z0-9][a-z0-9._-]*$/;
-
-/** Capitalize first letter of a string */
-const capitalize = (s: string) => s && String(s[0]).toUpperCase() + String(s).slice(1);
 
 export type HangarApp = {
   id: string;
@@ -35,6 +25,9 @@ export class HangarStore {
 
   /** Commands that address the whole store instead of a single stack */
   static readonly GlobalCommand = ["up", "down", "pull"];
+
+  /** A stack id is a folder name under `store/` (`llama.cpp`): no separator, no leading dot, nothing to climb out with */
+  private static readonly StackId = /^[a-z0-9][a-z0-9._-]*$/;
 
   /** Path of Hangar sata */
   readonly dataPath: string;
@@ -101,7 +94,7 @@ export class HangarStore {
     const source = path.join(this.storePath, "store", name);
     const destination = path.join(this.installedPath, name);
 
-    if ((await exists(source)) && !(await exists(destination))) {
+    if ((await Runtime.exists(source)) && !(await Runtime.exists(destination))) {
       logger.info(`Linking application: ${name}`);
       await symlink(source, destination, "dir");
     }
@@ -114,7 +107,7 @@ export class HangarStore {
   async unlink(name: string) {
     const destination = path.join(this.installedPath, name);
 
-    if (await exists(destination)) {
+    if (await Runtime.exists(destination)) {
       logger.info(`Unlinking application: ${name}`);
       await unlink(destination);
     }
@@ -125,7 +118,7 @@ export class HangarStore {
    * @returns boolean indicating if the store is installed
    */
   async isInstalled() {
-    return exists(path.join(this.storePath, ".git"));
+    return Runtime.exists(path.join(this.storePath, ".git"));
   }
 
   /**
@@ -133,7 +126,7 @@ export class HangarStore {
    * @param update boolean Wheter to update the store if already installed
    */
   async install() {
-    if (!(await exists(this.installedPath))) {
+    if (!(await Runtime.exists(this.installedPath))) {
       await mkdir(this.installedPath, { recursive: true });
     }
 
@@ -170,7 +163,7 @@ export class HangarStore {
   private async composeStack(stack: string, args: string[], options?: RunOptions) {
     const compose = path.join(this.installedPath, stack, "compose.yml");
 
-    if (!(await exists(compose))) {
+    if (!(await Runtime.exists(compose))) {
       throw new HangarRuntimeError(1, `Failed to find project: ${stack}`);
     }
 
@@ -203,7 +196,7 @@ export class HangarStore {
     const command = args[0] ?? "";
     const stacks = this.resolve(name);
 
-    if (command === "up" && !detached(args) && stacks.length > 1) {
+    if (command === "up" && !HangarStore.detached(args) && stacks.length > 1) {
       throw new HangarRuntimeError(1, "Non detached mode only authorised on a single stack");
     }
 
@@ -249,7 +242,7 @@ export class HangarStore {
       throw new HangarError(`${id} is a shared file, not an app`);
     }
 
-    if (create === (await exists(folder))) {
+    if (create === (await Runtime.exists(folder))) {
       throw new HangarError(create ? `The app ${id} already exists` : `The app ${id} does not exist`);
     }
 
@@ -280,7 +273,7 @@ export class HangarStore {
 
   /** The folder of a store app, once its id is known not to escape `store/`. */
   private stackPath(id: string) {
-    if (!STACK_ID.test(id)) throw new HangarError(`Invalid app id: ${id}`);
+    if (!HangarStore.StackId.test(id)) throw new HangarError(`Invalid app id: ${id}`);
     return path.join(this.storePath, "store", id);
   }
 
@@ -323,7 +316,7 @@ export class HangarStore {
 
             this.apps.add({
               id: app,
-              name: (yaml?.["name"] as string | undefined) ?? capitalize(app),
+              name: (yaml?.["name"] as string | undefined) ?? HangarStore.capitalize(app),
               icon: metadata?.icon,
               installed: installed.indexOf(app) !== -1,
               containerName: service?.container_name ?? app,
@@ -334,5 +327,15 @@ export class HangarStore {
         }),
       );
     }
+  }
+
+  /** True when the compose args ask for detached mode */
+  private static detached(args: string[]) {
+    return args.includes("-d") || args.includes("--detach");
+  }
+
+  /** Capitalize first letter of a string */
+  private static capitalize(s: string) {
+    return s && String(s[0]).toUpperCase() + String(s).slice(1);
   }
 }

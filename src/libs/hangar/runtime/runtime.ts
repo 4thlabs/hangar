@@ -1,4 +1,5 @@
 import { ChildProcess, spawn } from "node:child_process";
+import { stat } from "node:fs/promises";
 import { type Writable } from "node:stream";
 import { HangarRuntimeError } from "../hangar-error.ts";
 
@@ -37,6 +38,16 @@ export class Runtime implements CommandRunner {
 
   /** A set of the running children */
   private children: Set<ChildProcess> = new Set();
+
+  /**
+   * Check the existance of a file/path
+   * @param path The path to check
+   */
+  static async exists(path: string) {
+    return stat(path)
+      .then(() => true)
+      .catch(() => false);
+  }
 
   /**
    * Installs the SIGINT handler.

@@ -3,20 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 // The registry pulls in the Docker widget, and through it the server-only client.
 vi.mock("server-only", () => ({}));
 
-import { defaultWidgets, resolveWidgets, widgetConfigSchema } from "./index.ts";
+import { WidgetRegistry, defaultWidgets, widgetConfigSchema } from "./index.ts";
 import { noSecret } from "./mock/mock.ts";
 
 const host = { domain: "test.local", containerName: (app: string) => app, secret: noSecret };
 
-describe("resolveWidgets", () => {
+describe("WidgetRegistry", () => {
   it("places every declared widget in its column, in order", () => {
-    const placements = resolveWidgets(
-      [
-        { type: "clock", column: 1 },
-        { type: "github-releases", column: 3, repositories: ["glanceapp/glance"] },
-      ],
-      host,
-    );
+    const placements = new WidgetRegistry(host).resolve([
+      { type: "clock", column: 1 },
+      { type: "github-releases", column: 3, repositories: ["glanceapp/glance"] },
+    ]);
 
     expect(placements.map(placement => [placement.widget.id, placement.column])).toEqual([
       ["clock", 1],
@@ -25,13 +22,15 @@ describe("resolveWidgets", () => {
   });
 
   it("resolves the dashboard a store gets when it declares no widgets", () => {
-    expect(resolveWidgets(defaultWidgets, host)).toHaveLength(defaultWidgets.length);
+    expect(new WidgetRegistry(host).resolve(defaultWidgets)).toHaveLength(defaultWidgets.length);
   });
 
   it("asks for the container of the app its widget type names", () => {
     const containerName = vi.fn((app: string) => `${app}-1`);
 
-    resolveWidgets([{ type: "frigate-events", column: 3 }], { domain: "test.local", containerName, secret: noSecret });
+    new WidgetRegistry({ domain: "test.local", containerName, secret: noSecret }).resolve([
+      { type: "frigate-events", column: 3 },
+    ]);
 
     expect(containerName).toHaveBeenCalledWith("frigate");
   });
@@ -39,7 +38,9 @@ describe("resolveWidgets", () => {
   it("resolves a widget that needs no service without asking for a container", () => {
     const containerName = vi.fn((app: string) => app);
 
-    resolveWidgets([{ type: "clock", column: 1 }], { domain: "test.local", containerName, secret: noSecret });
+    new WidgetRegistry({ domain: "test.local", containerName, secret: noSecret }).resolve([
+      { type: "clock", column: 1 },
+    ]);
 
     expect(containerName).not.toHaveBeenCalled();
   });

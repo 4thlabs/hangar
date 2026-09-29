@@ -1,5 +1,5 @@
 import type { Dashboard } from "./api/type.ts";
-import { createArcaneClient } from "./api/client.ts";
+import { ArcaneClient } from "./api/client.ts";
 import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import {
@@ -10,8 +10,7 @@ import {
   WidgetMetadata,
   WidgetMetric,
   WidgetMetricGrid,
-  formatBytes,
-  integerFormatter,
+  Units,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
@@ -53,7 +52,7 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
             ) : (
               <span>{versionInfo.displayVersion}</span>
             )}
-            <span>{integerFormatter.format(counts.totalContainers)} containers</span>
+            <span>{Units.Integer.format(counts.totalContainers)} containers</span>
           </WidgetMetadata>
         }
       />
@@ -69,12 +68,12 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
           <WidgetMetric
             label="Images"
             value={imageUsageCounts.totalImages}
-            detail={`${integerFormatter.format(imageUsageCounts.imagesUnused)} unused · ${formatBytes(imageUsageCounts.totalImageSize)}`}
+            detail={`${Units.Integer.format(imageUsageCounts.imagesUnused)} unused · ${Units.bytes(imageUsageCounts.totalImageSize)}`}
           />
           <WidgetMetric
             label="Volumes"
             value={volumeUsageCounts.total}
-            detail={`${integerFormatter.format(volumeUsageCounts.inuse)} in use · ${integerFormatter.format(volumeUsageCounts.unused)} unused`}
+            detail={`${Units.Integer.format(volumeUsageCounts.inuse)} in use · ${Units.Integer.format(volumeUsageCounts.unused)} unused`}
           />
         </WidgetMetricGrid>
       </WidgetContent>
@@ -84,7 +83,7 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             {actionItems.items.map(action => (
               <li key={`${action.kind}-${action.severity}`} className={actionColor(action.severity)}>
-                <span className="font-semibold tabular-nums">{integerFormatter.format(action.count)}</span>{" "}
+                <span className="font-semibold tabular-nums">{Units.Integer.format(action.count)}</span>{" "}
                 {action.kind.replaceAll("_", " ")}
               </li>
             ))}
@@ -103,7 +102,7 @@ export const arcaneGeneralStats = (service: WidgetService, ttl?: number) =>
     ...chrome,
     errorDescription: "The general statistics could not be loaded.",
     load: async (environment: number = 0) => {
-      const response = await (await createArcaneClient(service)).getDashboard(environment);
+      const response = await (await ArcaneClient.connect(service)).getDashboard(environment);
 
       // The API answers 200 with success:false; treat that as a load failure.
       if (!response.success) throw new Error(response.detail ?? "Unsuccessful response");

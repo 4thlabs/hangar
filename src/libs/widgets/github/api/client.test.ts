@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearReleaseCache, getLatestReleases } from "./client.ts";
+import { GithubClient } from "./client.ts";
+
+/** A fresh client per case, so no case reads another's cache. */
+let client = new GithubClient();
 
 const release = (tag: string, publishedAt: string) => ({
   tag_name: tag,
@@ -23,7 +26,7 @@ const START = 1_700_000_000_000;
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] }).setSystemTime(START);
-  clearReleaseCache();
+  client = new GithubClient();
 });
 
 afterEach(() => {
@@ -41,7 +44,7 @@ describe("getLatestReleases", () => {
       }),
     );
 
-    const releases = await getLatestReleases(["immich-app/immich", "glanceapp/glance"]);
+    const releases = await client.getLatestReleases(["immich-app/immich", "glanceapp/glance"]);
 
     expect(releases.map(item => item.repository)).toEqual(["glanceapp/glance", "immich-app/immich"]);
     expect(releases[0]?.tag).toBe("v0.8.4");
@@ -50,7 +53,7 @@ describe("getLatestReleases", () => {
   it("drops a repository that has no release instead of failing the widget", async () => {
     vi.stubGlobal("fetch", respond({ "glanceapp/glance": release("v0.8.4", "2026-09-18T10:00:00Z") }));
 
-    const releases = await getLatestReleases(["glanceapp/glance", "example/never-released"]);
+    const releases = await client.getLatestReleases(["glanceapp/glance", "example/never-released"]);
 
     expect(releases.map(item => item.repository)).toEqual(["glanceapp/glance"]);
   });
@@ -59,9 +62,9 @@ describe("getLatestReleases", () => {
     const fetcher = respond({ "glanceapp/glance": release("v0.8.4", "2026-09-18T10:00:00Z") });
     vi.stubGlobal("fetch", fetcher);
 
-    await getLatestReleases(["glanceapp/glance"]);
+    await client.getLatestReleases(["glanceapp/glance"]);
     vi.setSystemTime(START + 29 * 60 * 1_000);
-    await getLatestReleases(["glanceapp/glance"]);
+    await client.getLatestReleases(["glanceapp/glance"]);
 
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
@@ -70,23 +73,23 @@ describe("getLatestReleases", () => {
     const fetcher = respond({ "glanceapp/glance": release("v0.8.4", "2026-09-18T10:00:00Z") });
     vi.stubGlobal("fetch", fetcher);
 
-    await getLatestReleases(["glanceapp/glance"]);
+    await client.getLatestReleases(["glanceapp/glance"]);
     vi.setSystemTime(START + 31 * 60 * 1_000);
-    await getLatestReleases(["glanceapp/glance"]);
+    await client.getLatestReleases(["glanceapp/glance"]);
 
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("keeps serving a stale release when GitHub rate-limits the refresh", async () => {
     vi.stubGlobal("fetch", respond({ "glanceapp/glance": release("v0.8.4", "2026-09-18T10:00:00Z") }));
-    await getLatestReleases(["glanceapp/glance"]);
+    await client.getLatestReleases(["glanceapp/glance"]);
 
     vi.stubGlobal(
       "fetch",
       vi.fn(() => Promise.resolve(new Response("rate limited", { status: 403 }))),
     );
     vi.setSystemTime(START + 31 * 60 * 1_000);
-    const releases = await getLatestReleases(["glanceapp/glance"]);
+    const releases = await client.getLatestReleases(["glanceapp/glance"]);
 
     expect(releases[0]?.tag).toBe("v0.8.4");
   });

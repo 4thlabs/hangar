@@ -1,5 +1,5 @@
 import type { WidgetService } from "../../config/config.ts";
-import { serviceClient } from "../../shared/service-client.ts";
+import { ServiceClient } from "../../shared/service-client.ts";
 
 /**
  * What Beszel's agent last reported about a host, under the single-letter keys it stores.
@@ -43,16 +43,22 @@ interface BeszelPage<T> {
  * The key goes in `Authorization` rather than `X-API-Key`: PocketBase reads the raw token there,
  * with or without a `Bearer` prefix, so a Beszel API token works as pasted.
  */
-export async function createBeszelClient(service: WidgetService) {
-  const client = await serviceClient(service, { apiKeyHeader: "Authorization" });
+export class BeszelClient extends ServiceClient {
+  /**
+   * Opens a client for the Beszel hub `service` points at.
+   */
+  static async connect(service: WidgetService) {
+    return new BeszelClient(await ServiceClient.client(service, { apiKeyHeader: "Authorization" }));
+  }
 
-  return {
-    /** Lists the monitored hosts, newest reading included, alphabetically as the hub's own page shows them. */
-    listSystems: () =>
-      client
-        .get<BeszelPage<BeszelSystem>>("/collections/systems/records", {
-          searchParams: { sort: "name", fields: "id,name,status,info", perPage: 100 },
-        })
-        .json(),
-  };
+  /**
+   * Lists the monitored hosts, newest reading included, alphabetically as the hub's own page shows them.
+   */
+  listSystems() {
+    return this.http
+      .get<BeszelPage<BeszelSystem>>("/collections/systems/records", {
+        searchParams: { sort: "name", fields: "id,name,status,info", perPage: 100 },
+      })
+      .json();
+  }
 }

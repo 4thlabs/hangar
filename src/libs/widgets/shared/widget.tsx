@@ -2,8 +2,8 @@ import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
 import { ExternalLinkIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { cn } from "cn";
-import { formatCompactTime, formatRelativeTime } from "#libs/format";
-import { integerFormatter } from "./format.ts";
+import { RelativeTime } from "#libs/format";
+import { Units } from "./format.ts";
 
 export function WidgetCard({ className, ...props }: ComponentProps<typeof Card>) {
   return <Card className={cn("w-full gap-3 bg-background pt-0", className)} {...props} />;
@@ -92,7 +92,7 @@ export function WidgetMetric({ className, detail, label, tone = "default", value
           tone === "destructive" && "text-destructive",
         )}
       >
-        {typeof value === "number" ? integerFormatter.format(value) : value}
+        {typeof value === "number" ? Units.Integer.format(value) : value}
       </dd>
       {detail && <dd className="truncate text-xs leading-tight text-muted-foreground">{detail}</dd>}
     </div>
@@ -142,7 +142,7 @@ type WidgetTimeProps = {
 export function WidgetTime({ at, compact = false, now = Date.now() }: WidgetTimeProps) {
   return (
     <time dateTime={new Date(at).toISOString()} className="shrink-0 text-xs text-muted-foreground">
-      {compact ? formatCompactTime(at, now) : formatRelativeTime(at, now)}
+      {compact ? RelativeTime.compact(at, now) : RelativeTime.format(at, now)}
     </time>
   );
 }

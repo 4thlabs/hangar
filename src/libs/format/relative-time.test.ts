@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatCompactTime } from "./relative-time.ts";
+import { RelativeTime } from "./relative-time.ts";
 
 const NOW = Date.UTC(2026, 8, 21, 12, 0, 0);
-const at = (offsetMs: number) => formatCompactTime(NOW + offsetMs, NOW);
+const at = (offsetMs: number) => RelativeTime.compact(NOW + offsetMs, NOW);
 
-describe("formatCompactTime", () => {
+describe("RelativeTime.compact", () => {
   it("writes the past bare and the future with `in`", () => {
     expect(at(-7_200_000)).toBe("2h");
     expect(at(79_200_000)).toBe("in 22h");

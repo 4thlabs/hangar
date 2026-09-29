@@ -15,6 +15,9 @@ export type AutoUpdateReport = { ranAt: string; updated: string[]; failed: strin
  * Runs nightly on its own schedule, and by hand from Settings > JOBS.
  */
 export class UpdateOutdatedApps extends Job {
+  /**
+   * Updates every outdated app, one at a time, and returns what went through and what failed.
+   */
   async run(): Promise<AutoUpdateReport> {
     // Its own client rather than `#libs/docker/server`: that module is `server-only`, and a job
     // is imported by a plain Node process. Same two arguments the web server passes.
@@ -43,7 +46,7 @@ export class UpdateOutdatedApps extends Job {
     logger.info(`Auto-update: ${updated.length} app(s) updated, ${failed.length} failed`);
 
     // One notification for the run, not one per app: this happens while nobody is watching.
-    // ponytail: no `markUpdated` either — that note lives in the web server's memory and this
+    // ponytail: no `imageCheckReport.markUpdated` either — that note lives in the web server's memory and this
     // runs in the Sidequest worker. The four-hourly check catches up within hours of a 4am run,
     // and nobody is reading the badge meanwhile. Wire a channel only if that stops being true.
     // ponytail: no `docker.invalidate()` — that instance is `server-only` and out of reach here,

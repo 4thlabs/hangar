@@ -1,5 +1,5 @@
 import type { WidgetService } from "../../config/config.ts";
-import { serviceClient } from "../../shared/service-client.ts";
+import { ServiceClient } from "../../shared/service-client.ts";
 
 /**
  * What gluetun reports about the address it is exiting from.
@@ -15,11 +15,18 @@ export interface GluetunPublicIp {
 }
 
 /** Talks to one gluetun control server, which versions its API under `/v1` rather than `/api`. */
-export async function createGluetunClient(service: WidgetService) {
-  const client = await serviceClient(service, { prefix: "/v1" });
+export class GluetunClient extends ServiceClient {
+  /**
+   * Opens a client for the gluetun control server `service` points at.
+   */
+  static async connect(service: WidgetService) {
+    return new GluetunClient(await ServiceClient.client(service, { prefix: "/v1" }));
+  }
 
-  return {
-    /** Gets the public address the tunnel currently exits from. */
-    getPublicIp: () => client.get<GluetunPublicIp>("publicip/ip").json(),
-  };
+  /**
+   * Gets the public address the tunnel currently exits from.
+   */
+  getPublicIp() {
+    return this.http.get<GluetunPublicIp>("publicip/ip").json();
+  }
 }

@@ -68,40 +68,6 @@ export const widgetConfigSchema = z.discriminatedUnion("type", [
 
 export type WidgetConfig = z.infer<typeof widgetConfigSchema>;
 
-/** Everything a widget needs to talk to its service, and to link to it. */
-export type WidgetService = {
-  /** Where Hangar calls from the server. */
-  api: string;
-  /** Where the visitor's browser goes. */
-  link: string;
-  /** The service's key, if the operator set one. Looked up only by the widgets that need it. */
-  apiKey: () => Promise<string | undefined>;
-};
-
-/**
- * How a service widget reaches its service.
- *
- * The link is the rule Traefik applies to a stack that only says
- * `traefik.enable=true` — `<container>.<DOMAIN>` — unless `hangar.yml` overrides
- * it. The API calls the container directly when `url:` is declared, and otherwise
- * goes back out through the public host, which is what every widget did before
- * the two were told apart.
- *
- * The key is whatever `.env.global` holds under the container's name, and is
- * read lazily: it is the operator's to provide, so an absent one is a service
- * that takes no key, not a misconfiguration to report.
- */
-export function widgetService(
-  config: { url?: string | undefined; link?: string | undefined },
-  containerName: string,
-  domain: string,
-  secret: (container: string) => Promise<string | undefined>,
-): WidgetService {
-  const link = config.link ?? `https://${containerName}.${domain}`;
-
-  return { link, api: config.url ?? link, apiKey: () => secret(containerName) };
-}
-
 /**
  * What resolving a widget's service needs to know, passed in rather than read here: reaching for
  * `#libs/hangar` would drag SQLite and Docker into the RSC graph the registry sits in.
@@ -114,22 +80,86 @@ export type WidgetHost = {
   secret: (container: string) => Promise<string | undefined>;
 };
 
-/** `frigate-events` → the `frigate` app: a widget type is prefixed by the app it reads. */
-export const appOf = (type: string) => type.split("-")[0]!;
+/** Everything a widget needs to talk to its service, and to link to it. */
+export class WidgetService {
+  /** Where Hangar calls from the server. */
+  readonly api: string;
 
-/**
- * The service a widget declaration points at, resolved against the host.
- *
- * Only some members of the union carry URLs — a clock addresses nothing — so the narrowing is
- * what keeps `widgetService` honest about the two it may be handed.
- */
-export const serviceOf = (config: WidgetConfig, host: WidgetHost): WidgetService =>
-  widgetService(
-    "url" in config ? { url: config.url, link: config.link } : {},
-    host.containerName(appOf(config.type)),
-    host.domain,
-    host.secret,
-  );
+  /** Where the visitor's browser goes. */
+  readonly link: string;
+
+  /** The service's key, if the operator set one. Looked up only by the widgets that need it. */
+  readonly apiKey: () => Promise<string | undefined>;
+
+  /**
+   * @param service The two addresses and the key lookup
+   */
+  constructor({ api, link, apiKey }: Pick<WidgetService, "api" | "link" | "apiKey">) {
+    this.api = api;
+    this.link = link;
+    this.apiKey = apiKey;
+  }
+
+  /**
+   * How a service widget reaches its service.
+   *
+   * The link is the rule Traefik applies to a stack that only says
+   * `traefik.enable=true` — `<container>.<DOMAIN>` — unless `hangar.yml` overrides
+   * it. The API calls the container directly when `url:` is declared, and otherwise
+   * goes back out through the public host, which is what every widget did before
+   * the two were told apart.
+   *
+   * The key is whatever `.env.global` holds under the container's name, and is
+   * read lazily: it is the operator's to provide, so an absent one is a service
+   * that takes no key, not a misconfiguration to report.
+   */
+  static resolve(
+    config: { url?: string | undefined; link?: string | undefined },
+    containerName: string,
+    domain: string,
+    secret: (container: string) => Promise<string | undefined>,
+  ): WidgetService {
+    const link = config.link ?? `https://${containerName}.${domain}`;
+
+    return new WidgetService({ link, api: config.url ?? link, apiKey: () => secret(containerName) });
+  }
+
+  /**
+   * The service a widget declaration points at, resolved against the host.
+   *
+   * Only some members of the union carry URLs — a clock addresses nothing — so the narrowing is
+   * what keeps {@link WidgetService.resolve} honest about the two it may be handed.
+   */
+  static of(config: WidgetConfig, host: WidgetHost): WidgetService {
+    return WidgetService.resolve(
+      "url" in config ? { url: config.url, link: config.link } : {},
+      host.containerName(WidgetService.appOf(config.type)),
+      host.domain,
+      host.secret,
+    );
+  }
+
+  /**
+   * The service a placed widget talks to, for code that is not the dashboard.
+   *
+   * `undefined` when the store does not place that widget, which is the honest answer for a route
+   * asked to proxy for something the operator never configured.
+   * @param configs The widgets the store places
+   * @param type The widget type, as `hangar.yml` declares it
+   */
+  static placed(configs: readonly WidgetConfig[], type: WidgetConfig["type"], host: WidgetHost) {
+    const config = configs.find(widget => widget.type === type);
+
+    return config && WidgetService.of(config, host);
+  }
+
+  /**
+   * `frigate-events` → the `frigate` app: a widget type is prefixed by the app it reads.
+   */
+  static appOf(type: string) {
+    return type.split("-")[0]!;
+  }
+}
 
 /**
  * The dashboard a store gets when its `hangar.yml` declares no `widgets:`.

@@ -1,6 +1,6 @@
 import type { ApiContext } from "waku/router";
 import { apiRoute, apiError } from "#app/api/api-route.ts";
-import { widgetImage } from "#libs/widgets/server";
+import { widgetImages } from "#libs/widgets/server";
 
 /** A poster or a thumbnail never changes; a day of browser cache saves the service the repeat. */
 const CACHE = "private, max-age=86400";
@@ -16,7 +16,7 @@ const CACHE = "private, max-age=86400";
 export const GET = apiRoute<ApiContext<"/api/widgets/[widget]/image/[id]">>(
   { log: "Failed to proxy a widget image", unavailable: "Les images des widgets sont indisponibles." },
   async (_request, { params }) => {
-    const image = await widgetImage(params.widget, params.id);
+    const image = await widgetImages.fetch(params.widget, params.id);
 
     // No relay, no such widget placed, or an id no service would issue.
     if (!image) return apiError("Aucune image à relayer pour ce widget.", 404);

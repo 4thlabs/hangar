@@ -14,10 +14,15 @@ import { Notifications } from "#libs/notifications";
  * read the newest completed run back out of it. Nothing else persists it.
  */
 export class CheckImageVersion extends Job {
+  /**
+   * Checks every installed image and returns the report Sidequest stores as the result.
+   */
   async run(): Promise<ImageUpdateReport> {
     // Its own client rather than `#libs/docker/server`: that module is `server-only`, and a job
     // is imported by a plain Node process. Same two arguments the web server passes.
-    const updates = await new Docker(new Dockerode(), hangar.store).imageUpdates(hangar.store.config.registryThrottling());
+    const updates = await new Docker(new Dockerode(), hangar.store).imageUpdates(
+      hangar.store.config.registryThrottling(),
+    );
 
     // In the message, not in metadata: the log format only ever prints `message` and `error`.
     const outdated = updates.filter(update => update.status === "outdated").length;

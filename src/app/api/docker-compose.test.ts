@@ -23,7 +23,7 @@ vi.mock("#libs/hangar/server", () => ({
   },
 }));
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
-vi.mock("#libs/jobs", () => ({ markUpdated: mocks.markUpdated }));
+vi.mock("#libs/jobs", () => ({ imageCheckReport: { markUpdated: mocks.markUpdated } }));
 vi.mock("#libs/notifications/server", () => ({ notifications: { notify: mocks.notify } }));
 
 const { POST } = await import("#app/pages/_api/api/docker/apps/compose.ts");

@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import type { GluetunPublicIp } from "./api/client.ts";
-import { createGluetunClient } from "./api/client.ts";
+import { GluetunClient } from "./api/client.ts";
 import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import { WidgetCard, WidgetContent, WidgetHeader } from "../shared/index.ts";
@@ -58,6 +58,6 @@ export const gluetunVpnStatus = (service: WidgetService, ttl?: number) =>
     ttl,
     ...chrome,
     errorDescription: "The VPN status could not be read.",
-    load: async () => (await createGluetunClient(service)).getPublicIp(),
+    load: async () => (await GluetunClient.connect(service)).getPublicIp(),
     render: (publicIp: GluetunPublicIp) => <GluetunVpnStatusCard publicIp={publicIp} />,
   });

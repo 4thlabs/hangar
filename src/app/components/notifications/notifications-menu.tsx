@@ -9,7 +9,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#a
 import { Popover, PopoverContent, PopoverTrigger } from "#app/components/ui/popover.tsx";
 import { toast, ToastIcon } from "#app/components/ui/toast.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#app/components/ui/tooltip.tsx";
-import { formatRelativeTime } from "#libs/format";
+import { RelativeTime } from "#libs/format";
 import type { NotificationPayload } from "#libs/notifications";
 
 /**
@@ -29,7 +29,7 @@ function NotificationItem({ notification }: { notification: NotificationPayload 
         </span>
         {notification.description && <span className="text-muted-foreground">{notification.description}</span>}
         <time className="text-xs text-muted-foreground" dateTime={new Date(notification.createdAt).toISOString()}>
-          {formatRelativeTime(notification.createdAt, Date.now(), "fr")}
+          {RelativeTime.format(notification.createdAt, Date.now(), "fr")}
         </time>
       </span>
     </>

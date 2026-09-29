@@ -2,12 +2,12 @@ import "../styles.css";
 
 import type { ReactNode } from "react";
 import { AppProviders } from "#app/providers/app-providers.tsx";
-import { getUserPreferences } from "#libs/preferences";
+import { userPreferences } from "#libs/preferences/server";
 
 type RootLayoutProps = { children: ReactNode };
 
 export default function RootLayout({ children }: RootLayoutProps) {
-  const { theme, themePalette } = getUserPreferences();
+  const { theme, themePalette } = userPreferences.get();
 
   return (
     <AppProviders initialPalette={themePalette} initialMode={theme}>

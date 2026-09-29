@@ -16,7 +16,7 @@ import {
 } from "#app/components/ui/empty.tsx";
 import { DockerNotFoundError } from "#libs/docker";
 import { docker } from "#libs/docker/server";
-import { outdatedProjects } from "#libs/jobs";
+import { imageCheckReport } from "#libs/jobs";
 import { logger } from "#libs/logs";
 
 /**
@@ -25,7 +25,7 @@ import { logger } from "#libs/logs";
  */
 async function AppDetailContent({ project }: { project: string }) {
   try {
-    const [detail, outdated] = await Promise.all([docker.projectDetail(project), outdatedProjects()]);
+    const [detail, outdated] = await Promise.all([docker.projectDetail(project), imageCheckReport.outdated()]);
 
     return <AppDetail detail={{ ...detail, updateAvailable: outdated.has(project) }} />;
   } catch (error) {

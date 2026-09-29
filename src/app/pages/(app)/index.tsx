@@ -1,7 +1,7 @@
 import { Warm } from "#app/components/common/warm.tsx";
-import { resolveWidgets, type DashboardColumn } from "#libs/widgets";
+import { type DashboardColumn } from "#libs/widgets";
 import { hangar } from "#libs/hangar/server";
-import { widgetHost } from "#libs/widgets/server";
+import { widgetRegistry } from "#libs/widgets/server";
 
 const COLUMNS: readonly DashboardColumn[] = [1, 2, 3];
 
@@ -18,7 +18,7 @@ const COLUMN_CLASSNAME: Record<DashboardColumn, string> = {
 
 function Dashboard() {
   // The store owns the dashboard: its hangar.yml says which widgets go where.
-  const placements = resolveWidgets(hangar.store.config.widgets(), widgetHost);
+  const placements = widgetRegistry.resolve(hangar.store.config.widgets());
 
   return (
     <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[1fr_3fr_1fr]">

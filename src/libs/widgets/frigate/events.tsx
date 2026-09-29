@@ -1,5 +1,5 @@
 import type { FrigateEvent, FrigateStats } from "./api/client.ts";
-import { createFrigateClient } from "./api/client.ts";
+import { FrigateClient } from "./api/client.ts";
 import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import {
@@ -10,7 +10,7 @@ import {
   WidgetListItem,
   WidgetMetadata,
   WidgetTime,
-  widgetImageUrl,
+  WidgetImage,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
@@ -56,7 +56,7 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
             const eventUrl = `${serviceUrl}/explore?event_id=${encodeURIComponent(event.id)}`;
             // Relayed by Hangar: the public Frigate host sits behind the OIDC middleware, which
             // answers an `<img>` with a login redirect rather than a picture.
-            const thumbnailUrl = widgetImageUrl("frigate-events", event.id);
+            const thumbnailUrl = WidgetImage.url("frigate-events", event.id);
 
             return (
               <WidgetListItem
@@ -105,7 +105,7 @@ export const frigateEvents = (service: WidgetService, ttl?: number) =>
     ...chrome,
     errorDescription: "The camera events could not be loaded.",
     load: async () => {
-      const client = await createFrigateClient(service);
+      const client = await FrigateClient.connect(service);
 
       return await Promise.all([client.getEvents(), client.getStats()]);
     },

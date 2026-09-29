@@ -3,22 +3,26 @@
  * when it stops being fresh.
  *
  * The settled value is kept separately, and carried across a reload, so a reader can have it
- * *without awaiting* — see {@link Snapshots.peek}. Wrapped in an object so a cached `undefined` is
+ * *without awaiting* — see {@link Cache.peek}. Wrapped in an object so a cached `undefined` is
  * still distinguishable from nothing cached.
  */
 type CacheEntry = { value: Promise<unknown>; settled?: { data: unknown } | undefined; until: number };
 
 /**
- * One cached read, with its key, TTL, grace and loader already bound — see {@link Snapshots.define}.
+ * One cached read, with its key, TTL, grace and loader already bound — see {@link Cache.define}.
  *
  * This is what a consumer holds. Repeating the four arguments at every call site is how the same
  * read ends up cached under two slightly different descriptions, so they are spelled once and the
  * three ways of asking for the value all come from that one declaration.
  */
 export type Snapshot<T> = {
-  /** The value, awaiting a load when there is nothing usable cached. */
+  /**
+   * The value, awaiting a load when there is nothing usable cached.
+   */
   read(): Promise<T>;
-  /** The value without awaiting anything, or `undefined` to say "ask properly". */
+  /**
+   * The value without awaiting anything, or `undefined` to say "ask properly".
+   */
   peek(): { data: T } | undefined;
   /**
    * Fills the snapshot ahead of a render.
@@ -31,7 +35,8 @@ export type Snapshot<T> = {
 };
 
 /**
- * Reads that answer from the last snapshot and refresh themselves behind the caller.
+ * A cache of snapshots: reads that answer from the last snapshot and refresh themselves behind
+ * the caller. Each read it holds is handed out as a {@link Snapshot}.
  *
  * Nothing in here is on a timer: a value is only reloaded because somebody asked for it. Filling
  * it *before* anyone asks is a caller's job — see `src/app/middleware/cache-warm.ts`, which is
@@ -40,7 +45,8 @@ export type Snapshot<T> = {
  * Holds no state of its own beyond the map, so a composition root can own one per concern: the
  * Docker client has one for its daemon reads, the widget layer one for every widget's `load`.
  */
-export class Snapshots {
+export class Cache {
+  /** Every cached read, by key. */
   private readonly entries = new Map<string, CacheEntry>();
 
   /**
@@ -162,43 +168,45 @@ export class Snapshots {
     };
   }
 
-  /** Drops every snapshot, so the next read goes back to the source. */
+  /**
+   * Drops every snapshot, so the next read goes back to the source.
+   */
   clear() {
     this.entries.clear();
   }
-}
 
-/**
- * A snapshot derived from one or two others.
- *
- * Caches nothing of its own — the sources do that, and `project` is a pure rearrangement run per
- * read. That is what keeps a projection from becoming a second cached copy of the same data, with
- * its own TTL to fall out of step.
- *
- * @param project Builds the derived value; must stay pure, since it runs on every read and peek
- */
-export function join<A, B>(a: Snapshot<A>, project: (a: A) => B): Snapshot<B>;
-export function join<A, B, C>(a: Snapshot<A>, b: Snapshot<B>, project: (a: A, b: B) => C): Snapshot<C>;
-export function join(...args: readonly unknown[]): Snapshot<unknown> {
-  const project = args[args.length - 1] as (...values: readonly unknown[]) => unknown;
-  const sources = args.slice(0, -1) as readonly Snapshot<unknown>[];
+  /**
+   * A snapshot derived from one or two others.
+   *
+   * Caches nothing of its own — the sources do that, and `project` is a pure rearrangement run per
+   * read. That is what keeps a projection from becoming a second cached copy of the same data, with
+   * its own TTL to fall out of step.
+   *
+   * @param project Builds the derived value; must stay pure, since it runs on every read and peek
+   */
+  static join<A, B>(a: Snapshot<A>, project: (a: A) => B): Snapshot<B>;
+  static join<A, B, C>(a: Snapshot<A>, b: Snapshot<B>, project: (a: A, b: B) => C): Snapshot<C>;
+  static join(...args: readonly unknown[]): Snapshot<unknown> {
+    const project = args[args.length - 1] as (...values: readonly unknown[]) => unknown;
+    const sources = args.slice(0, -1) as readonly Snapshot<unknown>[];
 
-  return {
-    read: async () => project(...(await Promise.all(sources.map(source => source.read())))),
-    peek: () => {
-      // Every source is peeked before anything is decided: a peek is what starts a stale entry's
-      // reload, so returning early on the first cold one would leave the rest ageing untouched.
-      const ready = sources.map(source => source.peek());
-      const values: unknown[] = [];
+    return {
+      read: async () => project(...(await Promise.all(sources.map(source => source.read())))),
+      peek: () => {
+        // Every source is peeked before anything is decided: a peek is what starts a stale entry's
+        // reload, so returning early on the first cold one would leave the rest ageing untouched.
+        const ready = sources.map(source => source.peek());
+        const values: unknown[] = [];
 
-      for (const entry of ready) {
-        if (!entry) return undefined;
+        for (const entry of ready) {
+          if (!entry) return undefined;
 
-        values.push(entry.data);
-      }
+          values.push(entry.data);
+        }
 
-      return { data: project(...values) };
-    },
-    warm: () => Promise.all(sources.map(source => source.warm())).then(() => undefined),
-  };
+        return { data: project(...values) };
+      },
+      warm: () => Promise.all(sources.map(source => source.warm())).then(() => undefined),
+    };
+  }
 }

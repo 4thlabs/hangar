@@ -1,5 +1,5 @@
 import type { WidgetService } from "../../config/config.ts";
-import { serviceClient } from "../../shared/service-client.ts";
+import { ServiceClient } from "../../shared/service-client.ts";
 
 /** The subset of a Frigate event displayed by Hangar. */
 export interface FrigateEvent {
@@ -23,17 +23,32 @@ export interface FrigateStats {
 }
 
 /** Talks to one Frigate instance. */
-export async function createFrigateClient(service: WidgetService) {
-  const client = await serviceClient(service);
+export class FrigateClient extends ServiceClient {
+  /**
+   * Opens a client for the Frigate instance `service` points at.
+   */
+  static async connect(service: WidgetService) {
+    return new FrigateClient(await ServiceClient.client(service));
+  }
 
-  return {
-    /** Gets the most recent Frigate events. */
-    getEvents: (limit: number = 5) => client.get<FrigateEvent[]>("events", { searchParams: { limit } }).json(),
+  /**
+   * Gets the most recent Frigate events.
+   */
+  getEvents(limit: number = 5) {
+    return this.http.get<FrigateEvent[]>("events", { searchParams: { limit } }).json();
+  }
 
-    /** Gets Frigate runtime statistics. */
-    getStats: () => client.get<FrigateStats>("stats").json(),
+  /**
+   * Gets Frigate runtime statistics.
+   */
+  getStats() {
+    return this.http.get<FrigateStats>("stats").json();
+  }
 
-    /** Fetches one event's thumbnail as raw bytes, for Hangar to relay. */
-    getThumbnail: (eventId: string) => client.get(`events/${eventId}/thumbnail.jpg`),
-  };
+  /**
+   * Fetches one event's thumbnail as raw bytes, for Hangar to relay.
+   */
+  getThumbnail(eventId: string) {
+    return this.http.get(`events/${eventId}/thumbnail.jpg`);
+  }
 }

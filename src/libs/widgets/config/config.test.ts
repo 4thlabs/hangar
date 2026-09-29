@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { widgetConfigSchema, widgetService } from "./config.ts";
+import { WidgetService, widgetConfigSchema } from "./config.ts";
 import { noSecret } from "../mock/mock.ts";
 
 const DOMAIN = "test.local";
@@ -7,16 +7,16 @@ const DOMAIN = "test.local";
 /** The two URLs, without the key thunk that never compares equal. */
 const pick = ({ api, link }: { api: string; link: string }) => ({ api, link });
 
-describe("widgetService", () => {
+describe("WidgetService.resolve", () => {
   it("reaches a service on its public host when the store declares neither URL", () => {
-    expect(pick(widgetService({}, "frigate", DOMAIN, noSecret))).toEqual({
+    expect(pick(WidgetService.resolve({}, "frigate", DOMAIN, noSecret))).toEqual({
       api: "https://frigate.test.local",
       link: "https://frigate.test.local",
     });
   });
 
   it("calls the container directly while still linking to the public host", () => {
-    expect(pick(widgetService({ url: "http://frigate:5000" }, "frigate", DOMAIN, noSecret))).toEqual({
+    expect(pick(WidgetService.resolve({ url: "http://frigate:5000" }, "frigate", DOMAIN, noSecret))).toEqual({
       api: "http://frigate:5000",
       link: "https://frigate.test.local",
     });
@@ -25,7 +25,7 @@ describe("widgetService", () => {
   it("follows an overridden link with the API when no URL is declared", () => {
     // The override is there because the default host is wrong, so falling back
     // to that default for the API would send every call somewhere unreachable.
-    expect(pick(widgetService({ link: "https://cams.example.com" }, "frigate", DOMAIN, noSecret))).toEqual({
+    expect(pick(WidgetService.resolve({ link: "https://cams.example.com" }, "frigate", DOMAIN, noSecret))).toEqual({
       api: "https://cams.example.com",
       link: "https://cams.example.com",
     });
@@ -34,7 +34,12 @@ describe("widgetService", () => {
   it("keeps the two apart when both are declared", () => {
     expect(
       pick(
-        widgetService({ url: "http://frigate:5000", link: "https://cams.example.com" }, "frigate", DOMAIN, noSecret),
+        WidgetService.resolve(
+          { url: "http://frigate:5000", link: "https://cams.example.com" },
+          "frigate",
+          DOMAIN,
+          noSecret,
+        ),
       ),
     ).toEqual({
       api: "http://frigate:5000",
@@ -44,7 +49,7 @@ describe("widgetService", () => {
 
   it("asks for the container's key, and only when the widget wants it", async () => {
     const secret = vi.fn(() => Promise.resolve("s3cret"));
-    const { apiKey } = widgetService({}, "arcane", DOMAIN, secret);
+    const { apiKey } = WidgetService.resolve({}, "arcane", DOMAIN, secret);
 
     expect(secret).not.toHaveBeenCalled();
     await expect(apiKey()).resolves.toBe("s3cret");
@@ -53,13 +58,13 @@ describe("widgetService", () => {
   });
 
   it("reports an unset key as no key, which is a service that takes none", async () => {
-    const { apiKey } = widgetService({}, "frigate", DOMAIN, noSecret);
+    const { apiKey } = WidgetService.resolve({}, "frigate", DOMAIN, noSecret);
 
     await expect(apiKey()).resolves.toBeUndefined();
   });
 
   it("names the link after the container, not the app", () => {
-    expect(widgetService({}, "frigate-nvr", DOMAIN, noSecret).link).toBe("https://frigate-nvr.test.local");
+    expect(WidgetService.resolve({}, "frigate-nvr", DOMAIN, noSecret).link).toBe("https://frigate-nvr.test.local");
   });
 });
 
