@@ -14,7 +14,7 @@ import {
 } from "#app/components/ui/dropdown-menu.tsx";
 
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "#app/components/ui/field.tsx";
-import { COLOR_MODES, isColorMode, isThemePalette, THEME_PALETTES } from "#libs/preferences/shared";
+import { Theme } from "#libs/preferences";
 
 type ThemePreferenceFieldProps<T extends string> = {
   id: string;
@@ -67,13 +67,13 @@ export function ThemeSettingsCard() {
   const [mode, setMode] = useAtom(colorModeAtom);
 
   function handlePaletteChange(value: unknown) {
-    if (typeof value !== "string" || !isThemePalette(value)) return;
+    if (typeof value !== "string" || !Theme.isPalette(value)) return;
 
     setPalette(value);
   }
 
   function handleModeChange(value: unknown) {
-    if (typeof value !== "string" || !isColorMode(value)) return;
+    if (typeof value !== "string" || !Theme.isColorMode(value)) return;
 
     setMode(value);
   }
@@ -91,7 +91,7 @@ export function ThemeSettingsCard() {
             label="Palette"
             description="Choisissez l’identité visuelle utilisée sur le site."
             value={palette}
-            options={THEME_PALETTES}
+            options={Theme.Palettes}
             onValueChange={handlePaletteChange}
           />
           <ThemePreferenceField
@@ -99,7 +99,7 @@ export function ThemeSettingsCard() {
             label="Mode"
             description="Utilisez un affichage clair, sombre ou celui de votre système."
             value={mode}
-            options={COLOR_MODES}
+            options={Theme.ColorModes}
             onValueChange={handleModeChange}
           />
         </FieldGroup>

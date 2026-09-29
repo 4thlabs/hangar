@@ -7,7 +7,7 @@ import { colorModeAtom, themePaletteAtom } from "#app/atoms/theme.ts";
 import { searchCodecs } from "#app/search-codecs.ts";
 import { ThemeEffects } from "#app/components/theme/theme-effects.tsx";
 import { Toaster } from "#app/components/ui/toast.tsx";
-import type { ColorMode, ThemePalette } from "../../libs/preferences/shared/themes.ts";
+import type { ColorMode, ThemePalette } from "#libs/preferences";
 
 type AppProvidersProps = {
   children: ReactNode;

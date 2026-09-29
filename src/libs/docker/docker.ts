@@ -11,7 +11,7 @@ import {
   type ImageUpdateStatus,
 } from "./compose.ts";
 import { logger } from "#libs/logs";
-import { join, Snapshots, type Snapshot } from "#libs/cache";
+import { Cache, type Snapshot } from "#libs/cache";
 import type { ContainerStatsSample } from "./stats.ts";
 
 /** Raw stats samples keyed by full container id. */
@@ -49,23 +49,6 @@ export interface InstalledApps {
   installedProjectIds(): Set<string>;
 }
 
-/** Pinned to a digest, or named by id: the reference already denotes one exact image. */
-const pinned = (image: string) => image.includes("@sha256:") || image.startsWith("sha256:");
-
-/**
- * Pause between two registry calls. The daemon asks the registry once per call, and Docker Hub
- * and ghcr.io both rate-limit a burst from one IP.
- * ponytail: a single gap shared by every registry, not a bucket per registry. Split them if a
- * host that mixes Hub and ghcr makes the check noticeably slow.
- */
-const REGISTRY_GAP_MS = 100;
-
-/** What {@link Docker.remoteDigest} returns once the registry says "too many requests". */
-const RATE_LIMITED = Symbol("rate-limited");
-
-const rateLimited = (error: unknown) =>
-  (error as { statusCode?: number })?.statusCode === 429 || /toomanyrequests|429/i.test(String(error));
-
 /**
  * The Docker Engine API, scoped to the apps Hangar installed. Talks to the socket directly
  * rather than shelling out: an inspect costs ~5ms instead of a process spawn, and a stats sample
@@ -79,7 +62,18 @@ const rateLimited = (error: unknown) =>
  */
 export class Docker {
   /** A full or short container id, as the Engine API spells them. */
-  private static readonly CONTAINER_ID = /^[a-f0-9]{12,64}$/i;
+  private static readonly ContainerId = /^[a-f0-9]{12,64}$/i;
+
+  /**
+   * Pause between two registry calls. The daemon asks the registry once per call, and Docker Hub
+   * and ghcr.io both rate-limit a burst from one IP.
+   * ponytail: a single gap shared by every registry, not a bucket per registry. Split them if a
+   * host that mixes Hub and ghcr makes the check noticeably slow.
+   */
+  private static readonly RegistryGapMs = 100;
+
+  /** What {@link Docker.remoteDigest} returns once the registry says "too many requests". */
+  private static readonly RateLimited = Symbol("rate-limited");
 
   /** The Engine API client. */
   private readonly docker: Dockerode;
@@ -88,23 +82,23 @@ export class Docker {
   private readonly apps: InstalledApps;
 
   /** Default {@link ttl}: long enough to cover one page's renders, short enough to feel live. */
-  private static readonly TTL = 5_000;
+  private static readonly Ttl = 5_000;
 
   /**
    * How long past its TTL a sweep is still handed out while it reloads behind the caller. Comfortably
    * longer than the warm loop's tick, so a page render still finds a snapshot when a tick runs late
    * or fails — the moment it does not, `/apps` goes back to waiting on the daemon.
    */
-  private static readonly GRACE = 120_000;
+  private static readonly Grace = 120_000;
 
   /** `df` is the slowest call the daemon has, and these counts move slowly. */
-  private static readonly OVERVIEW_TTL = 300_000;
+  private static readonly OverviewTtl = 300_000;
 
   /** Longer grace than the sweep: nothing here changes fast enough to be worth blocking a paint. */
-  private static readonly OVERVIEW_GRACE = 3_600_000;
+  private static readonly OverviewGrace = 3_600_000;
 
   /** The daemon reads this client serves from a snapshot. */
-  private readonly snapshots = new Snapshots();
+  private readonly cache = new Cache();
 
   /**
    * One sweep of every Compose-labeled container, in both API views. One read for everyone: the
@@ -132,11 +126,11 @@ export class Docker {
    * @param apps The installed-app lookup, satisfied by `hangar.store`
    * @param ttl How long a container sweep is reused; injected so a test can drive it
    */
-  constructor(docker: Dockerode, apps: InstalledApps, ttl = Docker.TTL) {
+  constructor(docker: Dockerode, apps: InstalledApps, ttl = Docker.Ttl) {
     this.docker = docker;
     this.apps = apps;
-    this.containers = this.snapshots.define("containers", ttl, Docker.GRACE, this.sweep);
-    this.projects = join(this.containers, sources => ({
+    this.containers = this.cache.define("containers", ttl, Docker.Grace, this.sweep);
+    this.projects = Cache.join(this.containers, sources => ({
       projects: new ComposeProjects(sources).summaries(this.apps.installedProjectIds()),
     }));
   }
@@ -152,7 +146,7 @@ export class Docker {
   private readonly sweep = async (): Promise<ComposeContainerSource[]> => {
     const listed = await this.docker.listContainers({
       all: true,
-      filters: { label: [ComposeProjects.LABEL.project] },
+      filters: { label: [ComposeProjects.Label.project] },
     });
     const inspected = await Promise.allSettled(
       listed.map(async info => ({ info, detail: await this.docker.getContainer(info.Id).inspect() })),
@@ -171,7 +165,7 @@ export class Docker {
    * the dashboard, and wiring the two caches together would couple the libraries over a badge.
    */
   invalidate() {
-    this.snapshots.clear();
+    this.cache.clear();
   }
 
   /**
@@ -184,14 +178,14 @@ export class Docker {
    * reads as `unknown` rather than throwing, so one unreachable registry does not cost the report
    * — and, more importantly, never renders as a false "update available".
    */
-  async imageUpdates(gap = REGISTRY_GAP_MS): Promise<ImageUpdate[]> {
+  async imageUpdates(gap = Docker.RegistryGapMs): Promise<ImageUpdate[]> {
     const installed = this.apps.installedProjectIds();
     const pairs = new Map<string, { project: string; image: string; imageId: string }>();
 
     // Keyed by the running image too, not only the reference: a pull moves the tag while the
     // containers keep the image they were created with, so two of them on one tag can differ.
     for (const { info } of await this.containers.read()) {
-      const project = info.Labels[ComposeProjects.LABEL.project] ?? "";
+      const project = info.Labels[ComposeProjects.Label.project] ?? "";
       const pair = { project, image: info.Image, imageId: info.ImageID };
 
       if (installed.has(project)) pairs.set(`${project}\u0000${info.Image}\u0000${info.ImageID}`, pair);
@@ -216,7 +210,7 @@ export class Docker {
 
       const digest = await this.remoteDigest(image);
 
-      if (digest === RATE_LIMITED) {
+      if (digest === Docker.RateLimited) {
         // In the message, not in metadata: the log format only ever prints `message` and `error`.
         logger.warn(
           `Registry rate limit hit on ${image} (${index} checked), skipping the remaining ${references.length - index - 1}`,
@@ -257,12 +251,12 @@ export class Docker {
 
   /**
    * What the registry serves for this reference, `null` when it could not say, or
-   * {@link RATE_LIMITED} when it refused to answer at all.
+   * {@link Docker.RateLimited} when it refused to answer at all.
    * One call per reference: replicas of a service share an image, and two apps may share one too.
    * @param image The reference as Compose runs it, e.g. `nginx:alpine`
    */
-  private async remoteDigest(image: string): Promise<string | null | typeof RATE_LIMITED> {
-    if (pinned(image)) return null;
+  private async remoteDigest(image: string): Promise<string | null | typeof Docker.RateLimited> {
+    if (Docker.pinned(image)) return null;
 
     try {
       const remote = await this.docker.getImage(image).distribution({ abortSignal: AbortSignal.timeout(10_000) });
@@ -270,7 +264,7 @@ export class Docker {
       return remote.Descriptor.digest;
     } catch (error) {
       // A rate limit stops the whole run, see the caller.
-      if (rateLimited(error)) return RATE_LIMITED;
+      if (Docker.rateLimited(error)) return Docker.RateLimited;
 
       // Unreachable registry, private image with no credentials: both say "don't know".
       logger.warn("Could not check an image for updates", { error, image });
@@ -280,11 +274,25 @@ export class Docker {
   }
 
   /**
+   * Pinned to a digest, or named by id: the reference already denotes one exact image.
+   */
+  private static pinned(image: string) {
+    return image.includes("@sha256:") || image.startsWith("sha256:");
+  }
+
+  /**
+   * Whether the registry refused the call for asking too often.
+   */
+  private static rateLimited(error: unknown) {
+    return (error as { statusCode?: number })?.statusCode === 429 || /toomanyrequests|429/i.test(String(error));
+  }
+
+  /**
    * One container's verdict, from what it runs and what the registry serves. Pure: both lookups
    * already happened, which is what lets them be batched and deduplicated above.
    */
   private static imageStatus(image: string, local: string[] | null, remote: string | null): ImageUpdateStatus {
-    if (pinned(image)) return "current";
+    if (Docker.pinned(image)) return "current";
 
     // Unreadable image, one built here rather than pulled, or a registry that could not answer.
     if (!local?.length || !remote) return "unknown";
@@ -300,7 +308,7 @@ export class Docker {
    * daemon version, `df` the disk usage (which images nothing runs, which volumes nothing mounts).
    */
   overview(): Promise<DockerOverview> {
-    return this.snapshots.read("overview", Docker.OVERVIEW_TTL, Docker.OVERVIEW_GRACE, async () => {
+    return this.cache.read("overview", Docker.OverviewTtl, Docker.OverviewGrace, async () => {
       const [info, usage] = (await Promise.all([this.docker.info(), this.docker.df()])) as [
         SystemInfo,
         SystemDiskUsage,
@@ -340,12 +348,12 @@ export class Docker {
    * Opens a following log stream for one container, after verifying it belongs to `project`
    * (so a caller can't read logs from a container outside the project they're authorized for).
    * @param project The Compose project the container is expected to belong to
-   * @param containerId The container id; must match {@link Docker.CONTAINER_ID} or it's treated as not found
+   * @param containerId The container id; must match {@link Docker.ContainerId} or it's treated as not found
    * @param signal Aborted when the client disconnects; tears the log stream down
    * @throws {DockerNotFoundError} if the id is malformed, missing, or belongs to another project
    */
   async openLogs(project: string, containerId: string, signal: AbortSignal): Promise<Readable> {
-    if (!Docker.CONTAINER_ID.test(containerId)) throw new DockerNotFoundError(`container ${containerId}`);
+    if (!Docker.ContainerId.test(containerId)) throw new DockerNotFoundError(`container ${containerId}`);
 
     // Narrowing to the project, rather than inspecting the id directly, means an id from another
     // project is indistinguishable from one that doesn't exist: no cross-project probing. The
@@ -388,7 +396,7 @@ export class Docker {
    * must not end the stats stream for every open tab.
    */
   async sampleStats(): Promise<Samples> {
-    const running = await this.docker.listContainers({ filters: { label: [ComposeProjects.LABEL.project] } });
+    const running = await this.docker.listContainers({ filters: { label: [ComposeProjects.Label.project] } });
     const samples = await Promise.allSettled(
       running.map(
         async entry =>

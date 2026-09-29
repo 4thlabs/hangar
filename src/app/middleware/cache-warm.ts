@@ -2,8 +2,7 @@ import type { MiddlewareHandler } from "hono/types";
 import { appsSnapshot } from "#app/snapshots.ts";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
-import { resolveWidgets } from "#libs/widgets";
-import { widgetHost } from "#libs/widgets/server";
+import { widgetRegistry } from "#libs/widgets/server";
 
 /** How often the snapshots are topped up. Comfortably inside every TTL + grace window they feed. */
 const INTERVAL = 30_000;
@@ -22,7 +21,7 @@ const globalForWarm = globalThis as unknown as { warmTimer?: NodeJS.Timeout };
  * not this interval, is what decides how often a service is really asked.
  */
 function tick() {
-  const widgets = resolveWidgets(hangar.store.config.widgets(), widgetHost);
+  const widgets = widgetRegistry.resolve(hangar.store.config.widgets());
 
   // Failures are the render's to report, not the loop's: a service that is down leaves nothing
   // cached and the widget falls back to its error card, exactly as it would without warming.

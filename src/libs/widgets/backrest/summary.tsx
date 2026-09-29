@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import type { BackrestRepoSummary } from "./api/client.ts";
-import { createBackrestClient } from "./api/client.ts";
+import { BackrestClient } from "./api/client.ts";
 import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import {
@@ -11,8 +11,8 @@ import {
   WidgetListItem,
   WidgetMetadata,
   WidgetTime,
-  formatBytes,
-  formatCompactTime,
+  Units,
+  RelativeTime,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
@@ -80,7 +80,7 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
             <span>
               {repos.length} {repos.length === 1 ? "repo" : "repos"}
             </span>
-            <span>{formatBytes(protectedBytes)} protected</span>
+            <span>{Units.bytes(protectedBytes)} protected</span>
           </WidgetMetadata>
         }
       />
@@ -115,9 +115,9 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
                     {repo.status ?? "No backup yet"}
                   </span>
                   <span>{repo.successes} ok / 30d</span>
-                  <span>{formatBytes(repo.bytesAdded)} added</span>
-                  <span>{formatBytes(repo.protectedBytes)} protected</span>
-                  {repo.nextBackupAt !== undefined && <span>next {formatCompactTime(repo.nextBackupAt, now)}</span>}
+                  <span>{Units.bytes(repo.bytesAdded)} added</span>
+                  <span>{Units.bytes(repo.protectedBytes)} protected</span>
+                  {repo.nextBackupAt !== undefined && <span>next {RelativeTime.compact(repo.nextBackupAt, now)}</span>}
                 </WidgetMetadata>
               </p>
             </WidgetListItem>
@@ -142,6 +142,7 @@ export const backrestSummary = (service: WidgetService, ttl?: number) =>
     ttl,
     ...chrome,
     errorDescription: "The backup status could not be loaded.",
-    load: async () => ((await (await createBackrestClient(service)).getSummary()).repoSummaries ?? []).map(displayRepo),
+    load: async () =>
+      ((await (await BackrestClient.connect(service)).getSummary()).repoSummaries ?? []).map(displayRepo),
     render: (repos: RepoBackup[]) => <BackrestSummaryCard repos={repos} serviceUrl={service.link} />,
   });

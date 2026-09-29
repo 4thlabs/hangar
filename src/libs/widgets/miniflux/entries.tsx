@@ -1,5 +1,5 @@
 import type { MinifluxEntry } from "./api/client.ts";
-import { createMinifluxClient } from "./api/client.ts";
+import { MinifluxClient } from "./api/client.ts";
 import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import {
@@ -85,7 +85,7 @@ export const minifluxEntries = (service: WidgetService, ttl?: number) =>
     ...chrome,
     errorDescription: "The feed entries could not be loaded.",
     load: async () => {
-      const client = await createMinifluxClient(service);
+      const client = await MinifluxClient.connect(service);
 
       return await Promise.all([client.getEntries(), client.getUnreadCount()]);
     },

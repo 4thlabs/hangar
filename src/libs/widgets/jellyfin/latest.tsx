@@ -1,5 +1,5 @@
 import type { JellyfinCounts, JellyfinItem } from "./api/client.ts";
-import { createJellyfinClient } from "./api/client.ts";
+import { JellyfinClient } from "./api/client.ts";
 import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import { ScrollArea } from "#app/components/ui/scroll-area.tsx";
@@ -9,8 +9,8 @@ import {
   WidgetEmptyState,
   WidgetHeader,
   WidgetMetadata,
-  integerFormatter,
-  widgetImageUrl,
+  Units,
+  WidgetImage,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
@@ -77,10 +77,10 @@ export function JellyfinLatestCard({ counts, items, serviceUrl }: JellyfinLatest
         title={chrome.title}
         description={
           <WidgetMetadata>
-            <span>{integerFormatter.format(counts.MovieCount)} movies</span>
-            <span>{integerFormatter.format(counts.SeriesCount)} shows</span>
-            <span>{integerFormatter.format(counts.EpisodeCount)} episodes</span>
-            <span>{integerFormatter.format(counts.SongCount)} songs</span>
+            <span>{Units.Integer.format(counts.MovieCount)} movies</span>
+            <span>{Units.Integer.format(counts.SeriesCount)} shows</span>
+            <span>{Units.Integer.format(counts.EpisodeCount)} episodes</span>
+            <span>{Units.Integer.format(counts.SongCount)} songs</span>
           </WidgetMetadata>
         }
       />
@@ -103,7 +103,7 @@ export function JellyfinLatestCard({ counts, items, serviceUrl }: JellyfinLatest
                         with no artwork keeps the frame, which is what Jellyfin's own library shows. */}
                     {item.imageId ? (
                       <img
-                        src={widgetImageUrl("jellyfin-latest", item.imageId)}
+                        src={WidgetImage.url("jellyfin-latest", item.imageId)}
                         alt=""
                         loading="lazy"
                         className="aspect-2/3 w-full rounded-sm bg-muted object-cover"
@@ -140,7 +140,7 @@ export const jellyfinLatest = (service: WidgetService, user: string, ttl?: numbe
     ...chrome,
     errorDescription: "The Jellyfin library could not be loaded.",
     load: async () => {
-      const client = await createJellyfinClient(service);
+      const client = await JellyfinClient.connect(service);
       // Independent calls, so they go together; only "latest" has to wait on the user lookup.
       const [counts, users] = await Promise.all([client.getCounts(), client.getUsers()]);
       const account = users.find(candidate => candidate.Name === user);

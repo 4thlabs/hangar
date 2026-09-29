@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import type { BeszelSystem } from "./api/client.ts";
-import { createBeszelClient } from "./api/client.ts";
+import { BeszelClient } from "./api/client.ts";
 import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import {
@@ -10,7 +10,7 @@ import {
   WidgetList,
   WidgetListItem,
   WidgetMetadata,
-  formatCompactTime,
+  RelativeTime,
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
@@ -126,7 +126,7 @@ export function BeszelServerStatsCard({ servers, serviceUrl, now = Date.now() }:
                 <p className="shrink-0 text-xs text-muted-foreground">
                   <WidgetMetadata>
                     {server.up && server.uptime !== undefined && (
-                      <span>{formatCompactTime(now - server.uptime * 1_000, now)} up</span>
+                      <span>{RelativeTime.compact(now - server.uptime * 1_000, now)} up</span>
                     )}
                     {server.temperature !== undefined && (
                       <span className={server.temperature >= 80 ? "text-destructive" : undefined}>
@@ -168,6 +168,6 @@ export const beszelServerStats = (service: WidgetService, ttl?: number) =>
     ttl,
     ...chrome,
     errorDescription: "The server stats could not be loaded.",
-    load: async () => (await (await createBeszelClient(service)).listSystems()).items.map(displaySystem),
+    load: async () => (await (await BeszelClient.connect(service)).listSystems()).items.map(displaySystem),
     render: (servers: ServerStats[]) => <BeszelServerStatsCard servers={servers} serviceUrl={service.link} />,
   });

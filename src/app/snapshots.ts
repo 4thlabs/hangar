@@ -1,8 +1,8 @@
-import { join } from "#libs/cache";
+import { Cache } from "#libs/cache";
 import type { ComposeProjectsSnapshot } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
-import { outdatedSnapshot } from "#libs/jobs";
+import { imageCheckReport } from "#libs/jobs";
 
 /**
  * Decorates the Docker snapshot with what only the store knows: the update badge, the icon and
@@ -38,4 +38,4 @@ function decorate(projects: ComposeProjectsSnapshot, outdated: ReadonlySet<strin
  * and `/apps` quietly went back to painting a spinner. Now there is one object to warm and to
  * render from, so removing a widget cannot slow down an unrelated page.
  */
-export const appsSnapshot = join(docker.projects, outdatedSnapshot, decorate);
+export const appsSnapshot = Cache.join(docker.projects, imageCheckReport.snapshot, decorate);

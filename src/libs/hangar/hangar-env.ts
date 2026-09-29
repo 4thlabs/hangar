@@ -4,35 +4,6 @@ import { copyFile, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { HangarError } from "./hangar-error.ts";
 
-/** Variables compose fills in by itself: they are not the operator's to provide */
-const COMPOSE_VARIABLES = ["PWD", "COMPOSE_PROJECT_NAME"];
-
-/** The files compose interpolates: its own fragments and the `env_file:` targets beside them */
-const INTERPOLATED = /\.(ya?ml|env)$/;
-
-const HEADER = "# Global Environment Variables\n# These variables are available to all projects\n";
-
-/**
- * The prefixes an app owns: `sync-in` gives `SYNCIN_` and `SYNC_IN_`, because the store writes
- * the name both ways.
- *
- * ponytail: derived from the directory name only, so an app whose variables go by another name
- * — home-assistant publishing `HASS_*` — is missed; let apps declare extra prefixes in `x-hangar`
- * if that stops being the exception.
- */
-const prefixes = (app: string) =>
-  [app.replaceAll("-", ""), app.replaceAll("-", "_")].map(name => `${name.toUpperCase()}_`);
-
-/** Renders the variables the way the file has always looked: header, timestamp, sorted pairs. */
-const serialize = (variables: Record<string, string>) => {
-  const body = Object.keys(variables)
-    .sort()
-    .map(key => `${key}=${variables[key]}`)
-    .join("\n");
-
-  return `${HEADER}# Last updated: ${new Date().toISOString()}\n\n${body}\n`;
-};
-
 /**
  * The global environment file every stack is composed with, living at the root of the data
  * directory.
@@ -42,6 +13,14 @@ const serialize = (variables: Record<string, string>) => {
  * is on disk at that instant, and drops only the keys it was explicitly told to drop.
  */
 export class HangarEnv {
+  /** Variables compose fills in by itself: they are not the operator's to provide */
+  private static readonly ComposeVariables = ["PWD", "COMPOSE_PROJECT_NAME"];
+
+  /** The files compose interpolates: its own fragments and the `env_file:` targets beside them */
+  private static readonly Interpolated = /\.(ya?ml|env)$/;
+
+  private static readonly Header = "# Global Environment Variables\n# These variables are available to all projects\n";
+
   /** The env file */
   private readonly _file: string;
 
@@ -127,7 +106,7 @@ export class HangarEnv {
    * @param suffix The variable's name after the app prefix, e.g. `API_KEY`
    */
   async appVar(app: string, suffix: string) {
-    for (const prefix of prefixes(app)) {
+    for (const prefix of HangarEnv.prefixes(app)) {
       const value = await this.get(`${prefix}${suffix}`);
 
       if (value) return value;
@@ -151,7 +130,7 @@ export class HangarEnv {
     for (const key of remove) delete next[key];
 
     await this.backup();
-    await writeFile(this._file, serialize(next), "utf8");
+    await writeFile(this._file, HangarEnv.serialize(next), "utf8");
     this._cached = undefined;
 
     return next;
@@ -180,7 +159,7 @@ export class HangarEnv {
   async ensure(app?: string) {
     const current = await this.read();
     // Naming the apps is a directory listing; reading their files is what the scope saves.
-    const allowed = ["APP_", ...(await this.apps()).flatMap(prefixes)];
+    const allowed = ["APP_", ...(await this.apps()).flatMap(name => HangarEnv.prefixes(name))];
 
     const missing = (await this.referenced(await this.files(app)))
       .filter(key => !(key in current) && allowed.some(prefix => key.startsWith(prefix)))
@@ -246,7 +225,7 @@ export class HangarEnv {
   private async referenced(paths: string[]) {
     const keys = await Promise.all(
       paths
-        .filter(file => INTERPOLATED.test(file))
+        .filter(file => HangarEnv.Interpolated.test(file))
         .map(async file => {
           const source = await readFile(file, "utf8").catch(() => "");
 
@@ -256,7 +235,7 @@ export class HangarEnv {
         }),
     );
 
-    return [...new Set(keys.flat())].filter(key => !COMPOSE_VARIABLES.includes(key)).sort();
+    return [...new Set(keys.flat())].filter(key => !HangarEnv.ComposeVariables.includes(key)).sort();
   }
 
   /**
@@ -278,5 +257,27 @@ export class HangarEnv {
 
       throw new HangarError(`Cannot back up the global env at ${this._file}: ${error.code ?? error.message}`);
     });
+  }
+
+  /**
+   * The prefixes an app owns: `sync-in` gives `SYNCIN_` and `SYNC_IN_`, because the store writes
+   * the name both ways.
+   *
+   * ponytail: derived from the directory name only, so an app whose variables go by another name
+   * — home-assistant publishing `HASS_*` — is missed; let apps declare extra prefixes in `x-hangar`
+   * if that stops being the exception.
+   */
+  private static prefixes(app: string) {
+    return [app.replaceAll("-", ""), app.replaceAll("-", "_")].map(name => `${name.toUpperCase()}_`);
+  }
+
+  /** Renders the variables the way the file has always looked: header, timestamp, sorted pairs. */
+  private static serialize(variables: Record<string, string>) {
+    const body = Object.keys(variables)
+      .sort()
+      .map(key => `${key}=${variables[key]}`)
+      .join("\n");
+
+    return `${HangarEnv.Header}# Last updated: ${new Date().toISOString()}\n\n${body}\n`;
   }
 }

@@ -72,14 +72,18 @@ export class ContainerStats {
     return Math.max(usage - cache, 0);
   }
 
-  /** Sums one direction across every network interface the container is attached to. */
+  /**
+   * Sums one direction across every network interface the container is attached to.
+   */
   private network(direction: "rx_bytes" | "tx_bytes"): number | null {
     const interfaces = Object.values(this.sample.networks ?? {});
 
     return interfaces.length > 0 ? interfaces.reduce((total, entry) => total + entry[direction], 0) : null;
   }
 
-  /** Sums one block I/O operation across every backing device. */
+  /**
+   * Sums one block I/O operation across every backing device.
+   */
   private blockIo(operation: "read" | "write"): number | null {
     const entries = this.sample.blkio_stats?.io_service_bytes_recursive;
     if (!entries) return null;
@@ -89,7 +93,9 @@ export class ContainerStats {
       .reduce((total, entry) => total + entry.value, 0);
   }
 
-  /** The UI-facing view of this sample. */
+  /**
+   * The UI-facing view of this sample.
+   */
   metrics(): ContainerMetrics {
     const usage = this.memoryUsage();
     const limit = this.sample.memory_stats.limit ?? null;

@@ -1,10 +1,10 @@
 import type { HandlerInterceptor } from "waku/router/server";
 import { unstable_getHeaders as getHeaders } from "waku/router/server";
-import { parseUserPreferences, runWithUserPreferences } from "#libs/preferences";
+import { UserPreferencesStore, userPreferences } from "#libs/preferences/server";
 
 const userPreferencesInterceptor: HandlerInterceptor = next => {
-  const preferences = parseUserPreferences(getHeaders().cookie ?? "");
-  return runWithUserPreferences(preferences, next);
+  const preferences = UserPreferencesStore.parse(getHeaders().cookie ?? "");
+  return userPreferences.run(preferences, next);
 };
 
 export default userPreferencesInterceptor;

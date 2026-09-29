@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Snapshots } from "#libs/cache";
+import { Cache } from "#libs/cache";
 import { logger } from "#libs/logs";
 import { WidgetError } from "./widget-error.tsx";
 import { WidgetSkeleton } from "./widget-skeleton.tsx";
@@ -39,7 +39,7 @@ export type Widget = {
 };
 
 /**
- * Every widget's data, cached in one place. Shared rather than per widget, because `resolveWidgets`
+ * Every widget's data, cached in one place. Shared rather than per widget, because `WidgetRegistry`
  * rebuilds most widget objects on every render — a cache closed over by one `defineWidget` call
  * would be thrown away with it and cache nothing. The per-call handle below is only the bound
  * key, TTL, grace and loader; the entries it reads live here, so a rebuilt widget finds them.
@@ -50,10 +50,10 @@ export type Widget = {
  * ponytail: a widget id is not unique — `hangar.yml` accepts two `github-releases` blocks with
  * different repositories, and both would read one entry, under whichever `ttl:` bound it first. Give `WidgetDefinition` an optional
  * `cacheKey` defaulting to `id`, set to `${id}:${service.api}` by the service factories, when that
- * happens. Do not uniquify `widget.id` in `resolveWidgets` instead: the clock and Docker widgets
+ * happens. Do not uniquify `widget.id` in `WidgetRegistry` instead: the clock and Docker widgets
  * are shared module singletons, so assigning to `.id` would corrupt them for every later render.
  */
-const snapshots = new Snapshots();
+const cache = new Cache();
 
 /**
  * How long a widget's data is fresh, when its `hangar.yml` entry does not say. The dashboard has no
@@ -65,7 +65,7 @@ const TTL = 60_000;
 const GRACE = 900_000;
 
 /** Drops every cached widget load. Tests only, so one test's data cannot leak into the next. */
-export const clearWidgetCache = () => snapshots.clear();
+export const clearWidgetCache = () => cache.clear();
 
 /**
  * Wraps a data-backed widget: one try/catch, one log, one error fallback.
@@ -75,7 +75,7 @@ export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
   const { id, title, icon, className, errorDescription, load, render, ttl } = definition;
 
   const fallback = () => <WidgetError className={className} icon={icon} name={title} description={errorDescription} />;
-  const snapshot = snapshots.define(id, ttl ?? TTL, GRACE, load);
+  const snapshot = cache.define(id, ttl ?? TTL, GRACE, load);
 
   return {
     id,

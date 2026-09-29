@@ -1,7 +1,9 @@
 import "server-only";
 import { env } from "#libs/env";
 import { hangar } from "#libs/hangar/server";
-import { serviceOf, type WidgetConfig, type WidgetHost, type WidgetService } from "../config/config.ts";
+import { WidgetService, type WidgetHost } from "../config/config.ts";
+import { WidgetRegistry } from "../registry.ts";
+import { WidgetImages } from "./images.ts";
 
 /**
  * How this Hangar addresses the services its widgets read.
@@ -17,15 +19,10 @@ export const widgetHost: WidgetHost = {
   secret: container => hangar.store.env.appVar(container, "API_KEY"),
 };
 
-/**
- * The service a placed widget talks to, for code that is not the dashboard.
- *
- * `undefined` when the store does not place that widget, which is the honest answer for a route
- * asked to proxy for something the operator never configured.
- * @param type The widget type, as `hangar.yml` declares it
- */
-export function serviceFor(type: WidgetConfig["type"]): WidgetService | undefined {
-  const config = hangar.store.config.widgets().find(widget => widget.type === type);
+/** The dashboard's widgets, resolved against {@link widgetHost}. */
+export const widgetRegistry = new WidgetRegistry(widgetHost);
 
-  return config && serviceOf(config, widgetHost);
-}
+/** The image relay, for the widgets the store places. */
+export const widgetImages = new WidgetImages(type =>
+  WidgetService.placed(hangar.store.config.widgets(), type, widgetHost),
+);

@@ -3,15 +3,6 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { notification, user, type Notification } from "#libs/db";
 import { logger } from "#libs/logs";
 
-/**
- * How many notifications a user keeps. Older ones are dropped on the next insert.
- * ponytail: a fixed count rather than an age-based sweep, swap it if a user ever wants history.
- */
-const RETAINED = 50;
-
-/** How many are handed to the navbar on a page render, and how many one stream frame carries. */
-const PAGE = 30;
-
 export type NotificationLevel = Notification["level"];
 
 export type NotificationInput = {
@@ -48,14 +39,6 @@ export type NotificationPayload = {
 };
 
 /**
- * Insertion order, as the tie-break `created_at` cannot give: a batch files several notifications
- * inside the same millisecond, and without this the newest-first order — and with it which rows
- * {@link Notifications.purge} drops — would be up to SQLite.
- */
-const NEWEST_FIRST = [desc(notification.createdAt), sql`rowid desc`];
-const OLDEST_FIRST = [notification.createdAt, sql`rowid asc`];
-
-/**
  * The notification centre's store: one row per recipient, so a system-wide event fans out at
  * insertion time and `seen`/`read` need no join table.
  *
@@ -67,9 +50,31 @@ const OLDEST_FIRST = [notification.createdAt, sql`rowid asc`];
  * one, which lets a test hand over a bare in-memory database.
  */
 export class Notifications<TRelations extends AnyRelations = AnyRelations> {
+  /**
+   * How many notifications a user keeps. Older ones are dropped on the next insert.
+   * ponytail: a fixed count rather than an age-based sweep, swap it if a user ever wants history.
+   */
+  private static readonly Retained = 50;
+
+  /** How many are handed to the navbar on a page render, and how many one stream frame carries. */
+  private static readonly Page = 30;
+
+  /**
+   * Insertion order, as the tie-break `created_at` cannot give: a batch files several notifications
+   * inside the same millisecond, and without this the newest-first order — and with it which rows
+   * {@link Notifications.purge} drops — would be up to SQLite.
+   */
+  private static readonly NewestFirst = [desc(notification.createdAt), sql`rowid desc`];
+
+  /** Oldest first, with the same insertion-order tie-break as {@link Notifications.NewestFirst}. */
+  private static readonly OldestFirst = [notification.createdAt, sql`rowid asc`];
+
+  /** The database handle to read and write through. */
   private readonly db: BetterSQLite3Database<TRelations>;
 
-  /** @param db The database handle to read and write through */
+  /**
+   * @param db The database handle to read and write through
+   */
   constructor(db: BetterSQLite3Database<TRelations>) {
     this.db = db;
   }
@@ -119,13 +124,13 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
    * A user's newest notifications, newest first.
    * @param limit How many to return at most
    */
-  async list(userId: string, limit = PAGE): Promise<NotificationPayload[]> {
+  async list(userId: string, limit = Notifications.Page): Promise<NotificationPayload[]> {
     try {
       const rows = await this.db
         .select()
         .from(notification)
         .where(eq(notification.userId, userId))
-        .orderBy(...NEWEST_FIRST)
+        .orderBy(...Notifications.NewestFirst)
         .limit(limit);
 
       return rows.map(Notifications.toPayload);
@@ -148,8 +153,8 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
       .select()
       .from(notification)
       .where(and(eq(notification.userId, userId), gte(notification.createdAt, cursor)))
-      .orderBy(...OLDEST_FIRST)
-      .limit(PAGE);
+      .orderBy(...Notifications.OldestFirst)
+      .limit(Notifications.Page);
 
     return rows.map(Notifications.toPayload);
   }
@@ -192,7 +197,9 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
     }
   }
 
-  /** Who a notification goes to: the one named, or everyone when none was. */
+  /**
+   * Who a notification goes to: the one named, or everyone when none was.
+   */
   private async recipients(userId: string | undefined): Promise<string[]> {
     if (userId) return [userId];
 
@@ -201,7 +208,9 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
     return accounts.map(account => account.id);
   }
 
-  /** Drops everything past the {@link RETAINED} newest for one user. */
+  /**
+   * Drops everything past the {@link Notifications.Retained} newest for one user.
+   */
   private async purge(userId: string): Promise<void> {
     await this.db.delete(notification).where(
       and(
@@ -212,14 +221,16 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
             .select({ id: notification.id })
             .from(notification)
             .where(eq(notification.userId, userId))
-            .orderBy(...NEWEST_FIRST)
-            .limit(RETAINED),
+            .orderBy(...Notifications.NewestFirst)
+            .limit(Notifications.Retained),
         ),
       ),
     );
   }
 
-  /** A row as the browser reads it. */
+  /**
+   * A row as the browser reads it.
+   */
   private static toPayload(row: Notification): NotificationPayload {
     return {
       id: row.id,

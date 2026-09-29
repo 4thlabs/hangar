@@ -1,5 +1,5 @@
 import type { WidgetService } from "../../config/config.ts";
-import { serviceClient } from "../../shared/service-client.ts";
+import { ServiceClient } from "../../shared/service-client.ts";
 
 /**
  * An `int64`, as Connect encodes it: a JSON string, never a number.
@@ -47,11 +47,18 @@ export interface BackrestSummary {
  * It takes no key: Backrest has no API-key concept, and on the container network the endpoint is
  * unauthenticated. `serviceClient` sends no header when there is no key, so nothing is needed here.
  */
-export async function createBackrestClient(service: WidgetService) {
-  const client = await serviceClient(service, { prefix: "" });
+export class BackrestClient extends ServiceClient {
+  /**
+   * Opens a client for the Backrest server `service` points at.
+   */
+  static async connect(service: WidgetService) {
+    return new BackrestClient(await ServiceClient.client(service, { prefix: "" }));
+  }
 
-  return {
-    /** Gets the per-repository and per-plan backup health the Backrest dashboard itself shows. */
-    getSummary: () => client.post<BackrestSummary>("v1.Backrest/GetSummaryDashboard", { json: {} }).json(),
-  };
+  /**
+   * Gets the per-repository and per-plan backup health the Backrest dashboard itself shows.
+   */
+  getSummary() {
+    return this.http.post<BackrestSummary>("v1.Backrest/GetSummaryDashboard", { json: {} }).json();
+  }
 }

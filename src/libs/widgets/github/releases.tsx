@@ -1,5 +1,5 @@
 import type { GithubRelease } from "./api/client.ts";
-import { getLatestReleases } from "./api/client.ts";
+import { githubClient } from "./api/client.ts";
 import { IconSelfh } from "#app/components/common/icon-selfh.tsx";
 import { WidgetCard, WidgetContent, WidgetHeader, WidgetList, WidgetListItem, WidgetTime } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
@@ -48,6 +48,6 @@ export const githubReleases = (repositories: readonly string[], ttl?: number) =>
     ttl,
     ...chrome,
     errorDescription: "The GitHub releases could not be loaded.",
-    load: () => getLatestReleases(repositories),
+    load: () => githubClient.getLatestReleases(repositories),
     render: (releases: GithubRelease[]) => <GithubReleasesCard releases={releases} />,
   });

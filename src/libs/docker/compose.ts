@@ -87,6 +87,9 @@ export type ComposeContainerSource = { info: Docker.ContainerInfo; detail: Docke
  * these as unexpected defects.
  */
 export class DockerNotFoundError extends HangarError {
+  /**
+   * @param subject What was looked for, e.g. `container abc123`
+   */
   constructor(subject: string) {
     super(`Docker: ${subject} not found`);
     this.name = "DockerNotFoundError";
@@ -106,7 +109,7 @@ type Aggregate = { services: Set<string>; containerIds: string[]; runningCount: 
  */
 export class ComposeProjects {
   /** Labels Docker Compose stamps on every container it creates; used to discover and group projects. */
-  static readonly LABEL = {
+  static readonly Label = {
     project: "com.docker.compose.project",
     service: "com.docker.compose.service",
     containerNumber: "com.docker.compose.container-number",
@@ -132,18 +135,23 @@ export class ComposeProjects {
     const labels = info.Labels;
 
     return (
-      Boolean(labels[ComposeProjects.LABEL.project]) &&
-      Boolean(labels[ComposeProjects.LABEL.service]) &&
-      labels[ComposeProjects.LABEL.oneoff]?.toLowerCase() !== "true" &&
-      (!project || labels[ComposeProjects.LABEL.project] === project)
+      Boolean(labels[ComposeProjects.Label.project]) &&
+      Boolean(labels[ComposeProjects.Label.service]) &&
+      labels[ComposeProjects.Label.oneoff]?.toLowerCase() !== "true" &&
+      (!project || labels[ComposeProjects.Label.project] === project)
     );
   }
 
+  /**
+   * Orders names the same way on every host, whatever its locale.
+   */
   private static compare(left: string, right: string) {
     return left.localeCompare(right, "en");
   }
 
-  /** Reads Docker's structured healthcheck state; `none` when the container declares no healthcheck. */
+  /**
+   * Reads Docker's structured healthcheck state; `none` when the container declares no healthcheck.
+   */
   private static health({ detail }: ComposeContainerSource): ContainerHealth {
     const health = detail.State.Health?.Status;
 
@@ -161,18 +169,24 @@ export class ComposeProjects {
     return "partial";
   }
 
-  /** Parses the Compose replica index label, or `null` when absent/unparseable. */
+  /**
+   * Parses the Compose replica index label, or `null` when absent/unparseable.
+   */
   private static replica(labels: Record<string, string>) {
-    const replica = Number.parseInt(labels[ComposeProjects.LABEL.containerNumber] ?? "", 10);
+    const replica = Number.parseInt(labels[ComposeProjects.Label.containerNumber] ?? "", 10);
     return Number.isFinite(replica) ? replica : null;
   }
 
-  /** Keeps only ports actually published to the host, sorted by host port. */
+  /**
+   * Keeps only ports actually published to the host, sorted by host port.
+   */
   private static publishedPorts(ports: Docker.Port[]) {
     return ports.filter(port => port.PublicPort).sort((left, right) => left.PublicPort - right.PublicPort);
   }
 
-  /** Builds the UI-facing container shape. Resource usage is not here: it arrives over the stats stream. */
+  /**
+   * Builds the UI-facing container shape. Resource usage is not here: it arrives over the stats stream.
+   */
   private static container(source: ComposeContainerSource): ComposeContainer {
     const { info, detail } = source;
     const labels = info.Labels;
@@ -180,7 +194,7 @@ export class ComposeProjects {
     return {
       id: info.Id,
       name: (info.Names[0] ?? "").replace(/^\//, ""),
-      service: labels[ComposeProjects.LABEL.service] ?? "unknown",
+      service: labels[ComposeProjects.Label.service] ?? "unknown",
       replica: ComposeProjects.replica(labels),
       image: info.Image,
       state: info.State,
@@ -190,7 +204,9 @@ export class ComposeProjects {
     };
   }
 
-  /** The container this id is a prefix of, if it is one of these. */
+  /**
+   * The container this id is a prefix of, if it is one of these.
+   */
   find(containerId: string): ComposeContainerSource | undefined {
     return this.containers.find(candidate => candidate.info.Id.startsWith(containerId));
   }
@@ -208,10 +224,10 @@ export class ComposeProjects {
 
     for (const container of this.containers) {
       const labels = container.info.Labels;
-      const aggregate = projects.get(labels[ComposeProjects.LABEL.project] ?? "");
+      const aggregate = projects.get(labels[ComposeProjects.Label.project] ?? "");
       if (!aggregate) continue;
 
-      aggregate.services.add(labels[ComposeProjects.LABEL.service] ?? "");
+      aggregate.services.add(labels[ComposeProjects.Label.service] ?? "");
       aggregate.containerIds.push(container.info.Id);
       aggregate.runningCount += container.info.State === "running" ? 1 : 0;
       aggregate.unhealthyCount += ComposeProjects.health(container) === "unhealthy" ? 1 : 0;
@@ -231,7 +247,9 @@ export class ComposeProjects {
       .sort((left, right) => ComposeProjects.compare(left.name, right.name));
   }
 
-  /** Groups the containers by service name, replicas in index order, services sorted by name. */
+  /**
+   * Groups the containers by service name, replicas in index order, services sorted by name.
+   */
   services(): ComposeService[] {
     const grouped = Map.groupBy(this.containers.map(ComposeProjects.container), container => container.service);
 
