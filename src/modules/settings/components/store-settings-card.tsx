@@ -1,0 +1,60 @@
+"use client";
+
+import { useState } from "react";
+import type { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
+import { DownloadIcon, RefreshCwIcon } from "lucide-react";
+import { PendingButton } from "#modules/common/components/pending-button.tsx";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
+import { Input } from "#modules/common/ui/input.tsx";
+import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
+
+type StoreSettingsCardProps = {
+  storeUrl: string;
+  initialInstalled: boolean;
+  manageStore: () => Promise<StoreActionResult>;
+};
+
+export function StoreSettingsCard({ storeUrl, initialInstalled, manageStore }: StoreSettingsCardProps) {
+  const [installed, setInstalled] = useState(initialInstalled);
+  const { run, isPending } = useServerAction();
+
+  const handleManageStore = () =>
+    // The synchronisation itself runs detached server-side: this toast only says it started,
+    // and its outcome arrives later as a notification.
+    run(manageStore, { success: "Synchronisation lancée", error: "Échec du lancement" }, result => {
+      // Only a returned result carries the new state; a transport failure leaves it as it was.
+      if (result) setInstalled(result.installed);
+    });
+
+  return (
+    <Card className="w-full max-w-2xl">
+      <CardHeader>
+        <CardTitle>STORE</CardTitle>
+        <CardDescription>Consultez le dépôt configuré et synchronisez sa copie locale.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="store-url">URL du store</FieldLabel>
+            <Input id="store-url" value={storeUrl} readOnly aria-describedby="store-status" />
+            <FieldDescription id="store-status">
+              {installed ? "Le store est installé localement." : "Le store n’est pas encore installé."}
+            </FieldDescription>
+          </Field>
+        </FieldGroup>
+      </CardContent>
+      <CardFooter>
+        <PendingButton
+          type="button"
+          pending={isPending}
+          pendingLabel="Synchronisation…"
+          icon={installed ? <RefreshCwIcon data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />}
+          onClick={handleManageStore}
+        >
+          {installed ? "Mettre à jour" : "Installer"}
+        </PendingButton>
+      </CardFooter>
+    </Card>
+  );
+}

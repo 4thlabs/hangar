@@ -1,7 +1,7 @@
 import type { PageProps } from "waku/router";
 import { unstable_notFound } from "waku/router/server";
-import { saveApp } from "#app/actions/store/manage-app.ts";
-import { AppEditor } from "#app/components/store/app-editor.tsx";
+import { saveApp } from "#modules/store/actions/manage-app.ts";
+import { AppEditor } from "#modules/store/components/app-editor.tsx";
 import { hangar } from "#libs/hangar/server";
 
 export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">) {

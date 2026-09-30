@@ -2,7 +2,7 @@
  * A moment as the distance from now: "2 minutes ago", or `2m` where a row has no room.
  *
  * Its own lib rather than the widgets one: the dashboard dates its items with it and so does the
- * notification centre, and the navbar has no business reaching into `#libs/widgets`.
+ * notification centre, and the navbar has no business reaching into `#modules/widgets`.
  */
 export class RelativeTime {
   /** The unit ladder, largest threshold last: a moment is written in the biggest unit that fits. */

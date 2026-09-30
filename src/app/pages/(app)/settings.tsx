@@ -1,12 +1,12 @@
-import { cancelJob, runJob } from "#app/actions/jobs/manage-job.ts";
-import { saveConfig } from "#app/actions/store/manage-config.ts";
-import { saveEnv } from "#app/actions/store/manage-env.ts";
-import { manageStore } from "#app/actions/store/manage-store.ts";
-import { ConfigSettingsCard } from "#app/components/settings/config-settings-card.tsx";
-import { EnvSettingsCard } from "#app/components/settings/env-settings-card.tsx";
-import { JobsSettingsCard } from "#app/components/settings/jobs-settings-card.tsx";
-import { StoreSettingsCard } from "#app/components/settings/store-settings-card.tsx";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "#app/components/ui/tabs.tsx";
+import { cancelJob, runJob } from "#modules/settings/actions/manage-job.ts";
+import { saveConfig } from "#modules/settings/actions/manage-config.ts";
+import { saveEnv } from "#modules/settings/actions/manage-env.ts";
+import { manageStore } from "#modules/settings/actions/manage-store.ts";
+import { ConfigSettingsCard } from "#modules/settings/components/config-settings-card.tsx";
+import { EnvSettingsCard } from "#modules/settings/components/env-settings-card.tsx";
+import { JobsSettingsCard } from "#modules/settings/components/jobs-settings-card.tsx";
+import { StoreSettingsCard } from "#modules/settings/components/store-settings-card.tsx";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#modules/common/ui/tabs.tsx";
 import { hangar } from "#libs/hangar/server";
 import { Sidequest } from "sidequest";
 

@@ -1,10 +1,10 @@
 import type { PageProps } from "waku/router";
-import { AppsOverview } from "#app/components/apps/apps-overview.tsx";
-import { PageSpinner } from "#app/components/common/page-spinner.tsx";
-import { Warm } from "#app/components/common/warm.tsx";
-import type { AppsSearch } from "#app/search-codecs.ts";
-import { appsSearchCodec } from "#app/search-codecs.ts";
-import { appsSnapshot } from "#app/snapshots.ts";
+import { AppsOverview } from "#modules/apps/components/apps-overview.tsx";
+import { PageSpinner } from "#modules/common/components/page-spinner.tsx";
+import { Warm } from "#modules/common/components/warm.tsx";
+import type { AppsSearch } from "#modules/apps/search-codec.ts";
+import { appsSearchCodec } from "#modules/apps/search-codec.ts";
+import { appsSnapshot } from "#modules/apps/snapshots.ts";
 import type { ComposeProjectsSnapshot } from "#libs/docker";
 import { logger } from "#libs/logs";
 

@@ -1,7 +1,7 @@
-import { Warm } from "#app/components/common/warm.tsx";
-import { type DashboardColumn } from "#libs/widgets";
+import { Warm } from "#modules/common/components/warm.tsx";
+import { type DashboardColumn } from "#modules/widgets/config/config.ts";
 import { hangar } from "#libs/hangar/server";
-import { widgetRegistry } from "#libs/widgets/server";
+import { widgetRegistry } from "#modules/widgets/server/server.ts";
 
 const COLUMNS: readonly DashboardColumn[] = [1, 2, 3];
 

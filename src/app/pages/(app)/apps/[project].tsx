@@ -2,10 +2,10 @@ import { Suspense } from "react";
 import { BoxIcon } from "lucide-react";
 import { Link } from "waku";
 import type { PageProps } from "waku/router";
-import { AppDetail } from "#app/components/apps/app-detail.tsx";
-import { PageSpinner } from "#app/components/common/page-spinner.tsx";
-import { Alert, AlertDescription, AlertTitle } from "#app/components/ui/alert.tsx";
-import { Button } from "#app/components/ui/button.tsx";
+import { AppDetail } from "#modules/apps/components/app-detail.tsx";
+import { PageSpinner } from "#modules/common/components/page-spinner.tsx";
+import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
+import { Button } from "#modules/common/ui/button.tsx";
 import {
   Empty,
   EmptyContent,
@@ -13,7 +13,7 @@ import {
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "#app/components/ui/empty.tsx";
+} from "#modules/common/ui/empty.tsx";
 import { DockerNotFoundError } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { imageCheckReport } from "#libs/jobs";

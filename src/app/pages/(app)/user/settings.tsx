@@ -1,4 +1,4 @@
-import { ThemeSettingsCard } from "#app/components/settings/theme-settings-card.tsx";
+import { ThemeSettingsCard } from "#modules/settings/components/theme-settings-card.tsx";
 
 export default function UserSettingsPage() {
   return (

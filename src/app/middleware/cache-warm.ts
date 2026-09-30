@@ -1,8 +1,8 @@
 import type { MiddlewareHandler } from "hono/types";
-import { appsSnapshot } from "#app/snapshots.ts";
+import { appsSnapshot } from "#modules/apps/snapshots.ts";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
-import { widgetRegistry } from "#libs/widgets/server";
+import { widgetRegistry } from "#modules/widgets/server/server.ts";
 
 /** How often the snapshots are topped up. Comfortably inside every TTL + grace window they feed. */
 const INTERVAL = 30_000;
