@@ -9,7 +9,7 @@ package-lock.json
 .agents
 
 # Generated: shadcn components, drizzle schema and migrations, waku route types
-src/app/components/ui
+src/modules/common/ui
 src/libs/db/schemas/auth-schema.ts
 src/drizzle
 src/app/pages.gen.ts

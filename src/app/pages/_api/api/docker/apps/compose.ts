@@ -1,8 +1,8 @@
 import { PassThrough } from "node:stream";
-import { SERVER_LOG_HINT } from "#app/actions/action-result.ts";
-import { actionLabel, isAppOperation, operationOutcome } from "#app/actions/apps/app-operation.ts";
-import { appOperationArguments, refuseAppOperation } from "#app/actions/apps/app-operations.ts";
-import { COMPOSE_EXIT_MARKER } from "#app/actions/apps/compose-stream.ts";
+import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
+import { actionLabel, isAppOperation, operationOutcome } from "#modules/apps/actions/app-operation.ts";
+import { appOperationArguments, refuseAppOperation } from "#modules/apps/actions/app-operations.ts";
+import { COMPOSE_EXIT_MARKER } from "#modules/apps/actions/compose-stream.ts";
 import { apiError, apiRoute, apiStream } from "#app/api/api-route.ts";
 import { docker } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";

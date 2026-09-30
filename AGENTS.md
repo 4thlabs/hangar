@@ -7,8 +7,20 @@
   `server.ts`).
 - Inside a library, import relatively. From outside, only through a barrel: `#libs/docker`, never
   `#libs/docker/compose.ts`. Needing a file directly means the library is missing an entry point.
-- Nested entry points are free — `#libs/db/server`, `#libs/widgets/config`, `#libs/docker/mock`
+- Nested entry points are free — `#libs/db/server`, `#libs/hangar/server`, `#libs/docker/mock`
   need no configuration. Test doubles get one, so a mock never sits in the public barrel.
+
+## Modules under `src/modules`
+
+- One module per page domain (`apps`, `store`, `settings`, `auth`, `notifications`, `widgets`
+  for the dashboard), holding its `actions/`, `components/`, `hooks/` and plain `.ts` helpers at
+  its root. Shared code and the app shell (shadcn `ui/`, navbar, providers, theme atoms) live in
+  `common`.
+- An action belongs to the module whose page calls it. A module may import another directly.
+- Import deeply through `#modules/…` (the existing `#*` rule), with the extension. No barrel: one
+  re-exporting both `"use server"` and `"use client"` files drags server code into client bundles.
+- `src/app` keeps only what Waku needs (`srcDir`): `pages/` as thin shells, `middleware/`, `api/`,
+  styles.
 
 ## Import mapping
 
@@ -42,7 +54,8 @@ composition root that binds them — `notifications/notifications.ts` (class) vs
 Required, because three entry points are plain Node, where `server-only` throws and `.tsx` cannot
 load at all: `bin/cli.js`, `node src/libs/db/utils/migrate.ts`, and the Sidequest worker
 (`sidequest.jobs.js`, outside the bundle). A job builds its own dependencies, as
-`check-image-version.ts` does. Keep `#libs/hangar` and `#libs/widgets/config` free of JSX.
+`check-image-version.ts` does. Keep `#libs/hangar` free of JSX, and with it
+`src/modules/widgets/config/config.ts`, which it imports.
 
 ## Classes
 

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { MobileTabBar } from "#app/components/navbar/navbar-mobile.tsx";
-import { AppNavbar } from "#app/components/navbar/navbar.tsx";
+import { MobileTabBar } from "#modules/common/components/navbar-mobile.tsx";
+import { AppNavbar } from "#modules/common/components/navbar.tsx";
 import { requireSession } from "#libs/auth";
 import { notifications as centre } from "#libs/notifications/server";
 
