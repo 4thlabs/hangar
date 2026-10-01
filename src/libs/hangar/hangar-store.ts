@@ -113,6 +113,28 @@ export class HangarStore {
     }
   }
 
+  /** Links every stack the config lists, and the shared files (networks, common env) next to them. */
+  private async linkAll() {
+    const entries = [...this.resolve(), ...this.config.shared()];
+
+    // prettier-ignore
+    await Promise.all(
+      entries
+        .map(async entry => await this.link(entry)
+        .catch(ex => logger.error(`Failed to link: ${entry}`, { error: ex }))),
+    );
+  }
+
+  /**
+   * Writes hangar.yml, then links what it now lists and reloads the apps.
+   * @param source The YAML; an invalid one throws and leaves the file untouched
+   */
+  async saveConfig(source: string) {
+    await this.config.write(source);
+    await this.linkAll();
+    await this.refresh();
+  }
+
   /**
    * Returns true if the store is installed, false otherwise
    * @returns boolean indicating if the store is installed
@@ -138,16 +160,7 @@ export class HangarStore {
 
     // The categories only exist once the clone brought hangar.yml in.
     await this.config.load();
-
-    // The shared files (networks, common env) live next to the stacks and link the same way.
-    const entries = [...this.resolve(), ...this.config.shared()];
-
-    // prettier-ignore
-    await Promise.all(
-      entries
-        .map(async entry => await this.link(entry)
-        .catch(ex => logger.error(`Failed to link: ${entry}`, { error: ex }))),
-    );
+    await this.linkAll();
 
     // The stacks are composed with .env.global: without it every compose call fails, so a
     // fresh install leaves the operator the list of variables to fill rather than nothing.
