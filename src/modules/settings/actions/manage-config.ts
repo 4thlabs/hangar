@@ -11,7 +11,7 @@ export const saveConfig = async (source: string): Promise<ActionResult> => {
   await requireSession();
 
   try {
-    await hangar.store.config.write(source);
+    await hangar.store.saveConfig(source);
 
     return ActionResult.success("La configuration a été enregistrée.");
   } catch (error) {

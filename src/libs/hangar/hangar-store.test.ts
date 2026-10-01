@@ -282,6 +282,19 @@ describe("HangarStore", () => {
     expect(store.app("missing")).toBeUndefined();
   });
 
+  it("links and lists a stack a saved config adds", async () => {
+    const store = await createStore(dataDir, createRuntime());
+    await mkdir(store.installedPath, { recursive: true });
+    await mkdir(path.join(store.storePath, ".git"));
+    await mkdir(path.join(store.storePath, "store", "delta-app"), { recursive: true });
+    await writeFile(path.join(store.storePath, "store", "delta-app", "compose.yml"), "services: {}\n");
+
+    await store.saveConfig("categories:\n  - name: extra\n    color: red\n    stacks: [delta-app]\n");
+
+    expect((await lstat(path.join(store.installedPath, "delta-app"))).isSymbolicLink()).toBe(true);
+    expect(store.app("delta-app")?.installed).toBe(true);
+  });
+
   describe("saveApp", () => {
     const COMPOSE = "name: Delta\nservices:\n  delta-app:\n    image: nginx\n";
 
