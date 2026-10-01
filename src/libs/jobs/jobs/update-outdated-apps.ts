@@ -25,8 +25,8 @@ export class UpdateOutdatedApps extends Job {
 
     // Asked here rather than read off the last `CheckImageVersion` result: that report is up to
     // four hours old, and pulling for an app already up to date is a recreate for nothing.
-    const updates = await docker.imageUpdates(hangar.store.config.registryThrottling());
-    const projects = [...new Set(updates.filter(update => update.status === "outdated").map(u => u.project))];
+    const remotes = await docker.remoteDigests(hangar.store.config.registryThrottling());
+    const projects = [...Docker.outdated(await docker.runningImages.read(), remotes)];
 
     const updated: string[] = [];
     const failed: string[] = [];
@@ -46,9 +46,8 @@ export class UpdateOutdatedApps extends Job {
     logger.info(`Auto-update: ${updated.length} app(s) updated, ${failed.length} failed`);
 
     // One notification for the run, not one per app: this happens while nobody is watching.
-    // ponytail: no `imageCheckReport.markUpdated` either — that note lives in the web server's memory and this
-    // runs in the Sidequest worker. The four-hourly check catches up within hours of a 4am run,
-    // and nobody is reading the badge meanwhile. Wire a channel only if that stops being true.
+    // Nothing to tell the badge: it compares the last check with what runs, so it clears as soon
+    // as the web server's sweep sees the new containers.
     // ponytail: no `docker.invalidate()` — that instance is `server-only` and out of reach here,
     // so an Apps page open across the run shows the old state until its snapshot expires (60s).
     if (updated.length > 0 || failed.length > 0) {

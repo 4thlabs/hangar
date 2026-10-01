@@ -198,90 +198,42 @@ describe("Docker.sampleStats", () => {
   });
 });
 
-describe("Docker.imageUpdates", () => {
-  /** The local image carries `digest` as its registry digest, and the registry serves `remote`. */
-  const givenDigests = (digest: string | null, remote = "sha256:remote") => {
-    dockerMock.imageInspect.mockResolvedValue({ RepoDigests: digest ? [`nginx@${digest}`] : [] });
-    dockerMock.distribution.mockResolvedValue({ Descriptor: { digest: remote } });
-  };
+describe("Docker.remoteDigests", () => {
+  /** Every local image carries `digests` as its registry digests. */
+  const givenImages = (...digests: string[]) =>
+    dockerMock.listImages.mockResolvedValue([{ Id: "sha256:running", RepoDigests: digests }]);
 
-  it("reports an image the registry has moved past", async () => {
-    givenContainers([container()]);
-    givenDigests("sha256:local");
-
-    expect(await client("alpha").imageUpdates()).toEqual([
-      { project: "alpha", image: "nginx:alpine", status: "outdated" },
-    ]);
-  });
-
-  it("reports an image the registry still serves as current", async () => {
-    givenContainers([container()]);
-    givenDigests("sha256:same", "sha256:same");
-
-    expect(await client("alpha").imageUpdates()).toEqual([
-      { project: "alpha", image: "nginx:alpine", status: "current" },
-    ]);
-  });
-
-  it("does not claim an update for an image built here, which has no registry digest", async () => {
-    givenContainers([container()]);
-    givenDigests(null);
-
-    expect(await client("alpha").imageUpdates()).toEqual([
-      { project: "alpha", image: "nginx:alpine", status: "unknown" },
-    ]);
-    expect(dockerMock.distribution).not.toHaveBeenCalled();
-  });
-
-  it("reads the image the container runs, not what its tag points at now", async () => {
-    givenContainers([container()]);
-    givenDigests("sha256:same", "sha256:same");
-
-    await client("alpha").imageUpdates();
-
-    // A pull moves `nginx:alpine` onto the new image while the container keeps the old one:
-    // inspecting the reference would call it current, which is the whole bug.
-    expect(dockerMock.imageInspect).toHaveBeenCalledWith("sha256:running");
-    expect(dockerMock.imageInspect).not.toHaveBeenCalledWith("nginx:alpine");
-  });
-
-  it("separates two containers on one tag that run different images", async () => {
+  it("asks the registry once per reference, for images that carry a registry digest", async () => {
     givenContainers([
       container(),
-      container({
-        Id: "container-2",
-        labels: { [LABEL.project]: "beta", [LABEL.service]: "web" },
-        imageId: "sha256:old",
-      }),
+      container({ Id: "container-2", labels: { [LABEL.project]: "beta", [LABEL.service]: "web" } }),
     ]);
-    dockerMock.imageInspect.mockImplementation((id: string) =>
-      Promise.resolve({ RepoDigests: [id === "sha256:running" ? "nginx@sha256:remote" : "nginx@sha256:before"] }),
-    );
+    givenImages("nginx@sha256:local");
     dockerMock.distribution.mockResolvedValue({ Descriptor: { digest: "sha256:remote" } });
 
-    const updates = await client("alpha", "beta").imageUpdates();
-
-    expect(updates).toEqual([
-      { project: "alpha", image: "nginx:alpine", status: "current" },
-      { project: "beta", image: "nginx:alpine", status: "outdated" },
-    ]);
-    // Still one registry round trip: they share the reference, only the running image differs.
+    expect(await client("alpha", "beta").remoteDigests()).toEqual({ "nginx:alpine": "sha256:remote" });
     expect(dockerMock.distribution).toHaveBeenCalledTimes(1);
   });
 
-  it("does not claim an update when the registry cannot be reached", async () => {
+  it("does not ask about an image built here, which has no registry digest", async () => {
     givenContainers([container()]);
-    dockerMock.imageInspect.mockResolvedValue({ RepoDigests: ["nginx@sha256:local"] });
-    dockerMock.distribution.mockRejectedValue(new Error("toomanyrequests"));
+    givenImages();
 
-    expect(await client("alpha").imageUpdates()).toEqual([
-      { project: "alpha", image: "nginx:alpine", status: "unknown" },
-    ]);
+    expect(await client("alpha").remoteDigests()).toEqual({});
+    expect(dockerMock.distribution).not.toHaveBeenCalled();
+  });
+
+  it("leaves a digest-pinned reference alone: it already names one exact image", async () => {
+    givenContainers([container({ image: "nginx@sha256:pinned" })]);
+    givenImages("nginx@sha256:pinned");
+
+    expect(await client("alpha").remoteDigests()).toEqual({});
+    expect(dockerMock.distribution).not.toHaveBeenCalled();
   });
 
   it("asks the registry one image at a time, never in a burst", async () => {
     givenContainers(["a", "b", "c"].map(n => container({ Id: n, image: `${n}:latest` })));
-    dockerMock.imageInspect.mockResolvedValue({ RepoDigests: ["x@sha256:local"] });
+    givenImages("x@sha256:local");
     let inFlight = 0;
     let peak = 0;
     dockerMock.distribution.mockImplementation(async () => {
@@ -291,63 +243,99 @@ describe("Docker.imageUpdates", () => {
       return { Descriptor: { digest: "sha256:remote" } };
     });
 
-    await client("alpha").imageUpdates();
+    await client("alpha").remoteDigests();
 
     expect(dockerMock.distribution).toHaveBeenCalledTimes(3);
     expect(peak).toBe(1);
   });
 
-  it("stops asking once the registry rate-limits, and reports the rest as unknown", async () => {
+  it("stops asking once the registry rate-limits", async () => {
     givenContainers(["a", "b", "c"].map(n => container({ Id: n, image: `${n}:latest` })));
-    dockerMock.imageInspect.mockResolvedValue({ RepoDigests: ["x@sha256:local"] });
+    givenImages("x@sha256:local");
     dockerMock.distribution.mockRejectedValue(new Error("toomanyrequests: You have reached your pull rate limit"));
 
-    const updates = await client("alpha").imageUpdates();
-
+    expect(await client("alpha").remoteDigests()).toEqual({});
     expect(dockerMock.distribution).toHaveBeenCalledTimes(1);
-    expect(updates.map(update => update.status)).toEqual(["unknown", "unknown", "unknown"]);
   });
 
   it("keeps asking past a registry that is only unreachable", async () => {
     givenContainers(["a", "b"].map(n => container({ Id: n, image: `${n}:latest` })));
-    dockerMock.imageInspect.mockResolvedValue({ RepoDigests: ["b@sha256:remote"] });
+    givenImages("x@sha256:local");
     dockerMock.distribution
       .mockRejectedValueOnce(new Error("connect ECONNREFUSED"))
       .mockResolvedValueOnce({ Descriptor: { digest: "sha256:remote" } });
 
-    expect((await client("alpha").imageUpdates()).map(update => update.status)).toEqual(["unknown", "current"]);
-  });
-
-  it("leaves a digest-pinned reference alone: it already names one exact image", async () => {
-    givenContainers([container({ image: "nginx@sha256:pinned" })]);
-
-    expect(await client("alpha").imageUpdates()).toEqual([
-      { project: "alpha", image: "nginx@sha256:pinned", status: "current" },
-    ]);
-    // The local inspect still happens — it is free, and batched by image id across containers.
-    // What a pinned reference must never cost is the rate-limited registry round trip.
-    expect(dockerMock.distribution).not.toHaveBeenCalled();
-  });
-
-  it("asks the registry once for a reference two projects share, and answers for both", async () => {
-    givenContainers([
-      container(),
-      container({ Id: "container-2", labels: { [LABEL.project]: "beta", [LABEL.service]: "web" } }),
-    ]);
-    givenDigests("sha256:local");
-
-    const updates = await client("alpha", "beta").imageUpdates();
-
-    expect(updates.map(update => update.project)).toEqual(["alpha", "beta"]);
-    expect(updates.every(update => update.status === "outdated")).toBe(true);
-    expect(dockerMock.distribution).toHaveBeenCalledTimes(1);
+    expect(await client("alpha").remoteDigests()).toEqual({ "b:latest": "sha256:remote" });
   });
 
   it("ignores images from projects Hangar did not install", async () => {
     givenContainers([container({ Id: "beta-1", labels: { [LABEL.project]: "beta", [LABEL.service]: "web" } })]);
-    givenDigests("sha256:local");
+    givenImages("nginx@sha256:local");
 
-    expect(await client("alpha").imageUpdates()).toEqual([]);
+    expect(await client("alpha").remoteDigests()).toEqual({});
+  });
+});
+
+describe("Docker.runningImages", () => {
+  it("reads the image the container runs, not what its tag points at now", async () => {
+    givenContainers([container()]);
+    // A pull moves `nginx:alpine` onto the new image while the container keeps the old one:
+    // resolving the reference would call it current, which is the whole bug.
+    dockerMock.listImages.mockResolvedValue([
+      { Id: "sha256:running", RepoDigests: ["nginx@sha256:before"] },
+      { Id: "sha256:pulled", RepoDigests: ["nginx@sha256:remote"] },
+    ]);
+
+    expect(await client("alpha").runningImages.read()).toEqual([
+      { project: "alpha", image: "nginx:alpine", digests: ["nginx@sha256:before"] },
+    ]);
+  });
+
+  it("answers without digests rather than failing when the images cannot be listed", async () => {
+    givenContainers([container()]);
+    dockerMock.listImages.mockRejectedValue(new Error("daemon gone"));
+
+    expect(await client("alpha").runningImages.read()).toEqual([
+      { project: "alpha", image: "nginx:alpine", digests: [] },
+    ]);
+  });
+});
+
+describe("Docker.outdated", () => {
+  const running = (project: string, image: string, ...digests: string[]) => ({ project, image, digests });
+
+  it("flags an app whose running image the registry has moved past", () => {
+    const outdated = Docker.outdated([running("alpha", "nginx:alpine", "nginx@sha256:local")], {
+      "nginx:alpine": "sha256:remote",
+    });
+
+    expect([...outdated]).toEqual(["alpha"]);
+  });
+
+  it("clears it once the app runs what the registry serves", () => {
+    const outdated = Docker.outdated([running("alpha", "nginx:alpine", "nginx@sha256:remote")], {
+      "nginx:alpine": "sha256:remote",
+    });
+
+    expect([...outdated]).toEqual([]);
+  });
+
+  it("separates two apps on one tag that run different images", () => {
+    const outdated = Docker.outdated(
+      [running("alpha", "nginx:alpine", "nginx@sha256:remote"), running("beta", "nginx:alpine", "nginx@sha256:old")],
+      { "nginx:alpine": "sha256:remote" },
+    );
+
+    expect([...outdated]).toEqual(["beta"]);
+  });
+
+  it("makes no claim without both sides: no registry answer, or an image built here", () => {
+    const outdated = Docker.outdated(
+      [running("alpha", "nginx:alpine", "nginx@sha256:local"), running("beta", "local:dev")],
+      { "local:dev": "sha256:remote" },
+    );
+
+    expect([...outdated]).toEqual([]);
   });
 });
 

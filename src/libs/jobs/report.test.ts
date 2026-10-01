@@ -10,9 +10,9 @@ const { ImageCheckReport } = await import("./report.ts");
 let report = new ImageCheckReport(mocks.list);
 
 /** One completed `CheckImageVersion` row, newest-id-first as Sidequest lists them. */
-const run = (id: number, checkedAt: string, ...outdated: string[]) => ({
+const run = (id: number, checkedAt: string, remotes: Record<string, string> = {}) => ({
   id,
-  result: { checkedAt, updates: outdated.map(project => ({ project, image: "nginx", status: "outdated" })) },
+  result: { checkedAt, remotes },
 });
 
 const past = "2026-09-20T00:00:00.000Z";
@@ -29,29 +29,21 @@ describe("ImageCheckReport", () => {
   it("takes the newest run by its own timestamp, not by row id", async () => {
     // A rerun from the Jobs page resets the row it was run from and keeps its id, so the fresh
     // report can sit below an older one.
-    mocks.list.mockResolvedValue([run(9, past, "alpha"), run(2, future, "beta")]);
+    mocks.list.mockResolvedValue([run(9, past, { nginx: "sha256:old" }), run(2, future, { nginx: "sha256:new" })]);
 
-    expect([...(await report.outdated())]).toEqual(["beta"]);
+    expect(await report.snapshot.read()).toEqual({ nginx: "sha256:new" });
   });
 
-  it("drops an app updated since the report was taken", async () => {
-    mocks.list.mockResolvedValue([run(1, past, "alpha", "beta")]);
-    report.markUpdated("alpha");
+  it("reads a report from before digests were stored as nothing to compare", async () => {
+    mocks.list.mockResolvedValue([{ id: 1, result: { checkedAt: past, updates: [] } }]);
 
-    expect([...(await report.outdated())]).toEqual(["beta"]);
-  });
-
-  it("lets a check that ran after the update have the last word", async () => {
-    report.markUpdated("alpha");
-    mocks.list.mockResolvedValue([run(1, future, "alpha")]);
-
-    expect([...(await report.outdated())]).toEqual(["alpha"]);
+    expect(await report.snapshot.read()).toEqual({});
   });
 
   it("reports nothing rather than failing when the job store cannot be read", async () => {
     mocks.list.mockRejectedValue(new Error("no backend"));
 
-    expect([...(await report.outdated())]).toEqual([]);
+    expect(await report.snapshot.read()).toEqual({});
     expect(mocks.logger.error).toHaveBeenCalled();
   });
 });

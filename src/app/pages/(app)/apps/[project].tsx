@@ -3,6 +3,7 @@ import { BoxIcon } from "lucide-react";
 import { Link } from "waku";
 import type { PageProps } from "waku/router";
 import { AppDetail } from "#modules/apps/components/app-detail.tsx";
+import { outdatedSnapshot } from "#modules/apps/snapshots.ts";
 import { PageSpinner } from "#modules/common/components/page-spinner.tsx";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -16,7 +17,6 @@ import {
 } from "#modules/common/ui/empty.tsx";
 import { DockerNotFoundError } from "#libs/docker";
 import { docker } from "#libs/docker/server";
-import { imageCheckReport } from "#libs/jobs";
 import { logger } from "#libs/logs";
 
 /**
@@ -25,7 +25,7 @@ import { logger } from "#libs/logs";
  */
 async function AppDetailContent({ project }: { project: string }) {
   try {
-    const [detail, outdated] = await Promise.all([docker.projectDetail(project), imageCheckReport.outdated()]);
+    const [detail, outdated] = await Promise.all([docker.projectDetail(project), outdatedSnapshot.read()]);
 
     return <AppDetail detail={{ ...detail, updateAvailable: outdated.has(project) }} />;
   } catch (error) {

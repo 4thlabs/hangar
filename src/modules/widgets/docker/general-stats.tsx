@@ -1,7 +1,7 @@
 import { Link } from "waku";
 import type { DockerOverview } from "#libs/docker";
 import { docker } from "#libs/docker/server";
-import { imageCheckReport } from "#libs/jobs";
+import { outdatedSnapshot } from "#modules/apps/snapshots.ts";
 import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
 import {
   WidgetCard,
@@ -95,8 +95,8 @@ export const dockerGeneralStats = (ttl?: number) =>
     ...chrome,
     errorDescription: "The local Docker statistics could not be loaded.",
     load: async (): Promise<DockerGeneralStats> => {
-      // `imageCheckReport` reads the last completed check; the widget never talks to a registry itself.
-      const [overview, outdated] = await Promise.all([docker.overview(), imageCheckReport.outdated()]);
+      // The last completed check against what runs now; the widget never talks to a registry itself.
+      const [overview, outdated] = await Promise.all([docker.overview(), outdatedSnapshot.read()]);
 
       return { overview, outdated: [...outdated].sort() };
     },
