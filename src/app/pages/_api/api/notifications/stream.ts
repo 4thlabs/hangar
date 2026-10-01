@@ -1,5 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { apiRoute, sseEvent, sseStream } from "#app/api/api-route.ts";
+import { imageCheckReport } from "#libs/jobs";
 import { notifications } from "#libs/notifications/server";
 
 /**
@@ -30,6 +31,13 @@ async function* frames(userId: string, from: Date, signal: AbortSignal) {
       if (newest !== cursor.getTime()) alreadySent.clear();
       for (const item of fresh) if (item.createdAt === newest) alreadySent.add(item.id);
       cursor = new Date(newest);
+
+      // A notification is how a Sidequest job tells this process it finished, and the client
+      // answers this frame with a page reload: the "Mises à jour disponibles" toast must not land
+      // on a badge still read from the previous check. One local SQLite read to refill, so any
+      // notification is reason enough. Not `docker.invalidate()`: that drops the sweep's stale
+      // value with it, and the reload would wait on the daemon instead of being served meanwhile.
+      imageCheckReport.invalidate();
 
       yield sseEvent(fresh);
     }

@@ -1,5 +1,5 @@
 import { Cache } from "#libs/cache";
-import type { ComposeProjectsSnapshot } from "#libs/docker";
+import { Docker, type ComposeProjectsSnapshot } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
 import { imageCheckReport } from "#libs/jobs";
@@ -29,6 +29,16 @@ function decorate(projects: ComposeProjectsSnapshot, outdated: ReadonlySet<strin
 }
 
 /**
+ * The apps running an image the last check found the registry has moved past.
+ *
+ * Recomputed on every read from two snapshots that each refresh on their own clock: the check's
+ * stored registry digests, and the digests of what runs now. An update therefore clears the
+ * badge as soon as the container sweep sees it, whoever ran it — this page, the nightly job or
+ * a shell — with nothing to invalidate.
+ */
+export const outdatedSnapshot = Cache.join(docker.runningImages, imageCheckReport.snapshot, Docker.outdated);
+
+/**
  * Everything `/apps` renders, as one snapshot.
  *
  * It exists so the page and the warm loop cannot disagree about what that is. They used to name
@@ -38,4 +48,4 @@ function decorate(projects: ComposeProjectsSnapshot, outdated: ReadonlySet<strin
  * and `/apps` quietly went back to painting a spinner. Now there is one object to warm and to
  * render from, so removing a widget cannot slow down an unrelated page.
  */
-export const appsSnapshot = Cache.join(docker.projects, imageCheckReport.snapshot, decorate);
+export const appsSnapshot = Cache.join(docker.projects, outdatedSnapshot, decorate);

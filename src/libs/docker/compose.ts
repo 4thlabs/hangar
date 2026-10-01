@@ -32,19 +32,24 @@ export type ComposeProjectSummary = {
 /** Response body for the "list all projects" endpoint. */
 export type ComposeProjectsSnapshot = { projects: ComposeProjectSummary[] };
 
-/** Whether the registry still serves what a container runs, as far as we could tell. */
-export type ImageUpdateStatus = "current" | "outdated" | "unknown";
-
-/** One image an installed app runs, and whether the registry has a newer one. */
-export type ImageUpdate = {
+/** One container of an installed app, and the registry digests of the image it runs. */
+export type RunningImage = {
   project: string;
   /** The reference as Compose runs it, e.g. `nginx:alpine`. */
   image: string;
-  status: ImageUpdateStatus;
+  /** `RepoDigests` of the running image; empty for one built here or that could not be read. */
+  digests: string[];
 };
 
-/** What `CheckImageVersion` leaves behind as its job result. */
-export type ImageUpdateReport = { checkedAt: string; updates: ImageUpdate[] };
+/** What the registry served for each reference when it was asked, by reference. */
+export type RemoteDigests = Record<string, string>;
+
+/**
+ * What `CheckImageVersion` leaves behind as its job result: the registry's answers, not a
+ * verdict. Whether an app is behind is decided at read time against what it runs *then*, so an
+ * update — from the UI, the nightly job or a shell — shows the moment its containers do.
+ */
+export type ImageUpdateReport = { checkedAt: string; remotes: RemoteDigests };
 
 /** Full detail for one container, as shown on the project detail page. */
 export type ComposeContainer = {

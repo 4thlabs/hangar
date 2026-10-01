@@ -14,7 +14,7 @@ export const dockerMock = {
   logs: vi.fn(),
   stats: vi.fn(),
   demuxStream: vi.fn(),
-  imageInspect: vi.fn(),
+  listImages: vi.fn(),
   distribution: vi.fn(),
   info: vi.fn(),
   df: vi.fn(),
@@ -27,13 +27,13 @@ export const dockerMock = {
 export const fakeDockerode = () =>
   ({
     listContainers: dockerMock.listContainers,
+    listImages: dockerMock.listImages,
     getContainer: (id: string) => ({
       inspect: () => dockerMock.inspect(id),
       logs: (options: unknown) => dockerMock.logs(id, options),
       stats: (options: unknown) => dockerMock.stats(id, options),
     }),
     getImage: (reference: string) => ({
-      inspect: () => dockerMock.imageInspect(reference),
       distribution: (options: unknown) => dockerMock.distribution(reference, options),
     }),
     info: dockerMock.info,

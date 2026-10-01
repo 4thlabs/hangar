@@ -7,8 +7,8 @@ import {
   type ComposeContainerSource,
   type ComposeProjectDetail,
   type ComposeProjectsSnapshot,
-  type ImageUpdate,
-  type ImageUpdateStatus,
+  type RemoteDigests,
+  type RunningImage,
 } from "./compose.ts";
 import { logger } from "#libs/logs";
 import { Cache, type Snapshot } from "#libs/cache";
@@ -122,6 +122,15 @@ export class Docker {
   readonly projects: Snapshot<ComposeProjectsSnapshot>;
 
   /**
+   * Every container of an installed app, with the registry digests of the image it runs — what
+   * {@link Docker.outdated} compares the last check against.
+   *
+   * Over the same sweep as {@link projects}, so a Compose command that invalidates one moves the
+   * other: the badge goes the moment the containers it was about do.
+   */
+  readonly runningImages: Snapshot<RunningImage[]>;
+
+  /**
    * @param docker An Engine API client; injected so the composition root owns the connection
    * @param apps The installed-app lookup, satisfied by `hangar.store`
    * @param ttl How long a container sweep is reused; injected so a test can drive it
@@ -133,7 +142,41 @@ export class Docker {
     this.projects = Cache.join(this.containers, sources => ({
       projects: new ComposeProjects(sources).summaries(this.apps.installedProjectIds()),
     }));
+
+    const images = this.cache.define("images", ttl, Docker.Grace, this.listImages);
+
+    this.runningImages = Cache.join(this.containers, images, (sources, digests) => {
+      const installed = this.apps.installedProjectIds();
+
+      // By the image id the container runs, never by its reference: `compose pull` moves the tag
+      // and leaves the containers on the image they were created with, so resolving the tag would
+      // call an app current while it still runs the old one.
+      return sources
+        .map(({ info }) => ({
+          project: info.Labels[ComposeProjects.Label.project] ?? "",
+          image: info.Image,
+          digests: digests.get(info.ImageID) ?? [],
+        }))
+        .filter(running => installed.has(running.project));
+    });
   }
+
+  /**
+   * The registry digests of every local image, by image id. One call for the whole host rather
+   * than an inspect per image: the list already carries `RepoDigests`.
+   *
+   * Never rejects: the digests only feed the update badge, which is an extra, never a reason for
+   * the Apps page to fail. An unreadable list leaves every app without a badge until the next one.
+   */
+  private readonly listImages = async (): Promise<Map<string, string[]>> => {
+    try {
+      return new Map((await this.docker.listImages()).map(image => [image.Id, image.RepoDigests ?? []]));
+    } catch (error) {
+      logger.warn("Could not list the local images", { error });
+
+      return new Map();
+    }
+  };
 
   /**
    * The sweep behind {@link containers}.
@@ -169,38 +212,20 @@ export class Docker {
   }
 
   /**
-   * Asks the registry, for every image the installed apps run, whether it still serves what is
-   * running here. The daemon does the talking (`/distribution/{name}/json`), so its own registry
-   * credentials apply and nothing here handles auth.
+   * Asks the registry what it serves for every reference the installed apps run. The daemon does
+   * the talking (`/distribution/{name}/json`), so its own registry credentials apply and nothing
+   * here handles auth.
    *
-   * One entry per project and image reference, but one registry call per *reference*: replicas of
-   * a service share an image, and two apps may share one too. Anything the daemon cannot answer
-   * reads as `unknown` rather than throwing, so one unreachable registry does not cost the report
-   * — and, more importantly, never renders as a false "update available".
+   * One call per *reference*: replicas of a service share an image, and two apps may share one
+   * too. Only for images that carry a registry digest — one built here has nothing to compare
+   * against, and asking about it would spend a rate-limited round trip to learn nothing. A
+   * reference the registry could not answer for is left out, which {@link Docker.outdated} reads
+   * as "don't know", never as a false "update available".
    */
-  async imageUpdates(gap = Docker.RegistryGapMs): Promise<ImageUpdate[]> {
-    const installed = this.apps.installedProjectIds();
-    const pairs = new Map<string, { project: string; image: string; imageId: string }>();
-
-    // Keyed by the running image too, not only the reference: a pull moves the tag while the
-    // containers keep the image they were created with, so two of them on one tag can differ.
-    for (const { info } of await this.containers.read()) {
-      const project = info.Labels[ComposeProjects.Label.project] ?? "";
-      const pair = { project, image: info.Image, imageId: info.ImageID };
-
-      if (installed.has(project)) pairs.set(`${project}\u0000${info.Image}\u0000${info.ImageID}`, pair);
-    }
-
-    const running = [...pairs.values()];
-
-    // Local first, and it decides who gets a registry call: an image built here carries no
-    // registry digest to compare against, and asking about it would spend a rate-limited round
-    // trip to learn nothing.
-    const ids = [...new Set(running.map(pair => pair.imageId))];
-    const locals = new Map(await Promise.all(ids.map(async id => [id, await this.localDigests(id)] as const)));
-
-    const references = [...new Set(running.filter(pair => locals.get(pair.imageId)?.length).map(pair => pair.image))];
-    const remotes = new Map<string, string | null>();
+  async remoteDigests(gap = Docker.RegistryGapMs): Promise<RemoteDigests> {
+    const running = await this.runningImages.read();
+    const references = [...new Set(running.filter(r => r.digests.length && !Docker.pinned(r.image)).map(r => r.image))];
+    const remotes: RemoteDigests = {};
 
     // One at a time and spaced out, not a burst: the calls count against a per-IP limit. Once the
     // registry says "too many requests", every call after it would be refused too and would
@@ -218,35 +243,32 @@ export class Docker {
         break;
       }
 
-      remotes.set(image, digest);
+      if (digest) remotes[image] = digest;
     }
 
-    return running.map(({ project, image, imageId }) => ({
-      project,
-      image,
-      status: Docker.imageStatus(image, locals.get(imageId) ?? null, remotes.get(image) ?? null),
-    }));
+    return remotes;
   }
 
   /**
-   * The registry digests of the image a container is *running*, looked up by id and never by
-   * reference. `docker compose pull` moves the tag and leaves the containers on the image they
-   * were created with, so resolving the tag would report an app current while it still runs the
-   * old one — and the tag is what Hangar itself moves, every time it pulls.
+   * The apps running an image the registry has moved past. Pure, so it can sit in a
+   * `Cache.join` and be recomputed on every read against whatever runs now.
    *
-   * `null` when the image could not be read; an empty list when it was never pulled.
+   * A container counts only when both sides are known: an image with no registry digest, or a
+   * reference the registry was not asked about (pinned, rate-limited, unreachable), is no claim
+   * either way.
+   * @param running What runs now, from {@link runningImages}
+   * @param remotes What the registry served, from {@link remoteDigests}
    */
-  private async localDigests(imageId: string): Promise<string[] | null> {
-    // Compose never filled it in, or the daemon did not report one: nothing to inspect.
-    if (!imageId) return null;
+  static outdated(running: readonly RunningImage[], remotes: RemoteDigests): Set<string> {
+    return new Set(
+      running
+        .filter(({ image, digests }) => {
+          const remote = remotes[image];
 
-    try {
-      return (await this.docker.getImage(imageId).inspect()).RepoDigests ?? [];
-    } catch (error) {
-      logger.warn("Could not read the image a container runs", { error, imageId });
-
-      return null;
-    }
+          return remote !== undefined && digests.length > 0 && !digests.some(d => d.endsWith(`@${remote}`));
+        })
+        .map(({ project }) => project),
+    );
   }
 
   /**
@@ -256,8 +278,6 @@ export class Docker {
    * @param image The reference as Compose runs it, e.g. `nginx:alpine`
    */
   private async remoteDigest(image: string): Promise<string | null | typeof Docker.RateLimited> {
-    if (Docker.pinned(image)) return null;
-
     try {
       const remote = await this.docker.getImage(image).distribution({ abortSignal: AbortSignal.timeout(10_000) });
 
@@ -285,19 +305,6 @@ export class Docker {
    */
   private static rateLimited(error: unknown) {
     return (error as { statusCode?: number })?.statusCode === 429 || /toomanyrequests|429/i.test(String(error));
-  }
-
-  /**
-   * One container's verdict, from what it runs and what the registry serves. Pure: both lookups
-   * already happened, which is what lets them be batched and deduplicated above.
-   */
-  private static imageStatus(image: string, local: string[] | null, remote: string | null): ImageUpdateStatus {
-    if (Docker.pinned(image)) return "current";
-
-    // Unreadable image, one built here rather than pulled, or a registry that could not answer.
-    if (!local?.length || !remote) return "unknown";
-
-    return local.some(digest => digest.endsWith(`@${remote}`)) ? "current" : "outdated";
   }
 
   /**
