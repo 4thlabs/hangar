@@ -377,8 +377,8 @@ describe("Docker.overview", () => {
   });
 });
 
-describe("Docker container sweeps", () => {
-  it("serves one daemon sweep to concurrent callers and to the next render", async () => {
+describe("Docker.loadContainers", () => {
+  it("serves one daemon load to concurrent callers and to the next render", async () => {
     givenContainers([container()]);
     const docker = client("alpha");
 
@@ -388,7 +388,7 @@ describe("Docker container sweeps", () => {
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(1);
   });
 
-  it("serves the same sweep to the apps list and to one project's detail", async () => {
+  it("serves the same load to the apps list and to one project's detail", async () => {
     givenContainers([container()]);
     const docker = client("alpha");
 
@@ -398,7 +398,7 @@ describe("Docker container sweeps", () => {
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the containers it could inspect when one has gone away mid-sweep", async () => {
+  it("keeps the containers it could inspect when one has gone away mid-load", async () => {
     const sources = [container(), container({ Id: "container-2", name: "/alpha-web-2" })];
     givenContainers(sources);
 
@@ -415,7 +415,7 @@ describe("Docker container sweeps", () => {
     expect(projects[0]).toMatchObject({ name: "alpha", containerCount: 1 });
   });
 
-  it("asks again once the sweep has expired", async () => {
+  it("asks again once the loaded containers have expired", async () => {
     givenContainers([container()]);
     const docker = new Docker(fakeDockerode(), fakeApps("alpha"), 0);
 
@@ -425,7 +425,7 @@ describe("Docker container sweeps", () => {
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
   });
 
-  it("serves the new sweep once a refresh it awaited settles", async () => {
+  it("serves the new containers once a refresh it awaited settles", async () => {
     givenContainers([container({ state: "running" })]);
     const docker = client("alpha");
 
@@ -450,7 +450,7 @@ describe("Docker container sweeps", () => {
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(1);
   });
 
-  it("does not cache a failed sweep", async () => {
+  it("does not cache a failed load", async () => {
     const docker = client("alpha");
     dockerMock.listContainers.mockRejectedValueOnce(new Error("socket gone"));
 
@@ -520,7 +520,7 @@ describe("Docker snapshot staleness", () => {
     await expect(docker.overview.read()).rejects.toThrow("socket gone");
   });
 
-  it("serves a stale sweep at once rather than waiting on the daemon", async () => {
+  it("serves stale containers at once rather than waiting on the daemon", async () => {
     givenContainers([container()]);
     const docker = client("alpha");
 

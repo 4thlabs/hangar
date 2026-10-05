@@ -47,7 +47,7 @@ export class UpdateOutdatedApps extends Job {
 
     // One notification for the run, not one per app: this happens while nobody is watching.
     // Nothing to tell the web server either: this process cannot reach its cache, but the daemon
-    // reports every recreated container to it, and the badge clears with the sweep that follows.
+    // reports every recreated container to it, and the badge clears with the reload that follows.
     if (updated.length > 0 || failed.length > 0) {
       await new Notifications(db).notify({
         level: failed.length > 0 ? "error" : "success",

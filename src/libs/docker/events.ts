@@ -96,7 +96,7 @@ export class DockerEvents {
    * What one event made stale.
    *
    * Every container counts for the overview, which reports the whole host; only a Compose one
-   * counts for the sweep, which never holds the others.
+   * counts for the containers, which never hold the others.
    */
   static changesOf(event: DockerEvent): DockerChange[] {
     switch (event.Type) {

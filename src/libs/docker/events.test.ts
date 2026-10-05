@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 describe("DockerEvents.changesOf", () => {
-  it("refreshes the sweep for a Compose container, and the overview for any container", () => {
+  it("refreshes the containers for a Compose container, and the overview for any container", () => {
     expect(DockerEvents.changesOf(composeContainer("start"))).toEqual(["containers", "overview"]);
     expect(DockerEvents.changesOf({ Type: "container", Actor: { Attributes: { name: "loose" } } })).toEqual([
       "overview",
@@ -86,7 +86,7 @@ describe("DockerEvents", () => {
     stream.write(line(composeContainer("health_status: healthy")));
     await vi.advanceTimersByTimeAsync(250);
 
-    // The sweep goes first; the overview, behind the slow `df`, waits for the burst to finish.
+    // The containers go first; the overview, behind the slow `df`, waits for the burst to finish.
     expect(changes).toEqual(["containers"]);
 
     await vi.advanceTimersByTimeAsync(2_000);

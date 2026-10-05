@@ -41,7 +41,7 @@ type SystemDiskUsage = {
 };
 
 /**
- * What a daemon event can make stale: the Compose container sweep, the local image list, or the
+ * What a daemon event can make stale: the Compose containers, the local image list, or the
  * host-wide overview. See {@link Docker.refresh} and `DockerEvents`.
  */
 export type DockerChange = "containers" | "images" | "overview";
@@ -91,15 +91,15 @@ export class Docker {
   private readonly apps: InstalledApps;
 
   /**
-   * Default {@link ttl}. Liveness is not its job: `DockerEvents` refreshes the sweep the moment the
+   * Default {@link ttl}. Liveness is not its job: `DockerEvents` reloads the containers the moment the
    * daemon reports a change. This is the net for a change the stream never reported — an action
    * the filter misses, or a stream gone quiet without dropping — and a minute bounds that, while
-   * the warm loop no longer re-sweeps on every tick for nothing.
+   * the warm loop no longer reloads them on every tick for nothing.
    */
   private static readonly Ttl = 60_000;
 
   /**
-   * How long past its TTL a sweep is still handed out while it reloads behind the caller. Comfortably
+   * How long past its TTL {@link containers} is still handed out while it reloads behind the caller. Comfortably
    * longer than the warm loop's tick, so a page render still finds a snapshot when a tick runs late
    * or fails — the moment it does not, `/apps` goes back to waiting on the daemon.
    */
@@ -111,14 +111,14 @@ export class Docker {
    */
   private static readonly OverviewTtl = 300_000;
 
-  /** Longer grace than the sweep: nothing here changes fast enough to be worth blocking a paint. */
+  /** Longer grace than the containers': nothing here changes fast enough to be worth blocking a paint. */
   private static readonly OverviewGrace = 3_600_000;
 
   /** The daemon reads this client serves from a snapshot. */
   private readonly cache = new Cache();
 
   /**
-   * One sweep of every Compose-labeled container, in both API views. One read for everyone: the
+   * Every Compose-labeled container on the host, in both API views. One read for everyone: the
    * apps list, one project's detail and a log stream all narrow this in memory through
    * `ComposeProjects` rather than asking the daemon again.
    */
@@ -134,7 +134,7 @@ export class Docker {
    * read described twice, and each rebuilt the projection in its own words. A caller that can wait
    * calls `read()`, one that must not calls `peek()`, and both are the same declaration.
    *
-   * ponytail: the sweep inspects every Compose container on the host and throws away the ones
+   * ponytail: {@link loadContainers} inspects every Compose container on the host and throws away the ones
    * Hangar did not install. There is no daemon-side fix: Docker ANDs repeated `label` filters, so
    * asking for several projects at once matches a container in *all* of them, i.e. nothing.
    * Narrowing would mean one list call per installed project, which is worse. Left as is.
@@ -145,7 +145,7 @@ export class Docker {
    * Every container of an installed app, with the registry digests of the image it runs — what
    * {@link Docker.outdated} compares the last check against.
    *
-   * Over the same sweep as {@link projects}, so a change that refreshes one moves the other: the
+   * Over the same containers as {@link projects}, so a change that refreshes one moves the other: the
    * badge goes the moment the containers it was about do.
    */
   readonly runningImages: Snapshot<RunningImage[]>;
@@ -162,12 +162,12 @@ export class Docker {
   /**
    * @param docker An Engine API client; injected so the composition root owns the connection
    * @param apps The installed-app lookup, satisfied by `hangar.store`
-   * @param ttl How long a container sweep is reused; injected so a test can drive it
+   * @param ttl How long the loaded containers are reused; injected so a test can drive it
    */
   constructor(docker: Dockerode, apps: InstalledApps, ttl = Docker.Ttl) {
     this.docker = docker;
     this.apps = apps;
-    this.containers = this.cache.define("containers", ttl, Docker.Grace, this.sweep);
+    this.containers = this.cache.define("containers", ttl, Docker.Grace, this.loadContainers);
     this.projects = Cache.join(this.containers, sources => ({
       projects: new ComposeProjects(sources).summaries(this.apps.installedProjectIds()),
     }));
@@ -210,14 +210,14 @@ export class Docker {
   };
 
   /**
-   * The sweep behind {@link containers}.
+   * The load behind {@link containers}: one list call, then an inspect per container.
    *
    * An inspect costs a few milliseconds over the socket, so they all go out at once — and with
    * `allSettled`, because a container that exits between the list and its inspect answers 404,
-   * and one container going away must not cost the whole sweep. That is the common case right
+   * and one container going away must not cost the whole load. That is the common case right
    * after a `compose down`, not an edge one.
    */
-  private readonly sweep = async (): Promise<ComposeContainerSource[]> => {
+  private readonly loadContainers = async (): Promise<ComposeContainerSource[]> => {
     const listed = await this.docker.listContainers({
       all: true,
       filters: { label: [ComposeProjects.Label.project] },
@@ -394,7 +394,7 @@ export class Docker {
     // Narrowing to the project, rather than inspecting the id directly, means an id from another
     // project is indistinguishable from one that doesn't exist: no cross-project probing. The
     // filter is `ComposeProjects`' rather than the daemon's, and `find` only ever searches what it
-    // kept, so the guarantee is the same one — it just no longer costs its own sweep.
+    // kept, so the guarantee is the same one — it just no longer costs a load of its own.
     const compose = new ComposeProjects(await this.containers.read(), project);
     const container = compose.find(containerId);
 
