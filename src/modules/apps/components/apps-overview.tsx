@@ -19,13 +19,14 @@ import { AppsTable } from "#modules/apps/components/apps-table.tsx";
 import { AppsUpdateFilter } from "#modules/apps/components/apps-update-filter.tsx";
 import { countBy, filterProjects, nextSort, updateState } from "#modules/apps/filter.ts";
 import { formatBytes, formatPercent } from "#modules/apps/format.ts";
+import { DockerStatsProvider } from "#modules/apps/components/docker-stats-provider.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
 import { AutoReload } from "#modules/common/components/auto-reload.tsx";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#modules/common/ui/empty.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
-import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
+import { useDockerStatsTotal } from "#modules/apps/hooks/use-docker-stats.ts";
 import type { AppSortColumn, AppsSearch } from "#modules/apps/search-codec.ts";
 import type { ComposeProjectsSnapshot } from "#libs/docker";
 
@@ -34,6 +35,28 @@ type AppsOverviewProps = {
   error: string | null;
   search: AppsSearch;
 };
+
+/** The CPU and memory cards: the only part of the page that changes with each stats frame. */
+function LiveTotals({ containerIds }: { containerIds: readonly string[] }) {
+  const total = useDockerStatsTotal(containerIds);
+
+  return (
+    <>
+      <StatCard
+        title="CPU"
+        value={formatPercent(total(metrics => metrics.cpuPercent))}
+        detail="Toutes apps confondues"
+        icon={CpuIcon}
+      />
+      <StatCard
+        title="Mémoire"
+        value={formatBytes(total(metrics => metrics.memoryUsage))}
+        detail="Toutes apps confondues"
+        icon={MemoryStickIcon}
+      />
+    </>
+  );
+}
 
 export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
   const router = useRouter();
@@ -53,9 +76,6 @@ export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
     }),
     { services: 0, running: 0, stopped: 0 },
   );
-  // Every installed app's containers at once: the stats stream covers the whole host, so the
-  // ids are what scopes the totals to Hangar's apps.
-  const { total } = useDockerStats(projects.flatMap(project => project.containerIds));
 
   async function refresh() {
     setRefreshing(true);
@@ -104,18 +124,11 @@ export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
             <StatCard title="Services" value={totals.services} icon={LayersIcon} />
             <StatCard title="Conteneurs actifs" value={totals.running} icon={PlayIcon} />
             <StatCard title="Conteneurs arrêtés" value={totals.stopped} icon={SquareIcon} />
-            <StatCard
-              title="CPU"
-              value={formatPercent(total(metrics => metrics.cpuPercent))}
-              detail="Toutes apps confondues"
-              icon={CpuIcon}
-            />
-            <StatCard
-              title="Mémoire"
-              value={formatBytes(total(metrics => metrics.memoryUsage))}
-              detail="Toutes apps confondues"
-              icon={MemoryStickIcon}
-            />
+            {/* Every installed app's containers at once: the stats stream covers the whole host, so
+                the ids are what scopes the totals to Hangar's apps. */}
+            <DockerStatsProvider>
+              <LiveTotals containerIds={projects.flatMap(project => project.containerIds)} />
+            </DockerStatsProvider>
           </div>
 
           {visible.length > 0 ? (

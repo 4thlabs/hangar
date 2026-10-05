@@ -2,13 +2,12 @@ import { s } from "#modules/apps/format.ts";
 import { statusLabel, statusVariant } from "#modules/apps/status.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
-import type { ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import type { ComposeService } from "#libs/docker";
 import { ContainerTable } from "./container-table.tsx";
 
-type ServiceCardProps = { project: string; service: ComposeService; stats: ContainerStats };
+type ServiceCardProps = { project: string; service: ComposeService };
 
-export function ServiceCard({ project, service, stats }: ServiceCardProps) {
+export function ServiceCard({ project, service }: ServiceCardProps) {
   return (
     <Card>
       <CardHeader>
@@ -23,7 +22,7 @@ export function ServiceCard({ project, service, stats }: ServiceCardProps) {
         </CardAction>
       </CardHeader>
       <CardContent className="px-0">
-        <ContainerTable project={project} containers={service.containers} stats={stats} />
+        <ContainerTable project={project} containers={service.containers} />
       </CardContent>
     </Card>
   );

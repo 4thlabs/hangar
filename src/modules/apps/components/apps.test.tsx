@@ -17,6 +17,7 @@ const noSearch = { q: "", status: [], category: [], update: [], sort: null };
 const { AppsTable } = await import("./apps-table.tsx");
 const { AppsOverview } = await import("./apps-overview.tsx");
 const { ContainerTable } = await import("./container-table.tsx");
+const { DockerStatsContext } = await import("#modules/apps/hooks/use-docker-stats.ts");
 
 const snapshot: ComposeProjectsSnapshot = {
   projects: [
@@ -115,7 +116,11 @@ describe("Docker apps views", () => {
   });
 
   it("renders live metrics from the stats frame, ports and the logs action", () => {
-    const html = renderToStaticMarkup(<ContainerTable stats={stats} project="alpha" containers={[container]} />);
+    const html = renderToStaticMarkup(
+      <DockerStatsContext value={stats}>
+        <ContainerTable project="alpha" containers={[container]} />
+      </DockerStatsContext>,
+    );
 
     expect(html).toContain("alpha-web-1");
     expect(html).toContain("nginx:latest");
@@ -125,7 +130,7 @@ describe("Docker apps views", () => {
   });
 
   it("shows dashes for a container the stats stream has no frame for", () => {
-    const html = renderToStaticMarkup(<ContainerTable stats={{}} project="alpha" containers={[container]} />);
+    const html = renderToStaticMarkup(<ContainerTable project="alpha" containers={[container]} />);
 
     expect(html).toContain("alpha-web-1");
     expect(html).not.toContain("12.5 %");
