@@ -51,6 +51,9 @@ export type RemoteDigests = Record<string, string>;
  */
 export type ImageUpdateReport = { checkedAt: string; remotes: RemoteDigests };
 
+/** One registry check: what the registry served, and the apps it has moved past. */
+export type UpdateCheck = { remotes: RemoteDigests; outdated: Set<string> };
+
 /** Full detail for one container, as shown on the project detail page. */
 export type ComposeContainer = {
   id: string;

@@ -9,6 +9,7 @@ import {
   type ComposeProjectsSnapshot,
   type RemoteDigests,
   type RunningImage,
+  type UpdateCheck,
 } from "./compose.ts";
 import { logger } from "#libs/logs";
 import { Cache, type Snapshot } from "#libs/cache";
@@ -307,6 +308,18 @@ export class Docker {
     }
 
     return remotes;
+  }
+
+  /**
+   * Asks the registry about every installed image, then compares its answers with what runs now.
+   * The two steps every job checking for updates takes, in that order.
+   * @param gap Pause between two registry calls, from the store's `registryThrottling`
+   */
+  async checkUpdates(gap = Docker.RegistryGapMs): Promise<UpdateCheck> {
+    const remotes = await this.remoteDigests(gap);
+    const outdated = Docker.outdated(await this.runningImages.read(), remotes);
+
+    return { remotes, outdated };
   }
 
   /**

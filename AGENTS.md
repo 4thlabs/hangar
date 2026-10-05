@@ -53,8 +53,8 @@ composition root that binds them — `notifications/notifications.ts` (class) vs
 
 Required, because three entry points are plain Node, where `server-only` throws and `.tsx` cannot
 load at all: `bin/cli.js`, `node src/libs/db/utils/migrate.ts`, and the Sidequest worker
-(`sidequest.jobs.js`, outside the bundle). A job builds its own dependencies, as
-`check-image-version.ts` does. Keep `#libs/hangar` free of JSX, and with it
+(`sidequest.jobs.js`, outside the bundle). A job gets its dependencies from the worker's own
+composition root, `src/libs/jobs/worker.ts`. Keep `#libs/hangar` free of JSX, and with it
 `src/modules/widgets/config/config.ts`, which it imports.
 
 ## Classes
