@@ -9,6 +9,20 @@ import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
 
+/** What the button looks like in each state. Uninstalling keeps its wording and only spins. */
+const FACES = {
+  available: { title: "Installer", label: (appName: string) => `Installer ${appName}`, icon: <DownloadIcon /> },
+  installing: { title: "Installation…", label: (appName: string) => `Installation de ${appName}`, icon: <Spinner /> },
+  installed: { title: "Désinstaller", label: (appName: string) => `Désinstaller ${appName}`, icon: <Trash2Icon /> },
+  uninstalling: { title: "Désinstaller", label: (appName: string) => `Désinstaller ${appName}`, icon: <Spinner /> },
+};
+
+function buttonState(installed: boolean, isPending: boolean): keyof typeof FACES {
+  if (installed) return isPending ? "uninstalling" : "installed";
+
+  return isPending ? "installing" : "available";
+}
+
 type StoreAppButtonProps = {
   appId: string;
   appName: string;
@@ -36,6 +50,8 @@ export function StoreAppButton({ appId, appName, installed, installApp, uninstal
 
   const install = () => handle(() => installApp(appId), "Application installée", "Échec de l’installation");
 
+  const face = FACES[buttonState(installed, isPending)];
+
   const uninstall = () => {
     setConfirming(false);
     handle(() => uninstallApp(appId), "Application désinstallée", "Échec de la désinstallation");
@@ -50,12 +66,10 @@ export function StoreAppButton({ appId, appName, installed, installApp, uninstal
         className="absolute top-1.5 right-1.5"
         disabled={isPending}
         onClick={installed ? () => setConfirming(true) : install}
-        aria-label={
-          installed ? `Désinstaller ${appName}` : isPending ? `Installation de ${appName}` : `Installer ${appName}`
-        }
-        title={installed ? "Désinstaller" : isPending ? "Installation…" : "Installer"}
+        aria-label={face.label(appName)}
+        title={face.title}
       >
-        {isPending ? <Spinner /> : installed ? <Trash2Icon /> : <DownloadIcon />}
+        {face.icon}
       </Button>
       {/* Reuses the apps confirmation: unlinking runs `docker compose down` first, same stakes. */}
       <ComposeConfirmDialog

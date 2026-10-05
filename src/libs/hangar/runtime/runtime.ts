@@ -130,15 +130,14 @@ export class Runtime implements CommandRunner {
         // A captured run hands back whatever was produced, exit code included: the caller
         // asked for the output, so it decides whether a non-zero code mattered. Its stderr
         // never joins stdout, but it is worth surfacing when the command produced nothing.
-        if (capture) {
-          return stdout.trim() || code === 0
-            ? resolve({ code: code ?? 0, stdout })
-            : reject(new HangarRuntimeError(code ?? 1, stderr.trim() || "Process exited."));
-        }
+        const succeeded = code === 0;
+        const capturedOutput = capture && stdout.trim() !== "";
 
-        return (code ?? 1) === 0
-          ? resolve({ code: code ?? 0, stdout })
-          : reject(new HangarRuntimeError(code ?? 1, "Process exited."));
+        if (succeeded || capturedOutput) return resolve({ code: code ?? 0, stdout });
+
+        const message = (capture && stderr.trim()) || "Process exited.";
+
+        return reject(new HangarRuntimeError(code ?? 1, message));
       });
     });
   }

@@ -7,17 +7,44 @@ import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import * as z from "zod";
 
-/** `create` decides whether a rejected save deletes the whole folder: it must be a real boolean. */
-const payloadSchema = z.object({ id: z.string(), source: z.string(), create: z.boolean() });
+const payloadSchema = z.object({ id: z.string(), source: z.string() });
 
 /**
- * Saves a store app's compose.yml, or adds a new app. `docker compose config` validates it first:
- * its complaint is the message the user needs, so it is shown as is.
+ * Adds a new store app. `docker compose config` validates it first: its complaint is the message
+ * the user needs, so it is shown as is.
  */
-export const saveApp = async (id: string, source: string, create: boolean): Promise<ActionResult> => {
+export const createApp = async (id: string, source: string): Promise<ActionResult> => {
   await requireSession();
 
-  const parsed = payloadSchema.safeParse({ id, source, create });
+  return writeApp(id, source, {
+    write: payload => hangar.store.createApp(payload.id, payload.source),
+    success: appId => `${appId} a été ajoutée au store.`,
+  });
+};
+
+/**
+ * Saves a store app's compose.yml. `docker compose config` validates it first: its complaint is
+ * the message the user needs, so it is shown as is.
+ */
+export const updateApp = async (id: string, source: string): Promise<ActionResult> => {
+  await requireSession();
+
+  return writeApp(id, source, {
+    write: payload => hangar.store.updateApp(payload.id, payload.source),
+    success: appId => `${appId} a été enregistrée.`,
+  });
+};
+
+type AppWrite = {
+  /** The store call that writes the validated payload. */
+  write: (payload: z.infer<typeof payloadSchema>) => Promise<void>;
+  /** The message shown once it is written. */
+  success: (id: string) => string;
+};
+
+/** Validates the payload, runs the write, and turns its outcome into what the editor shows. */
+async function writeApp(id: string, source: string, { write, success }: AppWrite): Promise<ActionResult> {
+  const parsed = payloadSchema.safeParse({ id, source });
 
   if (!parsed.success) {
     logger.warn("Store app save rejected", { issues: parsed.error.issues });
@@ -26,14 +53,14 @@ export const saveApp = async (id: string, source: string, create: boolean): Prom
   }
 
   try {
-    await hangar.store.saveApp(parsed.data.id, parsed.data.source, parsed.data.create);
+    await write(parsed.data);
 
-    return ActionResult.success(create ? `${id} a été ajoutée au store.` : `${id} a été enregistrée.`);
+    return ActionResult.success(success(parsed.data.id));
   } catch (error) {
     if (error instanceof HangarError) return ActionResult.failure(error.message);
 
-    logger.error("Store app save failed", { error, id });
+    logger.error("Store app save failed", { error, id: parsed.data.id });
 
-    return ActionResult.failure(`L’enregistrement de ${id} a échoué. ${SERVER_LOG_HINT}`);
+    return ActionResult.failure(`L’enregistrement de ${parsed.data.id} a échoué. ${SERVER_LOG_HINT}`);
   }
-};
+}

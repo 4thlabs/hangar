@@ -54,7 +54,7 @@ export function MinifluxEntriesCard({ entries, unread, serviceUrl, now = Date.no
                     {...(isUnread ? { role: "img", "aria-label": "Unread" } : { "aria-hidden": true })}
                   />
                 }
-                trailing={<WidgetTime compact at={Date.parse(entry.published_at)} now={now} />}
+                trailing={<WidgetTime style="compact" at={Date.parse(entry.published_at)} now={now} />}
               >
                 <a
                   href={entry.url}

@@ -16,7 +16,7 @@ export function ProjectActions({ project }: { project: string }) {
         onRun={compose.run}
         onConfirm={compose.setConfirmation}
       />
-      <ComposeRunDialogs compose={compose} subject={project} many={false} />
+      <ComposeRunDialogs compose={compose} subject={project} count={1} />
     </div>
   );
 }

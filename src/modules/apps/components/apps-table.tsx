@@ -27,13 +27,23 @@ type SortableHeadProps = {
   className?: string;
 };
 
+/** How a header shows that the table is sorted on its column, or not. */
+function sortDirection(sort: AppsSort, column: AppSortColumn): "ascending" | "descending" | "none" {
+  if (sort?.column !== column) return "none";
+
+  return sort.descending ? "descending" : "ascending";
+}
+
+const SORT_ICONS = { ascending: ArrowUpIcon, descending: ArrowDownIcon, none: ChevronsUpDownIcon };
+
 /** A column header that toggles the table's sort, announcing its state to screen readers. */
 function SortableHead({ column, label, sort, onSort, className }: SortableHeadProps) {
-  const active = sort?.column === column;
-  const Icon = active ? (sort.descending ? ArrowDownIcon : ArrowUpIcon) : ChevronsUpDownIcon;
+  const direction = sortDirection(sort, column);
+  const active = direction !== "none";
+  const Icon = SORT_ICONS[direction];
 
   return (
-    <TableHead className={className} aria-sort={active ? (sort.descending ? "descending" : "ascending") : "none"}>
+    <TableHead className={className} aria-sort={direction}>
       <button
         type="button"
         className="-mx-1 flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 hover:text-foreground/80"
@@ -144,7 +154,7 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
         </TableBody>
       </Table>
 
-      <ComposeRunDialogs compose={compose} subject={plural(selected.length, "application")} many />
+      <ComposeRunDialogs compose={compose} subject={plural(selected.length, "application")} count={selected.length} />
     </div>
   );
 }

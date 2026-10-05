@@ -92,6 +92,6 @@ describe("widget primitives", () => {
   it("writes the same moment short when the row cannot spare the words", () => {
     const now = Date.UTC(2026, 8, 21, 12, 0, 0);
 
-    expect(renderToStaticMarkup(<WidgetTime at={now - 7_200_000} now={now} compact />)).toContain(">2h<");
+    expect(renderToStaticMarkup(<WidgetTime at={now - 7_200_000} now={now} style="compact" />)).toContain(">2h<");
   });
 });
