@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { WidgetService, widgetConfigSchema } from "./config.ts";
+import { WidgetKey, WidgetService, widgetConfigSchema, type WidgetConfig } from "./config.ts";
 import { noSecret } from "../mock/mock.ts";
 
 const DOMAIN = "test.local";
@@ -100,5 +100,43 @@ describe("widgetConfigSchema", () => {
 
   it.each([0, -1, 1.5, "15"])("rejects %o as a TTL", value => {
     expect(widgetConfigSchema.safeParse({ type: "frigate-events", column: 3, ttl: value }).success).toBe(false);
+  });
+});
+
+describe("WidgetKey", () => {
+  const glance: WidgetConfig = { type: "github-releases", column: 1, repositories: ["glanceapp/glance"] };
+  const waku: WidgetConfig = { type: "github-releases", column: 1, repositories: ["wakujs/waku"] };
+
+  it("tells two placements of one type apart by what they ask for", () => {
+    const [first, second] = WidgetKey.all([glance, waku]);
+
+    expect(first).toMatch(/^github-releases-\w+$/);
+    expect(second).not.toBe(first);
+  });
+
+  it("keeps a placement's key when hangar.yml is reordered or the card changes column", () => {
+    const [glanceKey] = WidgetKey.all([glance, waku]);
+
+    expect(WidgetKey.all([waku, { ...glance, column: 3 }])[1]).toBe(glanceKey);
+  });
+
+  it("gives a placement asking for another TTL its own key", () => {
+    const [first, second] = WidgetKey.all([glance, { ...glance, ttl: 600 }]);
+
+    // Not a suffixed duplicate: its own hash, so it never reads the entry the other TTL bound.
+    expect(second).not.toMatch(new RegExp(`^${first}`));
+  });
+
+  it("suffixes an identical declaration, since a React key must be unique", () => {
+    const [first, second] = WidgetKey.all([glance, glance]);
+
+    expect(second).toBe(`${first}-2`);
+  });
+
+  it("finds the declaration a key names, and nothing for one it never handed out", () => {
+    const configs = [glance, waku];
+
+    expect(WidgetKey.find(configs, WidgetKey.all(configs)[1]!)).toBe(waku);
+    expect(WidgetKey.find(configs, "github-releases")).toBeUndefined();
   });
 });

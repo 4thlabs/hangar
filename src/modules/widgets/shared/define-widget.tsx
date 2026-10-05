@@ -11,7 +11,7 @@ import { WidgetSkeleton } from "./widget-skeleton.tsx";
  * (card, skeleton, error) and re-implements the same try/catch + log + fallback.
  */
 export type WidgetDefinition<T> = {
-  /** Stable key, also used for the React key in the dashboard grid. */
+  /** The widget type, as `hangar.yml` names it. Also the key of a widget nobody placed — see {@link Widget.at}. */
   id: string;
   /** Display name, shown in the header, skeleton and error state. */
   title: string;
@@ -20,8 +20,11 @@ export type WidgetDefinition<T> = {
   className?: string | undefined;
   /** Shown in the error state, after "<title> is unavailable". */
   errorDescription: string;
-  /** Renders the loaded data. Return null to fall back to the error state. */
-  render: (data: T) => ReactNode;
+  /**
+   * Renders the loaded data. Return null to fall back to the error state.
+   * `key` is the placement's, for the card that addresses something per placement (relayed images).
+   */
+  render: (data: T, key: string) => ReactNode;
 } & (
   | {
       /** Fetches the data. Anything thrown here becomes the error state. */
@@ -41,6 +44,10 @@ export type WidgetDefinition<T> = {
 
 export type Widget = {
   id: string;
+  /** Which placement this is: its cache entry, its React key, its image relay path. */
+  key: string;
+  /** The same widget for one placement, by its `WidgetKey`. Returns a copy: the clock and Docker widgets are shared singletons. */
+  at: (key: string) => Widget;
   Widget: () => ReactNode | Promise<ReactNode>;
   Skeleton: () => ReactNode;
   /** Loads into the snapshot ahead of a render, so the dashboard never paints a skeleton. */
@@ -55,14 +62,9 @@ export type Widget = {
  * would be thrown away with it and cache nothing. The per-call handle below is only the bound
  * key, TTL, grace and loader; the entries it reads live here, so a rebuilt widget finds them.
  *
- * Process-global, keyed by widget id, and therefore only safe while no widget renders per-session
- * data. None does; the day one needs to, it must not read through here.
- *
- * ponytail: a widget id is not unique — `hangar.yml` accepts two `github-releases` blocks with
- * different repositories, and both would read one entry, under whichever `ttl:` bound it first. Give `WidgetDefinition` an optional
- * `cacheKey` defaulting to `id`, set to `${id}:${service.api}` by the service factories, when that
- * happens. Do not uniquify `widget.id` in `WidgetRegistry` instead: the clock and Docker widgets
- * are shared module singletons, so assigning to `.id` would corrupt them for every later render.
+ * Process-global, keyed by placement (`WidgetKey`, which tells two `github-releases` blocks apart),
+ * and therefore only safe while no widget renders per-session data. None does; the day one needs
+ * to, it must not read through here.
  */
 const cache = new Cache();
 
@@ -83,20 +85,27 @@ export const clearWidgetCache = () => cache.clear();
  * A failing widget degrades to its own card; the rest of the dashboard stands.
  */
 export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
+  return place(definition, definition.id);
+}
+
+/** The widget bound to one placement's cache entry. */
+function place<T>(definition: WidgetDefinition<T>, key: string): Widget {
   const { id, title, icon, className, errorDescription, render } = definition;
 
   const fallback = () => <WidgetError className={className} icon={icon} name={title} description={errorDescription} />;
   const snapshot =
-    "snapshot" in definition ? definition.snapshot : cache.define(id, definition.ttl ?? TTL, GRACE, definition.load);
+    "snapshot" in definition ? definition.snapshot : cache.define(key, definition.ttl ?? TTL, GRACE, definition.load);
 
   return {
     id,
+    key,
+    at: other => place(definition, other),
     Widget() {
       const show = (data: T) => {
         try {
-          return render(data) ?? fallback();
+          return render(data, key) ?? fallback();
         } catch (error: unknown) {
-          logger.error(`Failed to render the ${title} widget`, { error, widget: id });
+          logger.error(`Failed to render the ${title} widget`, { error, widget: key });
           return fallback();
         }
       };
@@ -112,7 +121,7 @@ export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
         try {
           return show(await snapshot.read());
         } catch (error: unknown) {
-          logger.error(`Failed to load the ${title} widget`, { error, widget: id });
+          logger.error(`Failed to load the ${title} widget`, { error, widget: key });
           return fallback();
         }
       })();

@@ -64,7 +64,12 @@ describe("JellyfinLatestCard", () => {
 
   it("relays posters through Hangar and links the visitor to Jellyfin", () => {
     const html = renderToStaticMarkup(
-      <JellyfinLatestCard counts={counts} items={items} serviceUrl="https://jellyfin.test.local" />,
+      <JellyfinLatestCard
+        counts={counts}
+        items={items}
+        serviceUrl="https://jellyfin.test.local"
+        widget="jellyfin-latest"
+      />,
     );
 
     expect(html).toContain('src="/api/widgets/jellyfin-latest/image/ep-1"');
@@ -73,7 +78,12 @@ describe("JellyfinLatestCard", () => {
 
   it("reads the library totals as a subtitle rather than a card of their own", () => {
     const html = renderToStaticMarkup(
-      <JellyfinLatestCard counts={counts} items={items} serviceUrl="https://jellyfin.test.local" />,
+      <JellyfinLatestCard
+        counts={counts}
+        items={items}
+        serviceUrl="https://jellyfin.test.local"
+        widget="jellyfin-latest"
+      />,
     );
 
     expect(html).toContain("1,284 movies");
@@ -88,6 +98,7 @@ describe("JellyfinLatestCard", () => {
         counts={counts}
         items={[{ id: "s-1", imageId: undefined, title: "Drifters", subtitle: undefined }]}
         serviceUrl="https://jellyfin.test.local"
+        widget="jellyfin-latest"
       />,
     );
 
@@ -98,7 +109,12 @@ describe("JellyfinLatestCard", () => {
 
   it("says so when a library has nothing new", () => {
     const html = renderToStaticMarkup(
-      <JellyfinLatestCard counts={counts} items={[]} serviceUrl="https://jellyfin.test.local" />,
+      <JellyfinLatestCard
+        counts={counts}
+        items={[]}
+        serviceUrl="https://jellyfin.test.local"
+        widget="jellyfin-latest"
+      />,
     );
 
     expect(html).toContain("No items found.");

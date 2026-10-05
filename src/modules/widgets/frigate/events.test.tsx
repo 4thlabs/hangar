@@ -39,7 +39,13 @@ const events: FrigateEvent[] = [
 describe("FrigateEventsCard", () => {
   it("renders Frigate statistics and recent events with public links", () => {
     const html = renderToStaticMarkup(
-      <FrigateEventsCard events={events} stats={stats} serviceUrl="https://frigate.example.com" now={now} />,
+      <FrigateEventsCard
+        events={events}
+        stats={stats}
+        serviceUrl="https://frigate.example.com"
+        widget="frigate-events"
+        now={now}
+      />,
     );
 
     expect(html).toContain("2 cameras");
@@ -56,7 +62,13 @@ describe("FrigateEventsCard", () => {
 
   it("renders the empty state when there are no recent events", () => {
     const html = renderToStaticMarkup(
-      <FrigateEventsCard events={[]} stats={stats} serviceUrl="https://frigate.example.com" now={now} />,
+      <FrigateEventsCard
+        events={[]}
+        stats={stats}
+        serviceUrl="https://frigate.example.com"
+        widget="frigate-events"
+        now={now}
+      />,
     );
 
     expect(html).toContain("No recent events.");

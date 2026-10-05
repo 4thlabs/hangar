@@ -28,10 +28,10 @@ function Dashboard() {
 
         return (
           <div key={column} className={COLUMN_CLASSNAME[column]}>
-            {columnPlacements.map(({ widget: { id, Widget, Skeleton, ready } }) => (
+            {columnPlacements.map(({ widget: { key, Widget, Skeleton, ready } }) => (
               // Cold, or its service is down: behind a boundary, so it streams in on its own
               // instead of holding up the rest of the grid. Warm, it renders inline — see `Warm`.
-              <Warm key={id} ready={ready()} fallback={<Skeleton />}>
+              <Warm key={key} ready={ready()} fallback={<Skeleton />}>
                 <Widget />
               </Warm>
             ))}

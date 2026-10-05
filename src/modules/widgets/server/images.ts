@@ -1,4 +1,4 @@
-import type { WidgetConfig, WidgetService } from "../config/config.ts";
+import { WidgetService, type WidgetConfig, type WidgetHost } from "../config/config.ts";
 import { FrigateClient } from "../frigate/api/index.ts";
 import { JellyfinClient } from "../jellyfin/api/index.ts";
 
@@ -27,14 +27,19 @@ export class WidgetImages {
    */
   private static readonly Id = /^[\w.-]+$/;
 
-  /** The service a placed widget talks to, `undefined` when the store does not place it. */
-  private readonly serviceFor: (type: WidgetConfig["type"]) => WidgetService | undefined;
+  /** The declaration a placement key names, `undefined` when the store places nothing under it. */
+  private readonly placed: (key: string) => WidgetConfig | undefined;
+
+  /** How this Hangar addresses the services its widgets read. */
+  private readonly host: WidgetHost;
 
   /**
-   * @param serviceFor The service a placed widget talks to, `undefined` when the store does not place it
+   * @param placed The declaration a placement key names, `undefined` when the store places nothing under it
+   * @param host How this Hangar addresses the services its widgets read
    */
-  constructor(serviceFor: (type: WidgetConfig["type"]) => WidgetService | undefined) {
-    this.serviceFor = serviceFor;
+  constructor(placed: (key: string) => WidgetConfig | undefined, host: WidgetHost) {
+    this.placed = placed;
+    this.host = host;
   }
 
   /**
@@ -42,16 +47,16 @@ export class WidgetImages {
    *
    * `undefined` for anything the dashboard would never ask for — a widget that relays nothing, one
    * the store does not place, an id no service would issue — which the route answers with a 404.
-   * @param widget The widget the image belongs to, as `hangar.yml` names it
+   * @param widget The placement the image belongs to, by its `WidgetKey`: two Jellyfin widgets
+   * may each talk to their own server
    * @param id The image's id, as the service spells it
    */
   async fetch(widget: string, id: string): Promise<Response | undefined> {
-    const relay = WidgetImages.Relays[widget as WidgetConfig["type"]];
+    if (!WidgetImages.Id.test(id)) return undefined;
 
-    if (!relay || !WidgetImages.Id.test(id)) return undefined;
+    const config = this.placed(widget);
+    const relay = config && WidgetImages.Relays[config.type];
 
-    const service = this.serviceFor(widget as WidgetConfig["type"]);
-
-    return service && (await relay(service, id));
+    return relay && (await relay(WidgetService.of(config, this.host), id));
   }
 }

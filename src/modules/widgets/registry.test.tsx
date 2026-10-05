@@ -1,15 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 
 // The registry pulls in the Docker widget, and through it the server-only client.
 vi.mock("server-only", () => ({}));
 
 import { WidgetRegistry } from "./registry.ts";
 import { defaultWidgets, widgetConfigSchema } from "./config/config.ts";
-import { noSecret } from "./mock/mock.ts";
+import { clearWidgetCache, noSecret } from "./mock/mock.ts";
+import { githubClient } from "./github/api/client.ts";
 
 const host = { domain: "test.local", containerName: (app: string) => app, secret: noSecret };
 
 describe("WidgetRegistry", () => {
+  beforeEach(clearWidgetCache);
+
   it("places every declared widget in its column, in order", () => {
     const placements = new WidgetRegistry(host).resolve([
       { type: "clock", column: 1 },
@@ -20,6 +24,25 @@ describe("WidgetRegistry", () => {
       ["clock", 1],
       ["github-releases", 3],
     ]);
+  });
+
+  it("gives two placements of one type their own cache entry", async () => {
+    const load = vi
+      .spyOn(githubClient, "getLatestReleases")
+      .mockImplementation(repositories =>
+        Promise.resolve(
+          repositories.map(repository => ({ repository, tag: "v1", url: "", publishedAt: "2026-01-01" })),
+        ),
+      );
+    const [glance, waku] = new WidgetRegistry(host).resolve([
+      { type: "github-releases", column: 1, repositories: ["glanceapp/glance"] },
+      { type: "github-releases", column: 3, repositories: ["wakujs/waku"] },
+    ]);
+
+    expect(glance!.widget.key).not.toBe(waku!.widget.key);
+    expect(renderToStaticMarkup(<>{await glance!.widget.Widget()}</>)).toContain("glanceapp/glance");
+    expect(renderToStaticMarkup(<>{await waku!.widget.Widget()}</>)).toContain("wakujs/waku");
+    expect(load).toHaveBeenCalledTimes(2);
   });
 
   it("resolves the dashboard a store gets when it declares no widgets", () => {

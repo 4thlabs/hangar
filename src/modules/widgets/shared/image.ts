@@ -1,5 +1,3 @@
-import type { WidgetConfig } from "../config/config.ts";
-
 /**
  * A widget image as the browser addresses it.
  *
@@ -10,10 +8,11 @@ import type { WidgetConfig } from "../config/config.ts";
 export class WidgetImage {
   /**
    * Where a card points an `<img>` whose bytes Hangar relays.
-   * @param widget The widget the image belongs to, as `hangar.yml` names it
+   * @param widget The placement the image belongs to, by its `WidgetKey` — not its type, which two
+   * placements may share while talking to different servers
    * @param id The image's id, as the service spells it
    */
-  static url(widget: WidgetConfig["type"], id: string) {
+  static url(widget: string, id: string) {
     return `/api/widgets/${widget}/image/${encodeURIComponent(id)}`;
   }
 }

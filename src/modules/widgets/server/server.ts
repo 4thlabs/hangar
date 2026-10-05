@@ -1,7 +1,7 @@
 import "server-only";
 import { env } from "#libs/env";
 import { hangar } from "#libs/hangar/server";
-import { WidgetService, type WidgetHost } from "../config/config.ts";
+import { WidgetKey, type WidgetHost } from "../config/config.ts";
 import { WidgetRegistry } from "../registry.ts";
 import { WidgetImages } from "./images.ts";
 
@@ -23,6 +23,4 @@ export const widgetHost: WidgetHost = {
 export const widgetRegistry = new WidgetRegistry(widgetHost);
 
 /** The image relay, for the widgets the store places. */
-export const widgetImages = new WidgetImages(type =>
-  WidgetService.placed(hangar.store.config.widgets(), type, widgetHost),
-);
+export const widgetImages = new WidgetImages(key => WidgetKey.find(hangar.store.config.widgets(), key), widgetHost);
