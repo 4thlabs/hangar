@@ -14,6 +14,27 @@ import { logger } from "#libs/logs";
 import { Cache, type Snapshot } from "#libs/cache";
 import type { ContainerStatsSample } from "./stats.ts";
 
+/** What the daemon answers for a container that went away between a list and a call on it. */
+const NOT_FOUND = 404;
+
+/**
+ * The values of the calls that succeeded. A container that went away mid-way (404) is dropped
+ * quietly; any other failure is dropped too, so one container cannot sink the whole read, but
+ * logged, since it is not the expected race.
+ * @param operation What was being done, for the log line
+ */
+function fulfilledValues<T>(results: PromiseSettledResult<T>[], operation: string): T[] {
+  for (const result of results) {
+    const isExpectedRace =
+      result.status === "rejected" && (result.reason as { statusCode?: number }).statusCode === NOT_FOUND;
+
+    if (result.status === "rejected" && !isExpectedRace)
+      logger.warn(`Could not ${operation}`, { error: result.reason });
+  }
+
+  return results.filter(result => result.status === "fulfilled").map(result => result.value);
+}
+
 /** Raw stats samples keyed by full container id. */
 export type Samples = Map<string, ContainerStatsSample>;
 
@@ -226,7 +247,7 @@ export class Docker {
       listed.map(async info => ({ info, detail: await this.docker.getContainer(info.Id).inspect() })),
     );
 
-    return inspected.filter(result => result.status === "fulfilled").map(result => result.value);
+    return fulfilledValues(inspected, "inspect a container");
   };
 
   /**
@@ -416,7 +437,10 @@ export class Docker {
     else this.docker.modem.demuxStream(logs, output, output);
 
     logs.on("end", () => output.end());
-    logs.on("error", () => output.end());
+    logs.on("error", error => {
+      logger.warn("A container log stream failed", { error, container: container.info.Id });
+      output.end();
+    });
     signal.addEventListener("abort", () => logs.destroy());
 
     return output;
@@ -443,9 +467,10 @@ export class Docker {
     );
 
     return new Map(
-      samples
-        .filter(sample => sample.status === "fulfilled")
-        .map(sample => [sample.value[0], sample.value[1] as ContainerStatsSample]),
+      fulfilledValues(samples, "sample a container's statistics").map(([id, sample]) => [
+        id,
+        sample as ContainerStatsSample,
+      ]),
     );
   }
 }

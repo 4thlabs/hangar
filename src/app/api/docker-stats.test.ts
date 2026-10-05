@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Lives here rather than beside the route: waku turns every file under `src/app/pages/` into a
 // route, test files included, which breaks the build. `api-route.ts` next door is what the
 // 401/404/503 assertions below actually exercise.
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), logger: { error: vi.fn() } }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), logger: { error: vi.fn(), warn: vi.fn() } }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("#libs/auth", () => ({ getSession: mocks.getSession }));
@@ -96,6 +96,8 @@ describe("GET Docker container statistics", () => {
     // The good first frame is delivered, and the stream stops there rather than hanging.
     expect(body.match(/^data: /gm)).toHaveLength(1);
     expect(body).toContain('"memoryUsage":1024');
+    // Unlike a closed tab, a daemon failure leaves a trace on the server.
+    expect(mocks.logger.warn).toHaveBeenCalledWith("Docker statistics stream failed", { error: expect.any(Error) });
     controller.abort();
   });
 });

@@ -40,13 +40,18 @@ export class Runtime implements CommandRunner {
   private children: Set<ChildProcess> = new Set();
 
   /**
-   * Check the existance of a file/path
+   * Whether a path exists. Only "not there" answers `false`: any other `stat` failure, such as a
+   * permission error, is thrown rather than passed off as a missing path.
    * @param path The path to check
    */
   static async exists(path: string) {
     return stat(path)
       .then(() => true)
-      .catch(() => false);
+      .catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT" || error.code === "ENOTDIR") return false;
+
+        throw error;
+      });
   }
 
   /**

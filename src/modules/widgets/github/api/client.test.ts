@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { logger } from "#libs/logs";
 import { GithubClient } from "./client.ts";
 
 /** A fresh client per case, so no case reads another's cache. */
@@ -32,6 +33,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("getLatestReleases", () => {
@@ -52,10 +54,16 @@ describe("getLatestReleases", () => {
 
   it("drops a repository that has no release instead of failing the widget", async () => {
     vi.stubGlobal("fetch", respond({ "glanceapp/glance": release("v0.8.4", "2026-09-18T10:00:00Z") }));
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
 
     const releases = await client.getLatestReleases(["glanceapp/glance", "example/never-released"]);
 
     expect(releases.map(item => item.repository)).toEqual(["glanceapp/glance"]);
+    // Dropped from the card, but named in the log, so a typo in `hangar.yml` can be found.
+    expect(warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ repository: "example/never-released" }),
+    );
   });
 
   it("serves the cached release instead of asking again", async () => {

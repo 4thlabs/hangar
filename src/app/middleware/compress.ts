@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import zlib from "node:zlib";
 import { COMPRESSIBLE_CONTENT_TYPE_REGEX } from "hono/compress";
+import { logger } from "#libs/logs";
 import type { MiddlewareHandler } from "hono/types";
 
 /** Below this, the gzip header costs more than the encoding saves. Only checked when the length is known. */
@@ -65,8 +66,11 @@ export default (): MiddlewareHandler =>
 
     // Detached on purpose: the response is the compressor's readable end, which is already
     // flowing to the client. A failure upstream destroys `gzip`, which ends that stream — the
-    // status line left long ago, so a truncated body is all the client can be told.
-    void pipeline(Readable.fromWeb(body as never), gzip).catch(() => {});
+    // status line left long ago, so a truncated body is all the client can be told. A client that
+    // hung up is the normal case and not logged.
+    void pipeline(Readable.fromWeb(body as never), gzip).catch((error: unknown) => {
+      if (!c.req.raw.signal.aborted) logger.warn("Compressing a response failed", { error, path: c.req.path });
+    });
 
     c.res = new Response(Readable.toWeb(gzip) as ReadableStream<Uint8Array>, c.res);
     c.res.headers.delete("Content-Length");

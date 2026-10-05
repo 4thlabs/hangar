@@ -2,6 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { apiRoute, sseEvent, sseStream } from "#app/api/api-route.ts";
 import { imageCheckReport } from "#libs/jobs";
 import { notifications } from "#libs/notifications/server";
+import { logger } from "#libs/logs";
 
 /**
  * How often the stream looks for new notifications.
@@ -41,9 +42,11 @@ async function* frames(userId: string, from: Date, signal: AbortSignal) {
 
       yield sseEvent(fresh);
     }
-  } catch {
+  } catch (error) {
     // The client went away, or the database did. Ending the stream is all that is left: the
     // status line is long gone, so the browser reconnects and gets the error then.
+    // Only the second is worth a line: a closed tab is the normal way for this stream to end.
+    if (!signal.aborted) logger.warn("Notification stream failed", { error, userId });
   }
 }
 

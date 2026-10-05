@@ -40,7 +40,8 @@ export function RegisterForm() {
       }
 
       router.replace("/");
-    } catch {
+    } catch (error) {
+      console.error("Sign-up request failed", error);
       setError("Unable to create your account. Please try again.");
     } finally {
       setIsPending(false);

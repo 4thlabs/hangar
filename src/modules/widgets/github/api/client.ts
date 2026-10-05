@@ -1,6 +1,7 @@
 import ky, { type KyInstance } from "ky";
 import { Cache } from "#libs/cache";
 import { env } from "#libs/env";
+import { logger } from "#libs/logs";
 
 /** The subset of a GitHub release displayed by Hangar. */
 export interface GithubRelease {
@@ -69,16 +70,23 @@ export class GithubClient {
   /**
    * The latest release of each repository, newest first.
    *
-   * A repository that has no release, was renamed or is private simply drops out:
-   * one bad entry in `hangar.yml` must not take the whole card down.
+   * A repository that has no release, was renamed or is private drops out of the card, so one
+   * bad entry in `hangar.yml` cannot take the whole card down; the log says which one and why.
    */
   async getLatestReleases(repositories: readonly string[]): Promise<GithubRelease[]> {
     const settled = await Promise.allSettled(repositories.map(repository => this.getLatestRelease(repository)));
+    const releases: GithubRelease[] = [];
 
-    return settled
-      .filter((result): result is PromiseFulfilledResult<GithubRelease> => result.status === "fulfilled")
-      .map(result => result.value)
-      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+    for (const [index, result] of settled.entries()) {
+      if (result.status === "fulfilled") releases.push(result.value);
+      else
+        logger.warn("Skipping a repository on the GitHub card", {
+          error: result.reason,
+          repository: repositories[index],
+        });
+    }
+
+    return releases.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
   }
 
   /**

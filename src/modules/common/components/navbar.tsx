@@ -123,7 +123,8 @@ function UserMenu({ user }: { user: AvatarUser }) {
       }
 
       router.replace("/login");
-    } catch {
+    } catch (error) {
+      console.error("Sign-out request failed", error);
       toast.add(SIGN_OUT_ERROR_TOAST);
     } finally {
       setIsSigningOut(false);

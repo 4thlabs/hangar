@@ -3,6 +3,7 @@ import { apiRoute, sseEvent, sseStream } from "#app/api/api-route.ts";
 import type { Samples } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { ContainerStats } from "#libs/docker";
+import { logger } from "#libs/logs";
 
 /** How often a frame goes out. Also the window the CPU percentage is measured over. */
 const INTERVAL = 1_000;
@@ -31,9 +32,11 @@ async function* frames(first: Samples, signal: AbortSignal) {
       await delay(INTERVAL, undefined, { signal });
       current = await docker.sampleStats();
     }
-  } catch {
+  } catch (error) {
     // The client went away, or the daemon did after a good first frame. Ending the stream is all
     // that is left: the status line is long gone, so the browser reconnects and gets the 503 then.
+    // Only the second is worth a line: a closed tab is the normal way for this stream to end.
+    if (!signal.aborted) logger.warn("Docker statistics stream failed", { error });
   }
 }
 
