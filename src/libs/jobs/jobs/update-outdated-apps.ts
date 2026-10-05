@@ -1,10 +1,7 @@
-import Dockerode from "dockerode";
 import { Job } from "sidequest";
-import { Docker } from "#libs/docker";
-import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
-import { db } from "#libs/db";
-import { Notifications } from "#libs/notifications";
+import type { CreateJobServices } from "../services.ts";
+import { createWorkerServices } from "../worker.ts";
 
 /** What one auto-update run did, kept in the job's `result` column for the Jobs settings table. */
 export type AutoUpdateReport = { ranAt: string; updated: string[]; failed: string[] };
@@ -15,18 +12,28 @@ export type AutoUpdateReport = { ranAt: string; updated: string[]; failed: strin
  * Runs nightly on its own schedule, and by hand from Settings > JOBS.
  */
 export class UpdateOutdatedApps extends Job {
+  /** Builds what the run works with. */
+  private readonly createServices: CreateJobServices;
+
+  /**
+   * @param createServices The worker's own services by default, as Sidequest constructs the job
+   * with no arguments; a test passes its doubles
+   */
+  constructor(createServices: CreateJobServices = createWorkerServices) {
+    super();
+    this.createServices = createServices;
+  }
+
   /**
    * Updates every outdated app, one at a time, and returns what went through and what failed.
    */
   async run(): Promise<AutoUpdateReport> {
-    // Its own client rather than `#libs/docker/server`: that module is `server-only`, and a job
-    // is imported by a plain Node process. Same two arguments the web server passes.
-    const docker = new Docker(new Dockerode(), hangar.store);
+    const { hangar, docker, notifications } = await this.createServices();
 
     // Asked here rather than read off the last `CheckImageVersion` result: that report is up to
     // four hours old, and pulling for an app already up to date is a recreate for nothing.
-    const remotes = await docker.remoteDigests(hangar.store.config.registryThrottling());
-    const projects = [...Docker.outdated(await docker.runningImages.read(), remotes)];
+    const { outdated } = await docker.checkUpdates(hangar.store.config.registryThrottling());
+    const projects = [...outdated];
 
     const updated: string[] = [];
     const failed: string[] = [];
@@ -49,7 +56,7 @@ export class UpdateOutdatedApps extends Job {
     // Nothing to tell the web server either: this process cannot reach its cache, but the daemon
     // reports every recreated container to it, and the badge clears with the reload that follows.
     if (updated.length > 0 || failed.length > 0) {
-      await new Notifications(db).notify({
+      await notifications.notify({
         level: failed.length > 0 ? "error" : "success",
         title: "Mise à jour automatique",
         description:
