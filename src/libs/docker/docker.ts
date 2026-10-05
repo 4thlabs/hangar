@@ -271,7 +271,6 @@ export class Docker {
       const digest = await this.remoteDigest(image);
 
       if (digest === Docker.RateLimited) {
-        // In the message, not in metadata: the log format only ever prints `message` and `error`.
         logger.warn(
           `Registry rate limit hit on ${image} (${index} checked), skipping the remaining ${references.length - index - 1}`,
         );
