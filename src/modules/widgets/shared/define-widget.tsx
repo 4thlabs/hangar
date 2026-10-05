@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Cache, type Snapshot } from "#libs/cache";
 import { logger } from "#libs/logs";
+import { renderSnapshot } from "#modules/common/components/render-snapshot.ts";
 import { WidgetError } from "./widget-error.tsx";
 import { WidgetSkeleton } from "./widget-skeleton.tsx";
 
@@ -111,23 +112,11 @@ export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
           }
         };
 
-        // Synchronously, when the snapshot is warm. An async component suspends, and a suspended
-        // boundary puts its skeleton in the shell no matter how fast the data arrives — so this,
-        // not the cache alone, is what keeps the dashboard from painting skeletons at all.
-        const ready = snapshot.peek();
+        return renderSnapshot(snapshot, show, (error: unknown) => {
+          logger.error(`Failed to load the ${title} widget`, { error, widget: key });
 
-        if (ready) {
-          return show(ready.data);
-        }
-
-        return (async () => {
-          try {
-            return show(await snapshot.read());
-          } catch (error: unknown) {
-            logger.error(`Failed to load the ${title} widget`, { error, widget: key });
-            return fallback();
-          }
-        })();
+          return fallback();
+        });
       },
       warm: snapshot.warm,
       ready: () => snapshot.peek() !== undefined,
