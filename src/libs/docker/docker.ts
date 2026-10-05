@@ -92,10 +92,11 @@ export class Docker {
 
   /**
    * Default {@link ttl}. Liveness is not its job: `DockerEvents` refreshes the sweep the moment the
-   * daemon reports a change, so this is only the net for an event stream that went quiet without
-   * dropping — a stall over a `tcp://` `DOCKER_HOST`, say.
+   * daemon reports a change. This is the net for a change the stream never reported — an action
+   * the filter misses, or a stream gone quiet without dropping — and a minute bounds that, while
+   * the warm loop no longer re-sweeps on every tick for nothing.
    */
-  private static readonly Ttl = 300_000;
+  private static readonly Ttl = 60_000;
 
   /**
    * How long past its TTL a sweep is still handed out while it reloads behind the caller. Comfortably
@@ -106,9 +107,9 @@ export class Docker {
 
   /**
    * `df` is the slowest call the daemon has, and every event that moves these counts refreshes them
-   * anyway — see {@link Ttl}.
+   * anyway; this is the same net as {@link Ttl}, looser because only the dashboard reads it.
    */
-  private static readonly OverviewTtl = 3_600_000;
+  private static readonly OverviewTtl = 300_000;
 
   /** Longer grace than the sweep: nothing here changes fast enough to be worth blocking a paint. */
   private static readonly OverviewGrace = 3_600_000;

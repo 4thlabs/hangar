@@ -492,7 +492,7 @@ describe("Docker snapshot staleness", () => {
     expect((await docker.overview.read()).version).toBe("27.3.1");
 
     givenDaemon("28.0.0");
-    vi.setSystemTime(START + 3_610_000);
+    vi.setSystemTime(START + 310_000);
 
     // Past its TTL but inside the grace window: the caller gets the snapshot without waiting on
     // the daemon, and the reload goes out behind it.
@@ -512,11 +512,11 @@ describe("Docker snapshot staleness", () => {
     dockerMock.df.mockRejectedValue(new Error("socket gone"));
 
     // Inside the grace window the failed reload puts the snapshot back, timestamp and all...
-    vi.setSystemTime(START + 3_610_000);
+    vi.setSystemTime(START + 310_000);
     await expect(docker.overview.read()).resolves.toMatchObject({ version: "27.3.1" });
 
     // ...so it keeps ageing, and past it the caller gets the daemon's real error instead.
-    vi.setSystemTime(START + 7_300_000);
+    vi.setSystemTime(START + 4_000_000);
     await expect(docker.overview.read()).rejects.toThrow("socket gone");
   });
 
@@ -525,7 +525,7 @@ describe("Docker snapshot staleness", () => {
     const docker = client("alpha");
 
     await docker.projects.read();
-    vi.setSystemTime(START + 301_000);
+    vi.setSystemTime(START + 61_000);
     await docker.projects.read();
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
