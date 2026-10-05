@@ -6,20 +6,22 @@ import { HangarError } from "./hangar-error.ts";
 
 /**
  * What a scan of `app-installed` expects to meet: a dangling app symlink (`ENOENT`) or a shared
- * fragment read as a directory (`ENOTDIR`). Anything else — a permission, a disk error — is a
- * real failure and must not pass for an empty folder.
+ * fragment read as a directory (`ENOTDIR`). Anything else — a permission, a disk error — is
+ * unexpected, and worth a log line even though the scan goes on.
  */
 const EXPECTED_SCAN_ERRORS = new Set(["ENOENT", "ENOTDIR"]);
 
 /**
- * A `.catch` handler that turns an expected scan error into `fallback` and any other one into a
- * `HangarError` naming the path.
+ * A `.catch` handler that turns any scan error into `fallback`, logging the unexpected ones.
+ * Never thrown: one unreadable entry must not take down every page that lists variables.
  */
-function fallbackWhenMissing<T>(fallback: T, target: string) {
+function fallbackOnScanError<T>(fallback: T, target: string) {
   return (error: NodeJS.ErrnoException): T => {
-    if (error.code !== undefined && EXPECTED_SCAN_ERRORS.has(error.code)) return fallback;
+    const isExpected = error.code !== undefined && EXPECTED_SCAN_ERRORS.has(error.code);
 
-    throw new HangarError(`Cannot read ${target}: ${error.code ?? error.message}`);
+    if (!isExpected) logger.warn("Skipping an unreadable path in the installed apps", { error, path: target });
+
+    return fallback;
   };
 }
 
@@ -196,7 +198,7 @@ export class HangarEnv {
     const apps = await Promise.all(
       (await this.entries()).map(async entry => {
         const target = path.join(this._installedPath, entry);
-        const inner = await readdir(target).catch(fallbackWhenMissing(null, target));
+        const inner = await readdir(target).catch(fallbackOnScanError(null, target));
 
         return inner === null ? [] : [entry];
       }),
@@ -219,7 +221,7 @@ export class HangarEnv {
     const files = await Promise.all(
       (app ? [app] : await this.entries()).map(async entry => {
         const target = path.join(this._installedPath, entry);
-        const inner = await readdir(target).catch(fallbackWhenMissing(null, target));
+        const inner = await readdir(target).catch(fallbackOnScanError(null, target));
 
         // Not a directory: a shared fragment like `networks.yml`, which is itself the file.
         return inner === null ? [target] : inner.map(file => path.join(target, file));
@@ -234,7 +236,7 @@ export class HangarEnv {
    * stacks yet lists nothing: that is an empty set, not a failure.
    */
   private async entries() {
-    const entries = await readdir(this._installedPath).catch(fallbackWhenMissing([], this._installedPath));
+    const entries = await readdir(this._installedPath).catch(fallbackOnScanError([], this._installedPath));
 
     return entries.filter(entry => !entry.startsWith("."));
   }
@@ -249,7 +251,7 @@ export class HangarEnv {
       paths
         .filter(file => HangarEnv.Interpolated.test(file))
         .map(async file => {
-          const source = await readFile(file, "utf8").catch(fallbackWhenMissing("", file));
+          const source = await readFile(file, "utf8").catch(fallbackOnScanError("", file));
 
           // `$$` is compose's escape for a literal dollar: strip those first, or `$$FOO` reads
           // as a reference to FOO.

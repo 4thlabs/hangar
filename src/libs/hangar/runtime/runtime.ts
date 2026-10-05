@@ -1,6 +1,7 @@
 import { ChildProcess, spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { type Writable } from "node:stream";
+import { logger } from "#libs/logs";
 import { HangarRuntimeError } from "../hangar-error.ts";
 
 /** A runtime run result */
@@ -40,17 +41,19 @@ export class Runtime implements CommandRunner {
   private children: Set<ChildProcess> = new Set();
 
   /**
-   * Whether a path exists. Only "not there" answers `false`: any other `stat` failure, such as a
-   * permission error, is thrown rather than passed off as a missing path.
+   * Whether a path exists. Any `stat` failure answers `false`; one other than "not there", such
+   * as a permission error, is logged so it does not pass silently for a missing path.
    * @param path The path to check
    */
   static async exists(path: string) {
     return stat(path)
       .then(() => true)
       .catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT" || error.code === "ENOTDIR") return false;
+        const isMissing = error.code === "ENOENT" || error.code === "ENOTDIR";
 
-        throw error;
+        if (!isMissing) logger.warn("Could not check whether a path exists", { error, path });
+
+        return false;
       });
   }
 
