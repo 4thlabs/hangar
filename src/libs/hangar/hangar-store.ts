@@ -101,7 +101,7 @@ export class HangarStore {
   }
 
   /**
-   * Links(symlink) a stack into the installed apps.
+   * Removes a stack's symlink from the installed apps, leaving the stack itself in the store.
    * @param name the stack name
    */
   async unlink(name: string) {
@@ -144,8 +144,8 @@ export class HangarStore {
   }
 
   /**
-   * Install/Updates the store by cloning the repo or updates it
-   * @param update boolean Wheter to update the store if already installed
+   * Installs the store by cloning its repository, or updates it with a fast-forward pull when it
+   * is already there.
    */
   async install() {
     if (!(await Runtime.exists(this.installedPath))) {

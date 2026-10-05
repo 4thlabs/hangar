@@ -5,6 +5,6 @@ import "server-only";
  * bundle. It exposes exactly what `#libs/db` does.
  *
  * The unguarded entry exists because Sidequest loads a job module in a plain Node process, where
- * `server-only` throws — the same split as `hangar`/`hangar/server` and `docker`/`docker/server`.
+ * `server-only` throws — the same split as `docker`/`docker/server`.
  */
 export * from "../index.ts";

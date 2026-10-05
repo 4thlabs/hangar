@@ -221,7 +221,7 @@ describe("HangarStore", () => {
     expect(store.app("immich")?.containerName).toBe("immich-server");
   });
 
-  it("keeps going when an app has no x-arcane block or no compose.yml", async () => {
+  it("keeps going when an app has no x-hangar block or no compose.yml", async () => {
     const store = await createStore(dataDir, createRuntime());
     const good = path.join(store.storePath, "store", "good-app");
     const noMetadata = path.join(store.storePath, "store", "no-metadata-app");

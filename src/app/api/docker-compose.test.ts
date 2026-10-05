@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Lives here rather than beside the route: waku turns every file under `src/app/pages/` into a
-// route, test files included, which breaks the build. This covers what the deleted `manageApp`
-// action used to, plus the batch loop that replaced it.
+// route, test files included, which breaks the build.
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   compose: vi.fn(),

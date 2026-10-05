@@ -11,7 +11,7 @@ export const appOperationArguments: Record<AppOperation, readonly string[]> = {
   update: ["up", "-d", "--pull", "always"],
 };
 
-/** Why a compose command was refused, or `null` when it may run */
+/** Why a compose command was refused. */
 type AppOperationRefusal = {
   reason: "invalid" | "unmanaged";
   message: string;
@@ -21,6 +21,7 @@ type AppOperationRefusal = {
  * Checks a compose command targets a well-formed name of an app Hangar installed and manages.
  * The operation itself is already narrowed by the caller.
  * @param project The Compose project name
+ * @returns Why the command was refused, or `null` when it may run
  */
 export function refuseAppOperation(project: string): AppOperationRefusal | null {
   if (!COMPOSE_PROJECT_NAME.test(project)) {

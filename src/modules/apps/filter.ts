@@ -21,7 +21,7 @@ const sortValue: Record<AppSortColumn, (project: ComposeProjectSummary) => numbe
 
 /**
  * Orders by the chosen column, always breaking ties on the name: without a tie-break, apps
- * with equal counts would swap places on every 5s poll.
+ * with equal counts could swap places on every reload.
  */
 function sortProjects(projects: ComposeProjectSummary[], { column, descending }: NonNullable<AppsSort>) {
   const value = sortValue[column];

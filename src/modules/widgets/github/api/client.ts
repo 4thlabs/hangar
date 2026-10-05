@@ -45,7 +45,7 @@ export class GithubClient {
    */
   private static readonly Grace = 24 * 60 * 60 * 1_000;
 
-  /** One entry per repository. The widget layer caches the rendered card; this caches the calls. */
+  /** One entry per repository. The widget layer caches the loaded list; this caches each call. */
   private readonly cache = new Cache();
 
   /** The ky client, bound to the API and to the token when there is one. */

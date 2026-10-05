@@ -45,7 +45,7 @@ export interface BackrestSummary {
  * `GET` answers 404 — and the methods sit at the root rather than under `/api`, hence `prefix: ""`.
  *
  * It takes no key: Backrest has no API-key concept, and on the container network the endpoint is
- * unauthenticated. `serviceClient` sends no header when there is no key, so nothing is needed here.
+ * unauthenticated. `ServiceClient.client` sends no header when there is no key, so nothing is needed here.
  */
 export class BackrestClient extends ServiceClient {
   /**

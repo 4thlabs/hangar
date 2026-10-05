@@ -183,7 +183,7 @@ export class Docker {
   /**
    * @param docker An Engine API client; injected so the composition root owns the connection
    * @param apps The installed-app lookup, satisfied by `hangar.store`
-   * @param ttl How long the loaded containers are reused; injected so a test can drive it
+   * @param ttl How long the loaded containers and images are reused; injected so a test can drive it
    */
   constructor(docker: Dockerode, apps: InstalledApps, ttl = Docker.Ttl) {
     this.docker = docker;
