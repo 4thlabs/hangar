@@ -1,7 +1,7 @@
 import type { Unstable_SearchCodec } from "waku/router";
 
 export type StoreFilter = "installed" | "available";
-type StoreSearch = { q: string; filter: StoreFilter[] };
+export type StoreSearch = { q: string; filter: StoreFilter[] };
 
 /** Both store filters, in the order the filter menu lists them. */
 export const STORE_FILTERS: StoreFilter[] = ["installed", "available"];

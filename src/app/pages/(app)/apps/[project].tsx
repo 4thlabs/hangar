@@ -1,63 +1,7 @@
 import { Suspense } from "react";
-import { BoxIcon } from "lucide-react";
-import { Link } from "waku";
 import type { PageProps } from "waku/router";
-import { AppDetail } from "#modules/apps/components/app-detail.tsx";
-import { outdatedSnapshot } from "#modules/apps/snapshots.ts";
+import { AppDetailContent } from "#modules/apps/components/app-detail-content.tsx";
 import { PageSpinner } from "#modules/common/components/page-spinner.tsx";
-import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
-import { Button } from "#modules/common/ui/button.tsx";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#modules/common/ui/empty.tsx";
-import { DockerNotFoundError } from "#libs/docker";
-import { docker } from "#libs/docker/server";
-import { logger } from "#libs/logs";
-
-/**
- * The Docker half of the page, kept as a child so the `await` happens inside the boundary below
- * rather than in the page itself — see `apps.tsx` for why that distinction is the whole point.
- */
-async function AppDetailContent({ project }: { project: string }) {
-  try {
-    const [detail, outdated] = await Promise.all([docker.projectDetail(project), outdatedSnapshot.read()]);
-
-    return <AppDetail detail={{ ...detail, updateAvailable: outdated.has(project) }} />;
-  } catch (error) {
-    if (!(error instanceof DockerNotFoundError)) {
-      logger.error("Failed to render Docker Compose project", { error, project });
-    }
-
-    return error instanceof DockerNotFoundError ? (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <BoxIcon />
-          </EmptyMedia>
-          <EmptyTitle>Application introuvable</EmptyTitle>
-          <EmptyDescription>
-            Aucun conteneur Docker Compose ne porte actuellement le label « {project} ».
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button render={<Link to="/apps">Retour aux apps</Link>} />
-        </EmptyContent>
-      </Empty>
-    ) : (
-      <Alert variant="destructive">
-        <AlertTitle>Docker indisponible</AlertTitle>
-        <AlertDescription>
-          Impossible de charger cette application. Vérifiez le socket Docker et ses permissions.
-        </AlertDescription>
-      </Alert>
-    );
-  }
-}
 
 export default function AppDetailPage({ project }: PageProps<"/apps/[project]">) {
   return (
