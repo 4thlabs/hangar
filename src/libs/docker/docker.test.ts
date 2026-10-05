@@ -339,6 +339,24 @@ describe("Docker.outdated", () => {
   });
 });
 
+describe("Docker.outdatedNow", () => {
+  it("returns the registry's answers and the apps they show behind", async () => {
+    givenContainers([
+      container(),
+      container({ Id: "container-2", image: "redis:7", labels: { [LABEL.project]: "beta", [LABEL.service]: "cache" } }),
+    ]);
+    dockerMock.listImages.mockResolvedValue([{ Id: "sha256:running", RepoDigests: ["nginx@sha256:local"] }]);
+    dockerMock.distribution.mockImplementation(async (image: string) => ({
+      Descriptor: { digest: image === "nginx:alpine" ? "sha256:remote" : "sha256:local" },
+    }));
+
+    const { remotes, outdated } = await client("alpha", "beta").outdatedNow();
+
+    expect(remotes).toEqual({ "nginx:alpine": "sha256:remote", "redis:7": "sha256:local" });
+    expect([...outdated]).toEqual(["alpha"]);
+  });
+});
+
 describe("Docker.overview", () => {
   it("reports the host's containers, images and volumes", async () => {
     dockerMock.info.mockResolvedValue({

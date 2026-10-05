@@ -285,6 +285,18 @@ export class Docker {
   }
 
   /**
+   * Asks the registry now and compares its answers with what runs now: the check and the update
+   * jobs both start here, the one to report, the other to act.
+   * @param gap Milliseconds between two registry calls, from `hangar.yml`
+   * @returns The registry's answers, and the apps they show running something older
+   */
+  async outdatedNow(gap = Docker.RegistryGapMs): Promise<{ remotes: RemoteDigests; outdated: Set<string> }> {
+    const remotes = await this.remoteDigests(gap);
+
+    return { remotes, outdated: Docker.outdated(await this.runningImages.read(), remotes) };
+  }
+
+  /**
    * The apps running an image the registry has moved past. Pure, so it can sit in a
    * `Cache.join` and be recomputed on every read against whatever runs now.
    *

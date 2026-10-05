@@ -53,8 +53,9 @@ composition root that binds them — `notifications/notifications.ts` (class) vs
 
 Required, because three entry points are plain Node, where `server-only` throws and `.tsx` cannot
 load at all: `bin/cli.js`, `node src/libs/db/utils/migrate.ts`, and the Sidequest worker
-(`sidequest.jobs.js`, outside the bundle). A job builds its own dependencies, as
-`check-image-version.ts` does. Keep `#libs/hangar` free of JSX, and with it
+(`sidequest.jobs.js`, outside the bundle). Every service is bound once, in `createServices()`
+(`#libs/services`, unguarded): a job calls it, and `#libs/services/server` calls it behind the guard
+for the web server, which `docker/server` and `notifications/server` re-export. Keep `#libs/hangar` free of JSX, and with it
 `src/modules/widgets/config/config.ts`, which it imports.
 
 ## Classes

@@ -2,6 +2,7 @@ import { Sidequest } from "sidequest";
 import { CheckImageVersion } from "../jobs/check-image-version.ts";
 import { UpdateOutdatedApps } from "../jobs/update-outdated-apps.ts";
 import { MiddlewareHandler } from "hono/types";
+import { env } from "#libs/env";
 
 /**
  * Starts Sidequest and schedules Hangar's jobs, once, after the first request the server answers.
@@ -37,7 +38,7 @@ export class SidequestBoot {
       await Sidequest.configure({
         backend: {
           driver: "@sidequest/sqlite-backend",
-          config: process.env.HANGAR_DB_HOST,
+          config: env.HANGAR_DB_HOST,
         },
         queues: [{ name: "default", concurrency: 1, priority: 50, state: "active" }],
         // Jobs come from `sidequest.jobs.js`, not from stack-trace guessing. See that file.
