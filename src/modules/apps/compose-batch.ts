@@ -28,7 +28,9 @@ export async function runComposeBatch({ operation, projects, userId, output }: C
   for (const project of projects) {
     const succeeded = await runOne(operation, project, userId, output);
 
-    if (!succeeded) failures += 1;
+    if (!succeeded) {
+      failures += 1;
+    }
   }
 
   // The marker carries the number of failed apps, so `composeExitCode` keeps its meaning:

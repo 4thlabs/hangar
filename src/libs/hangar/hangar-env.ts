@@ -19,7 +19,9 @@ function fallbackOnScanError<T>(fallback: T, target: string) {
   return (error: NodeJS.ErrnoException): T => {
     const isExpected = error.code !== undefined && EXPECTED_SCAN_ERRORS.has(error.code);
 
-    if (!isExpected) logger.warn("Skipping an unreadable path in the installed apps", { error, path: target });
+    if (!isExpected) {
+      logger.warn("Skipping an unreadable path in the installed apps", { error, path: target });
+    }
 
     return fallback;
   };
@@ -79,7 +81,9 @@ export class HangarEnv {
    */
   async read(): Promise<Record<string, string>> {
     const contents = await readFile(this._file, "utf8").catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return "";
+      if (error.code === "ENOENT") {
+        return "";
+      }
 
       throw new HangarError(`Cannot read the global env at ${this._file}: ${error.code ?? error.message}`);
     });
@@ -130,7 +134,9 @@ export class HangarEnv {
     for (const prefix of HangarEnv.prefixes(app)) {
       const value = await this.get(`${prefix}${suffix}`);
 
-      if (value) return value;
+      if (value) {
+        return value;
+      }
     }
 
     return undefined;
@@ -148,7 +154,9 @@ export class HangarEnv {
   async write(updates: Record<string, string>, remove: string[] = []) {
     const next = { ...(await this.read()), ...updates };
 
-    for (const key of remove) delete next[key];
+    for (const key of remove) {
+      delete next[key];
+    }
 
     await this.backup();
     await writeFile(this._file, HangarEnv.serialize(next), "utf8");
@@ -277,7 +285,9 @@ export class HangarEnv {
     const stamp = new Date().toISOString().replaceAll(":", "-");
 
     await copyFile(this._file, `${this._file}.${stamp}.bak`).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return;
+      if (error.code === "ENOENT") {
+        return;
+      }
 
       throw new HangarError(`Cannot back up the global env at ${this._file}: ${error.code ?? error.message}`);
     });

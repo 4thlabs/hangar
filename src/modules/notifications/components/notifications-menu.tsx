@@ -77,9 +77,13 @@ export function NotificationsMenu({ initial }: { initial: NotificationPayload[] 
         item => !known.current.has(item.id),
       );
 
-      if (fresh.length === 0) return;
+      if (fresh.length === 0) {
+        return;
+      }
 
-      for (const item of fresh) known.current.add(item.id);
+      for (const item of fresh) {
+        known.current.add(item.id);
+      }
       setItems(current => [...fresh.reverse(), ...current]);
 
       // Something finished server-side, so whatever the page is showing about it is stale. Once
@@ -95,9 +99,13 @@ export function NotificationsMenu({ initial }: { initial: NotificationPayload[] 
 
   useEffect(() => {
     const pending = items.filter(item => !item.seen && !toasted.current.has(item.id));
-    if (pending.length === 0) return;
+    if (pending.length === 0) {
+      return;
+    }
 
-    for (const item of pending) toasted.current.add(item.id);
+    for (const item of pending) {
+      toasted.current.add(item.id);
+    }
 
     for (const item of pending.slice(0, TOAST_LIMIT)) {
       toast.add({ title: item.title, description: item.description ?? undefined, type: item.level });
@@ -114,7 +122,9 @@ export function NotificationsMenu({ initial }: { initial: NotificationPayload[] 
   // it is the moment the user is done with them. It also means no "mark everything read" button —
   // there is nothing left for one to do.
   function onOpenChange(open: boolean) {
-    if (open || unread === 0) return;
+    if (open || unread === 0) {
+      return;
+    }
 
     setItems(current => current.map(item => ({ ...item, read: true })));
     void markNotificationsRead();

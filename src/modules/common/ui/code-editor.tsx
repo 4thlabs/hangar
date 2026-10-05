@@ -35,7 +35,9 @@ const highlight = HighlightStyle.define([
  * lines. Escape then Tab still leaves the editor, CodeMirror's own way out of a Tab-bound editor.
  */
 const insertIndent: Command = view => {
-  if (view.state.selection.ranges.some(range => !range.empty)) return indentMore(view);
+  if (view.state.selection.ranges.some(range => !range.empty)) {
+return indentMore(view);
+}
   view.dispatch(view.state.replaceSelection(view.state.facet(indentUnit)), { scrollIntoView: true, userEvent: "input" });
   return true;
 };
@@ -65,7 +67,9 @@ export function CodeEditor({ defaultValue, onChange, className }: CodeEditorProp
         theme,
         syntaxHighlighting(highlight),
         EditorView.updateListener.of(update => {
-          if (update.docChanged) change.current(update.state.doc.toString());
+          if (update.docChanged) {
+change.current(update.state.doc.toString());
+}
         }),
       ],
     });

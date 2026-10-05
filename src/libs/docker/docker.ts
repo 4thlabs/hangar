@@ -28,8 +28,9 @@ function fulfilledValues<T>(results: PromiseSettledResult<T>[], operation: strin
     const isExpectedRace =
       result.status === "rejected" && (result.reason as { statusCode?: number }).statusCode === NOT_FOUND;
 
-    if (result.status === "rejected" && !isExpectedRace)
+    if (result.status === "rejected" && !isExpectedRace) {
       logger.warn(`Could not ${operation}`, { error: result.reason });
+    }
   }
 
   return results.filter(result => result.status === "fulfilled").map(result => result.value);
@@ -287,7 +288,9 @@ export class Docker {
     // registry says "too many requests", every call after it would be refused too and would
     // still spend quota, so the rest stay unknown until the next run.
     for (const [index, image] of references.entries()) {
-      if (index > 0) await sleep(gap);
+      if (index > 0) {
+        await sleep(gap);
+      }
 
       const digest = await this.remoteDigest(image);
 
@@ -298,7 +301,9 @@ export class Docker {
         break;
       }
 
-      if (digest) remotes[image] = digest;
+      if (digest) {
+        remotes[image] = digest;
+      }
     }
 
     return remotes;
@@ -339,7 +344,9 @@ export class Docker {
       return remote.Descriptor.digest;
     } catch (error) {
       // A rate limit stops the whole run, see the caller.
-      if (Docker.rateLimited(error)) return Docker.RateLimited;
+      if (Docker.rateLimited(error)) {
+        return Docker.RateLimited;
+      }
 
       // Unreachable registry, private image with no credentials: both say "don't know".
       logger.warn("Could not check an image for updates", { error, image });
@@ -409,7 +416,9 @@ export class Docker {
    * @throws {DockerNotFoundError} if the id is malformed, missing, or belongs to another project
    */
   async openLogs(project: string, containerId: string, signal: AbortSignal): Promise<Readable> {
-    if (!Docker.ContainerId.test(containerId)) throw new DockerNotFoundError(`container ${containerId}`);
+    if (!Docker.ContainerId.test(containerId)) {
+      throw new DockerNotFoundError(`container ${containerId}`);
+    }
 
     // Narrowing to the project, rather than inspecting the id directly, means an id from another
     // project is indistinguishable from one that doesn't exist: no cross-project probing. The
@@ -418,7 +427,9 @@ export class Docker {
     const compose = new ComposeProjects(await this.containers.read(), project);
     const container = compose.find(containerId);
 
-    if (!container) throw new DockerNotFoundError(`container ${containerId}`);
+    if (!container) {
+      throw new DockerNotFoundError(`container ${containerId}`);
+    }
 
     // Typed as a bare readable because `follow` is only known to produce a stream at runtime.
     const logs = (await this.docker.getContainer(container.info.Id).logs({
@@ -433,8 +444,11 @@ export class Docker {
 
     // Without a TTY the daemon multiplexes stdout and stderr into one framed stream; demuxing
     // both back into the same sink is what gives the log view its interleaved output.
-    if (container.detail.Config.Tty) logs.pipe(output);
-    else this.docker.modem.demuxStream(logs, output, output);
+    if (container.detail.Config.Tty) {
+      logs.pipe(output);
+    } else {
+      this.docker.modem.demuxStream(logs, output, output);
+    }
 
     logs.on("end", () => output.end());
     logs.on("error", error => {

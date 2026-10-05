@@ -27,10 +27,18 @@ async function* frames(userId: string, from: Date, signal: AbortSignal) {
       const fresh = (await notifications.since(userId, cursor)).filter(item => !alreadySent.has(item.id));
       const newest = fresh.at(-1)?.createdAt;
 
-      if (newest === undefined) continue;
+      if (newest === undefined) {
+        continue;
+      }
 
-      if (newest !== cursor.getTime()) alreadySent.clear();
-      for (const item of fresh) if (item.createdAt === newest) alreadySent.add(item.id);
+      if (newest !== cursor.getTime()) {
+        alreadySent.clear();
+      }
+      for (const item of fresh) {
+        if (item.createdAt === newest) {
+          alreadySent.add(item.id);
+        }
+      }
       cursor = new Date(newest);
 
       // A notification is how a Sidequest job tells this process it finished, and the client
@@ -46,7 +54,9 @@ async function* frames(userId: string, from: Date, signal: AbortSignal) {
     // The client went away, or the database did. Ending the stream is all that is left: the
     // status line is long gone, so the browser reconnects and gets the error then.
     // Only the second is worth a line: a closed tab is the normal way for this stream to end.
-    if (!signal.aborted) logger.warn("Notification stream failed", { error, userId });
+    if (!signal.aborted) {
+      logger.warn("Notification stream failed", { error, userId });
+    }
   }
 }
 

@@ -18,7 +18,9 @@ const FACES = {
 };
 
 function buttonState(installed: boolean, isPending: boolean): keyof typeof FACES {
-  if (installed) return isPending ? "uninstalling" : "installed";
+  if (installed) {
+    return isPending ? "uninstalling" : "installed";
+  }
 
   return isPending ? "installing" : "available";
 }

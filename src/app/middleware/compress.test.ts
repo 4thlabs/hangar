@@ -34,7 +34,9 @@ async function* read(response: Response) {
     : response.body!;
 
   const decoder = new TextDecoder();
-  for await (const chunk of body as unknown as AsyncIterable<Uint8Array>) yield decoder.decode(chunk);
+  for await (const chunk of body as unknown as AsyncIterable<Uint8Array>) {
+    yield decoder.decode(chunk);
+  }
 }
 
 describe("compress middleware", () => {
@@ -47,7 +49,9 @@ describe("compress middleware", () => {
     async function* frames() {
       yield SHELL;
       // Only resolves once the shell has been read, so the assertion cannot pass by racing.
-      while (!released) await new Promise(resolve => setTimeout(resolve, 5));
+      while (!released) {
+        await new Promise(resolve => setTimeout(resolve, 5));
+      }
       yield LATE;
     }
 
@@ -62,7 +66,9 @@ describe("compress middleware", () => {
     released = true;
 
     const rest = [];
-    for await (const chunk of chunks) rest.push(chunk);
+    for await (const chunk of chunks) {
+      rest.push(chunk);
+    }
     expect(rest.join("")).toContain("LATE");
   });
 

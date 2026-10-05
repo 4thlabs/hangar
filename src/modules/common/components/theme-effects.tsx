@@ -34,7 +34,9 @@ export function ThemeEffects() {
     applySystemPreference();
     persistPreference(Theme.ColorModeCookie, mode);
 
-    if (mode !== "system") return;
+    if (mode !== "system") {
+      return;
+    }
 
     colorScheme.addEventListener("change", applySystemPreference);
     return () => colorScheme.removeEventListener("change", applySystemPreference);

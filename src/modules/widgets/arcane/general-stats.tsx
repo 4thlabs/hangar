@@ -23,8 +23,12 @@ type ArcaneGeneralStatsCardProps = {
 const chrome = { title: "Arcane", icon: <IconSelfh name="arcane" />, className: "@container min-h-64" };
 
 function actionColor(severity: string) {
-  if (severity === "critical") return "text-destructive";
-  if (severity === "warning") return "text-chart-4";
+  if (severity === "critical") {
+    return "text-destructive";
+  }
+  if (severity === "warning") {
+    return "text-chart-4";
+  }
   return "text-muted-foreground";
 }
 
@@ -105,7 +109,9 @@ export const arcaneGeneralStats = (service: WidgetService, ttl?: number) =>
       const response = await (await ArcaneClient.connect(service)).getDashboard(environment);
 
       // The API answers 200 with success:false; treat that as a load failure.
-      if (!response.success) throw new Error(response.detail ?? "Unsuccessful response");
+      if (!response.success) {
+        throw new Error(response.detail ?? "Unsuccessful response");
+      }
 
       return response.data;
     },

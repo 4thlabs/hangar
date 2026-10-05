@@ -67,13 +67,17 @@ export function ThemeSettingsCard() {
   const [mode, setMode] = useAtom(colorModeAtom);
 
   function handlePaletteChange(value: unknown) {
-    if (typeof value !== "string" || !Theme.isPalette(value)) return;
+    if (typeof value !== "string" || !Theme.isPalette(value)) {
+      return;
+    }
 
     setPalette(value);
   }
 
   function handleModeChange(value: unknown) {
-    if (typeof value !== "string" || !Theme.isColorMode(value)) return;
+    if (typeof value !== "string" || !Theme.isColorMode(value)) {
+      return;
+    }
 
     setMode(value);
   }

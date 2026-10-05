@@ -36,7 +36,9 @@ async function* frames(first: Samples, signal: AbortSignal) {
     // The client went away, or the daemon did after a good first frame. Ending the stream is all
     // that is left: the status line is long gone, so the browser reconnects and gets the 503 then.
     // Only the second is worth a line: a closed tab is the normal way for this stream to end.
-    if (!signal.aborted) logger.warn("Docker statistics stream failed", { error });
+    if (!signal.aborted) {
+      logger.warn("Docker statistics stream failed", { error });
+    }
   }
 }
 

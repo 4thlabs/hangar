@@ -29,7 +29,9 @@ export function useStreamText(endpoint: string | null, method: "GET" | "POST" = 
   const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
-    if (!endpoint) return;
+    if (!endpoint) {
+      return;
+    }
 
     const controller = new AbortController();
 
@@ -43,7 +45,9 @@ export function useStreamText(endpoint: string | null, method: "GET" | "POST" = 
           const body = (await response.json()) as { error?: { message?: string } };
           throw new Error(body.error?.message ?? "Impossible de charger le flux.");
         }
-        if (!response.body) throw new Error("Le serveur n’a retourné aucun flux.");
+        if (!response.body) {
+          throw new Error("Le serveur n’a retourné aucun flux.");
+        }
 
         setStatus("connected");
         const reader = response.body.getReader();
@@ -51,17 +55,25 @@ export function useStreamText(endpoint: string | null, method: "GET" | "POST" = 
 
         while (!controller.signal.aborted) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            break;
+          }
 
           const chunk = decoder.decode(value, { stream: true });
           setText(current => `${current}${chunk}`.slice(-MAX_STREAM_CHARACTERS));
         }
 
         const remainder = decoder.decode();
-        if (remainder) setText(current => `${current}${remainder}`.slice(-MAX_STREAM_CHARACTERS));
-        if (!controller.signal.aborted) setStatus("ended");
+        if (remainder) {
+          setText(current => `${current}${remainder}`.slice(-MAX_STREAM_CHARACTERS));
+        }
+        if (!controller.signal.aborted) {
+          setStatus("ended");
+        }
       } catch (reason) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          return;
+        }
         setStatus("error");
         setError(reason instanceof Error ? reason.message : "Le flux a été interrompu.");
       }

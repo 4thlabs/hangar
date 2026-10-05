@@ -90,12 +90,16 @@ export class Cache {
   read<T>(key: string, ttl: number, grace: number, load: () => Promise<T>): Promise<T> {
     const ready = this.peek<T>(key, ttl, grace, load);
 
-    if (ready) return Promise.resolve(ready.data);
+    if (ready) {
+      return Promise.resolve(ready.data);
+    }
 
     const entry = this.entries.get(key);
 
     // Nothing settled yet but a load is already out: share it rather than starting a second.
-    if (entry && Date.now() < entry.until) return entry.value as Promise<T>;
+    if (entry && Date.now() < entry.until) {
+      return entry.value as Promise<T>;
+    }
 
     return this.refresh(key, entry, ttl, load);
   }
@@ -117,11 +121,15 @@ export class Cache {
   peek<T>(key: string, ttl: number, grace: number, load: () => Promise<T>): { data: T } | undefined {
     const entry = this.entries.get(key);
 
-    if (!entry?.settled) return undefined;
+    if (!entry?.settled) {
+      return undefined;
+    }
 
     const now = Date.now();
 
-    if (now < entry.until) return entry.settled as { data: T };
+    if (now < entry.until) {
+      return entry.settled as { data: T };
+    }
 
     // Stale but inside the grace window: hand back what we have, reload behind it. The floating
     // promise is safe only because `refresh` attaches its own handler to it — without that, a
@@ -155,14 +163,21 @@ export class Cache {
 
     value.then(
       data => {
-        if (this.entries.get(key) !== entry) return;
+        if (this.entries.get(key) !== entry) {
+          return;
+        }
         entry.settled = { data };
         entry.until = Date.now() + ttl;
       },
       () => {
-        if (this.entries.get(key) !== entry) return;
-        if (previous) this.entries.set(key, previous);
-        else this.entries.delete(key);
+        if (this.entries.get(key) !== entry) {
+          return;
+        }
+        if (previous) {
+          this.entries.set(key, previous);
+        } else {
+          this.entries.delete(key);
+        }
       },
     );
 
@@ -185,7 +200,9 @@ export class Cache {
   revalidate<T>(key: string, ttl: number, load: () => Promise<T>): Promise<void> {
     const entry = this.entries.get(key);
 
-    if (!entry) return Promise.resolve();
+    if (!entry) {
+      return Promise.resolve();
+    }
 
     if (!Number.isFinite(entry.until)) {
       entry.next ??= entry.value.then(settle, settle).then(() => this.revalidate(key, ttl, load));
@@ -247,7 +264,9 @@ export class Cache {
         const values: unknown[] = [];
 
         for (const entry of ready) {
-          if (!entry) return undefined;
+          if (!entry) {
+            return undefined;
+          }
 
           values.push(entry.data);
         }

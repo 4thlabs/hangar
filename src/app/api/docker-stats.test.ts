@@ -33,7 +33,9 @@ async function readFrames(response: Response, controller: AbortController, count
 
   for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
     frames.push(decoder.decode(chunk));
-    if (frames.length === count) break;
+    if (frames.length === count) {
+      break;
+    }
   }
 
   controller.abort();

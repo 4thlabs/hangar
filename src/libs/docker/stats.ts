@@ -44,7 +44,9 @@ export class ContainerStats {
    * has nothing to compare against and reports `null` rather than a misleading zero.
    */
   private cpuPercent(): number | null {
-    if (!this.previous) return null;
+    if (!this.previous) {
+      return null;
+    }
 
     const { cpu_stats: current } = this.sample;
     const used = current.cpu_usage.total_usage - this.previous.cpu_stats.cpu_usage.total_usage;
@@ -52,7 +54,9 @@ export class ContainerStats {
     const cores = current.online_cpus || current.cpu_usage.percpu_usage?.length || 1;
 
     // A restarted container resets its counter, which would otherwise read as a negative share.
-    if (available <= 0 || used < 0) return null;
+    if (available <= 0 || used < 0) {
+      return null;
+    }
 
     return (used / available) * cores * 100;
   }
@@ -63,7 +67,9 @@ export class ContainerStats {
    */
   private memoryUsage(): number | null {
     const usage = this.sample.memory_stats.usage;
-    if (usage === undefined) return null;
+    if (usage === undefined) {
+      return null;
+    }
 
     const stats = this.sample.memory_stats.stats as Record<string, number> | undefined;
     // cgroup v2 calls it `inactive_file`; v1 called it `total_inactive_file`.
@@ -86,7 +92,9 @@ export class ContainerStats {
    */
   private blockIo(operation: "read" | "write"): number | null {
     const entries = this.sample.blkio_stats?.io_service_bytes_recursive;
-    if (!entries) return null;
+    if (!entries) {
+      return null;
+    }
 
     return entries
       .filter(entry => entry.op.toLowerCase() === operation)

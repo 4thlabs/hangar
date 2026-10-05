@@ -28,7 +28,9 @@ export async function AppDetailContent({ project }: { project: string }) {
     return <AppDetail detail={{ ...detail, updateAvailable: outdated.has(project) }} />;
   } catch (error) {
     // An app that is not there is an answer, not a failure: nothing to log.
-    if (error instanceof DockerNotFoundError) return <AppNotFound project={project} />;
+    if (error instanceof DockerNotFoundError) {
+      return <AppNotFound project={project} />;
+    }
 
     logger.error("Failed to render Docker Compose project", { error, project });
 

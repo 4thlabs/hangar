@@ -11,10 +11,14 @@ export function formatLine({ timestamp, level, message, label, error, ...context
   // Only when there is one: appending it unconditionally printed ", undefined" on every line
   // that carried no error, which is every `info` the app writes.
   // eslint-disable-next-line @typescript-eslint/restrict-template-expressions, @typescript-eslint/no-base-to-string
-  if (error !== undefined) line += `, ${error}`;
+  if (error !== undefined) {
+    line += `, ${error}`;
+  }
 
   // Winston's own bookkeeping lives under symbol keys, which `Object.keys` leaves out.
-  if (Object.keys(context).length > 0) line += ` ${JSON.stringify(context)}`;
+  if (Object.keys(context).length > 0) {
+    line += ` ${JSON.stringify(context)}`;
+  }
 
   return line;
 }

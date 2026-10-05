@@ -78,12 +78,14 @@ export class GithubClient {
     const releases: GithubRelease[] = [];
 
     for (const [index, result] of settled.entries()) {
-      if (result.status === "fulfilled") releases.push(result.value);
-      else
+      if (result.status === "fulfilled") {
+        releases.push(result.value);
+      } else {
         logger.warn("Skipping a repository on the GitHub card", {
           error: result.reason,
           repository: repositories[index],
         });
+      }
     }
 
     return releases.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));

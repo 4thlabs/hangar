@@ -51,7 +51,9 @@ export class Runtime implements CommandRunner {
       .catch((error: NodeJS.ErrnoException) => {
         const isMissing = error.code === "ENOENT" || error.code === "ENOTDIR";
 
-        if (!isMissing) logger.warn("Could not check whether a path exists", { error, path });
+        if (!isMissing) {
+          logger.warn("Could not check whether a path exists", { error, path });
+        }
 
         return false;
       });
@@ -67,7 +69,9 @@ export class Runtime implements CommandRunner {
   signals() {
     process.on("SIGINT", () => {
       this.interrupted = true;
-      if (this.children.size === 0) process.exit(130);
+      if (this.children.size === 0) {
+        process.exit(130);
+      }
     });
   }
 
@@ -136,7 +140,9 @@ export class Runtime implements CommandRunner {
         const succeeded = code === 0;
         const capturedOutput = capture && stdout.trim() !== "";
 
-        if (succeeded || capturedOutput) return resolve({ code: code ?? 0, stdout });
+        if (succeeded || capturedOutput) {
+          return resolve({ code: code ?? 0, stdout });
+        }
 
         const message = (capture && stderr.trim()) || "Process exited.";
 

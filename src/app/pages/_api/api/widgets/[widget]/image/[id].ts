@@ -19,7 +19,9 @@ export const GET = apiRoute<ApiContext<"/api/widgets/[widget]/image/[id]">>(
     const image = await widgetImages.fetch(params.widget, params.id);
 
     // No such placement, a widget that relays nothing, or an id no service would issue.
-    if (!image) return apiError("Aucune image à relayer pour ce widget.", 404);
+    if (!image) {
+      return apiError("Aucune image à relayer pour ce widget.", 404);
+    }
 
     return new Response(image.body, {
       headers: { "Cache-Control": CACHE, "Content-Type": image.headers.get("content-type") ?? "image/jpeg" },

@@ -13,7 +13,9 @@ export function AutoReload({ seconds = 30 }: { seconds?: number }) {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      if (!document.hidden) void router.reload();
+      if (!document.hidden) {
+        void router.reload();
+      }
     }, seconds * 1_000);
 
     return () => clearInterval(timer);

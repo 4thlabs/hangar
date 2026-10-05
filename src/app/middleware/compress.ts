@@ -69,7 +69,9 @@ export default (): MiddlewareHandler =>
     // status line left long ago, so a truncated body is all the client can be told. A client that
     // hung up is the normal case and not logged.
     void pipeline(Readable.fromWeb(body as never), gzip).catch((error: unknown) => {
-      if (!c.req.raw.signal.aborted) logger.warn("Compressing a response failed", { error, path: c.req.path });
+      if (!c.req.raw.signal.aborted) {
+        logger.warn("Compressing a response failed", { error, path: c.req.path });
+      }
     });
 
     c.res = new Response(Readable.toWeb(gzip) as ReadableStream<Uint8Array>, c.res);

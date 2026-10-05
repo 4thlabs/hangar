@@ -8,7 +8,11 @@ export const statusLabel: Record<ComposeProjectStatus, string> = {
 };
 
 export const statusVariant = (status: ComposeProjectStatus) => {
-  if (status === "unhealthy") return "destructive" as const;
-  if (status === "partial") return "outline" as const;
+  if (status === "unhealthy") {
+    return "destructive" as const;
+  }
+  if (status === "partial") {
+    return "outline" as const;
+  }
   return "secondary" as const;
 };

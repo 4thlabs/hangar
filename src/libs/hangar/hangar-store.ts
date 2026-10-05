@@ -220,7 +220,9 @@ export class HangarStore {
       const results = await Promise.allSettled(stacks.map(stack => this.composeStack(stack, args, options)));
       const failure = results.find(result => result.status === "rejected");
 
-      if (failure) throw failure.reason;
+      if (failure) {
+        throw failure.reason;
+      }
       return;
     }
 
@@ -232,7 +234,11 @@ export class HangarStore {
 
   /** The store app with this id, or `undefined` when the store does not carry it. */
   app(id: string): HangarApp | undefined {
-    for (const app of this.apps) if (app.id === id) return app;
+    for (const app of this.apps) {
+      if (app.id === id) {
+        return app;
+      }
+    }
     return undefined;
   }
 
@@ -250,7 +256,9 @@ export class HangarStore {
   async createApp(id: string, source: string) {
     const folder = this.appFolder(id);
 
-    if (await Runtime.exists(folder)) throw new HangarError(`The app ${id} already exists`);
+    if (await Runtime.exists(folder)) {
+      throw new HangarError(`The app ${id} already exists`);
+    }
 
     await mkdir(folder, { recursive: true });
 
@@ -271,7 +279,9 @@ export class HangarStore {
   async updateApp(id: string, source: string) {
     const folder = this.appFolder(id);
 
-    if (!(await Runtime.exists(folder))) throw new HangarError(`The app ${id} does not exist`);
+    if (!(await Runtime.exists(folder))) {
+      throw new HangarError(`The app ${id} does not exist`);
+    }
 
     await this.writeValidatedCompose(folder, source);
   }
@@ -280,7 +290,9 @@ export class HangarStore {
   private appFolder(id: string) {
     const folder = this.stackPath(id);
 
-    if (this.config.shared().includes(id)) throw new HangarError(`${id} is a shared file, not an app`);
+    if (this.config.shared().includes(id)) {
+      throw new HangarError(`${id} is a shared file, not an app`);
+    }
 
     return folder;
   }
@@ -316,7 +328,9 @@ export class HangarStore {
 
   /** The folder of a store app, once its id is known not to escape `store/`. */
   private stackPath(id: string) {
-    if (!HangarStore.StackId.test(id)) throw new HangarError(`Invalid app id: ${id}`);
+    if (!HangarStore.StackId.test(id)) {
+      throw new HangarError(`Invalid app id: ${id}`);
+    }
     return path.join(this.storePath, "store", id);
   }
 

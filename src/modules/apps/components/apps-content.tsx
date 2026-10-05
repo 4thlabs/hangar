@@ -22,7 +22,9 @@ type AppsContentProps = {
  * next to a Réessayer button, and the route error boundary would take the whole page down.
  */
 export function AppsContent({ search, ready }: AppsContentProps) {
-  if (ready) return <AppsOverview snapshot={ready.data} error={null} search={search} />;
+  if (ready) {
+    return <AppsOverview snapshot={ready.data} error={null} search={search} />;
+  }
 
   return <ColdAppsContent search={search} />;
 }

@@ -13,14 +13,18 @@ async function findApp(appId: string, rejected: string) {
   await requireSession();
 
   const app = hangar.store.app(appId);
-  if (!app) logger.warn(rejected, { appId });
+  if (!app) {
+    logger.warn(rejected, { appId });
+  }
 
   return app;
 }
 
 export const installApp = async (appId: string): Promise<StoreActionResult> => {
   const app = await findApp(appId, "App installation rejected: unknown app");
-  if (!app) return StoreActionResult.failure(UNKNOWN_APP);
+  if (!app) {
+    return StoreActionResult.failure(UNKNOWN_APP);
+  }
 
   if (app.installed) {
     return StoreActionResult.success(`${app.name} est déjà installée.`);
@@ -46,7 +50,9 @@ export const installApp = async (appId: string): Promise<StoreActionResult> => {
 
 export const uninstallApp = async (appId: string): Promise<StoreActionResult> => {
   const app = await findApp(appId, "App uninstallation rejected: unknown app");
-  if (!app) return StoreActionResult.failure(UNKNOWN_APP);
+  if (!app) {
+    return StoreActionResult.failure(UNKNOWN_APP);
+  }
 
   if (!app.installed) {
     return StoreActionResult.success(`${app.name} n’est pas installée.`, false);

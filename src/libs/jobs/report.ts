@@ -74,7 +74,11 @@ export class ImageCheckReport {
 
       // ISO timestamps, so the newest is also the greatest string.
       let last: ImageUpdateReport | undefined;
-      for (const report of reports) if (!last || report.checkedAt > last.checkedAt) last = report;
+      for (const report of reports) {
+        if (!last || report.checkedAt > last.checkedAt) {
+          last = report;
+        }
+      }
 
       // A report from before digests were stored has `updates` instead: nothing to compare.
       return last?.remotes && typeof last.remotes === "object" ? last.remotes : {};

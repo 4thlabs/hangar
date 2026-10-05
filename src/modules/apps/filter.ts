@@ -73,7 +73,9 @@ export function filterProjects(
  * unsorted, so there is always a way back to relevance ordering while searching.
  */
 export function nextSort(current: AppsSort, column: AppSortColumn): AppsSort {
-  if (current?.column !== column) return { column, descending: false };
+  if (current?.column !== column) {
+    return { column, descending: false };
+  }
 
   return current.descending ? null : { column, descending: true };
 }
@@ -89,7 +91,9 @@ export function countBy(
   const counts: Record<string, number> = {};
   for (const project of projects) {
     const value = key(project);
-    if (value !== undefined) counts[value] = (counts[value] ?? 0) + 1;
+    if (value !== undefined) {
+      counts[value] = (counts[value] ?? 0) + 1;
+    }
   }
 
   return counts;

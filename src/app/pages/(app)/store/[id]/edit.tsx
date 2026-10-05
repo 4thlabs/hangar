@@ -7,7 +7,9 @@ import { hangar } from "#libs/hangar/server";
 export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">) {
   const app = hangar.store.app(id);
 
-  if (!app) unstable_notFound();
+  if (!app) {
+    unstable_notFound();
+  }
 
   const source = await hangar.store.appSource(app.id);
 

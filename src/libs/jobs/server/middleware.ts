@@ -32,7 +32,9 @@ export class SidequestBoot {
     return async (_c, next) => {
       await next();
 
-      if (this.configured) return;
+      if (this.configured) {
+        return;
+      }
 
       await Sidequest.configure({
         backend: {

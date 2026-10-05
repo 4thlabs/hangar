@@ -105,7 +105,9 @@ type WidgetListProps = ComponentProps<"ul"> & {
 };
 
 export function WidgetList({ children, className, empty, ...props }: WidgetListProps) {
-  if (empty !== undefined && Children.count(children) === 0) return <WidgetEmptyState>{empty}</WidgetEmptyState>;
+  if (empty !== undefined && Children.count(children) === 0) {
+    return <WidgetEmptyState>{empty}</WidgetEmptyState>;
+  }
 
   return (
     <ul className={cn("flex flex-col gap-3", className)} {...props}>

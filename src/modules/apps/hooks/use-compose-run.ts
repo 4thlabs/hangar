@@ -25,7 +25,9 @@ export function useComposeRun(projects: string[]) {
   const [targets, setTargets] = useState<string[]>([]);
 
   function run(operation: AppOperation) {
-    if (projects.length === 0) return;
+    if (projects.length === 0) {
+      return;
+    }
 
     setConfirmation(null);
     setTargets(projects);

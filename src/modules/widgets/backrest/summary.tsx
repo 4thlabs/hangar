@@ -64,7 +64,9 @@ export function displayRepo(summary: BackrestRepoSummary): RepoBackup {
 type RepoHealth = "never-run" | "healthy" | "failed";
 
 function repoHealth(repo: RepoBackup): RepoHealth {
-  if (repo.status === undefined) return "never-run";
+  if (repo.status === undefined) {
+    return "never-run";
+  }
 
   return repo.ok ? "healthy" : "failed";
 }

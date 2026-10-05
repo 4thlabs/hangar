@@ -16,7 +16,9 @@ function respond(byRepository: Record<string, unknown>) {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const found = Object.entries(byRepository).find(([repository]) => url.includes(repository));
 
-    if (!found) return Promise.resolve(new Response("Not Found", { status: 404 }));
+    if (!found) {
+      return Promise.resolve(new Response("Not Found", { status: 404 }));
+    }
 
     return Promise.resolve(Response.json(found[1]));
   });

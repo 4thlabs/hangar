@@ -375,7 +375,9 @@ describe("HangarStore.compose", () => {
       const args = call[1] as string[];
       const compose = args.find(arg => arg.endsWith("compose.yml"));
 
-      if (!compose) throw new Error(`No compose file in: ${args.join(" ")}`);
+      if (!compose) {
+        throw new Error(`No compose file in: ${args.join(" ")}`);
+      }
 
       return path.basename(path.dirname(compose));
     });
@@ -467,7 +469,9 @@ describe("HangarStore.compose", () => {
   it("stops an ordered run at the first failure but completes an unordered one", async () => {
     const { store } = await withStacks("alpha-app", "beta-app", "gamma-app");
     const failing = vi.fn(async (_c: string, args: string[]) => {
-      if (args.some(arg => arg.includes("beta-app"))) throw new HangarRuntimeError(2, "boom");
+      if (args.some(arg => arg.includes("beta-app"))) {
+        throw new HangarRuntimeError(2, "boom");
+      }
       return { code: 0 };
     });
     Object.assign(store, { runtime: { run: failing } });

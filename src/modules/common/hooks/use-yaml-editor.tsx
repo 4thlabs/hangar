@@ -32,7 +32,9 @@ export function useYamlEditor({ source, save, titles, onSaved, className }: Yaml
       titles,
       result => {
         setError(result && !result.success ? result.message : null);
-        if (result?.success) onSaved();
+        if (result?.success) {
+          onSaved();
+        }
       },
     );
 

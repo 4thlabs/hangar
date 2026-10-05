@@ -16,7 +16,9 @@ describe("HangarEnv", () => {
     await mkdir(path.join(installedPath, name), { recursive: true });
     await writeFile(path.join(installedPath, name, "compose.yml"), compose, "utf8");
 
-    if (appEnv !== undefined) await writeFile(path.join(installedPath, name, "app.env"), appEnv, "utf8");
+    if (appEnv !== undefined) {
+      await writeFile(path.join(installedPath, name, "app.env"), appEnv, "utf8");
+    }
   };
 
   beforeEach(async () => {

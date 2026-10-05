@@ -57,7 +57,9 @@ async function writeApp(id: string, source: string, { write, success }: AppWrite
 
     return ActionResult.success(success(parsed.data.id));
   } catch (error) {
-    if (error instanceof HangarError) return ActionResult.failure(error.message);
+    if (error instanceof HangarError) {
+      return ActionResult.failure(error.message);
+    }
 
     logger.error("Store app save failed", { error, id: parsed.data.id });
 

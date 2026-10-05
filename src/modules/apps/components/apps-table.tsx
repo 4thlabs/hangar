@@ -29,7 +29,9 @@ type SortableHeadProps = {
 
 /** How a header shows that the table is sorted on its column, or not. */
 function sortDirection(sort: AppsSort, column: AppSortColumn): "ascending" | "descending" | "none" {
-  if (sort?.column !== column) return "none";
+  if (sort?.column !== column) {
+    return "none";
+  }
 
   return sort.descending ? "descending" : "ascending";
 }
@@ -66,8 +68,11 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
   function toggle(name: string, checked: boolean) {
     setSelection(current => {
       const next = new Set(current);
-      if (checked) next.add(name);
-      else next.delete(name);
+      if (checked) {
+        next.add(name);
+      } else {
+        next.delete(name);
+      }
       return next;
     });
   }
