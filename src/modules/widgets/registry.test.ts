@@ -22,6 +22,18 @@ describe("WidgetRegistry", () => {
     ]);
   });
 
+  it("binds each placement to its own key, even two of one type", () => {
+    const placements = new WidgetRegistry(host).resolve([
+      { type: "clock", column: 1 },
+      { type: "github-releases", column: 3, repositories: ["glanceapp/glance"] },
+      { type: "github-releases", column: 3, repositories: ["4thlabs/hangar"] },
+    ]);
+    const keys = placements.map(placement => placement.widget.key);
+
+    expect(new Set(keys).size).toBe(3);
+    expect(keys.every((key, index) => key.startsWith(`${placements[index]!.widget.id}-`))).toBe(true);
+  });
+
   it("resolves the dashboard a store gets when it declares no widgets", () => {
     expect(new WidgetRegistry(host).resolve(defaultWidgets)).toHaveLength(defaultWidgets.length);
   });

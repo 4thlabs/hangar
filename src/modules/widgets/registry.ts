@@ -1,6 +1,6 @@
 import type { Widget } from "./shared/define-widget.tsx";
 import type { DashboardColumn, WidgetConfig, WidgetHost } from "./config/config.ts";
-import { WidgetService } from "./config/config.ts";
+import { WidgetKey, WidgetService } from "./config/config.ts";
 import { arcaneGeneralStats } from "./arcane/general-stats.tsx";
 import { backrestSummary } from "./backrest/summary.tsx";
 import { beszelServerStats } from "./beszel/server-stats.tsx";
@@ -49,10 +49,13 @@ export class WidgetRegistry {
   }
 
   /**
-   * Places every declared widget in its column, in order.
+   * Places every declared widget in its column, in order, each bound to its own key — two
+   * placements of one type read two cache entries, not whichever loaded first.
    */
   resolve(configs: readonly WidgetConfig[]): WidgetPlacement[] {
-    return configs.map(config => ({ column: config.column, widget: this.create(config) }));
+    const keys = WidgetKey.all(configs);
+
+    return configs.map((config, index) => ({ column: config.column, widget: this.create(config).at(keys[index]!) }));
   }
 
   /**

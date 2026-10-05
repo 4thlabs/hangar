@@ -11,7 +11,7 @@ const base = {
   errorDescription: "Could not load.",
 };
 
-// The widget cache is process-global and keyed by id, and every widget here shares one id.
+// The widget cache is process-global and keyed by placement, and every unplaced widget here shares one key.
 beforeEach(clearWidgetCache);
 
 describe("defineWidget", () => {
@@ -115,6 +115,33 @@ describe("defineWidget caching", () => {
     const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
 
     await expect(widget.warm()).resolves.toBeUndefined();
+  });
+});
+
+describe("defineWidget placements", () => {
+  it("keeps one cache entry per placement, so two of one type never share data", async () => {
+    // Two `github-releases` blocks watching different repositories: one type, two answers.
+    const make = (answer: string) =>
+      defineWidget({ ...base, load: () => Promise.resolve(answer), render: data => <p>{data}</p> });
+
+    const first = make("first").at("test-widget-a");
+    const second = make("second").at("test-widget-b");
+
+    expect(renderToStaticMarkup(await first.Widget())).toContain("first");
+    expect(renderToStaticMarkup(await second.Widget())).toContain("second");
+  });
+
+  it("binds a copy, leaving a shared widget as it was", () => {
+    const widget = defineWidget({ ...base, load: async () => "x", render: () => <p>x</p> });
+
+    expect(widget.at("test-widget-a").key).toBe("test-widget-a");
+    expect(widget.key).toBe("test-widget");
+  });
+
+  it("hands its key to render, for whatever the card addresses per placement", async () => {
+    const widget = defineWidget({ ...base, load: async () => "x", render: (_data, key) => <p>{key}</p> });
+
+    expect(renderToStaticMarkup(await widget.at("test-widget-a").Widget())).toContain("test-widget-a");
   });
 });
 

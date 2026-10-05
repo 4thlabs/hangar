@@ -39,7 +39,13 @@ const events: FrigateEvent[] = [
 describe("FrigateEventsCard", () => {
   it("renders Frigate statistics and recent events with public links", () => {
     const html = renderToStaticMarkup(
-      <FrigateEventsCard events={events} stats={stats} serviceUrl="https://frigate.example.com" now={now} />,
+      <FrigateEventsCard
+        events={events}
+        stats={stats}
+        serviceUrl="https://frigate.example.com"
+        widget="frigate-events-k1"
+        now={now}
+      />,
     );
 
     expect(html).toContain("2 cameras");
@@ -50,17 +56,23 @@ describe("FrigateEventsCard", () => {
     expect(html).toContain("front door");
     expect(html).toContain("garden");
     expect(html).toContain("2 minutes ago");
-    expect(html).toContain('src="/api/widgets/frigate-events/image/1699999880.0-person"');
+    expect(html).toContain('src="/api/widgets/frigate-events-k1/image/1699999880.0-person"');
     expect(html).toContain("https://frigate.example.com/explore?event_id=1699999880.0-person");
   });
 
   it("renders the empty state when there are no recent events", () => {
     const html = renderToStaticMarkup(
-      <FrigateEventsCard events={[]} stats={stats} serviceUrl="https://frigate.example.com" now={now} />,
+      <FrigateEventsCard
+        events={[]}
+        stats={stats}
+        serviceUrl="https://frigate.example.com"
+        widget="frigate-events-k1"
+        now={now}
+      />,
     );
 
     expect(html).toContain("No recent events.");
-    expect(html).not.toContain("/api/widgets/frigate-events/image/");
+    expect(html).not.toContain("/api/widgets/frigate-events-k1/image/");
   });
 
   it("calls the container but points the browser at the public host", async () => {

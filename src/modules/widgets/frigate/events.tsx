@@ -18,6 +18,8 @@ type FrigateEventsCardProps = {
   events: FrigateEvent[];
   stats: FrigateStats;
   serviceUrl: string;
+  /** The placement's key, which its relayed thumbnails are addressed by. */
+  widget: string;
   now?: number;
 };
 
@@ -28,7 +30,7 @@ function formatCameraName(camera: string) {
   return camera.replace(/^frigate_/, "").replaceAll("_", " ");
 }
 
-export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() }: FrigateEventsCardProps) {
+export function FrigateEventsCard({ events, stats, serviceUrl, widget, now = Date.now() }: FrigateEventsCardProps) {
   const detectors = Object.entries(stats.detectors);
 
   return (
@@ -56,7 +58,7 @@ export function FrigateEventsCard({ events, stats, serviceUrl, now = Date.now() 
             const eventUrl = `${serviceUrl}/explore?event_id=${encodeURIComponent(event.id)}`;
             // Relayed by Hangar: the public Frigate host sits behind the OIDC middleware, which
             // answers an `<img>` with a login redirect rather than a picture.
-            const thumbnailUrl = WidgetImage.url("frigate-events", event.id);
+            const thumbnailUrl = WidgetImage.url(widget, event.id);
 
             return (
               <WidgetListItem
@@ -109,7 +111,7 @@ export const frigateEvents = (service: WidgetService, ttl?: number) =>
 
       return await Promise.all([client.getEvents(), client.getStats()]);
     },
-    render: ([events, stats]: [FrigateEvent[], FrigateStats]) => (
-      <FrigateEventsCard events={events} stats={stats} serviceUrl={service.link} />
+    render: ([events, stats]: [FrigateEvent[], FrigateStats], key) => (
+      <FrigateEventsCard events={events} stats={stats} serviceUrl={service.link} widget={key} />
     ),
   });

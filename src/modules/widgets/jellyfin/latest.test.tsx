@@ -64,16 +64,26 @@ describe("JellyfinLatestCard", () => {
 
   it("relays posters through Hangar and links the visitor to Jellyfin", () => {
     const html = renderToStaticMarkup(
-      <JellyfinLatestCard counts={counts} items={items} serviceUrl="https://jellyfin.test.local" />,
+      <JellyfinLatestCard
+        counts={counts}
+        items={items}
+        serviceUrl="https://jellyfin.test.local"
+        widget="jellyfin-latest-k1"
+      />,
     );
 
-    expect(html).toContain('src="/api/widgets/jellyfin-latest/image/ep-1"');
+    expect(html).toContain('src="/api/widgets/jellyfin-latest-k1/image/ep-1"');
     expect(html).toContain("https://jellyfin.test.local/web/#/details?id=series-9");
   });
 
   it("reads the library totals as a subtitle rather than a card of their own", () => {
     const html = renderToStaticMarkup(
-      <JellyfinLatestCard counts={counts} items={items} serviceUrl="https://jellyfin.test.local" />,
+      <JellyfinLatestCard
+        counts={counts}
+        items={items}
+        serviceUrl="https://jellyfin.test.local"
+        widget="jellyfin-latest-k1"
+      />,
     );
 
     expect(html).toContain("1,284 movies");
@@ -88,17 +98,23 @@ describe("JellyfinLatestCard", () => {
         counts={counts}
         items={[{ id: "s-1", imageId: undefined, title: "Drifters", subtitle: undefined }]}
         serviceUrl="https://jellyfin.test.local"
+        widget="jellyfin-latest-k1"
       />,
     );
 
     expect(html).toContain("Drifters");
     // The widget icon is an <img> of its own, so it is the relay that must not be asked.
-    expect(html).not.toContain("/api/widgets/jellyfin-latest/image/");
+    expect(html).not.toContain("/api/widgets/jellyfin-latest-k1/image/");
   });
 
   it("says so when a library has nothing new", () => {
     const html = renderToStaticMarkup(
-      <JellyfinLatestCard counts={counts} items={[]} serviceUrl="https://jellyfin.test.local" />,
+      <JellyfinLatestCard
+        counts={counts}
+        items={[]}
+        serviceUrl="https://jellyfin.test.local"
+        widget="jellyfin-latest-k1"
+      />,
     );
 
     expect(html).toContain("No items found.");
