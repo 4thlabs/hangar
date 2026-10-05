@@ -68,3 +68,19 @@ One tree, never one per breakpoint: a subtree hidden with `md:hidden` is still m
 control in it runs twice with its own state, effects and subscriptions. Use one grid with explicit
 `col-start-*` (an element hidden below `md` is not a grid item, so the rest shifts) and carry the
 differences as classes on a single element.
+
+## Code readability
+
+Write code for the next human reader. Clarity beats cleverness and brevity.
+
+- Follow the project first: match existing conventions, naming, structure and tooling; run the formatter and linter before finishing.
+- Names: say what and why (`elapsedDays`, `isEligibleForRefund`). No `data`, `tmp`, `util`, `manager`, invented abbreviations, or misleading names. One word per concept.
+- Functions: small, one job, one level of abstraction; ≤ 3–4 parameters; no boolean flags that switch behavior.
+- Control flow: early returns, nesting ≤ 3, complex conditions extracted into named variables. No nested ternaries or clever one-liners.
+- Structure: put code where a newcomer would look for it; no god files or growing `utils`; dependencies flow one way.
+- Duplication: one place per rule or constant, but no premature abstraction; a little repetition beats a helper full of options.
+- Comments: explain why, never what. No commented-out code, no stale comments, no TODO without context. Document public APIs.
+- Data: explicit types and shapes; named constants instead of magic numbers/strings; avoid `any`.
+- Errors: never swallow them; add context; keep the happy path readable.
+- Tests: names describe behavior; setup visible in the test.
+- Scope: change only what the task needs; keep refactors separate from behavior changes.
