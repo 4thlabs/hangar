@@ -1,5 +1,7 @@
 import type { MiddlewareHandler } from "hono/types";
 import { appsSnapshot } from "#modules/apps/snapshots.ts";
+import type { DockerEvents } from "#libs/docker";
+import { dockerEvents } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { widgetRegistry } from "#modules/widgets/server/server.ts";
@@ -7,8 +9,8 @@ import { widgetRegistry } from "#modules/widgets/server/server.ts";
 /** How often the snapshots are topped up. Comfortably inside every TTL + grace window they feed. */
 const INTERVAL = 30_000;
 
-/** Reused across HMR reloads, otherwise dev stacks a second loop on every edit. */
-const globalForWarm = globalThis as unknown as { warmTimer?: NodeJS.Timeout };
+/** Reused across HMR reloads, otherwise dev stacks a second loop and event stream on every edit. */
+const globalForWarm = globalThis as unknown as { warmTimer?: NodeJS.Timeout; dockerEvents?: DockerEvents };
 
 /**
  * Fills every cache the first page render reads from, so it reads from memory instead of waiting.
@@ -31,12 +33,15 @@ function tick() {
 }
 
 /**
- * Starts the warm loop, once per process.
+ * Starts the warm loop and follows the Docker daemon's events, once per process: the loop fills the
+ * caches ahead of the first render, the events keep the Docker ones current between ticks, whoever
+ * changed the containers.
  *
  * Waku awaits every middleware factory before it runs the chain, so this must not await: the first
- * tick goes out behind the response rather than in front of it. It is also the earliest safe place
- * to start — module scope in the RSC graph is evaluated by `waku build`, where there is no daemon
- * and no service to reach, while middleware modules are only bundled, never run.
+ * tick goes out behind the response rather than in front of it, and the event stream connects
+ * behind it too. It is also the earliest safe place to start — module scope in the RSC graph is
+ * evaluated by `waku build`, where there is no daemon and no service to reach, while middleware
+ * modules are only bundled, never run.
  *
  * In production the first request is the container healthcheck hitting `/login` about ten seconds
  * in, so the caches are warm long before anyone navigates. In dev the first request is usually the
@@ -52,6 +57,10 @@ export default (): MiddlewareHandler => {
   globalForWarm.warmTimer = timer;
 
   logger.info(`Warming the dashboard caches every ${INTERVAL / 1_000}s`);
+
+  globalForWarm.dockerEvents?.stop();
+  dockerEvents.start();
+  globalForWarm.dockerEvents = dockerEvents;
 
   let first = true;
 

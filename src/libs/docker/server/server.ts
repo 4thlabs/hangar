@@ -23,6 +23,6 @@ export const docker = new Docker(client, hangar.store);
  * The daemon's events, refreshing {@link docker}'s snapshots as they come.
  *
  * Not started here: module scope in the RSC graph is evaluated by `waku build`, where there is no
- * daemon to follow. `src/app/middleware/docker-events.ts` starts it with the server.
+ * daemon to follow. `src/app/middleware/cache-warm.ts` starts it with the server.
  */
 export const dockerEvents = new DockerEvents(client, change => void docker.refresh([change]));
