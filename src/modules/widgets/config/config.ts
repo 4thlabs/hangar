@@ -37,13 +37,14 @@ const serviceUrlFields = { url: serviceUrl.optional(), link: serviceUrl.optional
  *
  * Seconds because that is what an operator writes; the widget layer works in milliseconds and
  * converts once, in `registry.ts`. Absent means the widget layer's own default. Not offered to the
- * clock, which loads nothing, so there is nothing for a TTL to hold.
+ * clock, which loads nothing, so there is nothing for a TTL to hold, nor to the Docker widget, which
+ * renders the daemon's snapshots and moves with its events. Left on either, it is ignored.
  */
 const ttlField = { ttl: z.int().positive().optional() };
 
 export const widgetConfigSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("clock"), column: columnSchema }),
-  z.object({ type: z.literal("docker-general-stats"), column: columnSchema, ...ttlField }),
+  z.object({ type: z.literal("docker-general-stats"), column: columnSchema }),
   z.object({ type: z.literal("arcane-general-stats"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
   z.object({ type: z.literal("backrest-summary"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
   z.object({ type: z.literal("beszel-server-stats"), column: columnSchema, ...serviceUrlFields, ...ttlField }),

@@ -353,7 +353,7 @@ describe("Docker.overview", () => {
       Volumes: [{ UsageData: { RefCount: 1 } }, { UsageData: { RefCount: 0 } }, { UsageData: null }],
     });
 
-    expect(await client().overview()).toEqual({
+    expect(await client().overview.read()).toEqual({
       version: "27.3.1",
       containers: { total: 5, running: 4, stopped: 1 },
       images: { total: 2, unused: 1, size: 1_073_741_824 },
@@ -370,7 +370,7 @@ describe("Docker.overview", () => {
     });
     dockerMock.df.mockResolvedValue({ LayersSize: 0, Images: null, Volumes: null });
 
-    const overview = await client().overview();
+    const overview = await client().overview.read();
 
     expect(overview.images).toEqual({ total: 0, unused: 0, size: 0 });
     expect(overview.volumes).toEqual({ total: 0, inUse: 0, unused: 0 });
@@ -425,15 +425,29 @@ describe("Docker container sweeps", () => {
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
   });
 
-  it("asks again after a Compose command invalidates it", async () => {
-    givenContainers([container()]);
+  it("serves the new sweep once a refresh it awaited settles", async () => {
+    givenContainers([container({ state: "running" })]);
     const docker = client("alpha");
 
     await docker.projects.read();
-    docker.invalidate();
-    await docker.projects.read();
+    givenContainers([container({ state: "exited" })]);
+    await docker.refresh(["containers"]);
 
+    // From memory, without waiting on the daemon: that is what lets the page reload paint at once.
+    expect(docker.projects.peek()?.data.projects[0]).toMatchObject({ name: "alpha", status: "stopped" });
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes only what went stale", async () => {
+    givenContainers([container()]);
+    dockerMock.listImages.mockResolvedValue([]);
+    const docker = client("alpha");
+
+    await docker.runningImages.read();
+    await docker.refresh(["images"]);
+
+    expect(dockerMock.listImages).toHaveBeenCalledTimes(2);
+    expect(dockerMock.listContainers).toHaveBeenCalledTimes(1);
   });
 
   it("does not cache a failed sweep", async () => {
@@ -475,35 +489,35 @@ describe("Docker snapshot staleness", () => {
     const docker = client("alpha");
     givenDaemon("27.3.1");
 
-    expect((await docker.overview()).version).toBe("27.3.1");
+    expect((await docker.overview.read()).version).toBe("27.3.1");
 
     givenDaemon("28.0.0");
-    vi.setSystemTime(START + 310_000);
+    vi.setSystemTime(START + 3_610_000);
 
     // Past its TTL but inside the grace window: the caller gets the snapshot without waiting on
     // the daemon, and the reload goes out behind it.
-    expect((await docker.overview()).version).toBe("27.3.1");
+    expect((await docker.overview.read()).version).toBe("27.3.1");
     expect(dockerMock.df).toHaveBeenCalledTimes(2);
 
     // Once that reload settles, the snapshot is the new one.
-    await vi.waitFor(async () => expect((await docker.overview()).version).toBe("28.0.0"));
+    await vi.waitFor(async () => expect((await docker.overview.read()).version).toBe("28.0.0"));
   });
 
   it("stops serving a stale overview once the daemon has been down past the grace window", async () => {
     const docker = client("alpha");
     givenDaemon("27.3.1");
-    await docker.overview();
+    await docker.overview.read();
 
     dockerMock.info.mockRejectedValue(new Error("socket gone"));
     dockerMock.df.mockRejectedValue(new Error("socket gone"));
 
     // Inside the grace window the failed reload puts the snapshot back, timestamp and all...
-    vi.setSystemTime(START + 310_000);
-    await expect(docker.overview()).resolves.toMatchObject({ version: "27.3.1" });
+    vi.setSystemTime(START + 3_610_000);
+    await expect(docker.overview.read()).resolves.toMatchObject({ version: "27.3.1" });
 
     // ...so it keeps ageing, and past it the caller gets the daemon's real error instead.
-    vi.setSystemTime(START + 4_000_000);
-    await expect(docker.overview()).rejects.toThrow("socket gone");
+    vi.setSystemTime(START + 7_300_000);
+    await expect(docker.overview.read()).rejects.toThrow("socket gone");
   });
 
   it("serves a stale sweep at once rather than waiting on the daemon", async () => {
@@ -511,7 +525,7 @@ describe("Docker snapshot staleness", () => {
     const docker = client("alpha");
 
     await docker.projects.read();
-    vi.setSystemTime(START + 6_000);
+    vi.setSystemTime(START + 301_000);
     await docker.projects.read();
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);

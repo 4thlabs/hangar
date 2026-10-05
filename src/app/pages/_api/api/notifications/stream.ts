@@ -35,8 +35,8 @@ async function* frames(userId: string, from: Date, signal: AbortSignal) {
       // A notification is how a Sidequest job tells this process it finished, and the client
       // answers this frame with a page reload: the "Mises à jour disponibles" toast must not land
       // on a badge still read from the previous check. One local SQLite read to refill, so any
-      // notification is reason enough. Not `docker.invalidate()`: that drops the sweep's stale
-      // value with it, and the reload would wait on the daemon instead of being served meanwhile.
+      // notification is reason enough. Nothing for the Docker snapshots: the daemon's events
+      // already refresh those, whichever process changed the containers.
       imageCheckReport.invalidate();
 
       yield sseEvent(fresh);

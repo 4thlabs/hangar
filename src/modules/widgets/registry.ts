@@ -66,7 +66,7 @@ export class WidgetRegistry {
       case "clock":
         return clockWidget;
       case "docker-general-stats":
-        return dockerGeneralStats(ttl);
+        return dockerGeneralStats;
       case "arcane-general-stats":
         return arcaneGeneralStats(service(), ttl);
       case "backrest-summary":

@@ -5,8 +5,19 @@
  * The settled value is kept separately, and carried across a reload, so a reader can have it
  * *without awaiting* — see {@link Cache.peek}. Wrapped in an object so a cached `undefined` is
  * still distinguishable from nothing cached.
+ *
+ * `next` is the reload {@link Cache.revalidate} queued behind a load still in flight, shared by
+ * every revalidation that arrives before that load lands.
  */
-type CacheEntry = { value: Promise<unknown>; settled?: { data: unknown } | undefined; until: number };
+type CacheEntry = {
+  value: Promise<unknown>;
+  settled?: { data: unknown } | undefined;
+  until: number;
+  next?: Promise<void> | undefined;
+};
+
+/** Swallows a settlement, for the promises whose callers only need to know it happened. */
+const settle = () => undefined;
 
 /**
  * One cached read, with its key, TTL, grace and loader already bound — see {@link Cache.define}.
@@ -32,6 +43,15 @@ export type Snapshot<T> = {
    * the process with it.
    */
   warm(): Promise<void>;
+  /**
+   * Reloads now, whatever the snapshot's age, for whoever learns the source has changed. Readers
+   * keep the current value until the new one lands, so this never puts a spinner on screen.
+   *
+   * Resolves once a load started after the call has settled, so a caller that awaits it reads the
+   * new state — at once when nothing is cached, since the next read goes to the source anyway.
+   * Never rejects, for the same reason as {@link warm}.
+   */
+  refresh(): Promise<void>;
 };
 
 /**
@@ -150,6 +170,33 @@ export class Cache {
   }
 
   /**
+   * Reloads `key` now, whatever its age, while readers keep the snapshot until the new value lands.
+   * For whoever learns the source changed: unlike {@link clear}, nothing goes missing in between,
+   * so a page rendered meanwhile still paints at once.
+   *
+   * A load already in flight may have left before the change, so it is never taken as the answer:
+   * it is let land, then one more load goes out. Every revalidation arriving before it lands shares
+   * that one follow-up rather than queueing its own.
+   *
+   * Nothing cached is left alone: nobody has read it yet, and the first read goes to the source.
+   *
+   * @returns Settles once a load started after this call has, and never rejects
+   */
+  revalidate<T>(key: string, ttl: number, load: () => Promise<T>): Promise<void> {
+    const entry = this.entries.get(key);
+
+    if (!entry) return Promise.resolve();
+
+    if (!Number.isFinite(entry.until)) {
+      entry.next ??= entry.value.then(settle, settle).then(() => this.revalidate(key, ttl, load));
+
+      return entry.next;
+    }
+
+    return this.refresh(key, entry, ttl, load).then(settle, settle);
+  }
+
+  /**
    * Binds one read's key, TTL, grace and loader into a handle.
    *
    * Prefer this to calling {@link read} and {@link peek} directly: those take the same four
@@ -165,6 +212,7 @@ export class Cache {
           () => undefined,
           () => undefined,
         ),
+      refresh: () => this.revalidate(key, ttl, load),
     };
   }
 
@@ -207,6 +255,7 @@ export class Cache {
         return { data: project(...values) };
       },
       warm: () => Promise.all(sources.map(source => source.warm())).then(() => undefined),
+      refresh: () => Promise.all(sources.map(source => source.refresh())).then(() => undefined),
     };
   }
 }

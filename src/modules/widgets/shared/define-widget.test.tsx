@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Cache } from "#libs/cache";
 import { clearWidgetCache, defineWidget } from "./define-widget.tsx";
 
 const base = {
@@ -166,5 +167,28 @@ describe("defineWidget rendering without suspending", () => {
     const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
 
     expect(widget.Widget()).toBeInstanceOf(Promise);
+  });
+});
+
+describe("defineWidget over a snapshot", () => {
+  it("renders straight from the snapshot it is given, without a copy of its own", async () => {
+    const owner = new Cache();
+    const load = vi.fn<() => Promise<string>>().mockResolvedValueOnce("first").mockResolvedValueOnce("second");
+    const snapshot = owner.define("source", 60_000, 60_000, load);
+    const widget = defineWidget({ ...base, snapshot, render: data => <p>{data}</p> });
+
+    await widget.warm();
+    expect(renderToStaticMarkup(widget.Widget() as React.ReactElement)).toContain("first");
+
+    // Whatever refreshes the owner's snapshot shows here at once, with no widget TTL to outlive.
+    await snapshot.refresh();
+    expect(renderToStaticMarkup(widget.Widget() as React.ReactElement)).toContain("second");
+  });
+
+  it("falls back to the error card when the snapshot cannot be read", async () => {
+    const snapshot = new Cache().define("source", 60_000, 60_000, () => Promise.reject(new Error("socket gone")));
+    const widget = defineWidget({ ...base, snapshot, render: () => <p>never</p> });
+
+    expect(renderToStaticMarkup(await widget.Widget())).toContain("Test is unavailable");
   });
 });

@@ -41,6 +41,15 @@ type SystemDiskUsage = {
 };
 
 /**
+ * What a daemon event can make stale: the Compose container sweep, the local image list, or the
+ * host-wide overview. See {@link Docker.refresh} and `DockerEvents`.
+ */
+export type DockerChange = "containers" | "images" | "overview";
+
+/** Every {@link DockerChange}, for a caller that cannot tell which one happened. */
+export const DockerChanges: readonly DockerChange[] = ["containers", "images", "overview"];
+
+/**
  * The slice of `HangarStore` this layer needs: which apps Hangar installed, and so which
  * Compose projects a caller may see. An interface rather than the class so a test can pass a
  * literal, the way `HangarStore` takes a `CommandRunner`.
@@ -81,8 +90,12 @@ export class Docker {
   /** What Hangar installed; read per call, so a freshly installed app shows up without a restart. */
   private readonly apps: InstalledApps;
 
-  /** Default {@link ttl}: long enough to cover one page's renders, short enough to feel live. */
-  private static readonly Ttl = 5_000;
+  /**
+   * Default {@link ttl}. Liveness is not its job: `DockerEvents` refreshes the sweep the moment the
+   * daemon reports a change, so this is only the net for an event stream that went quiet without
+   * dropping — a stall over a `tcp://` `DOCKER_HOST`, say.
+   */
+  private static readonly Ttl = 300_000;
 
   /**
    * How long past its TTL a sweep is still handed out while it reloads behind the caller. Comfortably
@@ -91,8 +104,11 @@ export class Docker {
    */
   private static readonly Grace = 120_000;
 
-  /** `df` is the slowest call the daemon has, and these counts move slowly. */
-  private static readonly OverviewTtl = 300_000;
+  /**
+   * `df` is the slowest call the daemon has, and every event that moves these counts refreshes them
+   * anyway — see {@link Ttl}.
+   */
+  private static readonly OverviewTtl = 3_600_000;
 
   /** Longer grace than the sweep: nothing here changes fast enough to be worth blocking a paint. */
   private static readonly OverviewGrace = 3_600_000;
@@ -106,6 +122,9 @@ export class Docker {
    * `ComposeProjects` rather than asking the daemon again.
    */
   private readonly containers: Snapshot<ComposeContainerSource[]>;
+
+  /** The registry digests of every local image, by image id; see {@link listImages}. */
+  private readonly images: Snapshot<Map<string, string[]>>;
 
   /**
    * Every app Hangar installed, as lightweight summaries of their Docker state.
@@ -125,10 +144,19 @@ export class Docker {
    * Every container of an installed app, with the registry digests of the image it runs — what
    * {@link Docker.outdated} compares the last check against.
    *
-   * Over the same sweep as {@link projects}, so a Compose command that invalidates one moves the
-   * other: the badge goes the moment the containers it was about do.
+   * Over the same sweep as {@link projects}, so a change that refreshes one moves the other: the
+   * badge goes the moment the containers it was about do.
    */
   readonly runningImages: Snapshot<RunningImage[]>;
+
+  /**
+   * Host-wide counts for the local daemon: the whole engine, not just the apps Hangar installed,
+   * so the dashboard reports the local environment the way Arcane reports a remote one.
+   *
+   * A handle like {@link projects} rather than a method, so the dashboard widget renders straight
+   * from it instead of caching a second copy with its own TTL to fall out of step.
+   */
+  readonly overview: Snapshot<DockerOverview>;
 
   /**
    * @param docker An Engine API client; injected so the composition root owns the connection
@@ -143,9 +171,9 @@ export class Docker {
       projects: new ComposeProjects(sources).summaries(this.apps.installedProjectIds()),
     }));
 
-    const images = this.cache.define("images", ttl, Docker.Grace, this.listImages);
+    this.images = this.cache.define("images", ttl, Docker.Grace, this.listImages);
 
-    this.runningImages = Cache.join(this.containers, images, (sources, digests) => {
+    this.runningImages = Cache.join(this.containers, this.images, (sources, digests) => {
       const installed = this.apps.installedProjectIds();
 
       // By the image id the container runs, never by its reference: `compose pull` moves the tag
@@ -159,6 +187,8 @@ export class Docker {
         }))
         .filter(running => installed.has(running.project));
     });
+
+    this.overview = this.cache.define("overview", Docker.OverviewTtl, Docker.OverviewGrace, this.loadOverview);
   }
 
   /**
@@ -199,16 +229,20 @@ export class Docker {
   };
 
   /**
-   * Drops every cached daemon read. Called after a Compose command, which is the one moment the
-   * page behind it is guaranteed to ask again and must not be told what was true before. The
-   * overview goes too: a compose command changes the container counts `info` reports.
+   * Reloads the daemon reads a change made stale, while every reader keeps the current snapshot
+   * until the new one lands — so a page rendered meanwhile still paints at once.
    *
-   * Does not reach the dashboard's Docker widget, which caches its own render one layer up: its
-   * counts stay up to a widget TTL stale after a compose command. Compose runs from `/apps`, not
-   * the dashboard, and wiring the two caches together would couple the libraries over a badge.
+   * `DockerEvents` calls this for whatever the daemon reports, whoever caused it: a Compose command
+   * from the web, the CLI or a job, or a container that crashed on its own. A caller that is about
+   * to read the new state awaits it instead, as the Compose stream does before the page reloads.
+   *
+   * @param changes What went stale; everything when the caller cannot tell
+   * @returns Settles once each reload has, and never rejects
    */
-  invalidate() {
-    this.cache.clear();
+  refresh(changes: Iterable<DockerChange> = DockerChanges): Promise<void> {
+    const snapshots = { containers: this.containers, images: this.images, overview: this.overview };
+
+    return Promise.all([...changes].map(change => snapshots[change].refresh())).then(() => undefined);
   }
 
   /**
@@ -308,35 +342,29 @@ export class Docker {
   }
 
   /**
-   * Host-wide counts for the local daemon: the whole engine, not just the apps Hangar installed,
-   * so the dashboard reports the local environment the way Arcane reports a remote one.
+   * The load behind {@link overview}.
    *
    * Two endpoints because neither answers alone: `info` carries the container tallies and the
    * daemon version, `df` the disk usage (which images nothing runs, which volumes nothing mounts).
    */
-  overview(): Promise<DockerOverview> {
-    return this.cache.read("overview", Docker.OverviewTtl, Docker.OverviewGrace, async () => {
-      const [info, usage] = (await Promise.all([this.docker.info(), this.docker.df()])) as [
-        SystemInfo,
-        SystemDiskUsage,
-      ];
-      const images = usage.Images ?? [];
-      const volumes = usage.Volumes ?? [];
-      const inUse = volumes.filter(volume => (volume.UsageData?.RefCount ?? 0) > 0).length;
+  private readonly loadOverview = async (): Promise<DockerOverview> => {
+    const [info, usage] = (await Promise.all([this.docker.info(), this.docker.df()])) as [SystemInfo, SystemDiskUsage];
+    const images = usage.Images ?? [];
+    const volumes = usage.Volumes ?? [];
+    const inUse = volumes.filter(volume => (volume.UsageData?.RefCount ?? 0) > 0).length;
 
-      return {
-        version: info.ServerVersion,
-        containers: { total: info.Containers, running: info.ContainersRunning, stopped: info.ContainersStopped },
-        // `LayersSize` rather than the sum of the images: layers shared between images are on disk once.
-        images: {
-          total: images.length,
-          unused: images.filter(image => image.Containers === 0).length,
-          size: usage.LayersSize,
-        },
-        volumes: { total: volumes.length, inUse, unused: volumes.length - inUse },
-      };
-    });
-  }
+    return {
+      version: info.ServerVersion,
+      containers: { total: info.Containers, running: info.ContainersRunning, stopped: info.ContainersStopped },
+      // `LayersSize` rather than the sum of the images: layers shared between images are on disk once.
+      images: {
+        total: images.length,
+        unused: images.filter(image => image.Containers === 0).length,
+        size: usage.LayersSize,
+      },
+      volumes: { total: volumes.length, inUse, unused: volumes.length - inUse },
+    };
+  };
 
   /**
    * Fetches the topology (services, containers, ports) of one installed app. No resource usage:

@@ -55,11 +55,15 @@ export const POST = apiRoute(
       for (const project of projects) {
         output.write(`\n$ docker compose ${appOperationArguments[operation].join(" ")} — ${project}\n`);
 
-        // The client reloads the page the moment this batch ends, and a sweep cached before the
-        // command would hand it back exactly the state the command just changed. Unconditional:
-        // a compose run that fails half-way still leaves containers it did start.
+        // The client reloads the page on this app's notification and again when the batch ends,
+        // so what `/apps` reads is reloaded before either goes out: the reload is then served the
+        // new state from memory, neither the old one nor a spinner. Not the overview: `df` is slow,
+        // only the dashboard reads it, and the daemon's events refresh it anyway. Unconditional: a
+        // compose run that fails half-way still leaves containers it did start.
         try {
-          await hangar.store.compose(project, [...appOperationArguments[operation]], { pipe: output });
+          await hangar.store
+            .compose(project, [...appOperationArguments[operation]], { pipe: output })
+            .finally(() => docker.refresh(["containers", "images"]));
 
           await notifications.notify({
             userId: session.user.id,
@@ -78,8 +82,6 @@ export const POST = apiRoute(
             description: `La commande Docker Compose a échoué pour ${project}. ${SERVER_LOG_HINT}`,
             href: `/apps/${project}`,
           });
-        } finally {
-          docker.invalidate();
         }
       }
 

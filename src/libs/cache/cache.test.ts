@@ -81,6 +81,62 @@ describe("Cache", () => {
   });
 });
 
+describe("Cache.revalidate", () => {
+  it("reloads a fresh value, serving the old one until the new one lands", async () => {
+    const cache = new Cache();
+    const second = Promise.withResolvers<string>();
+    const load = vi.fn().mockResolvedValueOnce("first").mockReturnValueOnce(second.promise);
+
+    await cache.read("k", TTL, GRACE, load);
+    const revalidated = cache.revalidate("k", TTL, load);
+
+    // Well inside its TTL, yet reloaded — and nobody waits on that reload meanwhile.
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(cache.peek("k", TTL, GRACE, load)).toEqual({ data: "first" });
+
+    second.resolve("second");
+    await revalidated;
+
+    expect(cache.peek("k", TTL, GRACE, load)).toEqual({ data: "second" });
+  });
+
+  it("leaves a key nobody has read alone", async () => {
+    const cache = new Cache();
+    const load = vi.fn().mockResolvedValue("first");
+
+    await cache.revalidate("k", TTL, load);
+
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("loads once more behind a load already in flight, however many times it is asked", async () => {
+    const cache = new Cache();
+    const inFlight = Promise.withResolvers<string>();
+    const load = vi.fn().mockReturnValueOnce(inFlight.promise).mockResolvedValueOnce("after the change");
+
+    const read = cache.read("k", TTL, GRACE, load);
+    // That load may have left before the change: it is not the answer, one more load is.
+    const revalidated = Promise.all([cache.revalidate("k", TTL, load), cache.revalidate("k", TTL, load)]);
+
+    inFlight.resolve("before the change");
+    await read;
+    await revalidated;
+
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(cache.peek("k", TTL, GRACE, load)).toEqual({ data: "after the change" });
+  });
+
+  it("keeps the snapshot when the reload fails, and does not reject", async () => {
+    const cache = new Cache();
+    const load = vi.fn().mockResolvedValueOnce("first").mockRejectedValueOnce(new Error("source gone"));
+
+    await cache.read("k", TTL, GRACE, load);
+
+    await expect(cache.revalidate("k", TTL, load)).resolves.toBeUndefined();
+    expect(cache.peek("k", TTL, GRACE, load)).toEqual({ data: "first" });
+  });
+});
+
 describe("Cache.peek", () => {
   it("has nothing before the first load settles", async () => {
     const cache = new Cache();
@@ -189,6 +245,22 @@ describe("join", () => {
     await expect(derived.warm()).resolves.toBeUndefined();
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes every source", async () => {
+    const cache = new Cache();
+    const first = vi.fn<() => Promise<string>>().mockResolvedValueOnce("a1").mockResolvedValueOnce("a2");
+    const second = vi.fn<() => Promise<string>>().mockResolvedValueOnce("b1").mockResolvedValueOnce("b2");
+    const derived = Cache.join(
+      cache.define("a", TTL, GRACE, first),
+      cache.define("b", TTL, GRACE, second),
+      (a, b) => a + b,
+    );
+
+    await derived.read();
+    await derived.refresh();
+
+    expect(derived.peek()).toEqual({ data: "a2b2" });
   });
 
   it("peeks every source even once one of them is cold", async () => {
