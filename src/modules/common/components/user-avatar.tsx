@@ -8,11 +8,15 @@ export type AvatarUser = {
 function getInitials(name: string, email: string) {
   const words = name.trim().split(/\s+/).filter(Boolean);
 
-  if (words.length > 0) {
-    return `${words[0]?.[0] ?? ""}${words.length > 1 ? (words.at(-1)?.[0] ?? "") : ""}`.toUpperCase();
+  if (words.length === 0) {
+    return email.slice(0, 2).toUpperCase();
   }
 
-  return email.slice(0, 2).toUpperCase();
+  const first = words[0]?.[0] ?? "";
+  // A single word gives a single initial, not the same letter twice.
+  const last = words.length > 1 ? (words.at(-1)?.[0] ?? "") : "";
+
+  return `${first}${last}`.toUpperCase();
 }
 
 export function UserAvatar({ user }: { user: AvatarUser }) {

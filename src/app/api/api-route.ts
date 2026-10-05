@@ -72,7 +72,9 @@ export function apiRoute<C extends RouteContext = RouteContext>(
   return async (request: Request, context = {} as C): Promise<Response> => {
     const session = await getSession(request);
 
-    if (!session) return apiError("Authentification requise.", 401);
+    if (!session) {
+      return apiError("Authentification requise.", 401);
+    }
 
     try {
       return await handler(request, context, session);

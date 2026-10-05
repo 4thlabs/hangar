@@ -116,7 +116,9 @@ export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
         // not the cache alone, is what keeps the dashboard from painting skeletons at all.
         const ready = snapshot.peek();
 
-        if (ready) return show(ready.data);
+        if (ready) {
+          return show(ready.data);
+        }
 
         return (async () => {
           try {

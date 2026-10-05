@@ -406,7 +406,7 @@ describe("Docker.loadContainers", () => {
     // case right after a `compose down` — not a reason to fail the whole page.
     dockerMock.inspect.mockImplementation((id: string) =>
       id === "container-2"
-        ? Promise.reject(new Error("no such container"))
+        ? Promise.reject(Object.assign(new Error("no such container"), { statusCode: 404 }))
         : Promise.resolve(sources.find(entry => entry.info.Id === id)?.detail),
     );
 

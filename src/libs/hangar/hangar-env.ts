@@ -5,6 +5,29 @@ import path from "node:path";
 import { HangarError } from "./hangar-error.ts";
 
 /**
+ * What a scan of `app-installed` expects to meet: a dangling app symlink (`ENOENT`) or a shared
+ * fragment read as a directory (`ENOTDIR`). Anything else — a permission, a disk error — is
+ * unexpected, and worth a log line even though the scan goes on.
+ */
+const EXPECTED_SCAN_ERRORS = new Set(["ENOENT", "ENOTDIR"]);
+
+/**
+ * A `.catch` handler that turns any scan error into `fallback`, logging the unexpected ones.
+ * Never thrown: one unreadable entry must not take down every page that lists variables.
+ */
+function fallbackOnScanError<T>(fallback: T, target: string) {
+  return (error: NodeJS.ErrnoException): T => {
+    const isExpected = error.code !== undefined && EXPECTED_SCAN_ERRORS.has(error.code);
+
+    if (!isExpected) {
+      logger.warn("Skipping an unreadable path in the installed apps", { error, path: target });
+    }
+
+    return fallback;
+  };
+}
+
+/**
  * The global environment file every stack is composed with, living at the root of the data
  * directory.
  *
@@ -58,7 +81,9 @@ export class HangarEnv {
    */
   async read(): Promise<Record<string, string>> {
     const contents = await readFile(this._file, "utf8").catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return "";
+      if (error.code === "ENOENT") {
+        return "";
+      }
 
       throw new HangarError(`Cannot read the global env at ${this._file}: ${error.code ?? error.message}`);
     });
@@ -109,7 +134,9 @@ export class HangarEnv {
     for (const prefix of HangarEnv.prefixes(app)) {
       const value = await this.get(`${prefix}${suffix}`);
 
-      if (value) return value;
+      if (value) {
+        return value;
+      }
     }
 
     return undefined;
@@ -127,7 +154,9 @@ export class HangarEnv {
   async write(updates: Record<string, string>, remove: string[] = []) {
     const next = { ...(await this.read()), ...updates };
 
-    for (const key of remove) delete next[key];
+    for (const key of remove) {
+      delete next[key];
+    }
 
     await this.backup();
     await writeFile(this._file, HangarEnv.serialize(next), "utf8");
@@ -175,9 +204,12 @@ export class HangarEnv {
    */
   private async apps() {
     const apps = await Promise.all(
-      (await this.entries()).map(async entry =>
-        (await readdir(path.join(this._installedPath, entry)).catch(() => null)) === null ? [] : [entry],
-      ),
+      (await this.entries()).map(async entry => {
+        const target = path.join(this._installedPath, entry);
+        const inner = await readdir(target).catch(fallbackOnScanError(null, target));
+
+        return inner === null ? [] : [entry];
+      }),
     );
 
     return apps.flat();
@@ -197,7 +229,7 @@ export class HangarEnv {
     const files = await Promise.all(
       (app ? [app] : await this.entries()).map(async entry => {
         const target = path.join(this._installedPath, entry);
-        const inner = await readdir(target).catch(() => null);
+        const inner = await readdir(target).catch(fallbackOnScanError(null, target));
 
         // Not a directory: a shared fragment like `networks.yml`, which is itself the file.
         return inner === null ? [target] : inner.map(file => path.join(target, file));
@@ -212,7 +244,7 @@ export class HangarEnv {
    * stacks yet lists nothing: that is an empty set, not a failure.
    */
   private async entries() {
-    const entries = await readdir(this._installedPath).catch(() => []);
+    const entries = await readdir(this._installedPath).catch(fallbackOnScanError([], this._installedPath));
 
     return entries.filter(entry => !entry.startsWith("."));
   }
@@ -227,7 +259,7 @@ export class HangarEnv {
       paths
         .filter(file => HangarEnv.Interpolated.test(file))
         .map(async file => {
-          const source = await readFile(file, "utf8").catch(() => "");
+          const source = await readFile(file, "utf8").catch(fallbackOnScanError("", file));
 
           // `$$` is compose's escape for a literal dollar: strip those first, or `$$FOO` reads
           // as a reference to FOO.
@@ -253,7 +285,9 @@ export class HangarEnv {
     const stamp = new Date().toISOString().replaceAll(":", "-");
 
     await copyFile(this._file, `${this._file}.${stamp}.bak`).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return;
+      if (error.code === "ENOENT") {
+        return;
+      }
 
       throw new HangarError(`Cannot back up the global env at ${this._file}: ${error.code ?? error.message}`);
     });

@@ -89,7 +89,9 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
   async notify(input: NotificationInput): Promise<void> {
     try {
       const targets = await this.recipients(input.userId);
-      if (targets.length === 0) return;
+      if (targets.length === 0) {
+        return;
+      }
 
       const now = new Date();
 
@@ -164,7 +166,9 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
    * @param ids The notifications that were just toasted
    */
   async markSeen(userId: string, ids: string[]): Promise<void> {
-    if (ids.length === 0) return;
+    if (ids.length === 0) {
+      return;
+    }
 
     try {
       await this.db
@@ -201,7 +205,9 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
    * Who a notification goes to: the one named, or everyone when none was.
    */
   private async recipients(userId: string | undefined): Promise<string[]> {
-    if (userId) return [userId];
+    if (userId) {
+      return [userId];
+    }
 
     const accounts = await this.db.select({ id: user.id }).from(user);
 

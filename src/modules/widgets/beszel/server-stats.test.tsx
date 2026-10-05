@@ -39,7 +39,7 @@ describe("displaySystem", () => {
     });
   });
 
-  it("treats a host that has never reported as having no readings, not zeroed ones", () => {
+  it("counts the readings of a host that has never reported as 0, and leaves uptime and temperature unknown", () => {
     expect(displaySystem({ id: "sys2", name: "vps", status: "pending", info: {} })).toMatchObject({
       up: false,
       uptime: undefined,

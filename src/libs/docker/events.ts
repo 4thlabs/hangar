@@ -116,7 +116,9 @@ export class DockerEvents {
    * stream runs behind the caller.
    */
   start() {
-    if (this.controller) return;
+    if (this.controller) {
+      return;
+    }
 
     this.controller = new AbortController();
     void this.follow(this.controller.signal);
@@ -129,7 +131,9 @@ export class DockerEvents {
     this.controller?.abort();
     this.controller = undefined;
 
-    for (const timer of this.batches.values()) clearTimeout(timer);
+    for (const timer of this.batches.values()) {
+      clearTimeout(timer);
+    }
     this.batches.clear();
   }
 
@@ -147,19 +151,27 @@ export class DockerEvents {
 
         logger.info("Following the Docker daemon's events");
         retry = DockerEvents.Retry;
-        for (const change of DockerChanges) this.schedule(change);
+        for (const change of DockerChanges) {
+          this.schedule(change);
+        }
 
         // One JSON object per line; a line is only parsed once whole, wherever the chunks split it.
         for await (const line of createInterface({ input: stream, crlfDelay: Number.POSITIVE_INFINITY })) {
           // Lines already buffered when `stop` aborted the request must not open new batches.
-          if (signal.aborted) break;
+          if (signal.aborted) {
+            break;
+          }
 
           this.receive(line);
         }
 
-        if (!signal.aborted) logger.warn("The Docker event stream ended, reconnecting");
+        if (!signal.aborted) {
+          logger.warn("The Docker event stream ended, reconnecting");
+        }
       } catch (error) {
-        if (signal.aborted) return;
+        if (signal.aborted) {
+          return;
+        }
 
         logger.warn("The Docker event stream failed, reconnecting", { error });
       }
@@ -173,10 +185,14 @@ export class DockerEvents {
    * Batches what one line of the stream made stale.
    */
   private receive(line: string) {
-    if (!line.trim()) return;
+    if (!line.trim()) {
+      return;
+    }
 
     try {
-      for (const change of DockerEvents.changesOf(JSON.parse(line) as DockerEvent)) this.schedule(change);
+      for (const change of DockerEvents.changesOf(JSON.parse(line) as DockerEvent)) {
+        this.schedule(change);
+      }
     } catch (error) {
       logger.warn("Could not read a Docker event", { error });
     }
@@ -186,7 +202,9 @@ export class DockerEvents {
    * Opens a batch for `change`, or joins the one already open.
    */
   private schedule(change: DockerChange) {
-    if (this.batches.has(change)) return;
+    if (this.batches.has(change)) {
+      return;
+    }
 
     const timer = setTimeout(() => {
       this.batches.delete(change);

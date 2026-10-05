@@ -29,8 +29,12 @@ export function ComposeOutputSheet({ projects, operation, label, onClose, onFini
 
   const finishedRef = useRef(false);
   useEffect(() => {
-    if (status === "connecting" || status === "connected") finishedRef.current = false;
-    if (finishedRef.current) return;
+    if (status === "connecting" || status === "connected") {
+      finishedRef.current = false;
+    }
+    if (finishedRef.current) {
+      return;
+    }
 
     if (status === "ended") {
       finishedRef.current = true;

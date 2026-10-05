@@ -13,7 +13,9 @@ import fuzzysort from "fuzzysort";
  * @param items The candidates, never mutated
  */
 export function searchByName<T extends { name: string }>(query: string, items: readonly T[]): T[] {
-  if (!query) return [...items].sort((left, right) => left.name.localeCompare(right.name));
+  if (!query) {
+    return [...items].sort((left, right) => left.name.localeCompare(right.name));
+  }
 
   return fuzzysort.go(query, items, { key: "name", limit: 0, threshold: 0 }).map(result => result.obj);
 }

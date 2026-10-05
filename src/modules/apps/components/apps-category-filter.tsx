@@ -17,7 +17,9 @@ export function AppsCategoryFilter({ counts }: AppsCategoryFilterProps) {
   const setSearch = useSetSearch_UNSTABLE({ from: "/apps" });
   const categories = Object.keys(counts).sort((a, b) => a.localeCompare(b));
 
-  if (categories.length === 0) return null;
+  if (categories.length === 0) {
+    return null;
+  }
 
   return (
     <CheckboxFilterMenu

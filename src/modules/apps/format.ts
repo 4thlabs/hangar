@@ -2,8 +2,12 @@
 const byteFormatter = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
 
 export function formatBytes(value: number | null) {
-  if (value === null) return "—";
-  if (value === 0) return "0 B";
+  if (value === null) {
+    return "—";
+  }
+  if (value === 0) {
+    return "0 B";
+  }
 
   // Binary units: the divisor below is 1024, so these are KiB/MiB/GiB, not KB/MB/GB.
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];

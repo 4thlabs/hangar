@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { logger } from "#libs/logs";
 import { GithubClient } from "./client.ts";
 
 /** A fresh client per case, so no case reads another's cache. */
@@ -15,7 +16,9 @@ function respond(byRepository: Record<string, unknown>) {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const found = Object.entries(byRepository).find(([repository]) => url.includes(repository));
 
-    if (!found) return Promise.resolve(new Response("Not Found", { status: 404 }));
+    if (!found) {
+      return Promise.resolve(new Response("Not Found", { status: 404 }));
+    }
 
     return Promise.resolve(Response.json(found[1]));
   });
@@ -32,6 +35,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("getLatestReleases", () => {
@@ -52,10 +56,16 @@ describe("getLatestReleases", () => {
 
   it("drops a repository that has no release instead of failing the widget", async () => {
     vi.stubGlobal("fetch", respond({ "glanceapp/glance": release("v0.8.4", "2026-09-18T10:00:00Z") }));
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
 
     const releases = await client.getLatestReleases(["glanceapp/glance", "example/never-released"]);
 
     expect(releases.map(item => item.repository)).toEqual(["glanceapp/glance"]);
+    // Dropped from the card, but named in the log, so a typo in `hangar.yml` can be found.
+    expect(warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ repository: "example/never-released" }),
+    );
   });
 
   it("serves the cached release instead of asking again", async () => {

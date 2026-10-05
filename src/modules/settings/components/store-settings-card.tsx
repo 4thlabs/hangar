@@ -24,7 +24,9 @@ export function StoreSettingsCard({ storeUrl, initialInstalled, manageStore }: S
     // and its outcome arrives later as a notification.
     run(manageStore, { success: "Synchronisation lancée", error: "Échec du lancement" }, result => {
       // Only a returned result carries the new state; a transport failure leaves it as it was.
-      if (result) setInstalled(result.installed);
+      if (result) {
+        setInstalled(result.installed);
+      }
     });
 
   return (

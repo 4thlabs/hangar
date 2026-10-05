@@ -101,7 +101,7 @@ export class HangarStore {
   }
 
   /**
-   * Links(symlink) a stack into the installed apps.
+   * Removes a stack's symlink from the installed apps, leaving the stack itself in the store.
    * @param name the stack name
    */
   async unlink(name: string) {
@@ -144,8 +144,8 @@ export class HangarStore {
   }
 
   /**
-   * Install/Updates the store by cloning the repo or updates it
-   * @param update boolean Wheter to update the store if already installed
+   * Installs the store by cloning its repository, or updates it with a fast-forward pull when it
+   * is already there.
    */
   async install() {
     if (!(await Runtime.exists(this.installedPath))) {
@@ -220,7 +220,9 @@ export class HangarStore {
       const results = await Promise.allSettled(stacks.map(stack => this.composeStack(stack, args, options)));
       const failure = results.find(result => result.status === "rejected");
 
-      if (failure) throw failure.reason;
+      if (failure) {
+        throw failure.reason;
+      }
       return;
     }
 
@@ -232,7 +234,11 @@ export class HangarStore {
 
   /** The store app with this id, or `undefined` when the store does not carry it. */
   app(id: string): HangarApp | undefined {
-    for (const app of this.apps) if (app.id === id) return app;
+    for (const app of this.apps) {
+      if (app.id === id) {
+        return app;
+      }
+    }
     return undefined;
   }
 
@@ -242,30 +248,66 @@ export class HangarStore {
   }
 
   /**
-   * Writes a store app's compose.yml once `docker compose config` accepts it: a rejected source
-   * leaves the app untouched, and a new app is not created at all.
-   * @param id The app id, its folder under `store/`
+   * Adds a new store app once `docker compose config` accepts its compose.yml. A rejected source
+   * creates nothing.
+   * @param id The app id, its folder under `store/`; must not exist yet
    * @param source The compose YAML
-   * @param create True to add a new app, which must not exist yet
    */
-  async saveApp(id: string, source: string, create: boolean) {
+  async createApp(id: string, source: string) {
+    const folder = this.appFolder(id);
+
+    if (await Runtime.exists(folder)) {
+      throw new HangarError(`The app ${id} already exists`);
+    }
+
+    await mkdir(folder, { recursive: true });
+
+    try {
+      await this.writeValidatedCompose(folder, source);
+    } catch (error) {
+      await rm(folder, { recursive: true, force: true });
+      throw error;
+    }
+  }
+
+  /**
+   * Replaces a store app's compose.yml once `docker compose config` accepts it. A rejected source
+   * leaves the app untouched.
+   * @param id The app id, its folder under `store/`; must already exist
+   * @param source The compose YAML
+   */
+  async updateApp(id: string, source: string) {
+    const folder = this.appFolder(id);
+
+    if (!(await Runtime.exists(folder))) {
+      throw new HangarError(`The app ${id} does not exist`);
+    }
+
+    await this.writeValidatedCompose(folder, source);
+  }
+
+  /** The folder of an app that may be created or edited: not one of the shared files. */
+  private appFolder(id: string) {
     const folder = this.stackPath(id);
 
     if (this.config.shared().includes(id)) {
       throw new HangarError(`${id} is a shared file, not an app`);
     }
 
-    if (create === (await Runtime.exists(folder))) {
-      throw new HangarError(create ? `The app ${id} already exists` : `The app ${id} does not exist`);
-    }
+    return folder;
+  }
 
+  /**
+   * Writes `source` as the folder's compose.yml if `docker compose config` accepts it, then
+   * reloads the apps. On a rejection only the pending copy is removed.
+   */
+  private async writeValidatedCompose(folder: string, source: string) {
     // Next to the real file, so the paths it references resolve the same way.
     const pending = path.join(folder, ".compose.pending.yml");
 
     // No `-p`: compose rejects some folder names as project names (`llama.cpp`), and a
     // validation does not need one.
     try {
-      await mkdir(folder, { recursive: true });
       await writeFile(pending, source, "utf8");
 
       // prettier-ignore
@@ -276,7 +318,7 @@ export class HangarStore {
         "config", "-q",
       ], { capture: true });
     } catch (error) {
-      await rm(create ? folder : pending, { recursive: true, force: true });
+      await rm(pending, { force: true });
       throw error;
     }
 
@@ -286,7 +328,9 @@ export class HangarStore {
 
   /** The folder of a store app, once its id is known not to escape `store/`. */
   private stackPath(id: string) {
-    if (!HangarStore.StackId.test(id)) throw new HangarError(`Invalid app id: ${id}`);
+    if (!HangarStore.StackId.test(id)) {
+      throw new HangarError(`Invalid app id: ${id}`);
+    }
     return path.join(this.storePath, "store", id);
   }
 

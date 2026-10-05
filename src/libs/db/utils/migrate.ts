@@ -17,7 +17,9 @@ const MIGRATIONS_FOLDER = fileURLToPath(new URL("../../../drizzle", import.meta.
 export function migrateDb(source = env.HANGAR_DB_HOST) {
   // The image points HANGAR_DB_HOST at a nested path inside the /app/data volume,
   // and better-sqlite3 will not create the directories itself.
-  if (source !== ":memory:") mkdirSync(path.dirname(source), { recursive: true });
+  if (source !== ":memory:") {
+    mkdirSync(path.dirname(source), { recursive: true });
+  }
 
   const db = drizzle({ connection: { source } });
   migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });

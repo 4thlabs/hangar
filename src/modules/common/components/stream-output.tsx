@@ -25,7 +25,9 @@ export function StreamOutput({ text, error, placeholder, follow = true, onScroll
 
   useEffect(() => {
     const viewport = viewportRef.current;
-    if (viewport && follow) viewport.scrollTop = viewport.scrollHeight;
+    if (viewport && follow) {
+      viewport.scrollTop = viewport.scrollHeight;
+    }
   }, [follow, text]);
 
   return (

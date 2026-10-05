@@ -71,7 +71,9 @@ export default (): MiddlewareHandler => {
   return async (_c, next) => {
     await next();
 
-    if (!first) return;
+    if (!first) {
+      return;
+    }
     first = false;
     tick();
   };

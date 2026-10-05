@@ -14,6 +14,28 @@ import { logger } from "#libs/logs";
 import { Cache, type Snapshot } from "#libs/cache";
 import type { ContainerStatsSample } from "./stats.ts";
 
+/** What the daemon answers for a container that went away between a list and a call on it. */
+const NOT_FOUND = 404;
+
+/**
+ * The values of the calls that succeeded. A container that went away mid-way (404) is dropped
+ * quietly; any other failure is dropped too, so one container cannot sink the whole read, but
+ * logged, since it is not the expected race.
+ * @param operation What was being done, for the log line
+ */
+function fulfilledValues<T>(results: PromiseSettledResult<T>[], operation: string): T[] {
+  for (const result of results) {
+    const isExpectedRace =
+      result.status === "rejected" && (result.reason as { statusCode?: number }).statusCode === NOT_FOUND;
+
+    if (result.status === "rejected" && !isExpectedRace) {
+      logger.warn(`Could not ${operation}`, { error: result.reason });
+    }
+  }
+
+  return results.filter(result => result.status === "fulfilled").map(result => result.value);
+}
+
 /** Raw stats samples keyed by full container id. */
 export type Samples = Map<string, ContainerStatsSample>;
 
@@ -162,7 +184,7 @@ export class Docker {
   /**
    * @param docker An Engine API client; injected so the composition root owns the connection
    * @param apps The installed-app lookup, satisfied by `hangar.store`
-   * @param ttl How long the loaded containers are reused; injected so a test can drive it
+   * @param ttl How long the loaded containers and images are reused; injected so a test can drive it
    */
   constructor(docker: Dockerode, apps: InstalledApps, ttl = Docker.Ttl) {
     this.docker = docker;
@@ -226,7 +248,7 @@ export class Docker {
       listed.map(async info => ({ info, detail: await this.docker.getContainer(info.Id).inspect() })),
     );
 
-    return inspected.filter(result => result.status === "fulfilled").map(result => result.value);
+    return fulfilledValues(inspected, "inspect a container");
   };
 
   /**
@@ -266,19 +288,22 @@ export class Docker {
     // registry says "too many requests", every call after it would be refused too and would
     // still spend quota, so the rest stay unknown until the next run.
     for (const [index, image] of references.entries()) {
-      if (index > 0) await sleep(gap);
+      if (index > 0) {
+        await sleep(gap);
+      }
 
       const digest = await this.remoteDigest(image);
 
       if (digest === Docker.RateLimited) {
-        // In the message, not in metadata: the log format only ever prints `message` and `error`.
         logger.warn(
           `Registry rate limit hit on ${image} (${index} checked), skipping the remaining ${references.length - index - 1}`,
         );
         break;
       }
 
-      if (digest) remotes[image] = digest;
+      if (digest) {
+        remotes[image] = digest;
+      }
     }
 
     return remotes;
@@ -319,7 +344,9 @@ export class Docker {
       return remote.Descriptor.digest;
     } catch (error) {
       // A rate limit stops the whole run, see the caller.
-      if (Docker.rateLimited(error)) return Docker.RateLimited;
+      if (Docker.rateLimited(error)) {
+        return Docker.RateLimited;
+      }
 
       // Unreachable registry, private image with no credentials: both say "don't know".
       logger.warn("Could not check an image for updates", { error, image });
@@ -389,7 +416,9 @@ export class Docker {
    * @throws {DockerNotFoundError} if the id is malformed, missing, or belongs to another project
    */
   async openLogs(project: string, containerId: string, signal: AbortSignal): Promise<Readable> {
-    if (!Docker.ContainerId.test(containerId)) throw new DockerNotFoundError(`container ${containerId}`);
+    if (!Docker.ContainerId.test(containerId)) {
+      throw new DockerNotFoundError(`container ${containerId}`);
+    }
 
     // Narrowing to the project, rather than inspecting the id directly, means an id from another
     // project is indistinguishable from one that doesn't exist: no cross-project probing. The
@@ -398,7 +427,9 @@ export class Docker {
     const compose = new ComposeProjects(await this.containers.read(), project);
     const container = compose.find(containerId);
 
-    if (!container) throw new DockerNotFoundError(`container ${containerId}`);
+    if (!container) {
+      throw new DockerNotFoundError(`container ${containerId}`);
+    }
 
     // Typed as a bare readable because `follow` is only known to produce a stream at runtime.
     const logs = (await this.docker.getContainer(container.info.Id).logs({
@@ -413,11 +444,17 @@ export class Docker {
 
     // Without a TTY the daemon multiplexes stdout and stderr into one framed stream; demuxing
     // both back into the same sink is what gives the log view its interleaved output.
-    if (container.detail.Config.Tty) logs.pipe(output);
-    else this.docker.modem.demuxStream(logs, output, output);
+    if (container.detail.Config.Tty) {
+      logs.pipe(output);
+    } else {
+      this.docker.modem.demuxStream(logs, output, output);
+    }
 
     logs.on("end", () => output.end());
-    logs.on("error", () => output.end());
+    logs.on("error", error => {
+      logger.warn("A container log stream failed", { error, container: container.info.Id });
+      output.end();
+    });
     signal.addEventListener("abort", () => logs.destroy());
 
     return output;
@@ -444,9 +481,10 @@ export class Docker {
     );
 
     return new Map(
-      samples
-        .filter(sample => sample.status === "fulfilled")
-        .map(sample => [sample.value[0], sample.value[1] as ContainerStatsSample]),
+      fulfilledValues(samples, "sample a container's statistics").map(([id, sample]) => [
+        id,
+        sample as ContainerStatsSample,
+      ]),
     );
   }
 }

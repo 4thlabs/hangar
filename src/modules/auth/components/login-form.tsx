@@ -28,7 +28,8 @@ export function LoginForm() {
       }
 
       router.replace("/");
-    } catch {
+    } catch (error) {
+      console.error("Sign-in request failed", error);
       setError("Unable to sign in. Please try again.");
     } finally {
       setIsPending(false);

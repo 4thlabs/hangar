@@ -34,7 +34,10 @@ export type ServerStats = {
   cpuModel: string | undefined;
 };
 
-/** A reading the agent did not send is nothing to draw a bar from, not a zero. */
+/**
+ * A reading the agent did not send counts as 0. The bars are only drawn for a host that is up,
+ * which reports all three, so the 0 never reaches the card as a real reading.
+ */
 const percent = (value: number | undefined) => value ?? 0;
 
 /** What a system looks like on the card. */

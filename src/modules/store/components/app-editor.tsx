@@ -13,11 +13,12 @@ type AppEditorProps = {
   /** The app being edited; absent when adding one, whose id is then typed in */
   id?: string;
   source: string;
-  saveApp: (id: string, source: string, create: boolean) => Promise<ActionResult>;
+  /** Creates the app when `id` is absent, saves it otherwise */
+  save: (id: string, source: string) => Promise<ActionResult>;
 };
 
 /** Edits a store app's compose.yml, or writes a new app's. */
-export function AppEditor({ id, source, saveApp }: AppEditorProps) {
+export function AppEditor({ id, source, save }: AppEditorProps) {
   const router = useRouter();
   const [newId, setNewId] = useState("");
   const create = id === undefined;
@@ -25,7 +26,7 @@ export function AppEditor({ id, source, saveApp }: AppEditorProps) {
 
   const { editor, handleSave, isPending } = useYamlEditor({
     source,
-    save: value => saveApp(appId, value, create),
+    save: value => save(appId, value),
     titles: { success: "Application enregistrée", error: "Application refusée" },
     // A new app gets its own editor, so a second save edits it instead of re-creating it.
     onSaved: () => (create ? router.push(`/store/${appId}/edit`) : router.reload()),

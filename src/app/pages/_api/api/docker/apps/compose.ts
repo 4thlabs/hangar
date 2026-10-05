@@ -1,13 +1,9 @@
 import { PassThrough } from "node:stream";
-import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
-import { actionLabel, isAppOperation, operationOutcome } from "#modules/apps/actions/app-operation.ts";
-import { appOperationArguments, refuseAppOperation } from "#modules/apps/actions/app-operations.ts";
-import { COMPOSE_EXIT_MARKER } from "#modules/apps/actions/compose-stream.ts";
+import { isAppOperation } from "#modules/apps/actions/app-operation.ts";
+import { refuseAppOperation } from "#modules/apps/actions/app-operations.ts";
+import { runComposeBatch } from "#modules/apps/compose-batch.ts";
 import { apiError, apiRoute, apiStream } from "#app/api/api-route.ts";
-import { docker } from "#libs/docker/server";
-import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
-import { notifications } from "#libs/notifications/server";
 
 /**
  * Streams `docker compose <operation>` over one or more apps as plain text, live.
@@ -41,7 +37,6 @@ export const POST = apiRoute(
     }
 
     const output = new PassThrough();
-    const label = actionLabel[operation];
 
     // The client may be long gone: without a reader the stream either buffers the whole batch in
     // memory or throws on a write, and neither may interrupt the commands. Compose resolves on
@@ -49,46 +44,9 @@ export const POST = apiRoute(
     output.on("error", () => {});
     request.signal.addEventListener("abort", () => output.resume());
 
-    void (async () => {
-      let failures = 0;
-
-      for (const project of projects) {
-        output.write(`\n$ docker compose ${appOperationArguments[operation].join(" ")} — ${project}\n`);
-
-        // The client reloads the page on this app's notification and again when the batch ends,
-        // so what `/apps` reads is reloaded before either goes out: the reload is then served the
-        // new state from memory, neither the old one nor a spinner. Not the overview: `df` is slow,
-        // only the dashboard reads it, and the daemon's events refresh it anyway. Unconditional: a
-        // compose run that fails half-way still leaves containers it did start.
-        try {
-          await hangar.store
-            .compose(project, [...appOperationArguments[operation]], { pipe: output })
-            .finally(() => docker.refresh(["containers", "images"]));
-
-          await notifications.notify({
-            userId: session.user.id,
-            level: "success",
-            title: `${label} terminé`,
-            description: operationOutcome[operation](project),
-            href: `/apps/${project}`,
-          });
-        } catch (error) {
-          failures += 1;
-          logger.error("Docker Compose stream command failed", { error, project, operation });
-          await notifications.notify({
-            userId: session.user.id,
-            level: "error",
-            title: `${label} échoué`,
-            description: `La commande Docker Compose a échoué pour ${project}. ${SERVER_LOG_HINT}`,
-            href: `/apps/${project}`,
-          });
-        }
-      }
-
-      // The marker carries the number of failed apps, so `composeExitCode` keeps its meaning:
-      // zero is still "everything went through".
-      output.end(`\n${COMPOSE_EXIT_MARKER}${failures}\n`);
-    })();
+    // Not awaited: the batch outlives the request (see above), and its failures are reported
+    // per app, as notifications.
+    void runComposeBatch({ operation, projects, userId: session.user.id, output });
 
     return apiStream(output);
   },

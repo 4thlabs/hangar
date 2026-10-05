@@ -126,21 +126,27 @@ type ComposeRunDialogsProps = {
   compose: ReturnType<typeof useComposeRun>;
   /** How the confirmation names its target: an app's name, or "3 applications". */
   subject: string;
-  /** Several apps are targeted, which the confirmation's wording follows. */
-  many: boolean;
+  /** How many apps are targeted, which the confirmation's wording follows. */
+  count: number;
+};
+
+/** The confirmation's wording for one app or for several, French agreeing in number. */
+const TARGET_WORDING = {
+  one: { apps: "cette application", staysListed: "Elle restera listée" },
+  many: { apps: "ces applications", staysListed: "Elles resteront listées" },
 };
 
 /** The confirmation and the output sheet behind `ComposeOperationButtons`, for either caller. */
-export function ComposeRunDialogs({ compose, subject, many }: ComposeRunDialogsProps) {
+export function ComposeRunDialogs({ compose, subject, count }: ComposeRunDialogsProps) {
   const { confirmation, setConfirmation, running, targets, run, close, finished } = compose;
-  const apps = many ? "ces applications" : "cette application";
+  const { apps, staysListed } = count > 1 ? TARGET_WORDING.many : TARGET_WORDING.one;
   const title: Record<DestructiveOperation, string> = {
     down: `Arrêter ${subject} ?`,
     recreate: `Recréer ${subject} ?`,
     update: `Mettre à jour ${subject} ?`,
   };
   const description: Record<DestructiveOperation, string> = {
-    down: `Docker Compose supprimera les conteneurs et réseaux de ${apps}. ${many ? "Elles resteront listées" : "Elle restera listée"}, à l’arrêt.`,
+    down: `Docker Compose supprimera les conteneurs et réseaux de ${apps}. ${staysListed}, à l’arrêt.`,
     recreate: `Tous les conteneurs de ${apps} seront recréés, même si leur configuration n’a pas changé.`,
     update: "Les images seront retirées du registre et les conteneurs recréés avec la nouvelle version.",
   };

@@ -168,9 +168,15 @@ export class ComposeProjects {
    * Any unhealthy container wins; otherwise it's running/stopped/partial by count.
    */
   private static status(containerCount: number, runningCount: number, unhealthyCount: number): ComposeProjectStatus {
-    if (unhealthyCount > 0) return "unhealthy";
-    if (containerCount > 0 && runningCount === containerCount) return "running";
-    if (runningCount === 0) return "stopped";
+    if (unhealthyCount > 0) {
+      return "unhealthy";
+    }
+    if (containerCount > 0 && runningCount === containerCount) {
+      return "running";
+    }
+    if (runningCount === 0) {
+      return "stopped";
+    }
     return "partial";
   }
 
@@ -230,7 +236,9 @@ export class ComposeProjects {
     for (const container of this.containers) {
       const labels = container.info.Labels;
       const aggregate = projects.get(labels[ComposeProjects.Label.project] ?? "");
-      if (!aggregate) continue;
+      if (!aggregate) {
+        continue;
+      }
 
       aggregate.services.add(labels[ComposeProjects.Label.service] ?? "");
       aggregate.containerIds.push(container.info.Id);
@@ -291,7 +299,9 @@ export class ComposeProjects {
     // One name in, one summary out: an app Hangar didn't install yields none, and reads as not found.
     const [summary] = this.summaries(new Set(installed.has(project) ? [project] : []));
 
-    if (!summary) throw new DockerNotFoundError(`Compose project ${project}`);
+    if (!summary) {
+      throw new DockerNotFoundError(`Compose project ${project}`);
+    }
 
     return { ...summary, services: this.services() };
   }

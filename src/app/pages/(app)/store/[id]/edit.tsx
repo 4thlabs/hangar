@@ -1,13 +1,15 @@
 import type { PageProps } from "waku/router";
 import { unstable_notFound } from "waku/router/server";
-import { saveApp } from "#modules/store/actions/manage-app.ts";
+import { updateApp } from "#modules/store/actions/manage-app.ts";
 import { AppEditor } from "#modules/store/components/app-editor.tsx";
 import { hangar } from "#libs/hangar/server";
 
 export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">) {
   const app = hangar.store.app(id);
 
-  if (!app) unstable_notFound();
+  if (!app) {
+    unstable_notFound();
+  }
 
   const source = await hangar.store.appSource(app.id);
 
@@ -21,7 +23,7 @@ export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">)
           app installée prend les changements à son prochain démarrage.
         </p>
       </div>
-      <AppEditor id={app.id} source={source} saveApp={saveApp} />
+      <AppEditor id={app.id} source={source} save={updateApp} />
     </main>
   );
 }

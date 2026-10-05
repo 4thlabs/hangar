@@ -68,11 +68,17 @@ export class ImageCheckReport {
       // below an older one. Take the last few and pick by the timestamp the report itself carries.
       const runs = await this.listRuns({ jobClass: "CheckImageVersion", state: "completed", limit: 10 });
       // JSON read back out of SQLite: trusted no further than the one shape we wrote.
-      const reports = runs.map(run => run.result as ImageUpdateReport | undefined);
-      const last = reports.reduce<ImageUpdateReport | undefined>(
-        (newest, report) => (report?.checkedAt && (!newest || report.checkedAt > newest.checkedAt) ? report : newest),
-        undefined,
-      );
+      const reports = runs
+        .map(run => run.result as ImageUpdateReport | undefined)
+        .filter((report): report is ImageUpdateReport => Boolean(report?.checkedAt));
+
+      // ISO timestamps, so the newest is also the greatest string.
+      let last: ImageUpdateReport | undefined;
+      for (const report of reports) {
+        if (!last || report.checkedAt > last.checkedAt) {
+          last = report;
+        }
+      }
 
       // A report from before digests were stored has `updates` instead: nothing to compare.
       return last?.remotes && typeof last.remotes === "object" ? last.remotes : {};

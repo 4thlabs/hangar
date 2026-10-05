@@ -52,7 +52,9 @@ export class WidgetImages {
    * @param id The image's id, as the service spells it
    */
   async fetch(widget: string, id: string): Promise<Response | undefined> {
-    if (!WidgetImages.Id.test(id)) return undefined;
+    if (!WidgetImages.Id.test(id)) {
+      return undefined;
+    }
 
     const config = this.placed(widget);
     const relay = config && WidgetImages.Relays[config.type];

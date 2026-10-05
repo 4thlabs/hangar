@@ -148,7 +148,9 @@ export const jellyfinLatest = (service: WidgetService, user: string, ttl?: numbe
       const account = users.find(candidate => candidate.Name === user);
 
       // Naming the operator's own typo beats an error card that says only "could not be loaded".
-      if (!account) throw new Error(`No Jellyfin user named ${user}`);
+      if (!account) {
+        throw new Error(`No Jellyfin user named ${user}`);
+      }
 
       const items = (await client.getLatest(account.Id, ITEM_COUNT)).map(displayItem);
 

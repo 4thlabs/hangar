@@ -5,22 +5,13 @@ import { installApp, uninstallApp } from "#modules/store/actions/store-apps.ts";
 import { StoreAppCard } from "#modules/store/components/store-app-card.tsx";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { StoreFilterMenu } from "#modules/store/components/store-filter-menu.tsx";
-import { searchByName } from "#modules/common/search.ts";
+import { storeListing } from "#modules/store/listing.ts";
 import { storeSearchCodec } from "#modules/store/search-codec.ts";
 import { hangar } from "#libs/hangar/server";
 
 export default function StorePage({ search }: PageProps<"/store">) {
   const all = [...hangar.store.apps];
-  // An empty selection means no filter; ticking both is the same as ticking neither.
-  const filtered =
-    search.filter.length === 0
-      ? all
-      : all.filter(app => search.filter.includes(app.installed ? "installed" : "available"));
-  const counts = {
-    installed: all.filter(app => app.installed).length,
-    available: all.filter(app => !app.installed).length,
-  };
-  const apps = searchByName(search.q, filtered);
+  const { apps, counts } = storeListing(all, search);
 
   return (
     <main>

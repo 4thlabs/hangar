@@ -24,7 +24,9 @@ function Dashboard() {
     <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[1fr_3fr_1fr]">
       {COLUMNS.map(column => {
         const columnPlacements = placements.filter(placement => placement.column === column);
-        if (columnPlacements.length === 0) return null;
+        if (columnPlacements.length === 0) {
+          return null;
+        }
 
         return (
           <div key={column} className={COLUMN_CLASSNAME[column]}>

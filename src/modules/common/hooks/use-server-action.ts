@@ -41,7 +41,9 @@ export function useServerAction() {
       try {
         result = await action();
         toast.add(createActionToast(result, titles));
-      } catch {
+      } catch (error) {
+        // The toast only says the request failed; the cause is for whoever opens the console.
+        console.error("Server action failed", error);
         toast.add(createTransportErrorToast(titles.error, titles.transport));
       }
 

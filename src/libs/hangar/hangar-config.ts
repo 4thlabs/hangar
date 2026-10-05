@@ -79,7 +79,9 @@ export class HangarConfig {
 
     // A store without a hangar.yml is a store without categories, not a
     // failure: it still installs, its apps are just left ungrouped.
-    if (source === undefined) logger.warn(`No Hangar config at ${this._configFile}: the store declares no categories`);
+    if (source === undefined) {
+      logger.warn(`No Hangar config at ${this._configFile}: the store declares no categories`);
+    }
 
     this.apply(source === undefined ? configSchema.parse({ categories: [] }) : this.parse(source));
 
@@ -94,7 +96,9 @@ export class HangarConfig {
   /** The raw file, `undefined` when the store ships none. */
   private read() {
     return readFile(this._configFile, "utf8").catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return undefined;
+      if (error.code === "ENOENT") {
+        return undefined;
+      }
 
       // An unreadable config is an operator error, not a defect: report the
       // path, not a filesystem stack trace.

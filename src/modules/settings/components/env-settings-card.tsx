@@ -39,7 +39,9 @@ export function EnvSettingsCard({ variables, saveEnv }: EnvSettingsCardProps) {
   const add = () => {
     const key = newKey.trim();
 
-    if (!key || key in values) return;
+    if (!key || key in values) {
+      return;
+    }
 
     setValues(previous => ({ ...previous, [key]: "" }));
     setRemoved(previous => previous.filter(name => name !== key));

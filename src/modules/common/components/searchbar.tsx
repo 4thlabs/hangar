@@ -30,7 +30,9 @@ function RouteSearchField({ id, autoFocus, from }: NavbarSearchProps & { from: s
   const [value, setValue] = useState(routeQuery);
 
   useEffect(() => {
-    if (value === routeQuery) return;
+    if (value === routeQuery) {
+      return;
+    }
     const timer = setTimeout(() => void setSearch({ q: value } as never, { history: "replace" }), DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [value, routeQuery, setSearch]);

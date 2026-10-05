@@ -221,7 +221,7 @@ describe("HangarStore", () => {
     expect(store.app("immich")?.containerName).toBe("immich-server");
   });
 
-  it("keeps going when an app has no x-arcane block or no compose.yml", async () => {
+  it("keeps going when an app has no x-hangar block or no compose.yml", async () => {
     const store = await createStore(dataDir, createRuntime());
     const good = path.join(store.storePath, "store", "good-app");
     const noMetadata = path.join(store.storePath, "store", "no-metadata-app");
@@ -295,7 +295,7 @@ describe("HangarStore", () => {
     expect(store.app("delta-app")?.installed).toBe(true);
   });
 
-  describe("saveApp", () => {
+  describe("createApp and updateApp", () => {
     const COMPOSE = "name: Delta\nservices:\n  delta-app:\n    image: nginx\n";
 
     it("adds a new app once docker compose accepts it", async () => {
@@ -304,7 +304,7 @@ describe("HangarStore", () => {
       await mkdir(store.installedPath, { recursive: true });
       await mkdir(path.join(store.storePath, ".git"));
 
-      await store.saveApp("delta-app", COMPOSE, true);
+      await store.createApp("delta-app", COMPOSE);
 
       expect(await store.appSource("delta-app")).toBe(COMPOSE);
       expect(store.app("delta-app")?.name).toBe("Delta");
@@ -324,7 +324,7 @@ describe("HangarStore", () => {
       runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "services must be a mapping"));
       const store = await createStore(dataDir, runtime);
 
-      await expect(store.saveApp("delta-app", "services: 3\n", true)).rejects.toThrow(/services must be a mapping/);
+      await expect(store.createApp("delta-app", "services: 3\n")).rejects.toThrow(/services must be a mapping/);
       await expect(lstat(path.join(store.storePath, "store", "delta-app"))).rejects.toThrow(/ENOENT/);
     });
 
@@ -336,20 +336,20 @@ describe("HangarStore", () => {
       await writeFile(path.join(folder, "compose.yml"), COMPOSE);
       runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "invalid"));
 
-      await expect(store.saveApp("delta-app", "services: 3\n", false)).rejects.toThrow();
+      await expect(store.updateApp("delta-app", "services: 3\n")).rejects.toThrow();
 
       expect(await store.appSource("delta-app")).toBe(COMPOSE);
       await expect(lstat(path.join(folder, ".compose.pending.yml"))).rejects.toThrow(/ENOENT/);
     });
 
-    it("refuses ids that escape the store, shared files and mismatched create flags", async () => {
+    it("refuses ids that escape the store, shared files, creating an existing app and editing a missing one", async () => {
       const store = await createStore(dataDir, createRuntime());
       await mkdir(path.join(store.storePath, "store", "delta-app"), { recursive: true });
 
-      await expect(store.saveApp("../config", COMPOSE, true)).rejects.toThrow(/Invalid app id/);
-      await expect(store.saveApp("networks.yml", COMPOSE, true)).rejects.toThrow(/shared/);
-      await expect(store.saveApp("delta-app", COMPOSE, true)).rejects.toThrow(/already exists/);
-      await expect(store.saveApp("other-app", COMPOSE, false)).rejects.toThrow(/does not exist/);
+      await expect(store.createApp("../config", COMPOSE)).rejects.toThrow(/Invalid app id/);
+      await expect(store.createApp("networks.yml", COMPOSE)).rejects.toThrow(/shared/);
+      await expect(store.createApp("delta-app", COMPOSE)).rejects.toThrow(/already exists/);
+      await expect(store.updateApp("other-app", COMPOSE)).rejects.toThrow(/does not exist/);
     });
   });
 });
@@ -375,7 +375,9 @@ describe("HangarStore.compose", () => {
       const args = call[1] as string[];
       const compose = args.find(arg => arg.endsWith("compose.yml"));
 
-      if (!compose) throw new Error(`No compose file in: ${args.join(" ")}`);
+      if (!compose) {
+        throw new Error(`No compose file in: ${args.join(" ")}`);
+      }
 
       return path.basename(path.dirname(compose));
     });
@@ -467,7 +469,9 @@ describe("HangarStore.compose", () => {
   it("stops an ordered run at the first failure but completes an unordered one", async () => {
     const { store } = await withStacks("alpha-app", "beta-app", "gamma-app");
     const failing = vi.fn(async (_c: string, args: string[]) => {
-      if (args.some(arg => arg.includes("beta-app"))) throw new HangarRuntimeError(2, "boom");
+      if (args.some(arg => arg.includes("beta-app"))) {
+        throw new HangarRuntimeError(2, "boom");
+      }
       return { code: 0 };
     });
     Object.assign(store, { runtime: { run: failing } });

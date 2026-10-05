@@ -1,6 +1,7 @@
 import { ChildProcess, spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { type Writable } from "node:stream";
+import { logger } from "#libs/logs";
 import { HangarRuntimeError } from "../hangar-error.ts";
 
 /** A runtime run result */
@@ -40,13 +41,22 @@ export class Runtime implements CommandRunner {
   private children: Set<ChildProcess> = new Set();
 
   /**
-   * Check the existance of a file/path
+   * Whether a path exists. Any `stat` failure answers `false`; one other than "not there", such
+   * as a permission error, is logged so it does not pass silently for a missing path.
    * @param path The path to check
    */
   static async exists(path: string) {
     return stat(path)
       .then(() => true)
-      .catch(() => false);
+      .catch((error: NodeJS.ErrnoException) => {
+        const isMissing = error.code === "ENOENT" || error.code === "ENOTDIR";
+
+        if (!isMissing) {
+          logger.warn("Could not check whether a path exists", { error, path });
+        }
+
+        return false;
+      });
   }
 
   /**
@@ -59,7 +69,9 @@ export class Runtime implements CommandRunner {
   signals() {
     process.on("SIGINT", () => {
       this.interrupted = true;
-      if (this.children.size === 0) process.exit(130);
+      if (this.children.size === 0) {
+        process.exit(130);
+      }
     });
   }
 
@@ -125,15 +137,16 @@ export class Runtime implements CommandRunner {
         // A captured run hands back whatever was produced, exit code included: the caller
         // asked for the output, so it decides whether a non-zero code mattered. Its stderr
         // never joins stdout, but it is worth surfacing when the command produced nothing.
-        if (capture) {
-          return stdout.trim() || code === 0
-            ? resolve({ code: code ?? 0, stdout })
-            : reject(new HangarRuntimeError(code ?? 1, stderr.trim() || "Process exited."));
+        const succeeded = code === 0;
+        const capturedOutput = capture && stdout.trim() !== "";
+
+        if (succeeded || capturedOutput) {
+          return resolve({ code: code ?? 0, stdout });
         }
 
-        return (code ?? 1) === 0
-          ? resolve({ code: code ?? 0, stdout })
-          : reject(new HangarRuntimeError(code ?? 1, "Process exited."));
+        const message = (capture && stderr.trim()) || "Process exited.";
+
+        return reject(new HangarRuntimeError(code ?? 1, message));
       });
     });
   }

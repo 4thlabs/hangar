@@ -16,7 +16,9 @@ export const saveConfig = async (source: string): Promise<ActionResult> => {
     return ActionResult.success("La configuration a été enregistrée.");
   } catch (error) {
     // A validation failure is the user's to fix: show it, the issues name the faulty paths.
-    if (error instanceof HangarError) return ActionResult.failure(error.message);
+    if (error instanceof HangarError) {
+      return ActionResult.failure(error.message);
+    }
 
     logger.error("Hangar config save failed", { error });
 

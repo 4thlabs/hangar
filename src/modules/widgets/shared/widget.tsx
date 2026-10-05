@@ -105,7 +105,9 @@ type WidgetListProps = ComponentProps<"ul"> & {
 };
 
 export function WidgetList({ children, className, empty, ...props }: WidgetListProps) {
-  if (empty !== undefined && Children.count(children) === 0) return <WidgetEmptyState>{empty}</WidgetEmptyState>;
+  if (empty !== undefined && Children.count(children) === 0) {
+    return <WidgetEmptyState>{empty}</WidgetEmptyState>;
+  }
 
   return (
     <ul className={cn("flex flex-col gap-3", className)} {...props}>
@@ -134,15 +136,20 @@ type WidgetTimeProps = {
   at: number;
   /** Passed by a card that takes its own `now`, so a test can pin the clock. */
   now?: number;
-  /** `18h` rather than `18 hours ago`, for a row that has other things to say. */
-  compact?: boolean;
+  /** `compact` writes `18h` rather than `18 hours ago`, for a row that has other things to say. */
+  style?: keyof typeof TIME_STYLES;
+};
+
+const TIME_STYLES = {
+  long: (at: number, now: number) => RelativeTime.format(at, now),
+  compact: (at: number, now: number) => RelativeTime.compact(at, now),
 };
 
 /** A moment, as every widget's trailing column writes one. */
-export function WidgetTime({ at, compact = false, now = Date.now() }: WidgetTimeProps) {
+export function WidgetTime({ at, style = "long", now = Date.now() }: WidgetTimeProps) {
   return (
     <time dateTime={new Date(at).toISOString()} className="shrink-0 text-xs text-muted-foreground">
-      {compact ? RelativeTime.compact(at, now) : RelativeTime.format(at, now)}
+      {TIME_STYLES[style](at, now)}
     </time>
   );
 }

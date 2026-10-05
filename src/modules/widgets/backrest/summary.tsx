@@ -60,6 +60,24 @@ export function displayRepo(summary: BackrestRepoSummary): RepoBackup {
   };
 }
 
+/** A repository that has never run, whose last run succeeded, or whose last run did not. */
+type RepoHealth = "never-run" | "healthy" | "failed";
+
+function repoHealth(repo: RepoBackup): RepoHealth {
+  if (repo.status === undefined) {
+    return "never-run";
+  }
+
+  return repo.ok ? "healthy" : "failed";
+}
+
+/** Muted for a repository that has not run, which is neither healthy nor failed. */
+const HEALTH_DOT_CLASS: Record<RepoHealth, string> = {
+  "never-run": "bg-muted-foreground",
+  healthy: "bg-primary",
+  failed: "bg-destructive",
+};
+
 type BackrestSummaryCardProps = {
   repos: RepoBackup[];
   serviceUrl: string;
@@ -93,16 +111,13 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
               className="items-start"
               media={
                 // The dot repeats what the status word below already says: colour alone is never
-                // the status. Muted for a repository that has not run, which is neither.
+                // the status.
                 <span
                   aria-hidden="true"
-                  className={cn(
-                    "mt-1.5 size-2 shrink-0 rounded-full",
-                    repo.status === undefined ? "bg-muted-foreground" : repo.ok ? "bg-primary" : "bg-destructive",
-                  )}
+                  className={cn("mt-1.5 size-2 shrink-0 rounded-full", HEALTH_DOT_CLASS[repoHealth(repo)])}
                 />
               }
-              trailing={repo.lastRunAt !== undefined && <WidgetTime at={repo.lastRunAt} now={now} compact />}
+              trailing={repo.lastRunAt !== undefined && <WidgetTime at={repo.lastRunAt} now={now} style="compact" />}
             >
               <p className="truncate font-medium text-primary">{repo.id}</p>
 
@@ -111,7 +126,7 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
                   than truncating, so a narrow column loses nothing. */}
               <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                 <WidgetMetadata>
-                  <span className={repo.status !== undefined && !repo.ok ? "text-destructive" : undefined}>
+                  <span className={repoHealth(repo) === "failed" ? "text-destructive" : undefined}>
                     {repo.status ?? "No backup yet"}
                   </span>
                   <span>{repo.successes} ok / 30d</span>

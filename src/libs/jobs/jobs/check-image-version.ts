@@ -25,7 +25,6 @@ export class CheckImageVersion extends Job {
     const remotes = await docker.remoteDigests(hangar.store.config.registryThrottling());
     const outdated = Docker.outdated(await docker.runningImages.read(), remotes).size;
 
-    // In the message, not in metadata: the log format only ever prints `message` and `error`.
     logger.info(`Checked ${Object.keys(remotes).length} image references for updates: ${outdated} app(s) outdated`);
 
     // Every four hours, for whoever is signed up. The dedupe key means the run rewrites its own

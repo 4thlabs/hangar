@@ -64,7 +64,9 @@ export class RelativeTime {
    */
   private static formatter(locale: string) {
     const cached = RelativeTime.Formatters.get(locale);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     const formatter = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
     RelativeTime.Formatters.set(locale, formatter);

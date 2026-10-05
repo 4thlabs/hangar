@@ -1,4 +1,4 @@
-import { saveApp } from "#modules/store/actions/manage-app.ts";
+import { createApp } from "#modules/store/actions/manage-app.ts";
 import { AppEditor } from "#modules/store/components/app-editor.tsx";
 
 /** What a store app needs for Hangar to list it: a name, an icon, a service with its container. */
@@ -17,7 +17,7 @@ export default function NewAppPage() {
     <main>
       <title>Nouvelle app | Hangar</title>
       <h1 className="text-2xl font-semibold">Nouvelle app</h1>
-      <AppEditor source={TEMPLATE} saveApp={saveApp} />
+      <AppEditor source={TEMPLATE} save={createApp} />
     </main>
   );
 }
