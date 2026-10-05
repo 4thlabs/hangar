@@ -1,4 +1,5 @@
 import { Link } from "waku";
+import { Cache } from "#libs/cache";
 import type { DockerOverview } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { outdatedSnapshot } from "#modules/apps/snapshots.ts";
@@ -85,22 +86,19 @@ export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStat
 }
 
 /**
- * A factory rather than a singleton only so its placement can set a TTL: the cache lives in the
- * widget layer's own map, keyed by id, so a rebuilt widget still finds what the last one loaded.
+ * One widget for every placement: it renders the daemon's own snapshots, which follow its events,
+ * so it has no TTL of its own to set — a compose command shows here as soon as on `/apps`.
  */
-export const dockerGeneralStats = (ttl?: number) =>
-  defineWidget({
-    id: "docker-general-stats",
-    ttl,
-    ...chrome,
-    errorDescription: "The local Docker statistics could not be loaded.",
-    load: async (): Promise<DockerGeneralStats> => {
-      // The last completed check against what runs now; the widget never talks to a registry itself.
-      const [overview, outdated] = await Promise.all([docker.overview(), outdatedSnapshot.read()]);
-
-      return { overview, outdated: [...outdated].sort() };
-    },
-    render: ({ overview, outdated }: DockerGeneralStats) => (
-      <DockerGeneralStatsCard overview={overview} outdated={outdated} />
-    ),
-  });
+export const dockerGeneralStats = defineWidget({
+  id: "docker-general-stats",
+  ...chrome,
+  errorDescription: "The local Docker statistics could not be loaded.",
+  // The last completed check against what runs now; the widget never talks to a registry itself.
+  snapshot: Cache.join(docker.overview, outdatedSnapshot, (overview, outdated) => ({
+    overview,
+    outdated: [...outdated].sort(),
+  })),
+  render: ({ overview, outdated }: DockerGeneralStats) => (
+    <DockerGeneralStatsCard overview={overview} outdated={outdated} />
+  ),
+});

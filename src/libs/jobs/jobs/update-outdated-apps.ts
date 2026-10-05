@@ -46,10 +46,8 @@ export class UpdateOutdatedApps extends Job {
     logger.info(`Auto-update: ${updated.length} app(s) updated, ${failed.length} failed`);
 
     // One notification for the run, not one per app: this happens while nobody is watching.
-    // Nothing to tell the badge: it compares the last check with what runs, so it clears as soon
-    // as the web server's sweep sees the new containers.
-    // ponytail: no `docker.invalidate()` — that instance is `server-only` and out of reach here,
-    // so an Apps page open across the run shows the old state until its snapshot expires (60s).
+    // Nothing to tell the web server either: this process cannot reach its cache, but the daemon
+    // reports every recreated container to it, and the badge clears with the reload that follows.
     if (updated.length > 0 || failed.length > 0) {
       await new Notifications(db).notify({
         level: failed.length > 0 ? "error" : "success",

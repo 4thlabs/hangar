@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Cache } from "#libs/cache";
+import { Cache, type Snapshot } from "#libs/cache";
 import { logger } from "#libs/logs";
 import { WidgetError } from "./widget-error.tsx";
 import { WidgetSkeleton } from "./widget-skeleton.tsx";
@@ -20,13 +20,24 @@ export type WidgetDefinition<T> = {
   className?: string | undefined;
   /** Shown in the error state, after "<title> is unavailable". */
   errorDescription: string;
-  /** Fetches the data. Anything thrown here becomes the error state. */
-  load: () => Promise<T>;
   /** Renders the loaded data. Return null to fall back to the error state. */
   render: (data: T) => ReactNode;
-  /** How long the loaded data stays fresh, in milliseconds. Defaults to {@link TTL}. */
-  ttl?: number | undefined;
-};
+} & (
+  | {
+      /** Fetches the data. Anything thrown here becomes the error state. */
+      load: () => Promise<T>;
+      /** How long the loaded data stays fresh, in milliseconds. Defaults to {@link TTL}. */
+      ttl?: number | undefined;
+    }
+  | {
+      /**
+       * Data some other layer already caches, and keeps fresh on its own terms — the Docker widget
+       * reads the daemon's snapshots, which follow its events. Read as is: caching it again here
+       * would only add a TTL for it to go stale behind.
+       */
+      snapshot: Snapshot<T>;
+    }
+);
 
 export type Widget = {
   id: string;
@@ -72,10 +83,11 @@ export const clearWidgetCache = () => cache.clear();
  * A failing widget degrades to its own card; the rest of the dashboard stands.
  */
 export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
-  const { id, title, icon, className, errorDescription, load, render, ttl } = definition;
+  const { id, title, icon, className, errorDescription, render } = definition;
 
   const fallback = () => <WidgetError className={className} icon={icon} name={title} description={errorDescription} />;
-  const snapshot = cache.define(id, ttl ?? TTL, GRACE, load);
+  const snapshot =
+    "snapshot" in definition ? definition.snapshot : cache.define(id, definition.ttl ?? TTL, GRACE, definition.load);
 
   return {
     id,

@@ -92,6 +92,12 @@ describe("widgetConfigSchema", () => {
     expect(parsed.success && parsed.data).toMatchObject({ ttl: 15 });
   });
 
+  it("still accepts the Docker widget's former TTL, and drops it", () => {
+    const parsed = widgetConfigSchema.safeParse({ type: "docker-general-stats", column: 1, ttl: 15 });
+
+    expect(parsed.success && parsed.data).toEqual({ type: "docker-general-stats", column: 1 });
+  });
+
   it.each([0, -1, 1.5, "15"])("rejects %o as a TTL", value => {
     expect(widgetConfigSchema.safeParse({ type: "frigate-events", column: 3, ttl: value }).success).toBe(false);
   });
