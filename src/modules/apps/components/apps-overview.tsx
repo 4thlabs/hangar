@@ -35,6 +35,31 @@ type AppsOverviewProps = {
   search: AppsSearch;
 };
 
+/**
+ * The CPU and memory cards. They own the stats subscription so that each frame re-renders these
+ * two cards only, not the filters, the counts and the apps table around them.
+ */
+function LiveTotals({ containerIds }: { containerIds: readonly string[] }) {
+  const { total } = useDockerStats(containerIds);
+
+  return (
+    <>
+      <StatCard
+        title="CPU"
+        value={formatPercent(total(metrics => metrics.cpuPercent))}
+        detail="Toutes apps confondues"
+        icon={CpuIcon}
+      />
+      <StatCard
+        title="Mémoire"
+        value={formatBytes(total(metrics => metrics.memoryUsage))}
+        detail="Toutes apps confondues"
+        icon={MemoryStickIcon}
+      />
+    </>
+  );
+}
+
 export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
   const router = useRouter();
   const [isRefreshing, setRefreshing] = useState(false);
@@ -53,9 +78,6 @@ export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
     }),
     { services: 0, running: 0, stopped: 0 },
   );
-  // Every installed app's containers at once: the stats stream covers the whole host, so the
-  // ids are what scopes the totals to Hangar's apps.
-  const { total } = useDockerStats(projects.flatMap(project => project.containerIds));
 
   async function refresh() {
     setRefreshing(true);
@@ -104,18 +126,9 @@ export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
             <StatCard title="Services" value={totals.services} icon={LayersIcon} />
             <StatCard title="Conteneurs actifs" value={totals.running} icon={PlayIcon} />
             <StatCard title="Conteneurs arrêtés" value={totals.stopped} icon={SquareIcon} />
-            <StatCard
-              title="CPU"
-              value={formatPercent(total(metrics => metrics.cpuPercent))}
-              detail="Toutes apps confondues"
-              icon={CpuIcon}
-            />
-            <StatCard
-              title="Mémoire"
-              value={formatBytes(total(metrics => metrics.memoryUsage))}
-              detail="Toutes apps confondues"
-              icon={MemoryStickIcon}
-            />
+            {/* Every installed app's containers at once: the stats stream covers the whole host, so
+                the ids are what scopes the totals to Hangar's apps. */}
+            <LiveTotals containerIds={projects.flatMap(project => project.containerIds)} />
           </div>
 
           {visible.length > 0 ? (
