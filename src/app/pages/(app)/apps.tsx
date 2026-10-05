@@ -6,10 +6,6 @@ import { appsSearchCodec } from "#modules/apps/search-codec.ts";
 import { appsSnapshot } from "#modules/apps/snapshots.ts";
 
 export default function AppsPage({ search }: PageProps<"/apps">) {
-  // Peeked once and shared: two peeks would be two chances to disagree about whether this render
-  // is warm, and the boundary and its child must make that call the same way.
-  const ready = appsSnapshot.peek();
-
   return (
     <main>
       {/* Outside the boundary, so the tab title changes on click rather than when Docker replies. */}
@@ -18,8 +14,8 @@ export default function AppsPage({ search }: PageProps<"/apps">) {
           shape, so React would reuse this boundary and — a navigation being a transition —
           keep that page on screen rather than swap in the spinner. The key is constant: a
           search-param change must not remount the boundary and flash it. */}
-      <Warm key="apps" ready={ready !== undefined} fallback={<PageSpinner />}>
-        <AppsContent search={search} ready={ready} />
+      <Warm key="apps" ready={appsSnapshot.peek() !== undefined} fallback={<PageSpinner />}>
+        <AppsContent search={search} />
       </Warm>
     </main>
   );
