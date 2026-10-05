@@ -141,24 +141,74 @@ export class WidgetService {
   }
 
   /**
-   * The service a placed widget talks to, for code that is not the dashboard.
-   *
-   * `undefined` when the store does not place that widget, which is the honest answer for a route
-   * asked to proxy for something the operator never configured.
-   * @param configs The widgets the store places
-   * @param type The widget type, as `hangar.yml` declares it
-   */
-  static placed(configs: readonly WidgetConfig[], type: WidgetConfig["type"], host: WidgetHost) {
-    const config = configs.find(widget => widget.type === type);
-
-    return config && WidgetService.of(config, host);
-  }
-
-  /**
    * `frigate-events` → the `frigate` app: a widget type is prefixed by the app it reads.
    */
   static appOf(type: string) {
     return type.split("-")[0]!;
+  }
+}
+
+/**
+ * What tells one placed widget from another: its cache entry, its React key, and the path its
+ * relayed images go through.
+ *
+ * The type alone is not enough — `hangar.yml` accepts two `github-releases` blocks watching
+ * different repositories, or two Jellyfin servers — so the key is `<type>-<hash>`, the hash taken
+ * over the whole declaration except `column`. Reordering the file or moving a card to another
+ * column keeps its key, and with it its cached data; changing what it reads gives it a new one,
+ * which is the point. A declaration repeated verbatim, or the odd hash collision, is told apart by
+ * a `-2`, `-3`… suffix in declaration order.
+ */
+export class WidgetKey {
+  /**
+   * The key of every declaration, in the same order.
+   * @param configs The widgets the store places
+   */
+  static all(configs: readonly WidgetConfig[]): string[] {
+    const seen = new Map<string, number>();
+
+    return configs.map(config => {
+      const key = `${config.type}-${WidgetKey.hash(config)}`;
+      const count = (seen.get(key) ?? 0) + 1;
+
+      seen.set(key, count);
+
+      return count === 1 ? key : `${key}-${count}`;
+    });
+  }
+
+  /**
+   * The declaration a key names, for code that is not the dashboard.
+   *
+   * `undefined` when the store places nothing under that key, which is the honest answer for a
+   * route asked to proxy for something the operator never configured.
+   * @param configs The widgets the store places
+   * @param key A key {@link all} handed out
+   */
+  static find(configs: readonly WidgetConfig[], key: string): WidgetConfig | undefined {
+    const index = WidgetKey.all(configs).indexOf(key);
+
+    return index === -1 ? undefined : configs[index];
+  }
+
+  /**
+   * FNV-1a over the declaration without its column, in base 36. Keys are sorted first, so the order
+   * the operator wrote the fields in does not matter; array order does, as it does on the card.
+   */
+  private static hash({ column: _column, ...declaration }: WidgetConfig) {
+    const text = JSON.stringify(declaration, (_key, value: unknown) =>
+      value && typeof value === "object" && !Array.isArray(value)
+        ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1)))
+        : value,
+    );
+    let hash = 0x811c9dc5;
+
+    for (const char of text) {
+      hash ^= char.codePointAt(0)!;
+      hash = Math.imul(hash, 0x01000193);
+    }
+
+    return (hash >>> 0).toString(36);
   }
 }
 

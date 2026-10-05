@@ -64,9 +64,11 @@ type JellyfinLatestCardProps = {
   counts: JellyfinCounts;
   items: LatestItem[];
   serviceUrl: string;
+  /** The placement's key, which its relayed posters are addressed by. */
+  widget: string;
 };
 
-export function JellyfinLatestCard({ counts, items, serviceUrl }: JellyfinLatestCardProps) {
+export function JellyfinLatestCard({ counts, items, serviceUrl, widget }: JellyfinLatestCardProps) {
   return (
     <WidgetCard className={chrome.className}>
       {/* The library totals label the row rather than taking a card of their own: they are what
@@ -103,7 +105,7 @@ export function JellyfinLatestCard({ counts, items, serviceUrl }: JellyfinLatest
                         with no artwork keeps the frame, which is what Jellyfin's own library shows. */}
                     {item.imageId ? (
                       <img
-                        src={WidgetImage.url("jellyfin-latest", item.imageId)}
+                        src={WidgetImage.url(widget, item.imageId)}
                         alt=""
                         loading="lazy"
                         className="aspect-2/3 w-full rounded-sm bg-muted object-cover"
@@ -156,7 +158,7 @@ export const jellyfinLatest = (service: WidgetService, user: string, ttl?: numbe
       // would both resolve to that series id. Nothing in the current library collides.
       return { counts, items: [...new Map(items.map(item => [item.id, item])).values()].slice(0, ITEM_COUNT) };
     },
-    render: ({ counts, items }: { counts: JellyfinCounts; items: LatestItem[] }) => (
-      <JellyfinLatestCard counts={counts} items={items} serviceUrl={service.link} />
+    render: ({ counts, items }: { counts: JellyfinCounts; items: LatestItem[] }, key) => (
+      <JellyfinLatestCard counts={counts} items={items} serviceUrl={service.link} widget={key} />
     ),
   });

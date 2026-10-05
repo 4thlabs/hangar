@@ -1,7 +1,9 @@
 # Widgets
 
 The dashboard is declared in the `widgets:` section of the store's [`hangar.yml`](store.md#widgets).
-Widgets render in three columns, top to bottom in the order they are declared.
+Widgets render in three columns, top to bottom in the order they are declared. A type can be
+placed more than once, for instance two `github-releases` blocks watching different repositories:
+each card loads and caches its own data.
 
 ```yaml
 widgets:
