@@ -31,7 +31,7 @@ export const navigations: readonly NavigationCategory[] = [
 ] as const;
 
 /**
- * How a link to a page prefetches it once the link is on screen. What matters is the page's
+ * How a link prefetches its page, once on screen or once hovered. What matters is the page's
  * client code, which the browser loads while reading the prefetched response: without it, the first
  * visit to a page after a reload waits for its scripts behind the page's spinner. `ttl: 0` keeps no
  * response, so a click still fetches the page fresh.

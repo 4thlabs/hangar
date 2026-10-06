@@ -134,7 +134,7 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
                   {project.icon && <img src={project.icon} alt="" className="size-5 object-contain" />}
                   <Link
                     to={{ to: "/apps/[project]", params: { project: project.name } }}
-                    unstable_prefetchOnView={navigationPrefetch}
+                    unstable_prefetchOnEnter={navigationPrefetch}
                     className="hover:underline"
                   >
                     {project.name}

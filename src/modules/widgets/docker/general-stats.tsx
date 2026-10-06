@@ -72,7 +72,7 @@ export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStat
               <li key={project}>
                 <Link
                   to={{ to: "/apps/[project]", params: { project } }}
-                  unstable_prefetchOnView={navigationPrefetch}
+                  unstable_prefetchOnEnter={navigationPrefetch}
                   className="font-medium text-chart-4 hover:underline"
                 >
                   {project}
