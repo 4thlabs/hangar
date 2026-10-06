@@ -8,7 +8,7 @@ import type { NotificationPayload } from "#libs/notifications";
 import { MobileSearch } from "#modules/common/components/navbar-mobile.tsx";
 import { NavbarSearch } from "#modules/common/components/searchbar.tsx";
 import { UserAvatar, type AvatarUser } from "#modules/common/components/user-avatar.tsx";
-import { isNavigationActive, navigations } from "#modules/common/navigations.ts";
+import { isNavigationActive, navigationPrefetch, navigations } from "#modules/common/navigations.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   DropdownMenu,
@@ -65,7 +65,11 @@ function DesktopNavigation() {
               value={item.href}
               className="h-full! px-3 after:-bottom-px! after:bg-sidebar-ring!"
               render={
-                <Link to={item.href} aria-current={active === item.href ? "page" : undefined}>
+                <Link
+                  to={item.href}
+                  aria-current={active === item.href ? "page" : undefined}
+                  unstable_prefetchOnView={navigationPrefetch}
+                >
                   {item.label}
                 </Link>
               }
@@ -89,7 +93,7 @@ function SettingsButton() {
             size="icon"
             className="hidden sm:inline-flex"
             render={
-              <Link to="/settings" aria-label="Paramètres">
+              <Link to="/settings" aria-label="Paramètres" unstable_prefetchOnView={navigationPrefetch}>
                 <SettingsIcon />
               </Link>
             }

@@ -31,6 +31,14 @@ export const navigations: readonly NavigationCategory[] = [
 ] as const;
 
 /**
+ * How a navigation link prefetches its page once the link is on screen. What matters is the page's
+ * client code, which the browser loads while reading the prefetched response: without it, the first
+ * visit to a page after a reload waits for its scripts behind the page's spinner. `ttl: 0` keeps no
+ * response, so a click still fetches the page fresh.
+ */
+export const navigationPrefetch = { ttl: 0 };
+
+/**
  * Whether `href` is the section the router is currently in.
  * A prefix match, so `/apps/alpha` keeps Apps active; `/` is exact, or it would match everything.
  */

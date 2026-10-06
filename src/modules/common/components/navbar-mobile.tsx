@@ -4,7 +4,7 @@ import { cn } from "cn";
 import { SearchIcon } from "lucide-react";
 import { Link, useRouter } from "waku";
 import { NavbarSearch } from "#modules/common/components/searchbar.tsx";
-import { isNavigationActive, navigations } from "#modules/common/navigations.ts";
+import { isNavigationActive, navigationPrefetch, navigations } from "#modules/common/navigations.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   Sheet,
@@ -58,6 +58,7 @@ export function MobileTabBar() {
             key={item.href}
             to={item.href}
             aria-current={active ? "page" : undefined}
+            unstable_prefetchOnView={navigationPrefetch}
             className={cn(
               "relative flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors",
               // The same hairline the header's tabs draw under themselves, on the other edge.
