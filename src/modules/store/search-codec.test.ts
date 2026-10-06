@@ -24,6 +24,7 @@ describe("storeSearchCodec", () => {
 
   it("round-trips", () => {
     const query = "q=home+assistant&filter=available";
+
     expect(storeSearchCodec.serialize(storeSearchCodec.parse(query))).toBe(query);
   });
 });

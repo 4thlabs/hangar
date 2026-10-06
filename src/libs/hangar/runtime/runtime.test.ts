@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
 import { PassThrough } from "node:stream";
+import { describe, expect, it } from "vitest";
 import { Runtime } from "./runtime.ts";
 
 const collect = (stream: PassThrough) => {
   let text = "";
+
   stream.on("data", (chunk: Buffer) => (text += chunk.toString()));
+
   return () => text;
 };
 
@@ -70,6 +72,7 @@ describe("Runtime", () => {
       pipe: output,
       signal: controller.signal,
     });
+
     controller.abort();
 
     await expect(run).rejects.toBeInstanceOf(Error);

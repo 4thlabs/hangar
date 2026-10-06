@@ -2,16 +2,16 @@
 
 import { CpuIcon, HardDriveIcon, MemoryStickIcon, NetworkIcon } from "lucide-react";
 import { Link } from "waku";
-import { formatBytes, formatPercent, s } from "#modules/apps/format.ts";
+import type { ComposeProjectDetail } from "#libs/docker";
 import { ProjectActions } from "#modules/apps/components/project-actions.tsx";
 import { ServiceCard } from "#modules/apps/components/service-card.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
+import { formatBytes, formatPercent, s } from "#modules/apps/format.ts";
+import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import { statusLabel, statusVariant } from "#modules/apps/status.ts";
 import { AutoReload } from "#modules/common/components/auto-reload.tsx";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
-import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import type { ComposeProjectDetail } from "#libs/docker";
 
 /** The resource and service cards; they own the stats subscription so a frame leaves the header alone. */
 function AppLiveStats({ detail }: { detail: ComposeProjectDetail }) {

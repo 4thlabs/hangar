@@ -68,6 +68,7 @@ export function apiRoute<C extends RouteContext = RouteContext>(
       }
 
       logger.error(options.log, { error, ...context.params });
+
       return apiError(options.unavailable, 503);
     }
   };

@@ -1,7 +1,7 @@
-import type { MinifluxEntry } from "./api/client.ts";
-import { MinifluxClient } from "./api/client.ts";
-import type { WidgetService } from "../config/config.ts";
+import { cn } from "cn";
 import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
+import type { WidgetService } from "../config/config.ts";
+import { defineWidget } from "../shared/define-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -11,8 +11,7 @@ import {
   WidgetMetadata,
   WidgetTime,
 } from "../shared/index.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
-import { cn } from "cn";
+import { MinifluxClient, type MinifluxEntry } from "./api/client.ts";
 
 type MinifluxEntriesCardProps = {
   entries: MinifluxEntry[];

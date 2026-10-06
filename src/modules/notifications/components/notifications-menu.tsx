@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { BellIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "waku";
-import { markNotificationsRead, markNotificationsSeen } from "#modules/notifications/actions/manage-notifications.ts";
+import { RelativeTime } from "#libs/format";
+import type { NotificationPayload } from "#libs/notifications";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#modules/common/ui/empty.tsx";
 import { Popover, PopoverContent, PopoverTrigger } from "#modules/common/ui/popover.tsx";
 import { toast, ToastIcon } from "#modules/common/ui/toast.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
-import { RelativeTime } from "#libs/format";
-import type { NotificationPayload } from "#libs/notifications";
+import { markNotificationsRead, markNotificationsSeen } from "#modules/notifications/actions/manage-notifications.ts";
 
 /** How many unseen notifications may toast at once; the rest wait in the bell. */
 const TOAST_LIMIT = 3;
@@ -77,6 +77,7 @@ export function NotificationsMenu({ initial }: { initial: NotificationPayload[] 
       for (const item of fresh) {
         known.current.add(item.id);
       }
+
       setItems(current => [...fresh.reverse(), ...current]);
 
       // Whatever the page shows is now stale. Reloaded here, not in the state updater: React may run that twice,
@@ -90,6 +91,7 @@ export function NotificationsMenu({ initial }: { initial: NotificationPayload[] 
 
   useEffect(() => {
     const pending = items.filter(item => !item.seen && !toasted.current.has(item.id));
+
     if (pending.length === 0) {
       return;
     }

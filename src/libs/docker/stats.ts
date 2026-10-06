@@ -64,6 +64,7 @@ export class ContainerStats {
    */
   private memoryUsage(): number | null {
     const usage = this.sample.memory_stats.usage;
+
     if (usage === undefined) {
       return null;
     }
@@ -89,6 +90,7 @@ export class ContainerStats {
    */
   private blockIo(operation: "read" | "write"): number | null {
     const entries = this.sample.blkio_stats?.io_service_bytes_recursive;
+
     if (!entries) {
       return null;
     }

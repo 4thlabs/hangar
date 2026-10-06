@@ -99,6 +99,7 @@ export function givenContainers(containers: ComposeContainerSource[]) {
   dockerMock.listContainers.mockImplementation((options: { filters?: { label?: string[] } } = {}) => {
     const [label = ""] = options.filters?.label ?? [];
     const [key = "", value] = label.split("=");
+
     const matches = containers.filter(
       entry => entry.info.Labels[key] !== undefined && (value === undefined || entry.info.Labels[key] === value),
     );

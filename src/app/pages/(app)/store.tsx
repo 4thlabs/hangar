@@ -1,13 +1,13 @@
 import { PlusIcon } from "lucide-react";
 import { Link } from "waku";
 import type { PageProps } from "waku/router";
+import { hangar } from "#libs/hangar/server";
+import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { installApp, uninstallApp } from "#modules/store/actions/store-apps.ts";
 import { StoreAppCard } from "#modules/store/components/store-app-card.tsx";
-import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { StoreFilterMenu } from "#modules/store/components/store-filter-menu.tsx";
 import { storeListing } from "#modules/store/listing.ts";
 import { storeSearchCodec } from "#modules/store/search-codec.ts";
-import { hangar } from "#libs/hangar/server";
 
 export default function StorePage({ search }: PageProps<"/store">) {
   const all = [...hangar.store.apps];

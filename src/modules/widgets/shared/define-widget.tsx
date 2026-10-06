@@ -97,6 +97,7 @@ export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
             return render(data, key) ?? fallback();
           } catch (error: unknown) {
             logger.error(`Failed to render the ${title} widget`, { error, placementKey: key });
+
             return fallback();
           }
         };

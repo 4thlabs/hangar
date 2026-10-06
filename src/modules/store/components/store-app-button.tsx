@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
 import { DownloadIcon, Trash2Icon } from "lucide-react";
+import { useState } from "react";
 import { useRouter } from "waku";
-import type { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
 import { ComposeConfirmDialog } from "#modules/apps/components/compose-operations.tsx";
+import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
-import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
+import type { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
 
 /** What the button looks like in each state. Uninstalling keeps its wording and only spins. */
 const FACES = {

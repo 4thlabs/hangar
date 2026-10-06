@@ -23,6 +23,7 @@ let changes: DockerChange[];
 /** Starts following a stream the test writes to, and lets the connection's own batches drain. */
 const follow = async () => {
   const stream = new PassThrough();
+
   dockerMock.getEvents.mockResolvedValueOnce(stream);
 
   events.start();
@@ -129,6 +130,7 @@ describe("DockerEvents", () => {
 
   it("reconnects when the stream ends, and reports everything again", async () => {
     const first = await follow();
+
     dockerMock.getEvents.mockResolvedValueOnce(new PassThrough());
 
     first.end();

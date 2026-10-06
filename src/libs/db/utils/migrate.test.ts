@@ -1,5 +1,5 @@
-import { expect, test } from "vitest";
 import { sql } from "drizzle-orm";
+import { expect, test } from "vitest";
 import { migrateDb } from "./migrate.ts";
 
 // Guards the committed SQL in `src/drizzle`, not drizzle's migrator: a schema change

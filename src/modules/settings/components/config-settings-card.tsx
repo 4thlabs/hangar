@@ -14,6 +14,7 @@ type ConfigSettingsCardProps = {
 
 export function ConfigSettingsCard({ source, saveConfig }: ConfigSettingsCardProps) {
   const router = useRouter();
+
   const { editor, handleSave, isPending } = useYamlEditor({
     source,
     save: saveConfig,

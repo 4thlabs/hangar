@@ -50,6 +50,7 @@ export class ImageCheckReport {
     try {
       // Row id is not run order (a rerun keeps its id), so pick by the report's own timestamp.
       const runs = await this.listRuns({ jobClass: "CheckImageVersion", state: "completed", limit: 10 });
+
       // JSON read back out of SQLite: trusted no further than the one shape we wrote.
       const reports = runs
         .map(run => run.result as ImageUpdateReport | undefined)
@@ -57,6 +58,7 @@ export class ImageCheckReport {
 
       // ISO timestamps, so the newest is also the greatest string.
       let last: ImageUpdateReport | undefined;
+
       for (const report of reports) {
         if (!last || report.checkedAt > last.checkedAt) {
           last = report;

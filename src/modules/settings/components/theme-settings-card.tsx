@@ -2,6 +2,7 @@
 
 import { useAtom } from "jotai";
 import { ChevronDownIcon } from "lucide-react";
+import { Theme } from "#libs/preferences";
 import { colorModeAtom, themePaletteAtom } from "#modules/common/atoms/theme.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
@@ -12,9 +13,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "#modules/common/ui/dropdown-menu.tsx";
-
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
-import { Theme } from "#libs/preferences";
 
 type ThemePreferenceFieldProps<T extends string> = {
   id: string;

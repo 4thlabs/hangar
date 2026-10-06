@@ -2,8 +2,8 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import zlib from "node:zlib";
 import { COMPRESSIBLE_CONTENT_TYPE_REGEX } from "hono/compress";
-import { logger } from "#libs/logs";
 import type { MiddlewareHandler } from "hono/types";
+import { logger } from "#libs/logs";
 
 /** Below this, the gzip header costs more than the encoding saves. Only checked when the length is known. */
 const THRESHOLD = 1_024;
@@ -55,6 +55,7 @@ export default (): MiddlewareHandler =>
     c.res.headers.set("Content-Encoding", "gzip");
 
     const vary = c.res.headers.get("Vary");
+
     if (vary !== "*" && !/(^|,)\s*accept-encoding\s*(,|$)/i.test(vary ?? "")) {
       c.res.headers.set("Vary", vary ? `${vary}, Accept-Encoding` : "Accept-Encoding");
     }

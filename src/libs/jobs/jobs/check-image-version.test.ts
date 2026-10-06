@@ -29,6 +29,7 @@ describe("CheckImageVersion", () => {
 
   it("asks the registry at the store's pace and returns its answers as the report", async () => {
     const remotes = { "nginx:alpine": "sha256:new" };
+
     checkUpdates.mockResolvedValue({ remotes, outdated: new Set() });
 
     const report = await job.run();

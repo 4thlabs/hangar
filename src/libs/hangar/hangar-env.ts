@@ -1,7 +1,7 @@
-import { logger } from "#libs/logs";
-import { parse } from "dotenv";
 import { copyFile, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { parse } from "dotenv";
+import { logger } from "#libs/logs";
 import { HangarError } from "./hangar-error.ts";
 
 /** What a scan of `app-installed` expects: a dangling app symlink, or a shared fragment read as a directory. */

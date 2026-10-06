@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ErrorBoundary } from "waku/router/client";
 import { userPreferences } from "#libs/preferences/server";
+
 type RootProps = {
   /** Everything below <body>: the layout of whichever route group matched. */
   children: ReactNode;

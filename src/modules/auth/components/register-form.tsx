@@ -2,10 +2,10 @@
 
 import { useState, type SubmitEvent } from "react";
 import { useRouter } from "waku";
+import { authClient } from "#libs/auth/client";
 import { AuthEmailField, AuthFormCard, AuthPasswordField } from "#modules/auth/components/auth-form-card.tsx";
 import { Field, FieldError, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
-import { authClient } from "#libs/auth/client";
 
 export function RegisterForm() {
   const router = useRouter();
@@ -26,6 +26,7 @@ export function RegisterForm() {
 
     if (password !== confirmPassword) {
       setPasswordMismatch(true);
+
       return;
     }
 
@@ -36,6 +37,7 @@ export function RegisterForm() {
 
       if (result.error) {
         setError(result.error.message ?? "Unable to create your account.");
+
         return;
       }
 

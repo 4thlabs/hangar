@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { BeszelSystem } from "./api/client.ts";
-import { BeszelServerStatsCard, beszelServerStats, displaySystem } from "./server-stats.tsx";
 import { aService, clearWidgetCache } from "../mock/mock.ts";
+import type { BeszelSystem } from "./api/client.ts";
+import { beszelServerStats, BeszelServerStatsCard, displaySystem } from "./server-stats.tsx";
 
 afterEach(() => vi.unstubAllGlobals());
 beforeEach(clearWidgetCache);
@@ -118,6 +118,7 @@ describe("beszelServerStats", () => {
     expect(called[0]?.url).toBe(
       "http://beszel:8090/api/collections/systems/records?sort=name&fields=id%2Cname%2Cstatus%2Cinfo&perPage=100",
     );
+
     expect(called[0]?.headers.get("Authorization")).toBe("a-token");
     expect(html).toContain("nas");
     // The container address is Hangar's to reach; the header links to the public host.

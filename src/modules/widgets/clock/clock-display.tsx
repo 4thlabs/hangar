@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { cn } from "cn";
+import { useEffect, useState } from "react";
 import { WidgetCard, WidgetContent } from "../shared/index.ts";
 
 const timeFormatter = new Intl.DateTimeFormat("en-GB", {

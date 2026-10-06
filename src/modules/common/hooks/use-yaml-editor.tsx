@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import type { ActionResult } from "#modules/common/actions/action-result.ts";
-import { CodeEditor } from "#modules/common/ui/code-editor.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
+import { CodeEditor } from "#modules/common/ui/code-editor.tsx";
 
 type YamlEditorOptions = {
   source: string;

@@ -1,8 +1,7 @@
 import "../styles.css";
-
 import type { ReactNode } from "react";
-import { AppProviders } from "#modules/common/components/app-providers.tsx";
 import { userPreferences } from "#libs/preferences/server";
+import { AppProviders } from "#modules/common/components/app-providers.tsx";
 
 type RootLayoutProps = { children: ReactNode };
 

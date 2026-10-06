@@ -3,7 +3,9 @@ import { Hangar } from "../hangar.ts";
 
 async function createHangar() {
   const hangar = await Hangar.create(env.HANGAR_STORE_URL, env.HANGAR_DATA_DIR);
+
   await hangar.store.refresh();
+
   return hangar;
 }
 

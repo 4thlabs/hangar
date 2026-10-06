@@ -1,8 +1,8 @@
-import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
-import { ExternalLinkIcon } from "lucide-react";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { cn } from "cn";
+import { ExternalLinkIcon } from "lucide-react";
+import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
 import { RelativeTime } from "#libs/format";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Units } from "./format.ts";
 
 export function WidgetCard({ className, ...props }: ComponentProps<typeof Card>) {

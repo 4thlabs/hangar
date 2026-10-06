@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 import module from "node:module";
 import { cli } from "../src/cli/index.ts";
 

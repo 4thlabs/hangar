@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { GithubRelease } from "./api/client.ts";
-import { GithubReleasesCard, githubReleases } from "./releases.tsx";
+import { githubReleases, GithubReleasesCard } from "./releases.tsx";
 
 const now = Date.parse("2026-09-18T12:00:00Z");
 

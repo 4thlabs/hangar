@@ -1,16 +1,15 @@
-import type { Widget } from "./shared/define-widget.tsx";
-import type { DashboardColumn, WidgetConfig, WidgetHost } from "./config/config.ts";
-import { WidgetKey, WidgetService } from "./config/config.ts";
 import { arcaneGeneralStats } from "./arcane/general-stats.tsx";
 import { backrestSummary } from "./backrest/summary.tsx";
 import { beszelServerStats } from "./beszel/server-stats.tsx";
+import { clockWidget } from "./clock/clock.tsx";
+import { WidgetKey, WidgetService, type DashboardColumn, type WidgetConfig, type WidgetHost } from "./config/config.ts";
 import { dockerGeneralStats } from "./docker/general-stats.tsx";
 import { frigateEvents } from "./frigate/events.tsx";
+import { githubReleases } from "./github/releases.tsx";
 import { gluetunVpnStatus } from "./gluetun/vpn-status.tsx";
 import { jellyfinLatest } from "./jellyfin/latest.tsx";
 import { minifluxEntries } from "./miniflux/entries.tsx";
-import { githubReleases } from "./github/releases.tsx";
-import { clockWidget } from "./clock/clock.tsx";
+import type { Widget } from "./shared/define-widget.tsx";
 
 /** A widget and the dashboard column it sits in. */
 export type WidgetPlacement = {

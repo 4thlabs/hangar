@@ -1,5 +1,4 @@
-import type { LucideIcon } from "lucide-react";
-import { BoxesIcon, LayoutDashboardIcon, SettingsIcon, StoreIcon } from "lucide-react";
+import { BoxesIcon, LayoutDashboardIcon, SettingsIcon, StoreIcon, type LucideIcon } from "lucide-react";
 
 type NavigationPath = "/" | "/apps" | "/store" | "/settings";
 

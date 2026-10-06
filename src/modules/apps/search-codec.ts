@@ -48,18 +48,23 @@ export const appsSearchCodec: Unstable_SearchCodec<AppsSearch> = {
   },
   serialize: ({ q, status, category, update, sort }) => {
     const params = new URLSearchParams();
+
     if (q) {
       params.set("q", q);
     }
+
     if (status.length > 0) {
       params.set("status", status.join(","));
     }
+
     if (category.length > 0) {
       params.set("category", category.join(","));
     }
+
     if (update.length > 0) {
       params.set("update", update.join(","));
     }
+
     if (sort) {
       params.set("sort", `${sort.descending ? "-" : ""}${sort.column}`);
     }

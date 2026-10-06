@@ -8,6 +8,7 @@ import { Runtime } from "./runtime/runtime.ts";
 export class Hangar {
   /** The app store for the Hangar instance */
   readonly store: HangarStore;
+
   /** The runtime for hangar */
   readonly runtime: Runtime;
 

@@ -1,11 +1,10 @@
+import type { ComposeContainer, ContainerHealth } from "#libs/docker";
 import { ContainerLogsSheet } from "#modules/apps/components/container-logs-sheet.tsx";
+import { formatBytes, formatPercent } from "#modules/apps/format.ts";
+import { EMPTY_METRICS, type ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Progress } from "#modules/common/ui/progress.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
-import { formatBytes, formatPercent } from "#modules/apps/format.ts";
-import type { ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { EMPTY_METRICS } from "#modules/apps/hooks/use-docker-stats.ts";
-import type { ComposeContainer, ContainerHealth } from "#libs/docker";
 
 const healthLabel: Record<ContainerHealth, string> = {
   healthy: "Healthy",

@@ -1,11 +1,11 @@
-import { HangarConfig } from "./hangar-config.ts";
-import { HangarEnv } from "./hangar-env.ts";
 import { mkdir, readdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { logger } from "#libs/logs";
 import { load } from "js-yaml";
-import { Runtime, type CommandRunner, type RunOptions } from "./runtime/runtime.ts";
+import { logger } from "#libs/logs";
+import { HangarConfig } from "./hangar-config.ts";
+import { HangarEnv } from "./hangar-env.ts";
 import { HangarError, HangarRuntimeError } from "./hangar-error.ts";
+import { Runtime, type CommandRunner, type RunOptions } from "./runtime/runtime.ts";
 
 export type HangarApp = {
   id: string;
@@ -214,6 +214,7 @@ export class HangarStore {
       if (failure) {
         throw failure.reason;
       }
+
       return;
     }
 
@@ -230,6 +231,7 @@ export class HangarStore {
         return app;
       }
     }
+
     return undefined;
   }
 
@@ -322,6 +324,7 @@ export class HangarStore {
     if (!HangarStore.StackId.test(id)) {
       throw new HangarError(`Invalid app id: ${id}`);
     }
+
     return path.join(this.storePath, "store", id);
   }
 

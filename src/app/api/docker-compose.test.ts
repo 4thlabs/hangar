@@ -20,6 +20,7 @@ vi.mock("#libs/hangar/server", () => ({
     },
   },
 }));
+
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
 vi.mock("#libs/notifications/server", () => ({ notifications: { notify: mocks.notify } }));
 
@@ -71,6 +72,7 @@ describe("POST Docker Compose stream", () => {
     ["update", ["up", "-d", "--pull", "always"]],
   ])("maps %s to the expected Compose command", async (operation, args) => {
     const response = await call(`operation=${operation}&projects=alpha`);
+
     await response.text();
 
     expect(mocks.compose).toHaveBeenCalledWith("alpha", args, expect.objectContaining({ pipe: expect.anything() }));
@@ -85,6 +87,7 @@ describe("POST Docker Compose stream", () => {
     expect(mocks.notify).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "1", level: "success", href: "/apps/alpha" }),
     );
+
     // No failure, so the marker the client reads as an exit code is zero.
     expect(body).toContain("[hangar] exit=0");
   });

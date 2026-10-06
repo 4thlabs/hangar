@@ -1,11 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { defaultWidgets, widgetConfigSchema } from "./config/config.ts";
+import { noSecret } from "./mock/mock.ts";
+import { WidgetRegistry } from "./registry.ts";
 
 // The registry pulls in the Docker widget, and through it the server-only client.
 vi.mock("server-only", () => ({}));
-
-import { WidgetRegistry } from "./registry.ts";
-import { defaultWidgets, widgetConfigSchema } from "./config/config.ts";
-import { noSecret } from "./mock/mock.ts";
 
 const host = { domain: "test.local", containerName: (app: string) => app, secret: noSecret };
 
@@ -28,6 +27,7 @@ describe("WidgetRegistry", () => {
       { type: "github-releases", column: 3, repositories: ["glanceapp/glance"] },
       { type: "github-releases", column: 3, repositories: ["4thlabs/hangar"] },
     ]);
+
     const keys = placements.map(placement => placement.widget.key);
 
     expect(new Set(keys).size).toBe(3);

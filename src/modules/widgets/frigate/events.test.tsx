@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FrigateEvent, FrigateStats } from "./api/client.ts";
-import { FrigateEventsCard, frigateEvents } from "./events.tsx";
 import { aService } from "../mock/mock.ts";
+import type { FrigateEvent, FrigateStats } from "./api/client.ts";
+import { frigateEvents, FrigateEventsCard } from "./events.tsx";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -94,6 +94,7 @@ describe("FrigateEventsCard", () => {
       link: "https://frigate.test.local",
       apiKey: () => Promise.resolve("s3cret"),
     });
+
     const html = renderToStaticMarkup(<>{await Widget()}</>);
 
     expect(called.every(request => request.url.startsWith("http://frigate:5000/api/"))).toBe(true);

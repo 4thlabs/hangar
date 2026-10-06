@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { composeExitCode } from "#modules/apps/actions/compose-stream.ts";
 import { type AppOperation } from "#modules/apps/actions/app-operation.ts";
-import { useStreamText } from "#modules/common/hooks/use-stream-text.ts";
+import { composeExitCode } from "#modules/apps/actions/compose-stream.ts";
 import { plural } from "#modules/apps/format.ts";
 import { StreamOutput, StreamStatusBadge } from "#modules/common/components/stream-output.tsx";
+import { useStreamText } from "#modules/common/hooks/use-stream-text.ts";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "#modules/common/ui/sheet.tsx";
 
 type ComposeOutputSheetProps = {
@@ -21,17 +21,21 @@ type ComposeOutputSheetProps = {
 
 export function ComposeOutputSheet({ projects, operation, label, onClose, onFinished }: ComposeOutputSheetProps) {
   const subject = projects.length === 1 ? projects[0] : plural(projects.length, "application");
+
   const endpoint =
     operation && projects.length > 0
       ? `/api/docker/apps/compose?operation=${operation}&projects=${projects.map(encodeURIComponent).join(",")}`
       : null;
+
   const { text, status, error } = useStreamText(endpoint, "POST");
 
   const finishedRef = useRef(false);
+
   useEffect(() => {
     if (status === "connecting" || status === "connected") {
       finishedRef.current = false;
     }
+
     if (finishedRef.current) {
       return;
     }

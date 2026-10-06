@@ -1,9 +1,9 @@
 import type { PageProps } from "waku/router";
 import { AppsContent } from "#modules/apps/components/apps-content.tsx";
-import { PageSpinner } from "#modules/common/components/page-spinner.tsx";
-import { Warm } from "#modules/common/components/warm.tsx";
 import { appsSearchCodec } from "#modules/apps/search-codec.ts";
 import { appsSnapshot } from "#modules/apps/snapshots.ts";
+import { PageSpinner } from "#modules/common/components/page-spinner.tsx";
+import { Warm } from "#modules/common/components/warm.tsx";
 
 export default function AppsPage({ search }: PageProps<"/apps">) {
   return (

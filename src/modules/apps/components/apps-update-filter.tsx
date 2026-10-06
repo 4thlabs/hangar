@@ -1,8 +1,8 @@
 "use client";
 
 import { useSearch_UNSTABLE, useSetSearch_UNSTABLE } from "waku/router/client";
-import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
 import { APP_UPDATES, type AppUpdate } from "#modules/apps/search-codec.ts";
+import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
 
 /** What each update state is called in the menu. */
 const updateLabel: Record<AppUpdate, string> = {

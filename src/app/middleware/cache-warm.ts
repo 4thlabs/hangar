@@ -1,9 +1,9 @@
 import type { MiddlewareHandler } from "hono/types";
-import { appsSnapshot } from "#modules/apps/snapshots.ts";
 import type { DockerEvents } from "#libs/docker";
 import { dockerEvents } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
+import { appsSnapshot } from "#modules/apps/snapshots.ts";
 import { widgetRegistry } from "#modules/widgets/server/server.ts";
 
 /** How often the snapshots are topped up. Comfortably inside every TTL + grace window they feed. */
@@ -50,6 +50,7 @@ export default (): MiddlewareHandler => {
     if (!first) {
       return;
     }
+
     first = false;
     tick();
   };

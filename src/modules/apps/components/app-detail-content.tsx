@@ -1,5 +1,8 @@
 import { BoxIcon } from "lucide-react";
 import { Link } from "waku";
+import { DockerNotFoundError } from "#libs/docker";
+import { docker } from "#libs/docker/server";
+import { logger } from "#libs/logs";
 import { AppDetail } from "#modules/apps/components/app-detail.tsx";
 import { outdatedSnapshot } from "#modules/apps/snapshots.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
@@ -12,9 +15,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#modules/common/ui/empty.tsx";
-import { DockerNotFoundError } from "#libs/docker";
-import { docker } from "#libs/docker/server";
-import { logger } from "#libs/logs";
 
 /** Docker half of `/apps/[project]`, a child so the `await` happens inside the boundary (see `AppsContent`). */
 export async function AppDetailContent({ project }: { project: string }) {

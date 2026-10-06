@@ -1,10 +1,10 @@
 import { PencilIcon } from "lucide-react";
 import { Link } from "waku";
-import type { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
-import { StoreAppButton } from "#modules/store/components/store-app-button.tsx";
+import { type HangarApp } from "#libs/hangar";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardTitle } from "#modules/common/ui/card.tsx";
-import { type HangarApp } from "#libs/hangar";
+import type { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
+import { StoreAppButton } from "#modules/store/components/store-app-button.tsx";
 
 type StoreAppCardProps = {
   app: HangarApp;

@@ -1,8 +1,8 @@
-import type { Dashboard } from "./api/type.ts";
-import { ArcaneClient } from "./api/client.ts";
-import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
+import type { WidgetService } from "../config/config.ts";
+import { defineWidget } from "../shared/define-widget.tsx";
 import {
+  Units,
   WidgetCard,
   WidgetContent,
   WidgetFooter,
@@ -10,9 +10,9 @@ import {
   WidgetMetadata,
   WidgetMetric,
   WidgetMetricGrid,
-  Units,
 } from "../shared/index.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import { ArcaneClient } from "./api/client.ts";
+import type { Dashboard } from "./api/type.ts";
 
 type ArcaneGeneralStatsCardProps = {
   dashboard: Dashboard;
@@ -25,9 +25,11 @@ function actionColor(severity: string) {
   if (severity === "critical") {
     return "text-destructive";
   }
+
   if (severity === "warning") {
     return "text-chart-4";
   }
+
   return "text-muted-foreground";
 }
 

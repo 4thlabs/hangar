@@ -19,6 +19,7 @@ export function migrateDb(source = env.HANGAR_DB_HOST) {
   }
 
   const db = drizzle({ connection: { source } });
+
   migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
   return db;

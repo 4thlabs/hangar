@@ -5,6 +5,7 @@ export function formatBytes(value: number | null) {
   if (value === null) {
     return "—";
   }
+
   if (value === 0) {
     return "0 B";
   }
@@ -12,6 +13,7 @@ export function formatBytes(value: number | null) {
   // Binary units: the divisor below is 1024, so these are KiB/MiB/GiB, not KB/MB/GB.
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];
   const unit = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+
   return `${byteFormatter.format(value / 1024 ** unit)} ${units[unit]}`;
 }
 

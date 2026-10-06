@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import { formatLine } from "./line.ts";
 
 const base = { level: "warn", timestamp: "2026-10-05 18:00:00", label: "Hangar" };
