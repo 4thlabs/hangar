@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { Cache, type Snapshot } from "#libs/cache";
+import { map, recover } from "#libs/cache";
+import { cache } from "#libs/cache/server";
 import { logger } from "#libs/logs";
-import { renderSnapshot } from "#modules/common/components/render-snapshot.ts";
 import { WidgetError } from "./widget-error.tsx";
 import { WidgetSkeleton } from "./widget-skeleton.tsx";
 
@@ -32,8 +32,8 @@ export type WidgetDefinition<T> = {
       ttl?: number | undefined;
     }
   | {
-      /** Data another layer already keeps fresh (the Docker daemon's snapshots); read as is, not cached again. */
-      snapshot: Snapshot<T>;
+      /** Data another layer already caches and keeps fresh (the Docker daemon's); read as is, not cached again. */
+      source: () => Promise<T>;
     }
 );
 
@@ -47,19 +47,10 @@ export type Widget = {
   key: string;
   /** This widget, bound to one placement's key — a copy, so a shared widget is never mutated. */
   at: (key: string) => Widget;
-  Widget: () => ReactNode | Promise<ReactNode>;
+  /** The card, from the cache: rendered at once when warm, suspending only when cold. */
+  Widget: () => Promise<ReactNode>;
   Skeleton: () => ReactNode;
-  /** Loads into the snapshot ahead of a render, so the dashboard never paints a skeleton. */
-  warm: () => Promise<void>;
-  /** Whether {@link Widget} can render without suspending, i.e. whether it needs a boundary at all. */
-  ready: () => boolean;
 };
-
-/**
- * Module-level so widgets rebuilt per render keep their entries. Process-global, keyed by placement: never put
- * per-session data here.
- */
-const cache = new Cache();
 
 /**
  * How long a widget's data is fresh, when its `hangar.yml` entry does not say. The dashboard has no
@@ -70,8 +61,11 @@ const TTL = 60_000;
 /** How long a service that has stopped answering keeps rendering its last good card. */
 const GRACE = 900_000;
 
-/** Drops every cached widget load. Tests only, so one test's data cannot leak into the next. */
-export const clearWidgetCache = () => cache.clear();
+/** Prefix of every cached card. The cache is process-global and keyed by placement: never put per-session data here. */
+const KEY_PREFIX = "widget:";
+
+/** Drops every cached card. Tests only, so one test's data cannot leak into the next. */
+export const clearWidgetCache = () => cache.clear(KEY_PREFIX);
 
 /**
  * Wraps a data-backed widget: one try/catch, one log, one error fallback.
@@ -84,32 +78,37 @@ export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
   const skeleton = () => <WidgetSkeleton className={className} icon={icon} title={title} />;
 
   const at = (key: string): Widget => {
-    const snapshot =
-      "snapshot" in definition ? definition.snapshot : cache.define(key, definition.ttl ?? TTL, GRACE, definition.load);
+    const show = (data: T) => {
+      try {
+        return render(data, key) ?? fallback();
+      } catch (error: unknown) {
+        logger.error(`Failed to render the ${title} widget`, { error, placementKey: key });
+
+        return fallback();
+      }
+    };
+
+    // The rendered card is what gets cached, so a warm widget costs neither the service call nor the render.
+    const card = () => {
+      if ("source" in definition) {
+        return map(definition.source(), show);
+      }
+
+      const policy = { ttl: definition.ttl ?? TTL, maxStale: GRACE };
+
+      return cache.get(KEY_PREFIX + key, policy, async () => show(await definition.load()));
+    };
 
     return {
       id,
       key,
       at,
-      Widget() {
-        const show = (data: T) => {
-          try {
-            return render(data, key) ?? fallback();
-          } catch (error: unknown) {
-            logger.error(`Failed to render the ${title} widget`, { error, placementKey: key });
-
-            return fallback();
-          }
-        };
-
-        return renderSnapshot(snapshot, show, (error: unknown) => {
+      Widget: () =>
+        recover(card(), (error: unknown) => {
           logger.error(`Failed to load the ${title} widget`, { error, placementKey: key });
 
           return fallback();
-        });
-      },
-      warm: snapshot.warm,
-      ready: () => snapshot.peek() !== undefined,
+        }),
       Skeleton: skeleton,
     };
   };

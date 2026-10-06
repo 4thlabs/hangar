@@ -1,4 +1,5 @@
 import Dockerode from "dockerode";
+import { Cache } from "#libs/cache";
 import { db } from "#libs/db";
 import { Docker } from "#libs/docker";
 import { Notifications } from "#libs/notifications";
@@ -15,8 +16,8 @@ export async function createWorkerServices(): Promise<JobServices> {
 
   return {
     hangar,
-    // Same two arguments the web server passes in `#libs/docker/server`.
-    docker: new Docker(new Dockerode(), hangar.store),
+    // Same arguments the web server passes in `#libs/docker/server`, with a cache of the run's own.
+    docker: new Docker(new Dockerode(), hangar.store, new Cache()),
     notifications: new Notifications(db),
   };
 }

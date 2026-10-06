@@ -8,7 +8,7 @@ export default function AppDetailPage({ project }: PageProps<"/apps/[project]">)
     <main>
       {/* Outside the boundary, so the tab title changes on click rather than when Docker replies. */}
       <title>{`${project} | Apps | Hangar`}</title>
-      {/* Keyed by the project, so every arrival gets a new boundary: see `Warm`. */}
+      {/* Keyed by the project, so every arrival gets a new boundary rather than reusing the route slot's. */}
       <Suspense key={project} fallback={<PageSpinner />}>
         <AppDetailContent project={project} />
       </Suspense>

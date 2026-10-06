@@ -1,7 +1,7 @@
 import { PassThrough, type Readable } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
 import type Dockerode from "dockerode";
-import { Cache, type Snapshot } from "#libs/cache";
+import { all, map, type Cache, type CachePolicy } from "#libs/cache";
 import { logger } from "#libs/logs";
 import {
   ComposeProjects,
@@ -98,41 +98,17 @@ export class Docker {
    */
   private static readonly Ttl = 60_000;
 
-  /** How long past its TTL a snapshot is still served while it reloads; longer than a warm-loop tick. */
-  private static readonly Grace = 120_000;
+  /** How long past its TTL a value is still served while it reloads. */
+  private static readonly MaxStale = 120_000;
 
   /** Same net as {@link Ttl}, looser: `df` is the daemon's slowest call and only the dashboard reads it. */
-  private static readonly OverviewTtl = 300_000;
+  private static readonly OverviewPolicy: CachePolicy = { ttl: 300_000, maxStale: 3_600_000 };
 
-  /** Nothing here changes fast enough to be worth blocking a paint. */
-  private static readonly OverviewGrace = 3_600_000;
+  /** Where the daemon's answers are kept, under `docker:` keys. */
+  private readonly cache: Cache;
 
-  private readonly cache = new Cache();
-
-  /** Every Compose-labeled container on the host; every other read narrows it in memory. */
-  private readonly containers: Snapshot<ComposeContainerSource[]>;
-
-  /** The registry digests of every local image, by image id; see {@link listImages}. */
-  private readonly images: Snapshot<Map<string, string[]>>;
-
-  /**
-   * Every installed app, as summaries of its Docker state: `read()` to wait, `peek()` not to.
-   * ponytail: every Compose container is inspected, then filtered; Docker ANDs repeated `label`
-   * filters, so the only daemon-side narrowing is one list per project, which is worse.
-   */
-  readonly projects: Snapshot<ComposeProjectsSnapshot>;
-
-  /**
-   * Every container of an installed app, with the registry digests of the image it runs. Joined on
-   * the same containers as {@link projects}, so the update badge moves with them.
-   */
-  readonly runningImages: Snapshot<RunningImage[]>;
-
-  /** Host-wide counts for the whole engine, not just the installed apps, as Arcane reports a remote one. */
-  readonly overview: Snapshot<DockerOverview>;
-
-  /** The snapshot each {@link DockerChange} makes stale. */
-  private readonly snapshotsByChange: Record<DockerChange, Snapshot<unknown>>;
+  /** How long the containers and images are reused. */
+  private readonly policy: CachePolicy;
 
   /** The daemon's event stream, reloading what each event made stale; idle until {@link follow}. */
   private readonly events: DockerEvents;
@@ -140,19 +116,49 @@ export class Docker {
   /**
    * @param docker An Engine API client; injected so the composition root owns the connection
    * @param apps The installed-app lookup, satisfied by `hangar.store`
+   * @param cache Where the daemon's answers are kept; one per process
    * @param ttl How long the loaded containers and images are reused; injected so a test can drive it
    */
-  constructor(docker: Dockerode, apps: InstalledApps, ttl = Docker.Ttl) {
+  constructor(docker: Dockerode, apps: InstalledApps, cache: Cache, ttl = Docker.Ttl) {
     this.docker = docker;
     this.apps = apps;
-    this.containers = this.cache.define("containers", ttl, Docker.Grace, this.loadContainers);
-    this.projects = Cache.join(this.containers, sources => ({
+    this.cache = cache;
+    this.policy = { ttl, maxStale: Docker.MaxStale };
+    this.events = new DockerEvents(docker, change => void this.cache.refresh(Docker.keyOf(change)));
+  }
+
+  /** The cache key of what a {@link DockerChange} makes stale. */
+  private static keyOf(change: DockerChange) {
+    return `docker:${change}`;
+  }
+
+  /** Every Compose-labeled container on the host; every other read narrows it in memory. */
+  private containers(): Promise<ComposeContainerSource[]> {
+    return this.cache.get(Docker.keyOf("containers"), this.policy, this.loadContainers);
+  }
+
+  /** The registry digests of every local image, by image id; see {@link listImages}. */
+  private images(): Promise<Map<string, string[]>> {
+    return this.cache.get(Docker.keyOf("images"), this.policy, this.listImages);
+  }
+
+  /**
+   * Every installed app, as summaries of its Docker state.
+   * ponytail: every Compose container is inspected, then filtered; Docker ANDs repeated `label`
+   * filters, so the only daemon-side narrowing is one list per project, which is worse.
+   */
+  projects(): Promise<ComposeProjectsSnapshot> {
+    return map(this.containers(), sources => ({
       projects: new ComposeProjects(sources).summaries(this.apps.installedProjectIds()),
     }));
+  }
 
-    this.images = this.cache.define("images", ttl, Docker.Grace, this.listImages);
-
-    this.runningImages = Cache.join(this.containers, this.images, (sources, digests) => {
+  /**
+   * Every container of an installed app, with the registry digests of the image it runs. Derived
+   * from the same containers as {@link projects}, so the update badge moves with them.
+   */
+  runningImages(): Promise<RunningImage[]> {
+    return map(all([this.containers(), this.images()]), ([sources, digests]) => {
       const installed = this.apps.installedProjectIds();
 
       // By the image id the container runs, never by its reference: `compose pull` moves the tag
@@ -166,10 +172,11 @@ export class Docker {
         }))
         .filter(running => installed.has(running.project));
     });
+  }
 
-    this.overview = this.cache.define("overview", Docker.OverviewTtl, Docker.OverviewGrace, this.loadOverview);
-    this.snapshotsByChange = { containers: this.containers, images: this.images, overview: this.overview };
-    this.events = new DockerEvents(docker, change => void this.snapshotsByChange[change].refresh());
+  /** Host-wide counts for the whole engine, not just the installed apps, as Arcane reports a remote one. */
+  overview(): Promise<DockerOverview> {
+    return this.cache.get(Docker.keyOf("overview"), Docker.OverviewPolicy, this.loadOverview);
   }
 
   /**
@@ -195,7 +202,9 @@ export class Docker {
    * @returns Settles once both reloads have, and never rejects
    */
   settle(): Promise<void> {
-    return Promise.all([this.containers.refresh(), this.images.refresh()]).then(() => undefined);
+    const refreshes = [this.cache.refresh(Docker.keyOf("containers")), this.cache.refresh(Docker.keyOf("images"))];
+
+    return Promise.all(refreshes).then(() => undefined);
   }
 
   /**
@@ -235,7 +244,7 @@ export class Docker {
    * reference is left out, which {@link Docker.outdated} reads as "don't know".
    */
   async remoteDigests(gap = Docker.RegistryGapMs): Promise<RemoteDigests> {
-    const running = await this.runningImages.read();
+    const running = await this.runningImages();
     const references = [...new Set(running.filter(r => r.digests.length && !Docker.pinned(r.image)).map(r => r.image))];
     const remotes: RemoteDigests = {};
 
@@ -270,7 +279,7 @@ export class Docker {
    */
   async checkUpdates(gap = Docker.RegistryGapMs): Promise<UpdateCheck> {
     const remotes = await this.remoteDigests(gap);
-    const outdated = Docker.outdated(await this.runningImages.read(), remotes);
+    const outdated = Docker.outdated(await this.runningImages(), remotes);
 
     return { remotes, outdated };
   }
@@ -355,12 +364,12 @@ export class Docker {
    * that is sampled separately and arrives over the stats stream.
    * An installed app with no container yet resolves to a stopped project with no service.
    * @param project The Compose project name
-   * @throws {DockerNotFoundError} if the project is not an installed app
+   * @returns Rejects with a {@link DockerNotFoundError} if the project is not an installed app
    */
-  async projectDetail(project: string): Promise<ComposeProjectDetail> {
-    const compose = new ComposeProjects(await this.containers.read(), project);
-
-    return compose.detail(project, this.apps.installedProjectIds());
+  projectDetail(project: string): Promise<ComposeProjectDetail> {
+    return map(this.containers(), sources =>
+      new ComposeProjects(sources, project).detail(project, this.apps.installedProjectIds()),
+    );
   }
 
   /**
@@ -378,7 +387,7 @@ export class Docker {
 
     // Looked up within the project, so an id from another project reads as missing: no
     // cross-project probing.
-    const compose = new ComposeProjects(await this.containers.read(), project);
+    const compose = new ComposeProjects(await this.containers(), project);
     const container = compose.find(containerId);
 
     if (!container) {

@@ -1,5 +1,5 @@
+import { Suspense } from "react";
 import { hangar } from "#libs/hangar/server";
-import { Warm } from "#modules/common/components/warm.tsx";
 import { type DashboardColumn } from "#modules/widgets/config/config.ts";
 import { widgetRegistry } from "#modules/widgets/server/server.ts";
 
@@ -27,12 +27,12 @@ function Dashboard() {
 
         return (
           <div key={column} className={COLUMN_CLASSNAME[column]}>
-            {columnPlacements.map(({ widget: { key, Widget, Skeleton, ready } }) => (
-              // Cold, or its service is down: behind a boundary, so it streams in on its own
-              // instead of holding up the rest of the grid. Warm, it renders inline — see `Warm`.
-              <Warm key={key} ready={ready()} fallback={<Skeleton />}>
+            {columnPlacements.map(({ widget: { key, Widget, Skeleton } }) => (
+              // Cold: its own boundary, so it streams in instead of holding up the rest of the grid.
+              // Warm, it renders inline and the skeleton never shows.
+              <Suspense key={key} fallback={<Skeleton />}>
                 <Widget />
-              </Warm>
+              </Suspense>
             ))}
           </div>
         );

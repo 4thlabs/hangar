@@ -6,6 +6,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("node:timers/promises", () => ({ setTimeout: () => Promise.resolve() }));
 
 const { containerSource, dockerMock, fakeApps, fakeDockerode, givenContainers } = await import("./mock/index.ts");
+const { Cache, peek } = await import("#libs/cache");
 const { Docker } = await import("./docker.ts");
 const { DockerNotFoundError } = await import("./compose.ts");
 
@@ -13,7 +14,7 @@ const { DockerNotFoundError } = await import("./compose.ts");
 const container = containerSource;
 
 /** A client over the given installed apps; `alpha` unless a test says otherwise. */
-const client = (...installed: string[]) => new Docker(fakeDockerode(), fakeApps(...installed));
+const client = (...installed: string[]) => new Docker(fakeDockerode(), fakeApps(...installed), new Cache());
 
 const LABEL = {
   project: "com.docker.compose.project",
@@ -27,7 +28,7 @@ describe("Docker.projects", () => {
   it("covers every installed app, including one with no container yet", async () => {
     givenContainers([container()]);
 
-    const { projects } = await client("alpha", "gamma").projects.read();
+    const { projects } = await client("alpha", "gamma").projects();
 
     expect(projects.map(project => project.name)).toEqual(["alpha", "gamma"]);
     expect(projects[1]).toMatchObject({ status: "stopped", containerCount: 0 });
@@ -39,7 +40,7 @@ describe("Docker.projects", () => {
       container({ Id: "beta-1", labels: { [LABEL.project]: "beta", [LABEL.service]: "api" } }),
     ]);
 
-    const { projects } = await client("alpha").projects.read();
+    const { projects } = await client("alpha").projects();
 
     expect(projects.map(project => project.name)).toEqual(["alpha"]);
   });
@@ -293,7 +294,7 @@ describe("Docker.runningImages", () => {
       { Id: "sha256:pulled", RepoDigests: ["nginx@sha256:remote"] },
     ]);
 
-    expect(await client("alpha").runningImages.read()).toEqual([
+    expect(await client("alpha").runningImages()).toEqual([
       { project: "alpha", image: "nginx:alpine", digests: ["nginx@sha256:before"] },
     ]);
   });
@@ -302,9 +303,7 @@ describe("Docker.runningImages", () => {
     givenContainers([container()]);
     dockerMock.listImages.mockRejectedValue(new Error("daemon gone"));
 
-    expect(await client("alpha").runningImages.read()).toEqual([
-      { project: "alpha", image: "nginx:alpine", digests: [] },
-    ]);
+    expect(await client("alpha").runningImages()).toEqual([{ project: "alpha", image: "nginx:alpine", digests: [] }]);
   });
 });
 
@@ -361,7 +360,7 @@ describe("Docker.overview", () => {
       Volumes: [{ UsageData: { RefCount: 1 } }, { UsageData: { RefCount: 0 } }, { UsageData: null }],
     });
 
-    expect(await client().overview.read()).toEqual({
+    expect(await client().overview()).toEqual({
       version: "27.3.1",
       containers: { total: 5, running: 4, stopped: 1 },
       images: { total: 2, unused: 1, size: 1_073_741_824 },
@@ -379,7 +378,7 @@ describe("Docker.overview", () => {
 
     dockerMock.df.mockResolvedValue({ LayersSize: 0, Images: null, Volumes: null });
 
-    const overview = await client().overview.read();
+    const overview = await client().overview();
 
     expect(overview.images).toEqual({ total: 0, unused: 0, size: 0 });
     expect(overview.volumes).toEqual({ total: 0, inUse: 0, unused: 0 });
@@ -391,8 +390,8 @@ describe("Docker.loadContainers", () => {
     givenContainers([container()]);
     const docker = client("alpha");
 
-    await Promise.all([docker.projects.read(), docker.projects.read()]);
-    await docker.projects.read();
+    await Promise.all([docker.projects(), docker.projects()]);
+    await docker.projects();
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(1);
   });
@@ -401,7 +400,7 @@ describe("Docker.loadContainers", () => {
     givenContainers([container()]);
     const docker = client("alpha");
 
-    await docker.projects.read();
+    await docker.projects();
     await docker.projectDetail("alpha");
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(1);
@@ -420,17 +419,17 @@ describe("Docker.loadContainers", () => {
         : Promise.resolve(sources.find(entry => entry.info.Id === id)?.detail),
     );
 
-    const { projects } = await client("alpha").projects.read();
+    const { projects } = await client("alpha").projects();
 
     expect(projects[0]).toMatchObject({ name: "alpha", containerCount: 1 });
   });
 
   it("asks again once the loaded containers have expired", async () => {
     givenContainers([container()]);
-    const docker = new Docker(fakeDockerode(), fakeApps("alpha"), 0);
+    const docker = new Docker(fakeDockerode(), fakeApps("alpha"), new Cache(), 0);
 
-    await docker.projects.read();
-    await docker.projects.read();
+    await docker.projects();
+    await docker.projects();
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
   });
@@ -439,12 +438,12 @@ describe("Docker.loadContainers", () => {
     givenContainers([container({ state: "running" })]);
     const docker = client("alpha");
 
-    await docker.projects.read();
+    await docker.projects();
     givenContainers([container({ state: "exited" })]);
     await docker.settle();
 
     // From memory, without waiting on the daemon: that is what lets the page reload paint at once.
-    expect(docker.projects.peek()?.data.projects[0]).toMatchObject({ name: "alpha", status: "stopped" });
+    expect(peek(docker.projects())?.value.projects[0]).toMatchObject({ name: "alpha", status: "stopped" });
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
   });
 
@@ -453,7 +452,7 @@ describe("Docker.loadContainers", () => {
     dockerMock.listImages.mockResolvedValue([]);
     const docker = client("alpha");
 
-    await docker.runningImages.read();
+    await docker.runningImages();
     await docker.settle();
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
@@ -466,10 +465,10 @@ describe("Docker.loadContainers", () => {
 
     dockerMock.listContainers.mockRejectedValueOnce(new Error("socket gone"));
 
-    await expect(docker.projects.read()).rejects.toThrow("socket gone");
+    await expect(docker.projects()).rejects.toThrow("socket gone");
     givenContainers([container()]);
 
-    await expect(docker.projects.read()).resolves.toMatchObject({ projects: [{ name: "alpha" }] });
+    await expect(docker.projects()).resolves.toMatchObject({ projects: [{ name: "alpha" }] });
   });
 });
 
@@ -503,45 +502,45 @@ describe("Docker snapshot staleness", () => {
 
     givenDaemon("27.3.1");
 
-    expect((await docker.overview.read()).version).toBe("27.3.1");
+    expect((await docker.overview()).version).toBe("27.3.1");
 
     givenDaemon("28.0.0");
     vi.setSystemTime(START + 310_000);
 
     // Past its TTL but inside the grace window: the caller gets the snapshot without waiting on
     // the daemon, and the reload goes out behind it.
-    expect((await docker.overview.read()).version).toBe("27.3.1");
+    expect((await docker.overview()).version).toBe("27.3.1");
     expect(dockerMock.df).toHaveBeenCalledTimes(2);
 
     // Once that reload settles, the snapshot is the new one.
-    await vi.waitFor(async () => expect((await docker.overview.read()).version).toBe("28.0.0"));
+    await vi.waitFor(async () => expect((await docker.overview()).version).toBe("28.0.0"));
   });
 
   it("stops serving a stale overview once the daemon has been down past the grace window", async () => {
     const docker = client("alpha");
 
     givenDaemon("27.3.1");
-    await docker.overview.read();
+    await docker.overview();
 
     dockerMock.info.mockRejectedValue(new Error("socket gone"));
     dockerMock.df.mockRejectedValue(new Error("socket gone"));
 
     // Inside the grace window the failed reload puts the snapshot back, timestamp and all...
     vi.setSystemTime(START + 310_000);
-    await expect(docker.overview.read()).resolves.toMatchObject({ version: "27.3.1" });
+    await expect(docker.overview()).resolves.toMatchObject({ version: "27.3.1" });
 
     // ...so it keeps ageing, and past it the caller gets the daemon's real error instead.
     vi.setSystemTime(START + 4_000_000);
-    await expect(docker.overview.read()).rejects.toThrow("socket gone");
+    await expect(docker.overview()).rejects.toThrow("socket gone");
   });
 
   it("serves stale containers at once rather than waiting on the daemon", async () => {
     givenContainers([container()]);
     const docker = client("alpha");
 
-    await docker.projects.read();
+    await docker.projects();
     vi.setSystemTime(START + 61_000);
-    await docker.projects.read();
+    await docker.projects();
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
   });
@@ -595,7 +594,7 @@ describe("Docker.follow", () => {
 
   it("moves the projects when a Compose container changes on the host", async () => {
     givenContainers([container({ state: "running" })]);
-    await docker.projects.read();
+    await docker.projects();
     await follow();
 
     givenContainers([container({ state: "exited" })]);
@@ -603,7 +602,7 @@ describe("Docker.follow", () => {
     await vi.advanceTimersByTimeAsync(BATCHES);
 
     // Read from memory: the event alone brought the snapshot up to date.
-    expect(docker.projects.peek()?.data.projects[0]).toMatchObject({ name: "alpha", status: "stopped" });
+    expect(peek(docker.projects())?.value.projects[0]).toMatchObject({ name: "alpha", status: "stopped" });
   });
 
   it("reloads the image list and the overview, not the containers, when an image changes", async () => {
@@ -611,8 +610,8 @@ describe("Docker.follow", () => {
     await follow();
 
     // Loaded once, since a snapshot nobody has read yet has nothing to reload.
-    await docker.runningImages.read();
-    await docker.overview.read();
+    await docker.runningImages();
+    await docker.overview();
     vi.clearAllMocks();
 
     stream.write(line({ Type: "image", Action: "pull" }));
@@ -635,7 +634,7 @@ describe("Docker.follow", () => {
     givenContainers([container()]);
     await follow();
 
-    await docker.runningImages.read();
+    await docker.runningImages();
     vi.clearAllMocks();
 
     docker.unfollow();

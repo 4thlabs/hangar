@@ -1,8 +1,8 @@
 import { Link } from "waku";
-import { Cache } from "#libs/cache";
+import { all, map } from "#libs/cache";
 import type { DockerOverview } from "#libs/docker";
 import { docker } from "#libs/docker/server";
-import { outdatedSnapshot } from "#modules/apps/snapshots.ts";
+import { outdatedApps } from "#modules/apps/snapshots.ts";
 import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
 import { defineWidget } from "../shared/define-widget.tsx";
 import {
@@ -84,16 +84,17 @@ export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStat
   );
 }
 
-/** One widget for every placement, rendering the daemon's snapshots: no TTL, it follows Docker events. */
+/** One widget for every placement, rendering the daemon's cached reads: no TTL, it follows Docker events. */
 export const dockerGeneralStats = defineWidget({
   id: "docker-general-stats",
   ...chrome,
   errorDescription: "The local Docker statistics could not be loaded.",
   // The last completed check against what runs now; the widget never talks to a registry itself.
-  snapshot: Cache.join(docker.overview, outdatedSnapshot, (overview, outdated) => ({
-    overview,
-    outdated: [...outdated].sort(),
-  })),
+  source: () =>
+    map(all([docker.overview(), outdatedApps()]), ([overview, outdated]) => ({
+      overview,
+      outdated: [...outdated].sort(),
+    })),
   render: ({ overview, outdated }: DockerGeneralStats) => (
     <DockerGeneralStatsCard overview={overview} outdated={outdated} />
   ),

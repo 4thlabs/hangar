@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Cache } from "#libs/cache";
 import { logger } from "#libs/logs";
 import { GithubClient } from "./client.ts";
 
 /** A fresh client per case, so no case reads another's cache. */
-let client = new GithubClient();
+let client = new GithubClient(new Cache());
 
 const release = (tag: string, publishedAt: string) => ({
   tag_name: tag,
@@ -29,7 +30,7 @@ const START = 1_700_000_000_000;
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] }).setSystemTime(START);
-  client = new GithubClient();
+  client = new GithubClient(new Cache());
 });
 
 afterEach(() => {

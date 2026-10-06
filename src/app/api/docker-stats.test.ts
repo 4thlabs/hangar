@@ -11,10 +11,11 @@ vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
 // One small singleton stands in for the whole layer: the class itself is tested against a fake
 // client in `src/libs/docker/docker.test.ts`.
 vi.mock("#libs/docker/server", async () => {
+  const { Cache } = await import("#libs/cache");
   const { Docker } = await import("#libs/docker");
   const { fakeApps, fakeDockerode } = await import("#libs/docker/mock");
 
-  return { docker: new Docker(fakeDockerode(), fakeApps("alpha")) };
+  return { docker: new Docker(fakeDockerode(), fakeApps("alpha"), new Cache()) };
 });
 
 const { containerSource, dockerMock, givenContainers } = await import("#libs/docker/mock");
