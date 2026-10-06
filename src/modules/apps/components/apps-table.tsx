@@ -10,6 +10,7 @@ import { plural, s } from "#modules/apps/format.ts";
 import { useComposeRun } from "#modules/apps/hooks/use-compose-run.ts";
 import type { AppSortColumn, AppsSort } from "#modules/apps/search-codec.ts";
 import { statusLabel, statusVariant } from "#modules/apps/status.ts";
+import { navigationPrefetch } from "#modules/common/navigations.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
 
@@ -131,7 +132,11 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
               <TableCell className="font-medium">
                 <div className="flex flex-wrap items-center gap-2">
                   {project.icon && <img src={project.icon} alt="" className="size-5 object-contain" />}
-                  <Link to={{ to: "/apps/[project]", params: { project: project.name } }} className="hover:underline">
+                  <Link
+                    to={{ to: "/apps/[project]", params: { project: project.name } }}
+                    unstable_prefetchOnView={navigationPrefetch}
+                    className="hover:underline"
+                  >
                     {project.name}
                   </Link>
                   {project.updateAvailable && <Badge variant="outline">Mise à jour</Badge>}

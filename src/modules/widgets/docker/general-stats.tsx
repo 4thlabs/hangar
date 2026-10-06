@@ -4,6 +4,7 @@ import type { DockerOverview } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { outdatedApps } from "#modules/apps/snapshots.ts";
 import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
+import { navigationPrefetch } from "#modules/common/navigations.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 import {
   Units,
@@ -71,6 +72,7 @@ export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStat
               <li key={project}>
                 <Link
                   to={{ to: "/apps/[project]", params: { project } }}
+                  unstable_prefetchOnView={navigationPrefetch}
                   className="font-medium text-chart-4 hover:underline"
                 >
                   {project}
