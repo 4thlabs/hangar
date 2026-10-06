@@ -1,6 +1,5 @@
 import type { MiddlewareHandler } from "hono/types";
-import type { DockerEvents } from "#libs/docker";
-import { dockerEvents } from "#libs/docker/server";
+import { docker } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { appsSnapshot } from "#modules/apps/snapshots.ts";
@@ -9,8 +8,8 @@ import { widgetRegistry } from "#modules/widgets/server/server.ts";
 /** How often the snapshots are topped up. Comfortably inside every TTL + grace window they feed. */
 const INTERVAL = 30_000;
 
-/** Reused across HMR reloads, otherwise dev stacks a second loop and event stream on every edit. */
-const globalForWarm = globalThis as unknown as { warmTimer?: NodeJS.Timeout; dockerEvents?: DockerEvents };
+/** Reused across HMR reloads, otherwise dev stacks a second loop on every edit. */
+const globalForWarm = globalThis as unknown as { warmTimer?: NodeJS.Timeout };
 
 /** Fills the caches the first render reads. Each cache's TTL, not INTERVAL, decides how often services are asked. */
 function tick() {
@@ -36,9 +35,7 @@ export default (): MiddlewareHandler => {
 
   logger.info(`Warming the dashboard caches every ${INTERVAL / 1_000}s`);
 
-  globalForWarm.dockerEvents?.stop();
-  dockerEvents.start();
-  globalForWarm.dockerEvents = dockerEvents;
+  docker.follow();
 
   let first = true;
 

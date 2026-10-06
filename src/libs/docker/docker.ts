@@ -13,6 +13,7 @@ import {
   type RunningImage,
   type UpdateCheck,
 } from "./compose.ts";
+import { DockerEvents, type DockerChange } from "./events.ts";
 import type { ContainerStatsSample } from "./stats.ts";
 
 /** What the daemon answers for a container that went away between a list and a call on it. */
@@ -62,15 +63,6 @@ type SystemDiskUsage = {
   Volumes: Dockerode.VolumeInspectInfo[] | null;
 };
 
-/**
- * What a daemon event can make stale: the Compose containers, the local image list, or the
- * host-wide overview. See {@link Docker.refresh} and `DockerEvents`.
- */
-export type DockerChange = "containers" | "images" | "overview";
-
-/** Every {@link DockerChange}, for a caller that cannot tell which one happened. */
-export const DockerChanges: readonly DockerChange[] = ["containers", "images", "overview"];
-
 /** The slice of `HangarStore` this layer needs: which Compose projects a caller may see. */
 export interface InstalledApps {
   installedProjectIds(): Set<string>;
@@ -101,8 +93,8 @@ export class Docker {
   private readonly apps: InstalledApps;
 
   /**
-   * Default {@link ttl}. `DockerEvents` keeps the containers live; this is only the net for a
-   * change the event stream missed.
+   * Default {@link ttl}. The daemon's events keep the containers live (see {@link follow}); this is
+   * only the net for a change the event stream missed.
    */
   private static readonly Ttl = 60_000;
 
@@ -139,6 +131,12 @@ export class Docker {
   /** Host-wide counts for the whole engine, not just the installed apps, as Arcane reports a remote one. */
   readonly overview: Snapshot<DockerOverview>;
 
+  /** The snapshot each {@link DockerChange} makes stale. */
+  private readonly snapshotsByChange: Record<DockerChange, Snapshot<unknown>>;
+
+  /** The daemon's event stream, reloading what each event made stale; idle until {@link follow}. */
+  private readonly events: DockerEvents;
+
   /**
    * @param docker An Engine API client; injected so the composition root owns the connection
    * @param apps The installed-app lookup, satisfied by `hangar.store`
@@ -170,6 +168,34 @@ export class Docker {
     });
 
     this.overview = this.cache.define("overview", Docker.OverviewTtl, Docker.OverviewGrace, this.loadOverview);
+    this.snapshotsByChange = { containers: this.containers, images: this.images, overview: this.overview };
+    this.events = new DockerEvents(docker, change => void this.snapshotsByChange[change].refresh());
+  }
+
+  /**
+   * Keeps the snapshots current from the daemon's events, whoever changes the containers, until
+   * {@link unfollow}. Returns at once; calling it again while following does nothing. Explicit, so a
+   * short-lived process (a job run, `waku build`) never opens the stream.
+   */
+  follow() {
+    this.events.start();
+  }
+
+  /**
+   * Stops following the daemon's events. The snapshots fall back to their TTL.
+   */
+  unfollow() {
+    this.events.stop();
+  }
+
+  /**
+   * Reloads the containers and images after a change this process made, for a caller about to read
+   * the new state. Readers keep the current snapshot meanwhile. The overview is left to the events:
+   * `df` is the daemon's slowest call, too slow to wait on.
+   * @returns Settles once both reloads have, and never rejects
+   */
+  settle(): Promise<void> {
+    return Promise.all([this.containers.refresh(), this.images.refresh()]).then(() => undefined);
   }
 
   /**
@@ -202,18 +228,6 @@ export class Docker {
 
     return fulfilledValues(inspected, "inspect a container");
   };
-
-  /**
-   * Reloads what a change made stale; readers keep the current snapshot meanwhile. Called by
-   * `DockerEvents`, and awaited by a caller about to read the new state.
-   * @param changes What went stale; everything when the caller cannot tell
-   * @returns Settles once each reload has, and never rejects
-   */
-  refresh(changes: Iterable<DockerChange> = DockerChanges): Promise<void> {
-    const snapshots = { containers: this.containers, images: this.images, overview: this.overview };
-
-    return Promise.all([...changes].map(change => snapshots[change].refresh())).then(() => undefined);
-  }
 
   /**
    * Asks the registry, through the daemon so its credentials apply, what it serves for each

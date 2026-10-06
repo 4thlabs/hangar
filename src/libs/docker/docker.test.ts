@@ -435,29 +435,30 @@ describe("Docker.loadContainers", () => {
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
   });
 
-  it("serves the new containers once a refresh it awaited settles", async () => {
+  it("serves the new containers once a settle it awaited resolves", async () => {
     givenContainers([container({ state: "running" })]);
     const docker = client("alpha");
 
     await docker.projects.read();
     givenContainers([container({ state: "exited" })]);
-    await docker.refresh(["containers"]);
+    await docker.settle();
 
     // From memory, without waiting on the daemon: that is what lets the page reload paint at once.
     expect(docker.projects.peek()?.data.projects[0]).toMatchObject({ name: "alpha", status: "stopped" });
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
   });
 
-  it("refreshes only what went stale", async () => {
+  it("settles the containers and images, and leaves the overview to the events", async () => {
     givenContainers([container()]);
     dockerMock.listImages.mockResolvedValue([]);
     const docker = client("alpha");
 
     await docker.runningImages.read();
-    await docker.refresh(["images"]);
+    await docker.settle();
 
+    expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
     expect(dockerMock.listImages).toHaveBeenCalledTimes(2);
-    expect(dockerMock.listContainers).toHaveBeenCalledTimes(1);
+    expect(dockerMock.df).not.toHaveBeenCalled();
   });
 
   it("does not cache a failed load", async () => {
@@ -543,5 +544,104 @@ describe("Docker snapshot staleness", () => {
     await docker.projects.read();
 
     expect(dockerMock.listContainers).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("Docker.follow", () => {
+  /** One event as the daemon writes it: a JSON object on its own line. */
+  const line = (event: object) => `${JSON.stringify(event)}\n`;
+
+  /** Long enough for every batch the events open, the overview's included. */
+  const BATCHES = 2_000;
+
+  let docker: InstanceType<typeof Docker>;
+
+  /** The stream each test follows, ended afterwards so the follower's read loop exits. */
+  let stream: PassThrough;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    docker = client("alpha");
+    stream = new PassThrough();
+  });
+
+  afterEach(() => {
+    docker.unfollow();
+    stream.end();
+    vi.useRealTimers();
+    dockerMock.getEvents.mockReset();
+    dockerMock.listImages.mockReset();
+    dockerMock.info.mockReset();
+    dockerMock.df.mockReset();
+  });
+
+  /** Follows {@link stream}, once the reloads every connection triggers have drained. */
+  const follow = async () => {
+    dockerMock.getEvents.mockResolvedValueOnce(stream);
+    dockerMock.listImages.mockResolvedValue([]);
+    dockerMock.info.mockResolvedValue({
+      ServerVersion: "27.3.1",
+      Containers: 1,
+      ContainersRunning: 1,
+      ContainersStopped: 0,
+    });
+
+    dockerMock.df.mockResolvedValue({ LayersSize: 0, Images: null, Volumes: null });
+
+    docker.follow();
+    await vi.advanceTimersByTimeAsync(BATCHES);
+    vi.clearAllMocks();
+  };
+
+  it("moves the projects when a Compose container changes on the host", async () => {
+    givenContainers([container({ state: "running" })]);
+    await docker.projects.read();
+    await follow();
+
+    givenContainers([container({ state: "exited" })]);
+    stream.write(line({ Type: "container", Action: "die", Actor: { Attributes: { [LABEL.project]: "alpha" } } }));
+    await vi.advanceTimersByTimeAsync(BATCHES);
+
+    // Read from memory: the event alone brought the snapshot up to date.
+    expect(docker.projects.peek()?.data.projects[0]).toMatchObject({ name: "alpha", status: "stopped" });
+  });
+
+  it("reloads the image list and the overview, not the containers, when an image changes", async () => {
+    givenContainers([container()]);
+    await follow();
+
+    // Loaded once, since a snapshot nobody has read yet has nothing to reload.
+    await docker.runningImages.read();
+    await docker.overview.read();
+    vi.clearAllMocks();
+
+    stream.write(line({ Type: "image", Action: "pull" }));
+    await vi.advanceTimersByTimeAsync(BATCHES);
+
+    expect(dockerMock.listImages).toHaveBeenCalledTimes(1);
+    expect(dockerMock.df).toHaveBeenCalledTimes(1);
+    expect(dockerMock.listContainers).not.toHaveBeenCalled();
+  });
+
+  it("opens the daemon's event stream only once, however often it is called", async () => {
+    await follow();
+
+    docker.follow();
+
+    expect(dockerMock.getEvents).not.toHaveBeenCalled();
+  });
+
+  it("reloads nothing more once unfollowed", async () => {
+    givenContainers([container()]);
+    await follow();
+
+    await docker.runningImages.read();
+    vi.clearAllMocks();
+
+    docker.unfollow();
+    stream.write(line({ Type: "image", Action: "pull" }));
+    await vi.advanceTimersByTimeAsync(BATCHES);
+
+    expect(dockerMock.listImages).not.toHaveBeenCalled();
   });
 });
