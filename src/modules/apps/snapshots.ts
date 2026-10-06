@@ -1,12 +1,12 @@
-import { Cache } from "#libs/cache";
+import { all, map } from "#libs/cache";
 import { Docker, type ComposeProjectsSnapshot } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
-import { imageCheckReport } from "#libs/jobs";
+import { imageCheckReport } from "#libs/jobs/server";
 
 /**
  * Decorates the Docker snapshot with what only the store knows: the update badge, the icon and
- * the category. Pure, because {@link appsSnapshot} runs it on every read and every peek.
+ * the category. Pure, because {@link appsSnapshot} runs it on every read.
  */
 function decorate(snapshot: ComposeProjectsSnapshot, outdated: ReadonlySet<string>): ComposeProjectsSnapshot {
   const categories = hangar.config.categories();
@@ -31,9 +31,15 @@ function decorate(snapshot: ComposeProjectsSnapshot, outdated: ReadonlySet<strin
 
 /**
  * The apps running an image the last check found the registry has moved past.
- * Recomputed from both snapshots on every read, so an update clears the badge whoever ran it, with no invalidation.
+ * Recomputed from both cached reads every time, so an update clears the badge whoever ran it, with no invalidation.
  */
-export const outdatedSnapshot = Cache.join(docker.runningImages, imageCheckReport.snapshot, Docker.outdated);
+export function outdatedApps(): Promise<Set<string>> {
+  return map(all([docker.runningImages(), imageCheckReport.remotes()]), ([running, remotes]) =>
+    Docker.outdated(running, remotes),
+  );
+}
 
-/** Everything /apps renders; the page and the warm loop share it, so they cannot disagree on what to warm. */
-export const appsSnapshot = Cache.join(docker.projects, outdatedSnapshot, decorate);
+/** Everything /apps renders. */
+export function appsSnapshot(): Promise<ComposeProjectsSnapshot> {
+  return map(all([docker.projects(), outdatedApps()]), ([snapshot, outdated]) => decorate(snapshot, outdated));
+}

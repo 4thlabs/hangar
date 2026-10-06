@@ -8,7 +8,7 @@ type WidgetSkeletonProps = {
   title: string;
 };
 
-/** Placeholder holding the card's size while its cache is cold; warm widgets get no boundary (see `Warm`). */
+/** Placeholder holding the card's size while its cache is cold; a warm widget renders inline and never shows it. */
 export function WidgetSkeleton({ className, icon, title }: WidgetSkeletonProps) {
   return (
     <WidgetCard className={className} aria-label={`Loading ${title}`} aria-busy="true">

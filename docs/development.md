@@ -56,7 +56,8 @@ src/
 - **`libs`** hold the logic as classes that take their dependencies through their constructor,
   so a test can pass an in-memory database instead of mocking a module. `HangarStore` owns the
   store clone, the links and the compose calls; `HangarConfig` reads `hangar.yml`; `HangarEnv`
-  manages `.env.global`; `Docker` wraps the daemon and keeps snapshots that follow its events.
+  manages `.env.global`; `Docker` wraps the daemon and caches its answers, refreshed by its events.
+  Slow reads go through the one `Cache` (`#libs/cache`, see [ADR 0001](adr/0001-cache.md)).
 - **`modules`** hold each page's server actions, components and hooks. The pages in `src/app` only
   compose them.
 - **Server-only code** is bound in each library's `server/` entry point, guarded with

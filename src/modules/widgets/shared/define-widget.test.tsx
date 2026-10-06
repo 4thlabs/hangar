@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Cache } from "#libs/cache";
+import { Cache, peek } from "#libs/cache";
 import { clearWidgetCache, defineWidget } from "./define-widget.tsx";
 
 const base = {
@@ -79,7 +79,7 @@ describe("defineWidget", () => {
 });
 
 describe("defineWidget caching", () => {
-  it("renders a second time from the snapshot rather than loading again", async () => {
+  it("renders a second time from the cache rather than loading again", async () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
     const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
 
@@ -101,21 +101,15 @@ describe("defineWidget caching", () => {
     expect(renderToStaticMarkup(await widget.Widget())).toContain("payload");
   });
 
-  it("warms the snapshot so the next render does not load", async () => {
+  it("caches the rendered card, so a warm render runs neither the load nor render", async () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
-    const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
+    const render = vi.fn((data: string) => <p>{data}</p>);
+    const widget = defineWidget({ ...base, load, render });
 
-    await widget.warm();
+    await widget.Widget();
+    await widget.Widget();
 
-    expect(renderToStaticMarkup(await widget.Widget())).toContain("payload");
-    expect(load).toHaveBeenCalledTimes(1);
-  });
-
-  it("resolves rather than rejects when warming a service that is down", async () => {
-    const load = vi.fn<() => Promise<string>>().mockRejectedValue(new Error("service down"));
-    const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
-
-    await expect(widget.warm()).resolves.toBeUndefined();
+    expect(render).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -176,46 +170,46 @@ describe("defineWidget freshness", () => {
 });
 
 describe("defineWidget rendering without suspending", () => {
-  it("renders synchronously once warm, so no Suspense boundary is created", async () => {
+  it("hands out a settled card once warm, which React renders without a fallback", async () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
     const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
 
-    await widget.warm();
+    await widget.Widget();
 
-    // Not a promise: an async component would suspend, and a suspended boundary puts its skeleton
-    // in the shell however fast the data arrives.
-    const rendered = widget.Widget();
+    const card = peek(widget.Widget());
 
-    expect(rendered).not.toBeInstanceOf(Promise);
-    expect(renderToStaticMarkup(rendered as React.ReactElement)).toContain("payload");
+    expect(card).toBeDefined();
+    expect(renderToStaticMarkup(card?.value as React.ReactElement)).toContain("payload");
   });
 
   it("still suspends when it has nothing cached", () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
     const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
 
-    expect(widget.Widget()).toBeInstanceOf(Promise);
+    expect(peek(widget.Widget())).toBeUndefined();
   });
 });
 
-describe("defineWidget over a snapshot", () => {
-  it("renders straight from the snapshot it is given, without a copy of its own", async () => {
+describe("defineWidget over a source", () => {
+  it("renders straight from the source it is given, without a cache of its own", async () => {
     const owner = new Cache();
     const load = vi.fn<() => Promise<string>>().mockResolvedValueOnce("first").mockResolvedValueOnce("second");
-    const snapshot = owner.define("source", 60_000, 60_000, load);
-    const widget = defineWidget({ ...base, snapshot, render: data => <p>{data}</p> });
+    const source = () => owner.get("source", { ttl: 60_000 }, load);
+    const widget = defineWidget({ ...base, source, render: data => <p>{data}</p> });
 
-    await widget.warm();
-    expect(renderToStaticMarkup(widget.Widget() as React.ReactElement)).toContain("first");
+    expect(renderToStaticMarkup(await widget.Widget())).toContain("first");
 
-    // Whatever refreshes the owner's snapshot shows here at once, with no widget TTL to outlive.
-    await snapshot.refresh();
-    expect(renderToStaticMarkup(widget.Widget() as React.ReactElement)).toContain("second");
+    // Whatever refreshes the owner's value shows here at once, with no widget TTL to outlive.
+    await owner.refresh("source");
+    expect(renderToStaticMarkup(peek(widget.Widget())?.value as React.ReactElement)).toContain("second");
   });
 
-  it("falls back to the error card when the snapshot cannot be read", async () => {
-    const snapshot = new Cache().define("source", 60_000, 60_000, () => Promise.reject(new Error("socket gone")));
-    const widget = defineWidget({ ...base, snapshot, render: () => <p>never</p> });
+  it("falls back to the error card when the source cannot be read", async () => {
+    const widget = defineWidget({
+      ...base,
+      source: () => Promise.reject(new Error("socket gone")),
+      render: () => <p>never</p>,
+    });
 
     expect(renderToStaticMarkup(await widget.Widget())).toContain("Test is unavailable");
   });

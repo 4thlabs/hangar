@@ -1,203 +1,210 @@
-/** One cached read. */
-type CacheEntry = {
-  /** The load as it was handed out. */
-  value: Promise<unknown>;
-  /** What it settled to, kept across a reload for {@link Cache.peek}; boxed so `undefined` can be cached. */
-  settled?: { data: unknown } | undefined;
-  /** When it stops being fresh; infinite while the load is in flight. */
-  until: number;
-  /** The reload {@link Cache.revalidate} queued behind an in-flight load, shared by later calls. */
-  next?: Promise<void> | undefined;
+import { logger } from "#libs/logs";
+import { track } from "./settled.ts";
+
+/** How long a cached value is used. */
+export type CachePolicy = {
+  /** How long the value is fresh, in milliseconds. */
+  ttl: number;
+  /**
+   * How long past `ttl` the value is still served, at once, while it reloads; past that, readers
+   * wait for the reload. This is how long a broken source stays hidden. Defaults to 0.
+   */
+  maxStale?: number | undefined;
 };
 
-/** Swallows a settlement, for the promises whose callers only need to know it happened. */
-const settle = () => undefined;
-
-/** One cached read with its key, TTL, grace and loader bound once — see {@link Cache.define}. */
-export type Snapshot<T> = {
-  /** The value, awaiting a load when there is nothing usable cached. */
-  read(): Promise<T>;
-  /** The value without awaiting anything, or `undefined` to say "ask properly". */
-  peek(): { data: T } | undefined;
-  /**
-   * Fills the snapshot ahead of a render. Never rejects: a source being down is the render's to
-   * report, and an unhandled rejection in a background tick would kill the process.
-   */
-  warm(): Promise<void>;
-  /**
-   * Reloads now, for whoever learns the source has changed; readers keep the current value
-   * meanwhile. Resolves once a load started after the call has settled. Never rejects.
-   */
-  refresh(): Promise<void>;
+/** One cached value. */
+type Entry = {
+  /** What readers get: settled once the first load has, then swapped for each successful reload. */
+  served: Promise<unknown>;
+  /** When {@link served} settled; `undefined` while the first load runs. */
+  loadedAt: number | undefined;
+  /** The load in flight, first or reload, shared by everyone who asks meanwhile. */
+  loading: Promise<unknown> | undefined;
+  /** The one reload a {@link Cache.refresh} queues behind a load that may predate the change. */
+  queued: Promise<void> | undefined;
+  /** The policy and load of the last read, which reloads reuse. */
+  policy: CachePolicy;
+  load: () => Promise<unknown>;
 };
+
+/** Settles a promise into nothing, for callers that only need to know it happened. */
+const ignore = () => undefined;
 
 /**
- * Reads that answer from the last snapshot and refresh themselves behind the caller. No timer:
- * filling it before anyone asks is `src/app/middleware/cache-warm.ts`'s job.
+ * Values from slow sources, served at once from memory and reloaded behind the reader. Every read
+ * of a value returns the same promise until it changes, marked as settled so React renders a warm
+ * value without suspending (see `TrackedPromise`).
+ *
+ * Keys are namespaced by their owner (`docker:containers`, `widget:github-releases`), which is the
+ * unit {@link refresh} works on.
  */
 export class Cache {
-  private readonly entries = new Map<string, CacheEntry>();
+  private readonly entries = new Map<string, Entry>();
 
   /**
-   * Serves `key` from the snapshot: as is within `ttl`, with a reload behind it within `grace`
-   * past that, and by awaiting `load` beyond. `grace` is how long a broken source stays hidden.
-   * Cache raw reads only: an error derived from a cached value would get cached as the value.
-   * @param key Which read this is; also the unit {@link clear} drops
-   * @param ttl How long the value is fresh, in milliseconds
-   * @param grace How long past `ttl` it is still served while reloading
-   * @param load Fetches a new value
+   * The value for `key`: as cached while fresh, as cached with a reload behind it while stale, and
+   * by awaiting `load` when cold or past `maxStale`. A failed load is never cached; a failed reload
+   * keeps the last good value.
+   * @param key Names the value, prefixed by its owner
+   * @param policy How long the value is used
+   * @param load Fetches the value from its source
    */
-  read<T>(key: string, ttl: number, grace: number, load: () => Promise<T>): Promise<T> {
-    const ready = this.peek<T>(key, ttl, grace, load);
-
-    if (ready) {
-      return Promise.resolve(ready.data);
-    }
-
+  get<T>(key: string, policy: CachePolicy, load: () => Promise<T>): Promise<T> {
     const entry = this.entries.get(key);
 
-    // Nothing settled yet but a load is already out: share it rather than starting a second.
-    if (entry && Date.now() < entry.until) {
-      return entry.value as Promise<T>;
+    if (!entry) {
+      return this.loadFirst(key, policy, load);
     }
 
-    return this.refresh(key, entry, ttl, load);
+    entry.policy = policy;
+    entry.load = load;
+
+    if (entry.loadedAt === undefined) {
+      return entry.served as Promise<T>;
+    }
+
+    const age = Date.now() - entry.loadedAt;
+    const maxStale = policy.maxStale ?? 0;
+
+    if (age < policy.ttl) {
+      return entry.served as Promise<T>;
+    }
+
+    const reload = this.reload(key, entry);
+
+    if (age < policy.ttl + maxStale) {
+      return entry.served as Promise<T>;
+    }
+
+    return reload as Promise<T>;
   }
 
   /**
-   * The value without awaiting, or `undefined` ("ask properly"). Awaiting would suspend and paint a
-   * fallback however warm the cache is. Same staleness rules as {@link read}.
+   * Reloads every cached value whose key starts with `prefix`, for whoever learns its source has
+   * changed. Readers keep the current value meanwhile. A load already in flight may predate the
+   * change, so one more follows it. Values never read are left alone.
+   * @returns Settles once a load started after this call has, and never rejects
    */
-  peek<T>(key: string, ttl: number, grace: number, load: () => Promise<T>): { data: T } | undefined {
-    const entry = this.entries.get(key);
+  refresh(prefix: string): Promise<void> {
+    const refreshes = [...this.entries]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, entry]) => this.refreshEntry(key, entry));
 
-    if (!entry?.settled) {
-      return undefined;
-    }
-
-    const now = Date.now();
-
-    if (now < entry.until) {
-      return entry.settled as { data: T };
-    }
-
-    // Stale but within grace. Floating is safe: `refresh` attaches its own rejection handler.
-    if (now < entry.until + grace) {
-      void this.refresh(key, entry, ttl, load);
-
-      return entry.settled as { data: T };
-    }
-
-    return undefined;
+    return Promise.all(refreshes).then(ignore);
   }
 
   /**
-   * Loads a fresh value into `key` and publishes it once it settles, unless a {@link clear} replaced
-   * the entry meanwhile.
-   * @param previous The entry being replaced, restored as-is if the load fails
+   * Reloads, every `intervalMs`, each value that would go stale before the next tick, so a reader
+   * never meets a stale one. Values are kept warm once read, for the life of the process.
+   * @returns Stops the loop
    */
-  private refresh<T>(key: string, previous: CacheEntry | undefined, ttl: number, load: () => Promise<T>): Promise<T> {
-    const value = load();
+  keepWarm(intervalMs: number): () => void {
+    const timer = setInterval(() => {
+      const now = Date.now();
 
-    // Keeps the old value for readers; never expires in flight, so concurrent callers share the load.
-    const entry: CacheEntry = { value, settled: previous?.settled, until: Number.POSITIVE_INFINITY };
+      for (const [key, entry] of this.entries) {
+        const goesStaleBeforeNextTick =
+          entry.loadedAt !== undefined && now + intervalMs >= entry.loadedAt + entry.policy.ttl;
+
+        if (goesStaleBeforeNextTick) {
+          void this.reload(key, entry).catch(ignore);
+        }
+      }
+    }, intervalMs);
+
+    // Never a reason to hold the process open: a reload is owed to no one.
+    timer.unref();
+
+    return () => clearInterval(timer);
+  }
+
+  /**
+   * Forgets every value whose key starts with `prefix`. For tests, which share a process; the app
+   * calls {@link refresh}, which keeps serving the old value while the new one loads.
+   */
+  clear(prefix: string) {
+    for (const key of this.entries.keys()) {
+      if (key.startsWith(prefix)) {
+        this.entries.delete(key);
+      }
+    }
+  }
+
+  /** Loads a value nobody has cached yet; forgets it again if the load fails. */
+  private loadFirst<T>(key: string, policy: CachePolicy, load: () => Promise<T>): Promise<T> {
+    const loading = track(load());
+
+    const entry: Entry = { served: loading, loadedAt: undefined, loading, queued: undefined, policy, load };
 
     this.entries.set(key, entry);
 
-    value.then(
-      data => {
-        if (this.entries.get(key) !== entry) {
-          return;
-        }
-
-        entry.settled = { data };
-        entry.until = Date.now() + ttl;
+    loading.then(
+      () => {
+        entry.loadedAt = Date.now();
+        entry.loading = undefined;
       },
       () => {
-        if (this.entries.get(key) !== entry) {
-          return;
-        }
-
-        if (previous) {
-          this.entries.set(key, previous);
-        } else {
+        if (this.entries.get(key) === entry) {
           this.entries.delete(key);
         }
       },
     );
 
-    return value;
+    return loading;
   }
 
   /**
-   * Implements {@link Snapshot.refresh}. A load in flight may predate the change, so one more load
-   * follows it, shared by every call that arrives meanwhile. Nothing cached is left alone.
-   * @returns Settles once a load started after this call has, and never rejects
+   * Reloads a cached value, or joins the load already in flight. Publishes the new value once it
+   * settles, unless {@link clear} dropped the entry meanwhile; a failure is logged and leaves the
+   * served value as it was, still ageing.
+   * @returns The load, rejecting if it fails
    */
-  revalidate<T>(key: string, ttl: number, load: () => Promise<T>): Promise<void> {
-    const entry = this.entries.get(key);
-
-    if (!entry) {
-      return Promise.resolve();
+  private reload(key: string, entry: Entry): Promise<unknown> {
+    if (entry.loading) {
+      return entry.loading;
     }
 
-    if (!Number.isFinite(entry.until)) {
-      entry.next ??= entry.value.then(settle, settle).then(() => this.revalidate(key, ttl, load));
+    const loading = track(entry.load());
 
-      return entry.next;
+    entry.loading = loading;
+    loading.then(
+      () => {
+        entry.loading = undefined;
+
+        if (this.entries.get(key) === entry) {
+          entry.served = loading;
+          entry.loadedAt = Date.now();
+        }
+      },
+      (error: unknown) => {
+        entry.loading = undefined;
+        logger.warn("Could not reload a cached value", { error, key });
+      },
+    );
+
+    return loading;
+  }
+
+  /** Implements {@link refresh} for one entry. */
+  private refreshEntry(key: string, entry: Entry): Promise<void> {
+    if (!entry.loading) {
+      return this.reload(key, entry).then(ignore, ignore);
     }
 
-    return this.refresh(key, entry, ttl, load).then(settle, settle);
-  }
+    entry.queued ??= entry.loading
+      .then(ignore, ignore)
+      .then(() => {
+        entry.queued = undefined;
 
-  /** Binds one read's key, TTL, grace and loader into a {@link Snapshot}; prefer it to {@link read}. */
-  define<T>(key: string, ttl: number, grace: number, load: () => Promise<T>): Snapshot<T> {
-    return {
-      read: () => this.read(key, ttl, grace, load),
-      peek: () => this.peek(key, ttl, grace, load),
-      warm: () =>
-        this.read(key, ttl, grace, load).then(
-          () => undefined,
-          () => undefined,
-        ),
-      refresh: () => this.revalidate(key, ttl, load),
-    };
-  }
-
-  /** Drops every snapshot, so the next read goes back to the source. */
-  clear() {
-    this.entries.clear();
-  }
-
-  /**
-   * A snapshot derived from one or two others. Caches nothing itself, so it cannot drift from them.
-   * @param project Builds the derived value; must stay pure, since it runs on every read and peek
-   */
-  static join<A, B>(a: Snapshot<A>, project: (a: A) => B): Snapshot<B>;
-  static join<A, B, C>(a: Snapshot<A>, b: Snapshot<B>, project: (a: A, b: B) => C): Snapshot<C>;
-  static join(...args: readonly unknown[]): Snapshot<unknown> {
-    const project = args[args.length - 1] as (...values: readonly unknown[]) => unknown;
-    const sources = args.slice(0, -1) as readonly Snapshot<unknown>[];
-
-    return {
-      read: async () => project(...(await Promise.all(sources.map(source => source.read())))),
-      peek: () => {
-        // Peek every source first: a peek is what starts a stale entry's reload.
-        const ready = sources.map(source => source.peek());
-        const values: unknown[] = [];
-
-        for (const entry of ready) {
-          if (!entry) {
-            return undefined;
-          }
-
-          values.push(entry.data);
+        // A first load that failed took its entry with it: nothing left to refresh.
+        if (this.entries.get(key) !== entry) {
+          return undefined;
         }
 
-        return { data: project(...values) };
-      },
-      warm: () => Promise.all(sources.map(source => source.warm())).then(() => undefined),
-      refresh: () => Promise.all(sources.map(source => source.refresh())).then(() => undefined),
-    };
+        return this.reload(key, entry);
+      })
+      .then(ignore, ignore);
+
+    return entry.queued;
   }
 }

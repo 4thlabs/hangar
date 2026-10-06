@@ -4,10 +4,11 @@ const mocks = vi.hoisted(() => ({ list: vi.fn(), logger: { error: vi.fn() } }));
 
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
 
+const { Cache, peek } = await import("#libs/cache");
 const { ImageCheckReport } = await import("./report.ts");
 
 /** A fresh report per case, reading the runs `mocks.list` answers. */
-let report = new ImageCheckReport(mocks.list);
+let report = new ImageCheckReport(mocks.list, new Cache());
 
 /** One completed `CheckImageVersion` row, newest-id-first as Sidequest lists them. */
 const run = (id: number, checkedAt: string, remotes: Record<string, string> = {}) => ({
@@ -22,7 +23,7 @@ describe("ImageCheckReport", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Every case starts from a cold cache: a new report has none.
-    report = new ImageCheckReport(mocks.list);
+    report = new ImageCheckReport(mocks.list, new Cache());
     mocks.list.mockResolvedValue([]);
   });
 
@@ -31,33 +32,33 @@ describe("ImageCheckReport", () => {
     // report can sit below an older one.
     mocks.list.mockResolvedValue([run(9, past, { nginx: "sha256:old" }), run(2, future, { nginx: "sha256:new" })]);
 
-    expect(await report.snapshot.read()).toEqual({ nginx: "sha256:new" });
+    expect(await report.remotes()).toEqual({ nginx: "sha256:new" });
   });
 
   it("reads a report from before digests were stored as nothing to compare", async () => {
     mocks.list.mockResolvedValue([{ id: 1, result: { checkedAt: past, updates: [] } }]);
 
-    expect(await report.snapshot.read()).toEqual({});
+    expect(await report.remotes()).toEqual({});
   });
 
   it("reports nothing rather than failing when the job store cannot be read", async () => {
     mocks.list.mockRejectedValue(new Error("no backend"));
 
-    expect(await report.snapshot.read()).toEqual({});
+    expect(await report.remotes()).toEqual({});
     expect(mocks.logger.error).toHaveBeenCalled();
   });
 
   it("keeps serving the last report while a refresh reads the new one", async () => {
     mocks.list.mockResolvedValue([run(1, past, { nginx: "sha256:old" })]);
-    await report.snapshot.read();
+    await report.remotes();
     mocks.list.mockResolvedValue([run(2, future, { nginx: "sha256:new" })]);
 
     const refreshed = report.refresh();
 
-    expect(report.snapshot.peek()).toEqual({ data: { nginx: "sha256:old" } });
+    expect(peek(report.remotes())).toEqual({ value: { nginx: "sha256:old" } });
 
     await refreshed;
 
-    expect(report.snapshot.peek()).toEqual({ data: { nginx: "sha256:new" } });
+    expect(peek(report.remotes())).toEqual({ value: { nginx: "sha256:new" } });
   });
 });

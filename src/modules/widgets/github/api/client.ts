@@ -1,5 +1,6 @@
 import ky, { type KyInstance } from "ky";
-import { Cache } from "#libs/cache";
+import type { Cache, CachePolicy } from "#libs/cache";
+import { cache } from "#libs/cache/server";
 import { env } from "#libs/env";
 import { logger } from "#libs/logs";
 
@@ -28,23 +29,24 @@ interface LatestRelease {
  * ponytail: per-process cache; move the refresh into a sidequest job if Hangar ever runs more than one instance.
  */
 export class GithubClient {
-  /** How long a release is served before GitHub is asked again. */
-  private static readonly Ttl = 30 * 60 * 1_000;
-
   /**
-   * How long a stale release is served, at once, while GitHub fails (rate limit, blip). Past it the card errors rather
-   * than show a tag nobody can tell is a year old.
+   * A release is served for half an hour before GitHub is asked again, and stale for a day while GitHub fails (rate
+   * limit, blip). Past that the card errors rather than show a tag nobody can tell is a year old.
    */
-  private static readonly Grace = 24 * 60 * 60 * 1_000;
+  private static readonly Policy: CachePolicy = { ttl: 30 * 60 * 1_000, maxStale: 24 * 60 * 60 * 1_000 };
 
-  /** One entry per repository. The widget layer caches the loaded list; this caches each call. */
-  private readonly cache = new Cache();
+  /** One entry per repository. The widget layer caches the rendered card; this caches each call. */
+  private readonly cache: Cache;
 
   /** The ky client, bound to the API and to the token when there is one. */
   private readonly http: KyInstance;
 
-  /** @param token A GitHub token: 60 requests/hour anonymous, 5000 with one */
-  constructor(token?: string) {
+  /**
+   * @param cache Where the releases are kept, under `github:` keys
+   * @param token A GitHub token: 60 requests/hour anonymous, 5000 with one
+   */
+  constructor(cache: Cache, token?: string) {
+    this.cache = cache;
     this.http = ky.extend({
       baseUrl: "https://api.github.com",
       retry: { limit: 1 },
@@ -81,7 +83,7 @@ export class GithubClient {
 
   /** One repository's latest release, through the cache. */
   private getLatestRelease(repository: string): Promise<GithubRelease> {
-    return this.cache.read(repository, GithubClient.Ttl, GithubClient.Grace, async () => {
+    return this.cache.get(`github:${repository}`, GithubClient.Policy, async () => {
       const latest = await this.http.get<LatestRelease>(`repos/${repository}/releases/latest`).json();
 
       return { repository, tag: latest.tag_name, url: latest.html_url, publishedAt: latest.published_at };
@@ -90,4 +92,4 @@ export class GithubClient {
 }
 
 /** The client the dashboard shares, so every placement of the card reads one cache. */
-export const githubClient = new GithubClient(env.GITHUB_TOKEN);
+export const githubClient = new GithubClient(cache, env.GITHUB_TOKEN);
