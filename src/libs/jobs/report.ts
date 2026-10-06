@@ -38,11 +38,12 @@ export class ImageCheckReport {
   }
 
   /**
-   * Drops the cached report, for whoever learns a check completed. The job cannot call it: it runs in
-   * the worker process.
+   * Rereads the report, for whoever learns a check completed; readers keep the last one meanwhile, so
+   * the Apps page does not fall back to its spinner. The job cannot call it: it runs in the worker process.
+   * @returns Settles once the new report is read, and never rejects
    */
-  invalidate() {
-    this.cache.clear();
+  refresh(): Promise<void> {
+    return this.snapshot.refresh();
   }
 
   /** Reads the newest completed report. */

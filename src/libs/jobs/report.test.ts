@@ -46,4 +46,18 @@ describe("ImageCheckReport", () => {
     expect(await report.snapshot.read()).toEqual({});
     expect(mocks.logger.error).toHaveBeenCalled();
   });
+
+  it("keeps serving the last report while a refresh reads the new one", async () => {
+    mocks.list.mockResolvedValue([run(1, past, { nginx: "sha256:old" })]);
+    await report.snapshot.read();
+    mocks.list.mockResolvedValue([run(2, future, { nginx: "sha256:new" })]);
+
+    const refreshed = report.refresh();
+
+    expect(report.snapshot.peek()).toEqual({ data: { nginx: "sha256:old" } });
+
+    await refreshed;
+
+    expect(report.snapshot.peek()).toEqual({ data: { nginx: "sha256:new" } });
+  });
 });

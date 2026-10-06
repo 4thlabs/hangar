@@ -41,7 +41,7 @@ async function* frames(userId: string, from: Date, signal: AbortSignal) {
       cursor = new Date(newest);
 
       // A notification may mean a job finished: refresh the image report first, since the client reloads on it.
-      imageCheckReport.invalidate();
+      await imageCheckReport.refresh();
 
       yield sseEvent(fresh);
     }
