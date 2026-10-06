@@ -16,11 +16,7 @@ import { DockerNotFoundError } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { logger } from "#libs/logs";
 
-/**
- * The Docker half of `/apps/[project]`, kept as a child so the `await` happens inside the
- * page's boundary rather than in the page itself — see `AppsContent` for why that distinction
- * is the whole point.
- */
+/** Docker half of `/apps/[project]`, a child so the `await` happens inside the boundary (see `AppsContent`). */
 export async function AppDetailContent({ project }: { project: string }) {
   try {
     const [detail, outdated] = await Promise.all([docker.projectDetail(project), outdatedSnapshot.read()]);

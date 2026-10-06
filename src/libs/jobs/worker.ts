@@ -5,12 +5,8 @@ import { Notifications } from "#libs/notifications";
 import type { JobServices } from "./services.ts";
 
 /**
- * The composition root of the Sidequest worker: the one place a job's services are bound, as each
- * library's `server.ts` is for the web server. No `server-only` guard: the worker is a plain Node
- * process, where that marker throws.
- *
- * Built per run rather than once per process, so a run never reads a cache left warm by the
- * previous one hours earlier.
+ * The Sidequest worker's composition root. Built per run, so a run never reads a cache left warm by
+ * the previous one. No `server-only` guard: see AGENTS.md § server-only.
  */
 export async function createWorkerServices(): Promise<JobServices> {
   // Imported on call rather than at load: the web server and the tests load every job module,

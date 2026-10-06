@@ -68,7 +68,7 @@ describe("JellyfinLatestCard", () => {
         counts={counts}
         items={items}
         serviceUrl="https://jellyfin.test.local"
-        widget="jellyfin-latest-k1"
+        placementKey="jellyfin-latest-k1"
       />,
     );
 
@@ -82,7 +82,7 @@ describe("JellyfinLatestCard", () => {
         counts={counts}
         items={items}
         serviceUrl="https://jellyfin.test.local"
-        widget="jellyfin-latest-k1"
+        placementKey="jellyfin-latest-k1"
       />,
     );
 
@@ -98,7 +98,7 @@ describe("JellyfinLatestCard", () => {
         counts={counts}
         items={[{ id: "s-1", imageId: undefined, title: "Drifters", subtitle: undefined }]}
         serviceUrl="https://jellyfin.test.local"
-        widget="jellyfin-latest-k1"
+        placementKey="jellyfin-latest-k1"
       />,
     );
 
@@ -113,7 +113,7 @@ describe("JellyfinLatestCard", () => {
         counts={counts}
         items={[]}
         serviceUrl="https://jellyfin.test.local"
-        widget="jellyfin-latest-k1"
+        placementKey="jellyfin-latest-k1"
       />,
     );
 
@@ -167,9 +167,7 @@ describe("jellyfinLatest", () => {
   });
 
   it("fills the row from an over-fetched list, because Jellyfin groups after it cuts", async () => {
-    // The bug this widget shipped with: the limit was the row length, so a run of episodes from
-    // one series grouped down to a single cell. Asking for ten times as many is what leaves
-    // enough behind, and the trimming happens here.
+    // Asking for the row length alone would group a run of episodes from one series down to one cell.
     const many = Array.from({ length: 25 }, (_, index) => ({
       Id: `m-${index}`,
       Name: `Film ${index}`,

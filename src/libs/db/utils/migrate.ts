@@ -5,15 +5,12 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { env } from "#libs/env";
 
-/**
- * The container runs this before the server so a fresh volume gets its tables.
- *
- * It deliberately does not import `#libs/db/server`: that entry is `server-only`,
- * which throws outside the `react-server` condition. Migrations need a
- * connection, not the schema, so open a plain one.
- */
 const MIGRATIONS_FOLDER = fileURLToPath(new URL("../../../drizzle", import.meta.url));
 
+/**
+ * Creates the tables of a fresh volume; the container runs it before the server. Opens its own
+ * connection: see AGENTS.md § server-only.
+ */
 export function migrateDb(source = env.HANGAR_DB_HOST) {
   // The image points HANGAR_DB_HOST at a nested path inside the /app/data volume,
   // and better-sqlite3 will not create the directories itself.

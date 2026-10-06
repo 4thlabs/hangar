@@ -16,15 +16,17 @@ import {
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
-/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
 const chrome = { title: "Backrest", icon: <IconSelfh name="backrest" />, className: "min-h-40" };
+
+/** A repository that has never run, whose last run succeeded, or whose last run did not. */
+type RepoHealth = "never-run" | "healthy" | "failed";
 
 /** One repository, already resolved to what the card shows. */
 export type RepoBackup = {
   id: string;
   /** The last run's outcome, without Backrest's `STATUS_` prefix. Absent until the repo has run. */
   status: string | undefined;
-  ok: boolean;
+  health: RepoHealth;
   lastRunAt: number | undefined;
   successes: number;
   bytesAdded: number;
@@ -38,37 +40,29 @@ const count = (value: string | undefined) => Number(value ?? 0);
 /** The same, as a moment: a zero is Backrest saying "never", not midnight in 1970. */
 const moment = (value: string | undefined) => (count(value) === 0 ? undefined : Number(value));
 
-/**
- * What a repository looks like on the card.
- *
- * `recentBackups` is a struct of parallel arrays, newest first, so index `0` is the last run — and
- * absent entirely for a repository that has never backed up. Only `STATUS_SUCCESS` counts as
- * healthy, which is the line Backrest's own dashboard and the Glance widget both draw.
- */
+/** Only `STATUS_SUCCESS` counts as healthy, as on Backrest's own dashboard. */
+function healthOf(status: string | undefined): RepoHealth {
+  if (status === undefined) {
+    return "never-run";
+  }
+
+  return status === "STATUS_SUCCESS" ? "healthy" : "failed";
+}
+
+/** What a repository looks like on the card. */
 export function displayRepo(summary: BackrestRepoSummary): RepoBackup {
   const status = summary.recentBackups?.status?.[0];
 
   return {
     id: summary.id,
     status: status?.replace(/^STATUS_/, ""),
-    ok: status === "STATUS_SUCCESS",
+    health: healthOf(status),
     lastRunAt: moment(summary.recentBackups?.timestampMs?.[0]),
     successes: count(summary.backupsSuccessLast30days),
     bytesAdded: count(summary.bytesAddedLast30days),
     protectedBytes: count(summary.protectedBytes),
     nextBackupAt: moment(summary.nextBackupTimeMs),
   };
-}
-
-/** A repository that has never run, whose last run succeeded, or whose last run did not. */
-type RepoHealth = "never-run" | "healthy" | "failed";
-
-function repoHealth(repo: RepoBackup): RepoHealth {
-  if (repo.status === undefined) {
-    return "never-run";
-  }
-
-  return repo.ok ? "healthy" : "failed";
 }
 
 /** Muted for a repository that has not run, which is neither healthy nor failed. */
@@ -110,23 +104,20 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
               key={repo.id}
               className="items-start"
               media={
-                // The dot repeats what the status word below already says: colour alone is never
-                // the status.
+                // Decorative: the status word below says the same.
                 <span
                   aria-hidden="true"
-                  className={cn("mt-1.5 size-2 shrink-0 rounded-full", HEALTH_DOT_CLASS[repoHealth(repo)])}
+                  className={cn("mt-1.5 size-2 shrink-0 rounded-full", HEALTH_DOT_CLASS[repo.health])}
                 />
               }
               trailing={repo.lastRunAt !== undefined && <WidgetTime at={repo.lastRunAt} now={now} style="compact" />}
             >
               <p className="truncate font-medium text-primary">{repo.id}</p>
 
-              {/* One line, not two: everything a repository has to say fits beside everything
-                  else once the clock is written `18h` instead of `18 hours ago`. It wraps rather
-                  than truncating, so a narrow column loses nothing. */}
+              {/* Wraps rather than truncating, so a narrow column loses nothing. */}
               <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                 <WidgetMetadata>
-                  <span className={repoHealth(repo) === "failed" ? "text-destructive" : undefined}>
+                  <span className={repo.health === "failed" ? "text-destructive" : undefined}>
                     {repo.status ?? "No backup yet"}
                   </span>
                   <span>{repo.successes} ok / 30d</span>
@@ -143,14 +134,7 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
   );
 }
 
-/**
- * Per-repository backup health: the last run, how it went, and when the next one is due.
- *
- * The placement needs an explicit `link:`, unlike every other service widget here: the store gives
- * Backrest a Traefik router named `backup`, so the default `<container>.<DOMAIN>` guess —
- * `backrest.<DOMAIN>` — points at nothing. `url:` matters too, because the public host sits behind
- * the OIDC middleware while the container network answers straight away.
- */
+/** Per-repository backup health. Needs an explicit `link:`: the store's Traefik router for Backrest is `backup`. */
 export const backrestSummary = (service: WidgetService, ttl?: number) =>
   defineWidget({
     id: "backrest-summary",

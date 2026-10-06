@@ -1,7 +1,6 @@
 /**
- * Badge classes per `hangar.yml` colour. Written out in full because Tailwind only ships classes
- * it can read in the source: a `bg-${color}-500/10` template would compile to nothing.
- * An unknown colour keeps the bare `secondary` badge rather than dropping the category.
+ * Badge classes per `hangar.yml` colour, written out in full: Tailwind cannot see a `bg-${color}-500/10` template.
+ * An unknown colour keeps the bare `secondary` badge.
  */
 export const categoryBadgeClass: Record<string, string> = {
   blue: "bg-blue-500/10 text-blue-700 dark:text-blue-300",

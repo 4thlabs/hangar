@@ -1,12 +1,6 @@
 import * as z from "zod";
 
-/**
- * The dashboard, as the store declares it in `hangar.yml`.
- *
- * Kept free of JSX on purpose: `HangarConfig` validates the `widgets:` section
- * at load, and that module is also imported by the CLI, which must not pull
- * React in to parse a YAML file. The components live in `registry.ts`.
- */
+// The `widgets:` section of `hangar.yml`. No JSX: the CLI imports this; the components live in `registry.ts`.
 
 /** Grid columns a widget can be placed in. */
 export type DashboardColumn = 1 | 2 | 3;
@@ -17,29 +11,14 @@ const columnSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 const repositorySchema = z.string().regex(/^[\w.-]+\/[\w.-]+$/, "must be owner/repo");
 
 /**
- * The two addresses a widget backed by a self-hosted service has.
- *
- * `url` is where Hangar reaches it from the server — a container-network address,
- * so the dashboard does not leave the host to render. `link` is what the visitor
- * clicks, and is only needed for the rare stack whose Traefik router does not
- * follow the default `<container>.<DOMAIN>` rule.
- *
- * Both are pinned to http(s): `frigate:5000` parses as a perfectly valid URL —
- * scheme `frigate:`, path `5000` — and would sail through to ky as a base URL
- * nothing can be fetched from.
+ * `url`: server-side address. `link`: what the browser opens. http(s) only: `frigate:5000` would otherwise parse as
+ * scheme `frigate:`.
  */
 const serviceUrl = z.url({ protocol: /^https?$/ });
 
 const serviceUrlFields = { url: serviceUrl.optional(), link: serviceUrl.optional() };
 
-/**
- * How long this widget's data stays fresh, in seconds.
- *
- * Seconds because that is what an operator writes; the widget layer works in milliseconds and
- * converts once, in `registry.ts`. Absent means the widget layer's own default. Not offered to the
- * clock, which loads nothing, so there is nothing for a TTL to hold, nor to the Docker widget, which
- * renders the daemon's snapshots and moves with its events. Left on either, it is ignored.
- */
+/** Freshness in seconds; absent = widget default. Not offered to the clock and Docker widgets, which cache nothing. */
 const ttlField = { ttl: z.int().positive().optional() };
 
 export const widgetConfigSchema = z.discriminatedUnion("type", [
@@ -92,9 +71,6 @@ export class WidgetService {
   /** The service's key, if the operator set one. Looked up only by the widgets that need it. */
   readonly apiKey: () => Promise<string | undefined>;
 
-  /**
-   * @param service The two addresses and the key lookup
-   */
   constructor({ api, link, apiKey }: Pick<WidgetService, "api" | "link" | "apiKey">) {
     this.api = api;
     this.link = link;
@@ -102,17 +78,8 @@ export class WidgetService {
   }
 
   /**
-   * How a service widget reaches its service.
-   *
-   * The link is the rule Traefik applies to a stack that only says
-   * `traefik.enable=true` — `<container>.<DOMAIN>` — unless `hangar.yml` overrides
-   * it. The API calls the container directly when `url:` is declared, and otherwise
-   * goes back out through the public host, which is what every widget did before
-   * the two were told apart.
-   *
-   * The key is whatever `.env.global` holds under the container's name, and is
-   * read lazily: it is the operator's to provide, so an absent one is a service
-   * that takes no key, not a misconfiguration to report.
+   * `link` defaults to `https://<container>.<domain>`, `api` to `link`. The key is read lazily; an absent one means
+   * the service takes none.
    */
   static resolve(
     config: { url?: string | undefined; link?: string | undefined },
@@ -125,12 +92,7 @@ export class WidgetService {
     return new WidgetService({ link, api: config.url ?? link, apiKey: () => secret(containerName) });
   }
 
-  /**
-   * The service a widget declaration points at, resolved against the host.
-   *
-   * Only some members of the union carry URLs — a clock addresses nothing — so the narrowing is
-   * what keeps {@link WidgetService.resolve} honest about the two it may be handed.
-   */
+  /** The service a declaration points at; a type without `url` (a clock) gets the defaults. */
   static of(config: WidgetConfig, host: WidgetHost): WidgetService {
     return WidgetService.resolve(
       "url" in config ? { url: config.url, link: config.link } : {},
@@ -140,30 +102,18 @@ export class WidgetService {
     );
   }
 
-  /**
-   * `frigate-events` → the `frigate` app: a widget type is prefixed by the app it reads.
-   */
+  /** `frigate-events` → the `frigate` app: a widget type is prefixed by the app it reads. */
   static appOf(type: string) {
     return type.split("-")[0]!;
   }
 }
 
 /**
- * What tells one placed widget from another: its cache entry, its React key, and the path its
- * relayed images go through.
- *
- * The type alone is not enough — `hangar.yml` accepts two `github-releases` blocks watching
- * different repositories, or two Jellyfin servers — so the key is `<type>-<hash>`, the hash taken
- * over the whole declaration except `column`. Reordering the file or moving a card to another
- * column keeps its key, and with it its cached data; changing what it reads gives it a new one,
- * which is the point. A declaration repeated verbatim, or the odd hash collision, is told apart by
- * a `-2`, `-3`… suffix in declaration order.
+ * Identifies a placed widget (cache entry, React key, image relay path). `<type>-<hash>` over everything but `column`,
+ * so moving a card keeps its cached data; duplicates get `-2`, `-3`.
  */
 export class WidgetKey {
-  /**
-   * The key of every declaration, in the same order.
-   * @param configs The widgets the store places
-   */
+  /** The key of every declaration, in the same order. */
   static all(configs: readonly WidgetConfig[]): string[] {
     const seen = new Map<string, number>();
 
@@ -177,14 +127,7 @@ export class WidgetKey {
     });
   }
 
-  /**
-   * The declaration a key names, for code that is not the dashboard.
-   *
-   * `undefined` when the store places nothing under that key, which is the honest answer for a
-   * route asked to proxy for something the operator never configured.
-   * @param configs The widgets the store places
-   * @param key A key {@link all} handed out
-   */
+  /** The declaration a key names, or `undefined` when the store places nothing under it. */
   static find(configs: readonly WidgetConfig[], key: string): WidgetConfig | undefined {
     const index = WidgetKey.all(configs).indexOf(key);
 
@@ -212,10 +155,7 @@ export class WidgetKey {
   }
 }
 
-/**
- * The dashboard a store gets when its `hangar.yml` declares no `widgets:`.
- * An existing install keeps the dashboard it had before the section existed.
- */
+/** The dashboard of a store whose `hangar.yml` declares no `widgets:`. */
 export const defaultWidgets: readonly WidgetConfig[] = [
   { type: "clock", column: 1 },
   { type: "docker-general-stats", column: 1 },

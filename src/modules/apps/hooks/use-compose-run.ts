@@ -5,16 +5,7 @@ import { useRouter } from "waku";
 import type { AppOperation } from "#modules/apps/actions/app-operation.ts";
 import type { DestructiveOperation } from "#modules/apps/components/compose-operations.tsx";
 
-/**
- * The state both compose callers hold: the app detail page acting on one project, and the apps
- * table acting on a selection. They differ only in what they target and how they word their
- * confirmation, so the running operation, the confirmation dialog and the reload live here.
- *
- * Nothing reports the outcome: the route notifies once each command ends, and the notification
- * comes back on its own stream — a toast raised here would be the same news, twice.
- *
- * @param projects The apps the next command applies to
- */
+/** Compose run state for the table and the detail page. No toast: the route's notification reports the outcome. */
 export function useComposeRun(projects: string[]) {
   const router = useRouter();
   const [confirmation, setConfirmation] = useState<DestructiveOperation | null>(null);

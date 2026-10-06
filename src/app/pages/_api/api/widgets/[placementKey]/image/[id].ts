@@ -5,18 +5,11 @@ import { widgetImages } from "#modules/widgets/server/server.ts";
 /** A poster or a thumbnail never changes; a day of browser cache saves the service the repeat. */
 const CACHE = "private, max-age=86400";
 
-/**
- * Relays one widget's image.
- *
- * The point is what the browser cannot do itself: fetching a Jellyfin poster straight from the
- * source would print the API key into the dashboard's HTML, and a Frigate thumbnail sits behind
- * the OIDC middleware, which answers an `<img>` with a login redirect. Hangar fetches both on the
- * container network instead, and `apiRoute` turns an anonymous request away before any of it runs.
- */
-export const GET = apiRoute<ApiContext<"/api/widgets/[widget]/image/[id]">>(
+/** Relays a widget image: keeps API keys out of the HTML and gets past OIDC. */
+export const GET = apiRoute<ApiContext<"/api/widgets/[placementKey]/image/[id]">>(
   { log: "Failed to proxy a widget image", unavailable: "Les images des widgets sont indisponibles." },
   async (_request, { params }) => {
-    const image = await widgetImages.fetch(params.widget, params.id);
+    const image = await widgetImages.fetch(params.placementKey, params.id);
 
     // No such placement, a widget that relays nothing, or an id no service would issue.
     if (!image) {

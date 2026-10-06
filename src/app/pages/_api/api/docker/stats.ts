@@ -15,11 +15,7 @@ function frame(current: Samples, previous: Samples) {
   return sseEvent(Object.fromEntries(metrics));
 }
 
-/**
- * Each connection keeps its own previous sample: a CPU percentage is a delta between two reads,
- * and one-shot samples cost ~2ms apiece, so there is nothing worth sharing between connections.
- * @param first The sample taken before the response, so a dead daemon is a 503 and not an empty stream
- */
+/** Each connection keeps its own previous sample: a CPU percentage is a delta, and a sample costs only ~2 ms. */
 async function* frames(first: Samples, signal: AbortSignal) {
   let previous: Samples = new Map();
   let current = first;
@@ -33,25 +29,18 @@ async function* frames(first: Samples, signal: AbortSignal) {
       current = await docker.sampleStats();
     }
   } catch (error) {
-    // The client went away, or the daemon did after a good first frame. Ending the stream is all
-    // that is left: the status line is long gone, so the browser reconnects and gets the 503 then.
-    // Only the second is worth a line: a closed tab is the normal way for this stream to end.
+    // Client gone (normal, not logged) or daemon failed; the browser reconnects and gets the 503.
     if (!signal.aborted) {
       logger.warn("Docker statistics stream failed", { error });
     }
   }
 }
 
-/**
- * Live resource usage for every running Compose container, as Server-Sent Events. The payload is
- * keyed by full container id, so the same stream serves one app's container table and the
- * whole-inventory totals — a caller reads the ids it happens to be showing.
- */
+/** Live resource usage of every running Compose container over SSE, keyed by full container id. */
 export const GET = apiRoute(
   { log: "Failed to stream Docker container statistics", unavailable: "Les statistiques Docker sont indisponibles." },
   async request => {
-    // Sampled before the response so an unreachable daemon surfaces as a 503 with a message,
-    // rather than as a 200 that streams nothing and has the browser reconnect forever.
+    // Sampled first so a dead daemon is a 503, not an empty 200.
     const first = await docker.sampleStats();
 
     return sseStream(frames(first, request.signal));

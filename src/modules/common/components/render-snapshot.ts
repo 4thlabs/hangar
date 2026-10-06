@@ -2,16 +2,8 @@ import type { ReactNode } from "react";
 import type { Snapshot } from "#libs/cache";
 
 /**
- * Renders a snapshot synchronously when it is warm, and only awaits it when it is cold.
- *
- * The other half of `Warm`: that one leaves the Suspense boundary out for a warm child, this
- * is what makes the child actually warm. An async component suspends however fast its promise
- * settles, so the warm path must not await anything — returning a promise only on the cold path is
- * what keeps a warm page from painting its fallback at all.
- *
- * @param show Renders the data; called on both paths, so they cannot render differently
- * @param onError Renders a failed load in place, rather than letting the route error boundary take
- * the whole page down. Only load errors reach it: `show` is not wrapped.
+ * Renders synchronously when warm, awaits only when cold: an async component suspends however fast it settles.
+ * `onError` renders a failed load in place and handles load errors only; `show` is not wrapped.
  */
 export function renderSnapshot<T>(
   snapshot: Snapshot<T>,

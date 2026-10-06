@@ -8,10 +8,7 @@ type AppsCategoryFilterProps = {
   counts: Record<string, number>;
 };
 
-/**
- * Categories are listed from the installed apps rather than from `hangar.yml`: a category whose
- * stacks are all uninstalled would only add an option that filters to nothing.
- */
+/** Lists categories from the installed apps, not `hangar.yml`, so no option filters to nothing. */
 export function AppsCategoryFilter({ counts }: AppsCategoryFilterProps) {
   const search = useSearch_UNSTABLE({ from: "/apps" });
   const setSearch = useSetSearch_UNSTABLE({ from: "/apps" });

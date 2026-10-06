@@ -35,12 +35,6 @@ export interface Dashboard {
   };
 }
 
-/**
- * The arcane result envelope.
- *
- * Discriminated on `success`: on a failure envelope `data` is absent, so a
- * non-optional `data` would let the compiler wave through `response.data`
- * on a path where it does not exist.
- */
+/** The Arcane result envelope, discriminated on `success`: a failure still answers 200, with no `data`. */
 export type ArcaneResult<T> =
   { success: true; data: T; detail?: string } | { success: false; data?: undefined; detail?: string };

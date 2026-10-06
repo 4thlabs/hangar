@@ -19,7 +19,6 @@ type ArcaneGeneralStatsCardProps = {
   serviceUrl: string;
 };
 
-/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
 const chrome = { title: "Arcane", icon: <IconSelfh name="arcane" />, className: "@container min-h-64" };
 
 function actionColor(severity: string) {
@@ -108,7 +107,6 @@ export const arcaneGeneralStats = (service: WidgetService, ttl?: number) =>
     load: async (environment: number = 0) => {
       const response = await (await ArcaneClient.connect(service)).getDashboard(environment);
 
-      // The API answers 200 with success:false; treat that as a load failure.
       if (!response.success) {
         throw new Error(response.detail ?? "Unsuccessful response");
       }

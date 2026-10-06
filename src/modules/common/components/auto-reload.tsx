@@ -4,9 +4,8 @@ import { useEffect } from "react";
 import { useRouter } from "waku";
 
 /**
- * Re-renders the current route on an interval, so a page backed by live server data stays
- * current without a client-side fetch layer. Skipped while the tab is hidden: nobody is
- * looking, and the reload would keep hitting the Docker daemon for nothing.
+ * Re-renders the current route on an interval, so live server data stays current without a fetch layer.
+ * Skipped while the tab is hidden, so it does not keep hitting the Docker daemon for nobody.
  */
 export function AutoReload({ seconds = 30 }: { seconds?: number }) {
   const router = useRouter();

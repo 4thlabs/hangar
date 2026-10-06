@@ -5,19 +5,16 @@ import { notifications } from "#libs/notifications/server";
 import { logger } from "#libs/logs";
 
 /**
- * How often the stream looks for new notifications.
- * ponytail: polling the same SQLite rather than a pub/sub bus, because a Sidequest job writes
- * from another process where an in-memory emitter would never be heard. Swap it for a real bus
- * the day the delay is felt.
+ * Polls SQLite: jobs write from another process, where an in-memory emitter would never be heard.
+ * ponytail: swap for a real pub/sub bus the day the delay is felt.
  */
 const INTERVAL = 3_000;
 
 async function* frames(userId: string, from: Date, signal: AbortSignal) {
   let cursor = from;
 
-  // The cursor is a millisecond and several notifications can share one, so the query bound is
-  // inclusive and these are the ids already sent at that exact millisecond. Without them the
-  // last notification of every batch would be re-sent on every tick, forever.
+  // The cursor bound is inclusive and notifications can share a millisecond: these ids were already sent at
+  // that millisecond, or the last of every batch would be re-sent on every tick.
   const alreadySent = new Set<string>();
 
   try {
@@ -41,29 +38,20 @@ async function* frames(userId: string, from: Date, signal: AbortSignal) {
       }
       cursor = new Date(newest);
 
-      // A notification is how a Sidequest job tells this process it finished, and the client
-      // answers this frame with a page reload: the "Mises à jour disponibles" toast must not land
-      // on a badge still read from the previous check. One local SQLite read to refill, so any
-      // notification is reason enough. Nothing for the Docker snapshots: the daemon's events
-      // already refresh those, whichever process changed the containers.
+      // A notification may mean a job finished: refresh the image report first, since the client reloads on it.
       imageCheckReport.invalidate();
 
       yield sseEvent(fresh);
     }
   } catch (error) {
-    // The client went away, or the database did. Ending the stream is all that is left: the
-    // status line is long gone, so the browser reconnects and gets the error then.
-    // Only the second is worth a line: a closed tab is the normal way for this stream to end.
+    // Client gone (normal, not logged) or database failed; the browser reconnects and gets the error.
     if (!signal.aborted) {
       logger.warn("Notification stream failed", { error, userId });
     }
   }
 }
 
-/**
- * The signed-in user's notifications as they are filed, as Server-Sent Events.
- * @param since Epoch milliseconds of the newest notification the client already holds
- */
+/** The signed-in user's notifications over SSE, from `?since=` (epoch ms of the newest one the client holds). */
 export const GET = apiRoute(
   { log: "Failed to stream notifications", unavailable: "Les notifications sont indisponibles." },
   async (request, _context, session) => {

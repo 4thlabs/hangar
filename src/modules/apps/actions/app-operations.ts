@@ -17,12 +17,7 @@ type AppOperationRefusal = {
   message: string;
 };
 
-/**
- * Checks a compose command targets a well-formed name of an app Hangar installed and manages.
- * The operation itself is already narrowed by the caller.
- * @param project The Compose project name
- * @returns Why the command was refused, or `null` when it may run
- */
+/** Why a compose command on `project` is refused (malformed name, or not an app Hangar manages), or `null`. */
 export function refuseAppOperation(project: string): AppOperationRefusal | null {
   if (!COMPOSE_PROJECT_NAME.test(project)) {
     return { reason: "invalid", message: "La commande Docker Compose est invalide." };

@@ -12,40 +12,18 @@ const INTERVAL = 30_000;
 /** Reused across HMR reloads, otherwise dev stacks a second loop and event stream on every edit. */
 const globalForWarm = globalThis as unknown as { warmTimer?: NodeJS.Timeout; dockerEvents?: DockerEvents };
 
-/**
- * Fills every cache the first page render reads from, so it reads from memory instead of waiting.
- *
- * A widget and the apps page both suspend while their data loads, which is a skeleton or a spinner
- * on screen. The caches underneath answer instantly once they hold something — but they are filled
- * on read, so without this the very first visitor is the one who fills them, and pays for it.
- *
- * Each read here goes through its own cache, so a value still fresh costs a map lookup and the TTL,
- * not this interval, is what decides how often a service is really asked.
- */
+/** Fills the caches the first render reads. Each cache's TTL, not INTERVAL, decides how often services are asked. */
 function tick() {
   const widgets = widgetRegistry.resolve(hangar.store.config.widgets());
 
-  // Failures are the render's to report, not the loop's: a service that is down leaves nothing
-  // cached and the widget falls back to its error card, exactly as it would without warming.
-  // Each page contributes one snapshot, so this list cannot fall behind what a page actually
-  // reads the way a hand-written list of ingredients did.
+  // Failures are the render's to report: a service that is down leaves nothing cached and the widget shows its
+  // error card. One snapshot per page, so this list cannot fall behind what a page reads.
   void Promise.all([appsSnapshot.warm(), ...widgets.map(placement => placement.widget.warm())]);
 }
 
 /**
- * Starts the warm loop and follows the Docker daemon's events, once per process: the loop fills the
- * caches ahead of the first render, the events keep the Docker ones current between ticks, whoever
- * changed the containers.
- *
- * Waku awaits every middleware factory before it runs the chain, so this must not await: the first
- * tick goes out behind the response rather than in front of it, and the event stream connects
- * behind it too. It is also the earliest safe place to start — module scope in the RSC graph is
- * evaluated by `waku build`, where there is no daemon and no service to reach, while middleware
- * modules are only bundled, never run.
- *
- * In production the first request is the container healthcheck hitting `/login` about ten seconds
- * in, so the caches are warm long before anyone navigates. In dev the first request is usually the
- * page being loaded, so a skeleton shows once per dev server start.
+ * Starts the warm loop and Docker events once per process. Must not await: Waku awaits middleware factories,
+ * and `waku build` evaluates module scope with no daemon.
  */
 export default (): MiddlewareHandler => {
   clearInterval(globalForWarm.warmTimer);
@@ -64,10 +42,8 @@ export default (): MiddlewareHandler => {
 
   let first = true;
 
-  // Waku skips the rest of the chain on a falsy handler, so this passes through rather than
-  // returning nothing. The first tick waits for one request to finish because `jobs-runner` only
-  // configures Sidequest after its own `next()`, and a widget reading the last image check before
-  // that logs an error and renders without its update badges.
+  // Waku skips the rest of the chain on a falsy handler, so this passes through. The first tick waits for one
+  // request: `jobs-runner` configures Sidequest only after its own `next()`, and the image check needs it.
   return async (_c, next) => {
     await next();
 

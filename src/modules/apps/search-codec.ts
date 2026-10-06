@@ -24,12 +24,8 @@ export type AppsSearch = {
 };
 
 /**
- * Search params of `/apps`. `status`, `category` and `update` are comma-separated multi-selects: an empty
- * list means "no filter", so the default state stays out of the URL entirely. Unknown statuses are
- * dropped rather than rejected, for the same reason the store falls back to `"all"`.
- *
- * Categories come from the user's `hangar.yml`, so there is no closed list to validate against:
- * values are kept as written, and one that matches nothing simply yields no rows.
+ * Search params of `/apps`. Comma-separated multi-selects; empty = no filter, unknown statuses dropped.
+ * Categories come from the user's `hangar.yml`: kept as written, and one that matches nothing yields no rows.
  */
 export const appsSearchCodec: Unstable_SearchCodec<AppsSearch> = {
   id: "apps",

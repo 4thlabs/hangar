@@ -7,9 +7,8 @@ import { logger } from "#libs/logs";
 import * as z from "zod";
 
 /**
- * What the browser is allowed to put in .env.global. Everything here ends up in a file every
- * container reads, so a stray newline in a value is a way to inject a variable: validate at
- * the boundary, before the file is touched.
+ * What the browser may put in .env.global. Every container reads that file, so a stray newline in a value
+ * would inject a variable.
  */
 const payloadSchema = z.object({
   updates: z.record(
@@ -22,9 +21,8 @@ const payloadSchema = z.object({
 export type EnvPayload = z.infer<typeof payloadSchema>;
 
 /**
- * Saves the global environment. The write itself reconciles with the file on disk, so a
- * variable added by hand since the page was rendered survives this save: only the names in
- * `remove` are dropped.
+ * Saves the global environment, reconciled with the file on disk: a variable added by hand since the page was
+ * rendered survives, and only the names in `remove` are dropped.
  */
 export const saveEnv = async (payload: EnvPayload): Promise<ActionResult> => {
   await requireSession();

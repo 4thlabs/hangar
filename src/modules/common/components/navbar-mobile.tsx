@@ -38,20 +38,8 @@ export function MobileSearch() {
 }
 
 /**
- * The phone's navigation: the same four destinations the header shows from `sm`, as a bar pinned
- * to the bottom of the screen.
- *
- * A second tree, where the navbar keeps one — and allowed to be, because what is duplicated has
- * no state to duplicate. The rule protects controls that run twice with their own effects and
- * subscriptions (two user menus, two notification streams); these are four `Link`s. And they
- * could not be one element anyway: the header owns one, the app layout the other.
- *
- * `sticky`, not `fixed`: it keeps its place in the flow, so it reserves its own height and the
- * page below it needs no bottom padding. Its containing block is the layout's `min-h-svh` column,
- * whose bottom edge is the bottom of the document — so it stays pinned for the whole scroll.
- *
- * `position: "bottom"` is ignored: the category split is the old sidebar's, and a tab bar reads
- * as one row of peers.
+ * Phone tab bar. A second tree is fine here: stateless links only.
+ * `sticky`, not `fixed`, so it reserves its own height and the page needs no bottom padding.
  */
 export function MobileTabBar() {
   const router = useRouter();

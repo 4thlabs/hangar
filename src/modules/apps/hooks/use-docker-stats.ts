@@ -18,18 +18,8 @@ export const EMPTY_METRICS: ContainerMetrics = {
 };
 
 /**
- * Subscribes to the live container statistics stream. Metrics are keyed by full container id and
- * cover the whole host, so `containerIds` is what scopes the totals to what the caller is showing
- * — one app's containers or every installed app's. `EventSource` reconnects on its own, and
- * carries the session cookie.
- *
- * Dropped while the tab is hidden, the way `AutoReload` skips its reload: one frame costs the
- * daemon a stats call per running container, every second, and a tab left open in the background
- * would go on paying that forever for a page nobody is looking at.
- *
- * @param containerIds The containers the caller's totals cover
- * @returns The latest frame (empty until the first one arrives, about a second in), and a
- * totaliser over those ids that ignores the containers the stream has no sample for
+ * Live stats over SSE, by container id, totalled over `containerIds`; closed while the tab is hidden.
+ * Each frame costs the daemon a stats call per running container, every second.
  */
 export function useDockerStats(containerIds: readonly string[]) {
   const [stats, setStats] = useState<ContainerStats>({});

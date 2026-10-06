@@ -13,23 +13,13 @@ type ActionToastTitles = {
 };
 
 /**
- * Runs a server action in a transition and toasts its outcome, including the case the action
- * never came back at all — a rejected call is a transport failure, not a failed operation, and
- * the two need different wording.
- *
- * `run` takes something returning an `ActionResult` and nothing more: callers that aggregate
- * several results, or that read an outcome off a stream, build their `ActionResult` first and pass
- * a function returning it. Titles are per call, not per hook, so they may depend on state set in
- * the same event — a hook-level closure would still hold the previous render's value.
+ * Runs a server action in a transition and toasts its outcome. A rejected call is a transport failure,
+ * not a failed operation, and gets its own wording.
  */
 export function useServerAction() {
   const [isPending, startTransition] = useTransition();
 
-  /**
-   * @param action The call to run
-   * @param titles Toast wording for this call
-   * @param onSettled Runs after the toast, whether the action succeeded, failed or never returned
-   */
+  /** `onSettled` runs after the toast, whether the action succeeded, failed or never returned. */
   const run = <R extends ActionResult>(
     action: () => Promise<R>,
     titles: ActionToastTitles,

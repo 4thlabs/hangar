@@ -5,10 +5,7 @@ import { requireSession } from "#libs/auth";
 import { Sidequest } from "sidequest";
 import { logger } from "#libs/logs";
 
-/**
- * Sidequest's `force`: reset and rerun the job whatever its state and attempts. Without it, a
- * completed or failed job — the ones the Jobs card offers to rerun — would not run again.
- */
+/** Sidequest's `force`: without it, a completed or failed job (the ones the Jobs card offers) would not run again. */
 const FORCE_RERUN = true;
 
 /** Runs a job again from the Jobs settings card. */

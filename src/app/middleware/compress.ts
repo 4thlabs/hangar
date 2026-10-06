@@ -8,41 +8,19 @@ import type { MiddlewareHandler } from "hono/types";
 /** Below this, the gzip header costs more than the encoding saves. Only checked when the length is known. */
 const THRESHOLD = 1_024;
 
-/**
- * Waku's default `rscBase`, under the default `basePath`. Neither is overridden in
- * `waku.config.ts`; a change there has to be mirrored here. See {@link compressible}.
- */
+/** Waku's default `rscBase` under the default `basePath`; mirror any change to `waku.config.ts` here. */
 const RSC_PREFIX = "/RSC/";
 
 /**
- * Whether a response is worth encoding.
- *
- * An RSC payload arrives here as a bare `new Response(stream)` with **no headers at all** — the
- * `text/plain` you see on the wire is added further down, by the Node server. So the content
- * type cannot be the only test, or the payloads that matter most (70 kB for `/store`, resent on
- * every navigation) are the exact ones that go out raw. A missing type is trusted only under the
- * RSC prefix; anywhere else it could be anything, and an unknown body is left alone.
+ * Whether a response is worth encoding. An RSC payload arrives with no headers at all (Node adds `text/plain`
+ * later), so a missing type is trusted under the RSC prefix only.
  */
 const compressible = (type: string | null, path: string) =>
   type === null ? path.startsWith(RSC_PREFIX) : COMPRESSIBLE_CONTENT_TYPE_REGEX.test(type);
 
 /**
- * Compresses what Waku itself answers: the HTML shell, every RSC payload, and the JSON API
- * routes. Nothing did before, and the RSC payloads are the worst of it — `/store` alone is 70 kB
- * of text that gzips to 4.5 kB, paid again on every navigation.
- *
- * Not `hono/compress`: it encodes through `CompressionStream`, which holds everything until the
- * stream ends. That is fine for a buffered response and wrong for every page here, which streams
- * a shell and fills its Suspense boundaries afterwards — a 2 kB shell followed by a 1.5 s wait
- * came out at 1511 ms rather than 2 ms. `Z_SYNC_FLUSH` ends a deflate block per chunk instead,
- * so the shell reaches the browser while the daemon is still being asked.
- *
- * Sorts first in `middleware/`, which is the order Waku runs them in, so it wraps the others.
- * The content-type test is Hono's own, and its `text/(?!event-stream)` is what leaves the two
- * live streams alone — an SSE frame inside a compression buffer is a frame nobody receives.
- *
- * Not the static assets: the adapter serves `/assets/*` before any of this runs. Those are the
- * reverse proxy's job — see the `compress` middleware on the router in `compose.prod.yml`.
+ * Gzips with Z_SYNC_FLUSH so streamed Suspense chunks flush per chunk (hono/compress buffers to the end).
+ * Skips SSE (Hono's content-type test); /assets is the reverse proxy's job.
  */
 export default (): MiddlewareHandler =>
   async function compress(c, next) {
@@ -64,10 +42,8 @@ export default (): MiddlewareHandler =>
 
     const gzip = zlib.createGzip({ flush: zlib.constants.Z_SYNC_FLUSH });
 
-    // Detached on purpose: the response is the compressor's readable end, which is already
-    // flowing to the client. A failure upstream destroys `gzip`, which ends that stream — the
-    // status line left long ago, so a truncated body is all the client can be told. A client that
-    // hung up is the normal case and not logged.
+    // Detached: the response is gzip's readable end, already flowing, so a failure can only truncate the body.
+    // A client that hung up is the normal case and not logged.
     void pipeline(Readable.fromWeb(body as never), gzip).catch((error: unknown) => {
       if (!c.req.raw.signal.aborted) {
         logger.warn("Compressing a response failed", { error, path: c.req.path });

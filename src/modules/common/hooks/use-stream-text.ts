@@ -15,11 +15,8 @@ export const streamStatusLabel: Record<StreamStatus, string> = {
 };
 
 /**
- * Reads a chunked text endpoint (container logs, compose output) and exposes it as
- * growing text, capped at the last {@link MAX_STREAM_CHARACTERS} characters.
- * Pass a `null` endpoint to stay idle; the request is aborted on unmount or endpoint change.
- * @param endpoint The URL to stream, or `null` to not connect
- * @param method HTTP method used for the request
+ * Streams a chunked text endpoint (container logs, compose output), keeping the last {@link MAX_STREAM_CHARACTERS}.
+ * A `null` endpoint stays idle; the request is aborted on unmount or endpoint change.
  */
 export function useStreamText(endpoint: string | null, method: "GET" | "POST" = "GET") {
   const [text, setText] = useState("");

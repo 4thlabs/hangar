@@ -24,30 +24,19 @@ export interface FrigateStats {
 
 /** Talks to one Frigate instance. */
 export class FrigateClient extends ServiceClient {
-  /**
-   * Opens a client for the Frigate instance `service` points at.
-   */
   static async connect(service: WidgetService) {
     return new FrigateClient(await ServiceClient.client(service));
   }
 
-  /**
-   * Gets the most recent Frigate events.
-   */
   getEvents(limit: number = 5) {
     return this.http.get<FrigateEvent[]>("events", { searchParams: { limit } }).json();
   }
 
-  /**
-   * Gets Frigate runtime statistics.
-   */
   getStats() {
     return this.http.get<FrigateStats>("stats").json();
   }
 
-  /**
-   * Fetches one event's thumbnail as raw bytes, for Hangar to relay.
-   */
+  /** One event's thumbnail as raw bytes, for `WidgetImages` to relay. */
   getThumbnail(eventId: string) {
     return this.http.get(`events/${eventId}/thumbnail.jpg`);
   }

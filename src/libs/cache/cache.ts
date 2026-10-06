@@ -1,87 +1,47 @@
-/**
- * One cached read: the promise as it was handed out, the value it settled to once it has one, and
- * when it stops being fresh.
- *
- * The settled value is kept separately, and carried across a reload, so a reader can have it
- * *without awaiting* — see {@link Cache.peek}. Wrapped in an object so a cached `undefined` is
- * still distinguishable from nothing cached.
- *
- * `next` is the reload {@link Cache.revalidate} queued behind a load still in flight, shared by
- * every revalidation that arrives before that load lands.
- */
+/** One cached read. */
 type CacheEntry = {
+  /** The load as it was handed out. */
   value: Promise<unknown>;
+  /** What it settled to, kept across a reload for {@link Cache.peek}; boxed so `undefined` can be cached. */
   settled?: { data: unknown } | undefined;
+  /** When it stops being fresh; infinite while the load is in flight. */
   until: number;
+  /** The reload {@link Cache.revalidate} queued behind an in-flight load, shared by later calls. */
   next?: Promise<void> | undefined;
 };
 
 /** Swallows a settlement, for the promises whose callers only need to know it happened. */
 const settle = () => undefined;
 
-/**
- * One cached read, with its key, TTL, grace and loader already bound — see {@link Cache.define}.
- *
- * This is what a consumer holds. Repeating the four arguments at every call site is how the same
- * read ends up cached under two slightly different descriptions, so they are spelled once and the
- * three ways of asking for the value all come from that one declaration.
- */
+/** One cached read with its key, TTL, grace and loader bound once — see {@link Cache.define}. */
 export type Snapshot<T> = {
-  /**
-   * The value, awaiting a load when there is nothing usable cached.
-   */
+  /** The value, awaiting a load when there is nothing usable cached. */
   read(): Promise<T>;
-  /**
-   * The value without awaiting anything, or `undefined` to say "ask properly".
-   */
+  /** The value without awaiting anything, or `undefined` to say "ask properly". */
   peek(): { data: T } | undefined;
   /**
-   * Fills the snapshot ahead of a render.
-   *
-   * Never rejects, and that is the point: a source being down is the render's to report, through
-   * whatever fallback it already has, and an unhandled rejection in a background tick would take
-   * the process with it.
+   * Fills the snapshot ahead of a render. Never rejects: a source being down is the render's to
+   * report, and an unhandled rejection in a background tick would kill the process.
    */
   warm(): Promise<void>;
   /**
-   * Reloads now, whatever the snapshot's age, for whoever learns the source has changed. Readers
-   * keep the current value until the new one lands, so this never puts a spinner on screen.
-   *
-   * Resolves once a load started after the call has settled, so a caller that awaits it reads the
-   * new state — at once when nothing is cached, since the next read goes to the source anyway.
-   * Never rejects, for the same reason as {@link warm}.
+   * Reloads now, for whoever learns the source has changed; readers keep the current value
+   * meanwhile. Resolves once a load started after the call has settled. Never rejects.
    */
   refresh(): Promise<void>;
 };
 
 /**
- * A cache of snapshots: reads that answer from the last snapshot and refresh themselves behind
- * the caller. Each read it holds is handed out as a {@link Snapshot}.
- *
- * Nothing in here is on a timer: a value is only reloaded because somebody asked for it. Filling
- * it *before* anyone asks is a caller's job — see `src/app/middleware/cache-warm.ts`, which is
- * what keeps a first page render from waiting on anything.
- *
- * Holds no state of its own beyond the map, so a composition root can own one per concern: the
- * Docker client has one for its daemon reads, the widget layer one for every widget's `load`.
+ * Reads that answer from the last snapshot and refresh themselves behind the caller. No timer:
+ * filling it before anyone asks is `src/app/middleware/cache-warm.ts`'s job.
  */
 export class Cache {
-  /** Every cached read, by key. */
   private readonly entries = new Map<string, CacheEntry>();
 
   /**
-   * Serves `key` from the last snapshot, and refreshes it behind the caller once it goes stale.
-   * A read inside `ttl` is the snapshot; a read within `grace` past it is *still* the snapshot,
-   * handed back at once with a reload started behind it; past that the caller waits on `load` and
-   * gets its error.
-   *
-   * `grace` therefore has one plain meaning: how long a broken source stays hidden. A reload that
-   * fails restores the entry it replaced, timestamp and all, so the snapshot keeps ageing and the
-   * next read past `ttl + grace` surfaces the real error rather than a stale answer forever.
-   *
-   * Only raw reads belong in here, never anything derived from one: a "not found" thrown downstream
-   * of a cached value must stay downstream of it, or it gets cached as though it were the value.
-   *
+   * Serves `key` from the snapshot: as is within `ttl`, with a reload behind it within `grace`
+   * past that, and by awaiting `load` beyond. `grace` is how long a broken source stays hidden.
+   * Cache raw reads only: an error derived from a cached value would get cached as the value.
    * @param key Which read this is; also the unit {@link clear} drops
    * @param ttl How long the value is fresh, in milliseconds
    * @param grace How long past `ttl` it is still served while reloading
@@ -105,18 +65,8 @@ export class Cache {
   }
 
   /**
-   * The value, if one is cached and still usable, **without awaiting anything**.
-   *
-   * This is what keeps a page from painting a spinner. A React component that awaits suspends, and
-   * a suspended boundary puts its fallback in the shell however fast the promise settles — so a
-   * warm cache alone buys a quicker swap, not the absence of one. Reading synchronously is the only
-   * thing that stops the boundary existing.
-   *
-   * Same staleness rules as {@link read}, including starting a reload behind the caller, and the
-   * settled value is carried across that reload — so a refresh in flight never costs a reader the
-   * snapshot it could have had.
-   *
-   * `undefined` means "ask properly": nothing cached, or what is cached is past `ttl + grace`.
+   * The value without awaiting, or `undefined` ("ask properly"). Awaiting would suspend and paint a
+   * fallback however warm the cache is. Same staleness rules as {@link read}.
    */
   peek<T>(key: string, ttl: number, grace: number, load: () => Promise<T>): { data: T } | undefined {
     const entry = this.entries.get(key);
@@ -131,9 +81,7 @@ export class Cache {
       return entry.settled as { data: T };
     }
 
-    // Stale but inside the grace window: hand back what we have, reload behind it. The floating
-    // promise is safe only because `refresh` attaches its own handler to it — without that, a
-    // source going down would surface as an unhandled rejection, which by default kills the process.
+    // Stale but within grace. Floating is safe: `refresh` attaches its own rejection handler.
     if (now < entry.until + grace) {
       void this.refresh(key, entry, ttl, load);
 
@@ -144,19 +92,14 @@ export class Cache {
   }
 
   /**
-   * Loads a fresh value into `key` and publishes it once it settles.
-   *
-   * Both handlers check they still own the slot before touching it: a load started before a
-   * {@link clear} can settle after it, and must not publish what that clear declared untrue.
-   *
+   * Loads a fresh value into `key` and publishes it once it settles, unless a {@link clear} replaced
+   * the entry meanwhile.
    * @param previous The entry being replaced, restored as-is if the load fails
    */
   private refresh<T>(key: string, previous: CacheEntry | undefined, ttl: number, load: () => Promise<T>): Promise<T> {
     const value = load();
 
-    // Carries the old settled value, so a reader during the reload still gets it instead of waiting.
-    // In flight it never expires, so concurrent callers share one round trip; staleness only
-    // starts once it has settled.
+    // Keeps the old value for readers; never expires in flight, so concurrent callers share the load.
     const entry: CacheEntry = { value, settled: previous?.settled, until: Number.POSITIVE_INFINITY };
 
     this.entries.set(key, entry);
@@ -185,16 +128,8 @@ export class Cache {
   }
 
   /**
-   * Reloads `key` now, whatever its age, while readers keep the snapshot until the new value lands.
-   * For whoever learns the source changed: unlike {@link clear}, nothing goes missing in between,
-   * so a page rendered meanwhile still paints at once.
-   *
-   * A load already in flight may have left before the change, so it is never taken as the answer:
-   * it is let land, then one more load goes out. Every revalidation arriving before it lands shares
-   * that one follow-up rather than queueing its own.
-   *
-   * Nothing cached is left alone: nobody has read it yet, and the first read goes to the source.
-   *
+   * Implements {@link Snapshot.refresh}. A load in flight may predate the change, so one more load
+   * follows it, shared by every call that arrives meanwhile. Nothing cached is left alone.
    * @returns Settles once a load started after this call has, and never rejects
    */
   revalidate<T>(key: string, ttl: number, load: () => Promise<T>): Promise<void> {
@@ -213,13 +148,7 @@ export class Cache {
     return this.refresh(key, entry, ttl, load).then(settle, settle);
   }
 
-  /**
-   * Binds one read's key, TTL, grace and loader into a handle.
-   *
-   * Prefer this to calling {@link read} and {@link peek} directly: those take the same four
-   * arguments, so every consumer that wants both spells them twice and nothing stops the two
-   * copies drifting apart.
-   */
+  /** Binds one read's key, TTL, grace and loader into a {@link Snapshot}; prefer it to {@link read}. */
   define<T>(key: string, ttl: number, grace: number, load: () => Promise<T>): Snapshot<T> {
     return {
       read: () => this.read(key, ttl, grace, load),
@@ -233,20 +162,13 @@ export class Cache {
     };
   }
 
-  /**
-   * Drops every snapshot, so the next read goes back to the source.
-   */
+  /** Drops every snapshot, so the next read goes back to the source. */
   clear() {
     this.entries.clear();
   }
 
   /**
-   * A snapshot derived from one or two others.
-   *
-   * Caches nothing of its own — the sources do that, and `project` is a pure rearrangement run per
-   * read. That is what keeps a projection from becoming a second cached copy of the same data, with
-   * its own TTL to fall out of step.
-   *
+   * A snapshot derived from one or two others. Caches nothing itself, so it cannot drift from them.
    * @param project Builds the derived value; must stay pure, since it runs on every read and peek
    */
   static join<A, B>(a: Snapshot<A>, project: (a: A) => B): Snapshot<B>;
@@ -258,8 +180,7 @@ export class Cache {
     return {
       read: async () => project(...(await Promise.all(sources.map(source => source.read())))),
       peek: () => {
-        // Every source is peeked before anything is decided: a peek is what starts a stale entry's
-        // reload, so returning early on the first cold one would leave the rest ageing untouched.
+        // Peek every source first: a peek is what starts a stale entry's reload.
         const ready = sources.map(source => source.peek());
         const values: unknown[] = [];
 

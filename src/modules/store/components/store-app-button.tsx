@@ -33,10 +33,7 @@ type StoreAppButtonProps = {
   uninstallApp: (appId: string) => Promise<StoreActionResult>;
 };
 
-/**
- * The only interactive part of a store card, split out so the card itself stays a server
- * component: the whole catalogue would otherwise ship to the client for one button per app.
- */
+/** A store card's only interactive part, split out so the card stays a server component. */
 export function StoreAppButton({ appId, appName, installed, installApp, uninstallApp }: StoreAppButtonProps) {
   const router = useRouter();
   const { run, isPending } = useServerAction();

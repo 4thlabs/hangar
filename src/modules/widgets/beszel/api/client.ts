@@ -2,10 +2,8 @@ import type { WidgetService } from "../../config/config.ts";
 import { ServiceClient } from "../../shared/service-client.ts";
 
 /**
- * What Beszel's agent last reported about a host, under the single-letter keys it stores.
- *
- * Every field is optional: a system that has never checked in — or one that is paused — carries an
- * `info` with whatever the hub last saw, which may be nothing at all.
+ * What Beszel's agent last reported about a host, under its single-letter keys. All optional: a host that never
+ * checked in, or is paused, may carry nothing.
  */
 export interface BeszelSystemInfo {
   /** Uptime, in seconds. */
@@ -38,22 +36,15 @@ interface BeszelPage<T> {
 }
 
 /**
- * Talks to one Beszel hub, which is a PocketBase and answers under `/api/collections`.
- *
- * The key goes in `Authorization` rather than `X-API-Key`: PocketBase reads the raw token there,
- * with or without a `Bearer` prefix, so a Beszel API token works as pasted.
+ * Talks to one Beszel hub (a PocketBase). The key goes in `Authorization`, where PocketBase reads a raw token, so a
+ * Beszel API token works as pasted.
  */
 export class BeszelClient extends ServiceClient {
-  /**
-   * Opens a client for the Beszel hub `service` points at.
-   */
   static async connect(service: WidgetService) {
     return new BeszelClient(await ServiceClient.client(service, { apiKeyHeader: "Authorization" }));
   }
 
-  /**
-   * Lists the monitored hosts, newest reading included, alphabetically as the hub's own page shows them.
-   */
+  /** The monitored hosts with their latest reading, alphabetically as the hub's own page shows them. */
   listSystems() {
     return this.http
       .get<BeszelPage<BeszelSystem>>("/collections/systems/records", {

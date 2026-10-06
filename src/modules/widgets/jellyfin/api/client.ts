@@ -31,30 +31,16 @@ export interface JellyfinItem {
 }
 
 /**
- * Talks to one Jellyfin server.
- *
- * Two things set Jellyfin apart from the other services here: it serves its API at the root
- * rather than under `/api`, and it takes no key header of its own — since 12.0 the only scheme
- * left is `Authorization: MediaBrowser Token="..."`, the legacy `X-Emby-Token` and `api_key`
- * having been dropped, so an otherwise valid key sent the old way answers 401 on every call.
+ * Talks to one Jellyfin server. Its API is at the root, and the key goes in `Authorization: MediaBrowser Token="..."`,
+ * the only scheme Jellyfin 12 accepts.
  */
 export class JellyfinClient extends ServiceClient {
   /** What "latest" means here: the media types the carousel mixes, as Glance's widget does. */
   private static readonly MediaTypes = "Movie,Episode,MusicAlbum";
 
-  /**
-   * How many raw items to ask for per item wanted.
-   *
-   * Jellyfin applies `limit` *before* `groupItems`, so a run of episodes from one series collapses
-   * into a single row after the cut: asking for ten returned exactly one here, the whole reason
-   * this exists. Measured against a real library — ten raw items grouped to 1, sixty to 10, a
-   * hundred to 43. Ten per item wanted leaves room for a season added in one go.
-   */
+  /** Jellyfin applies `limit` before grouping: ask for 10× and trim. */
   private static readonly Overfetch = 10;
 
-  /**
-   * Opens a client for the Jellyfin server `service` points at.
-   */
   static async connect(service: WidgetService) {
     const token = async () => {
       const key = await service.apiKey();
@@ -67,27 +53,16 @@ export class JellyfinClient extends ServiceClient {
     );
   }
 
-  /**
-   * Gets the server-wide library totals.
-   */
   getCounts() {
     return this.http.get<JellyfinCounts>("Items/Counts").json();
   }
 
-  /**
-   * Gets every user, so a name from `hangar.yml` can be turned into the id the API wants.
-   */
+  /** Every user, so a name from `hangar.yml` can be turned into the id the API wants. */
   getUsers() {
     return this.http.get<JellyfinUser[]>("Users").json();
   }
 
-  /**
-   * Gets the newest items across every library for one user.
-   *
-   * Per-user on purpose, and not a detail we can skip: Jellyfin's "latest" is scoped to what
-   * that user may see, so there is no server-wide answer to ask for — 12.0 moved that scope
-   * from the path (`Users/{id}/Items/Latest`, now gone) to the `userId` parameter.
-   */
+  /** The newest items across every library, as one user may see them: Jellyfin has no server-wide "latest". */
   getLatest(userId: string, limit: number) {
     return this.http
       .get<JellyfinItem[]>("Items/Latest", {
@@ -97,17 +72,14 @@ export class JellyfinClient extends ServiceClient {
           limit: limit * JellyfinClient.Overfetch,
           includeItemTypes: JellyfinClient.MediaTypes,
           groupItems: "true",
-          // Not a fix, a trim: the response carries a tag per image type and the card reads
-          // only the poster. Worth the parameter now that the limit is ten times what it was.
+          // The card reads only the poster's tag.
           enableImageTypes: "Primary",
         },
       })
       .json();
   }
 
-  /**
-   * Fetches an item's poster as raw bytes, for Hangar to relay without leaking the key.
-   */
+  /** An item's poster as raw bytes, for `WidgetImages` to relay. */
   getPoster(itemId: string) {
     return this.http.get(`Items/${itemId}/Images/Primary`);
   }

@@ -14,12 +14,8 @@ type YamlEditorOptions = {
 };
 
 /**
- * A YAML file edited in place and saved through a server action — `hangar.yml`, a store app's
- * compose file. Hands back the editor to place and the save to wire, so each caller keeps its own
- * layout around them.
- *
- * A refusal (schema, `docker compose config`) explains itself over several lines: a toast would
- * squash them, so they stay under the editor.
+ * A YAML file edited in place and saved through a server action; the caller places the editor and the save.
+ * A refusal stays under the editor, not in a toast: `docker compose config` explains itself over several lines.
  */
 export function useYamlEditor({ source, save, titles, onSaved, className }: YamlEditorOptions) {
   const { run, isPending } = useServerAction();

@@ -13,10 +13,7 @@ import { Button } from "#modules/common/ui/button.tsx";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import type { ComposeProjectDetail } from "#libs/docker";
 
-/**
- * The resource cards and the service cards, the parts of the page each stats frame changes. They
- * own the subscription so that a frame leaves the header and the compose actions alone.
- */
+/** The resource and service cards; they own the stats subscription so a frame leaves the header alone. */
 function AppLiveStats({ detail }: { detail: ComposeProjectDetail }) {
   const { stats, total } = useDockerStats(detail.containerIds);
 

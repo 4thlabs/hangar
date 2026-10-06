@@ -21,7 +21,6 @@ type MinifluxEntriesCardProps = {
   now?: number;
 };
 
-/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
 const chrome = { title: "Miniflux", icon: <IconSelfh name="miniflux" /> };
 
 export function MinifluxEntriesCard({ entries, unread, serviceUrl, now = Date.now() }: MinifluxEntriesCardProps) {

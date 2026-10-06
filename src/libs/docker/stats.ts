@@ -16,11 +16,8 @@ export type ContainerMetrics = {
 };
 
 /**
- * One container's resource usage, derived from a raw Engine API stats sample and the one before
- * it. Pure — it only reads the two samples it was handed, so it never touches the daemon.
- *
- * {@link metrics} returns a plain object on purpose, not the instance: it crosses the RSC
- * boundary into client components, and that serialization does not carry classes.
+ * One container's resource usage, from a raw stats sample and the one before it.
+ * {@link metrics} returns a plain object, since it crosses the RSC boundary.
  */
 export class ContainerStats {
   /** The sample just taken. */

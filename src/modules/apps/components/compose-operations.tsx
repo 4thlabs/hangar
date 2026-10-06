@@ -30,12 +30,7 @@ type ComposeOperationButtonsProps = {
   onConfirm: (operation: DestructiveOperation) => void;
 };
 
-/**
- * The Up / Force recreate / Down triplet, shared by the apps table and the app detail page.
- *
- * Presentation only: what the two callers target differs (a selection, or the app being shown),
- * so only the buttons are shared. The state behind them lives in `useComposeRun`.
- */
+/** The compose operation buttons, shared by the apps table and the detail page; state lives in `useComposeRun`. */
 export function ComposeOperationButtons({ running, disabled, size, onRun, onConfirm }: ComposeOperationButtonsProps) {
   const icon = (operation: AppOperation, Idle: typeof PowerIcon) =>
     running === operation ? <Spinner /> : <Idle data-icon="inline-start" />;

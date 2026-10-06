@@ -39,42 +39,29 @@ export type NotificationPayload = {
 };
 
 /**
- * The notification centre's store: one row per recipient, so a system-wide event fans out at
- * insertion time and `seen`/`read` need no join table.
+ * The notification centre's store: one row per recipient, so `seen`/`read` need no join table.
+ * Generic over the relations it never uses, so a test can pass a bare in-memory database.
  *
- * No `server-only` guard here on purpose: Sidequest runs a job by `import()`ing its module in a
- * plain Node process, where that marker throws. The handle arrives by injection, so the guard
- * lives at the composition root that opens it — see `./server/server.ts`.
- *
- * Generic over the handle's relations because it uses none of them: every query here is a core
- * one, which lets a test hand over a bare in-memory database.
+ * No `server-only` guard: see AGENTS.md § server-only.
  */
 export class Notifications<TRelations extends AnyRelations = AnyRelations> {
   /**
-   * How many notifications a user keeps. Older ones are dropped on the next insert.
-   * ponytail: a fixed count rather than an age-based sweep, swap it if a user ever wants history.
+   * How many notifications a user keeps; older ones are dropped on the next insert.
+   * ponytail: a fixed count, not an age-based sweep.
    */
   private static readonly Retained = 50;
 
   /** How many are handed to the navbar on a page render, and how many one stream frame carries. */
   private static readonly Page = 30;
 
-  /**
-   * Insertion order, as the tie-break `created_at` cannot give: a batch files several notifications
-   * inside the same millisecond, and without this the newest-first order — and with it which rows
-   * {@link Notifications.purge} drops — would be up to SQLite.
-   */
+  /** Ties on `created_at` (a batch shares one millisecond) are broken by insertion order. */
   private static readonly NewestFirst = [desc(notification.createdAt), sql`rowid desc`];
 
   /** Oldest first, with the same insertion-order tie-break as {@link Notifications.NewestFirst}. */
   private static readonly OldestFirst = [notification.createdAt, sql`rowid asc`];
 
-  /** The database handle to read and write through. */
   private readonly db: BetterSQLite3Database<TRelations>;
 
-  /**
-   * @param db The database handle to read and write through
-   */
   constructor(db: BetterSQLite3Database<TRelations>) {
     this.db = db;
   }

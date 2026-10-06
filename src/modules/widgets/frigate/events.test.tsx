@@ -43,7 +43,7 @@ describe("FrigateEventsCard", () => {
         events={events}
         stats={stats}
         serviceUrl="https://frigate.example.com"
-        widget="frigate-events-k1"
+        placementKey="frigate-events-k1"
         now={now}
       />,
     );
@@ -66,7 +66,7 @@ describe("FrigateEventsCard", () => {
         events={[]}
         stats={stats}
         serviceUrl="https://frigate.example.com"
-        widget="frigate-events-k1"
+        placementKey="frigate-events-k1"
         now={now}
       />,
     );
@@ -76,9 +76,7 @@ describe("FrigateEventsCard", () => {
   });
 
   it("calls the container but points the browser at the public host", async () => {
-    // The whole reason the two URLs are told apart: the header link, the event
-    // deep links and the thumbnail <img> are all resolved by the visitor, who
-    // cannot reach the container network the API answers on.
+    // Links and the thumbnail <img> are resolved by the visitor, who cannot reach the container network.
     const called: Request[] = [];
 
     vi.stubGlobal("fetch", (request: Request) => {

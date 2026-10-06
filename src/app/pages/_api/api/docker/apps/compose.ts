@@ -5,14 +5,7 @@ import { runComposeBatch } from "#modules/apps/compose-batch.ts";
 import { apiError, apiRoute, apiStream } from "#app/api/api-route.ts";
 import { logger } from "#libs/logs";
 
-/**
- * Streams `docker compose <operation>` over one or more apps as plain text, live.
- *
- * The loop runs server-side on purpose: aborting the request stops the streaming only, so
- * closing the tab mid-batch still leaves the remaining apps to be processed rather than
- * dropping them. Each app files a notification when its command ends — that is what the user
- * reads when they come back.
- */
+/** Streams `docker compose <operation>` over the apps; the batch outlives the request, each app notifies its end. */
 export const POST = apiRoute(
   { log: "Docker Compose stream failed to start", unavailable: "Le daemon Docker est indisponible." },
   async (request, _context, session) => {
@@ -25,8 +18,7 @@ export const POST = apiRoute(
       return apiError("La commande Docker Compose est invalide.", 400);
     }
 
-    // Every app is checked before any of them runs: a batch that would be refused half-way is
-    // refused whole, rather than leaving the caller to work out where it stopped.
+    // All checked before any runs: a batch that would be refused half-way is refused whole.
     for (const project of projects) {
       const refusal = refuseAppOperation(project);
 
@@ -38,14 +30,11 @@ export const POST = apiRoute(
 
     const output = new PassThrough();
 
-    // The client may be long gone: without a reader the stream either buffers the whole batch in
-    // memory or throws on a write, and neither may interrupt the commands. Compose resolves on
-    // the child's exit, not on the pipe, so a broken pipe costs the output and nothing else.
+    // Without a reader the stream would buffer the whole batch or throw on a write; neither may stop the commands.
     output.on("error", () => {});
     request.signal.addEventListener("abort", () => output.resume());
 
-    // Not awaited: the batch outlives the request (see above), and its failures are reported
-    // per app, as notifications.
+    // Not awaited: its failures are reported per app, as notifications.
     void runComposeBatch({ operation, projects, userId: session.user.id, output });
 
     return apiStream(output);

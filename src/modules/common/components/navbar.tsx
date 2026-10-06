@@ -186,18 +186,8 @@ export function AppNavbar({ user, notifications }: AppNavbarProps) {
   return (
     <header className="shrink-0 border-b border-sidebar-border bg-sidebar text-sidebar-foreground [--background:var(--sidebar)] [--foreground:var(--sidebar-foreground)] [--input:var(--sidebar-border)] [--muted:var(--sidebar-accent)] [--ring:var(--sidebar-ring)] [--secondary:var(--sidebar-accent)] [--secondary-foreground:var(--sidebar-accent-foreground)]">
       {/*
-        The centre track is sized before the `1fr` ones, so a `minmax(…,32rem)` search takes its
-        512px first and leaves the side tracks whatever is left — at `md` that was ~96px each and
-        the nav painted over the field. `max-content` floors the sides on their real width
-        (`min-w-0` would let them collapse again), so the search gets the leftover instead.
-
-        The template switches at `sm`, where the nav moves up from the tab bar, but the search
-        itself only appears at `md`: between the two the centre track holds nothing and collapses
-        to zero, which `1fr auto 1fr` cannot do without pushing the right-hand cluster off.
-
-        One grid for both layouts, not one each. A second tree hidden with `sm:hidden` is still
-        mounted: every control inside it would run twice, with its own state, its own effects and
-        its own subscriptions — two user menus, two notification streams.
+        One grid for both layouts (a second tree would mount every control twice). `max-content` side tracks keep
+        the nav off the search; the centre track is empty, and collapses, between `sm` and `md`.
       */}
       <div className="relative grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 sm:grid-cols-[minmax(max-content,1fr)_minmax(0,32rem)_minmax(max-content,1fr)] sm:gap-4 sm:px-4">
         <div className="col-start-1 flex h-full items-center justify-start gap-2">

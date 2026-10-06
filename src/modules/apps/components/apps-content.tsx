@@ -5,16 +5,8 @@ import { renderSnapshot } from "#modules/common/components/render-snapshot.ts";
 import { logger } from "#libs/logs";
 
 /**
- * The Docker half of `/apps`, kept as a child so the `await` happens inside the boundary rather
- * than in the page itself — an async page component suspends its own route, which paints nothing
- * at all until the daemon answers.
- *
- * Renders synchronously when the snapshot is warm, and only then does `<Warm>` above leave the
- * boundary out — see `renderSnapshot`. Both paths render the same rows because both come from
- * `appsSnapshot`.
- *
- * Errors are caught and rendered, not rethrown: `AppsOverview` already knows how to show one
- * next to a Réessayer button, and the route error boundary would take the whole page down.
+ * Docker half of /apps, a child so the `await` happens inside the boundary, not in the page's own route.
+ * Errors render in AppsOverview (with retry), not the route error boundary.
  */
 export function AppsContent({ search }: { search: AppsSearch }) {
   return renderSnapshot(

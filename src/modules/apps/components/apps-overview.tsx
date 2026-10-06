@@ -35,10 +35,7 @@ type AppsOverviewProps = {
   search: AppsSearch;
 };
 
-/**
- * The CPU and memory cards. They own the stats subscription so that each frame re-renders these
- * two cards only, not the filters, the counts and the apps table around them.
- */
+/** The CPU and memory cards; they own the stats subscription so a frame re-renders only them. */
 function LiveTotals({ containerIds }: { containerIds: readonly string[] }) {
   const { total } = useDockerStats(containerIds);
 
