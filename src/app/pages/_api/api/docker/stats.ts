@@ -19,18 +19,23 @@ async function* frames(first: Samples, signal: AbortSignal) {
   let previous: Samples = new Map();
   let current = first;
 
-  try {
-    for (;;) {
-      // The first frame has no previous sample, so its CPU reads as unknown rather than zero.
-      yield frame(current, previous);
-      previous = current;
+  for (;;) {
+    // The first frame has no previous sample, so its CPU reads as unknown rather than zero.
+    // Outside the `try`: a closed tab cancels the response, which throws an AbortError here
+    // while `signal` is still unaborted, so a catch around it would log every tab closing.
+    yield frame(current, previous);
+    previous = current;
+
+    try {
       await delay(INTERVAL, undefined, { signal });
       current = await docker.sampleStats();
-    }
-  } catch (error) {
-    // Client gone (normal, not logged) or daemon failed; the browser reconnects and gets the 503.
-    if (!signal.aborted) {
-      logger.warn("Docker statistics stream failed", { error });
+    } catch (error) {
+      // Client gone (normal, not logged) or daemon failed; the browser reconnects and gets the 503.
+      if (!signal.aborted) {
+        logger.warn("Docker statistics stream failed", { error });
+      }
+
+      return;
     }
   }
 }

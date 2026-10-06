@@ -76,6 +76,21 @@ describe("GET Docker container statistics", () => {
     expect(second?.["container-1"]?.cpuPercent).toBe(10);
   });
 
+  it("does not warn when the client goes away", async () => {
+    dockerMock.stats.mockResolvedValue(statsSample(100));
+    const controller = new AbortController();
+
+    const response = await GET(new Request("http://localhost/api/docker/stats", { signal: controller.signal }));
+
+    // A closed tab cancels the body while the request signal stays unaborted.
+    await readFrames(response, new AbortController(), 1);
+    // The cancellation lands at the next frame, once the next sample is taken.
+    await vi.waitFor(() => expect(dockerMock.listContainers).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(mocks.logger.warn).not.toHaveBeenCalled();
+  });
+
   it("returns 503 without leaking transport errors when the daemon is unreachable", async () => {
     dockerMock.listContainers.mockRejectedValue(new Error("private socket detail"));
 
