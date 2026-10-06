@@ -34,20 +34,13 @@ function sortProjects(projects: ComposeProjectSummary[], { column, descending }:
   });
 }
 
-/**
- * Which side of the update filter a project falls on. `updateAvailable` is `undefined` until the
- * version check has run, and an app nobody has looked at yet counts as up to date — the same call
- * the row badge already makes.
- */
+/** Which side of the update filter a project falls on; not checked yet counts as up to date, like the row badge. */
 export const updateState = (project: ComposeProjectSummary): AppUpdate =>
   project.updateAvailable ? "available" : "current";
 
 /**
  * Narrows the app list to the selected categories, statuses and update states, then to the query.
- * An empty list means no filter on that dimension, so the unfiltered view needs no special case.
- * A stack missing from every `hangar.yml` category can only show up unfiltered.
- * @param projects The current snapshot's projects
- * @param search The `/apps` search params
+ * An empty list means no filter on that dimension; a stack in no `hangar.yml` category only shows up unfiltered.
  */
 export function filterProjects(
   projects: ComposeProjectSummary[],
@@ -68,10 +61,7 @@ export function filterProjects(
   return sort ? sortProjects(found, sort) : found;
 }
 
-/**
- * The sort a header click should move to: unsorted, ascending, descending, then back to
- * unsorted, so there is always a way back to relevance ordering while searching.
- */
+/** The sort a header click moves to: ascending, descending, then back to unsorted (relevance while searching). */
 export function nextSort(current: AppsSort, column: AppSortColumn): AppsSort {
   if (current?.column !== column) {
     return { column, descending: false };

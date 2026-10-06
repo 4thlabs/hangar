@@ -2,19 +2,14 @@ import type { WidgetService } from "../../config/config.ts";
 import { ServiceClient } from "../../shared/service-client.ts";
 
 /**
- * An `int64`, as Connect encodes it: a JSON string, never a number.
- *
- * Every count, size and timestamp Backrest reports is one of these. Reading them as numbers type-
- * checks against a hand-written interface and then silently yields `NaN`, so they are typed as what
- * actually arrives and converted once, in `displayRepo`.
+ * An `int64` as Connect encodes it: a JSON string, never a number. Typed as what arrives (read as a number it yields
+ * `NaN`) and converted once, in `displayRepo`.
  */
 type Int64 = string;
 
 /**
- * The backups a repository has run lately, newest first.
- *
- * Parallel arrays rather than a list of records — index `0` of each is the last run. Absent for a
- * repository that has never backed up: Connect omits a default value rather than sending it.
+ * The backups a repository has run lately, as parallel arrays: index `0` of each is the last run. Absent before the
+ * first backup: Connect omits default values.
  */
 export interface BackrestRecentBackups {
   status?: string[];
@@ -39,25 +34,15 @@ export interface BackrestSummary {
 }
 
 /**
- * Talks to one Backrest server.
- *
- * Backrest is Connect-RPC, not REST: every call is a `POST` with a JSON body, reads included — a
- * `GET` answers 404 — and the methods sit at the root rather than under `/api`, hence `prefix: ""`.
- *
- * It takes no key: Backrest has no API-key concept, and on the container network the endpoint is
- * unauthenticated. `ServiceClient.client` sends no header when there is no key, so nothing is needed here.
+ * Talks to one Backrest server over Connect-RPC: every call, reads included, is a `POST` at the root. No key: Backrest
+ * has none, and the endpoint is unauthenticated on the container network.
  */
 export class BackrestClient extends ServiceClient {
-  /**
-   * Opens a client for the Backrest server `service` points at.
-   */
   static async connect(service: WidgetService) {
     return new BackrestClient(await ServiceClient.client(service, { prefix: "" }));
   }
 
-  /**
-   * Gets the per-repository and per-plan backup health the Backrest dashboard itself shows.
-   */
+  /** The per-repository and per-plan backup health Backrest's own dashboard shows. */
   getSummary() {
     return this.http.post<BackrestSummary>("v1.Backrest/GetSummaryDashboard", { json: {} }).json();
   }

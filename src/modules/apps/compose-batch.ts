@@ -45,11 +45,8 @@ async function runOne(operation: AppOperation, project: string, userId: string, 
 
   output.write(`\n$ docker compose ${appOperationArguments[operation].join(" ")} — ${project}\n`);
 
-  // The client reloads the page on this app's notification and again when the batch ends, so
-  // what `/apps` reads is reloaded before either goes out: the reload is then served the new state
-  // from memory, neither the old one nor a spinner. Not the overview: `df` is slow, only the
-  // dashboard reads it, and the daemon's events refresh it anyway. Unconditional: a compose run
-  // that fails half-way still leaves containers it did start.
+  // Refreshed before the notification goes out, so the client's reload is served the new state, not a spinner;
+  // always, since a run that fails half-way still leaves containers it started. Not `df`: slow, events refresh it.
   try {
     await hangar.store
       .compose(project, [...appOperationArguments[operation]], { pipe: output })

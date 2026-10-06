@@ -78,7 +78,7 @@ describe("Docker apps views", () => {
     expect(html).toContain("Arrêté");
     expect(html).toContain('aria-label="Sélectionner gamma"');
     expect(html).toContain('aria-label="Tout sélectionner"');
-    // The name itself is the link now; the trailing "Détails" button is gone.
+    // The name is the link; there is no separate "Détails" button.
     expect(html).toContain('<a href="/apps/alpha">alpha</a>');
     expect(html).not.toContain("Détails");
   });

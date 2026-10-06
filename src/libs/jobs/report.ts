@@ -15,30 +15,18 @@ export type ListRuns = (filter: {
  * dashboard read it — through `Docker.outdated`, against what runs at the time of the read.
  */
 export class ImageCheckReport {
-  /**
-   * How long the last report is reused. A new one only lands every four hours, so a minute of
-   * staleness is free.
-   */
+  /** A new report only lands every four hours, so a minute of staleness is free. */
   private static readonly Ttl = 60_000;
 
   /** How long a jammed job queue keeps serving the last answer. */
   private static readonly Grace = 3_600_000;
 
-  /**
-   * The last report, cached so the pages that show the badge can read it without awaiting and so
-   * render without a spinner.
-   */
   private readonly cache = new Cache();
 
   /** Where the completed runs are read from; injected so a test can hand over its own. */
   private readonly listRuns: ListRuns;
 
-  /**
-   * The registry digests of the last completed check, by reference.
-   *
-   * Empty when no check has run yet, when the last one predates digests being stored, or when the
-   * report could not be read: the badge is an extra, never a reason for the Apps page to fail.
-   */
+  /** The registry digests of the last completed check, by reference; empty when there is none to read. */
   readonly snapshot: Snapshot<RemoteDigests>;
 
   /**
@@ -50,22 +38,17 @@ export class ImageCheckReport {
   }
 
   /**
-   * Drops the cached report, so the next read takes the newest one rather than serving the last
-   * until its TTL. For whoever learns a check has completed — the job itself cannot call this: it
-   * runs in the Sidequest worker, not in the process holding this cache.
+   * Drops the cached report, for whoever learns a check completed. The job cannot call it: it runs in
+   * the worker process.
    */
   invalidate() {
     this.cache.clear();
   }
 
-  /**
-   * Reads the newest completed report.
-   */
+  /** Reads the newest completed report. */
   private async read(): Promise<RemoteDigests> {
     try {
-      // Jobs list by row id, descending — which is *not* run order: rerunning one from the Jobs
-      // settings page resets the row it was run from and keeps its id, so a fresh result can sit
-      // below an older one. Take the last few and pick by the timestamp the report itself carries.
+      // Row id is not run order (a rerun keeps its id), so pick by the report's own timestamp.
       const runs = await this.listRuns({ jobClass: "CheckImageVersion", state: "completed", limit: 10 });
       // JSON read back out of SQLite: trusted no further than the one shape we wrote.
       const reports = runs

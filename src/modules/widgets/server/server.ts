@@ -6,12 +6,8 @@ import { WidgetRegistry } from "../registry.ts";
 import { WidgetImages } from "./images.ts";
 
 /**
- * How this Hangar addresses the services its widgets read.
- *
- * The composition root: `config/config.ts` stays free of the store and the environment so the
- * CLI can parse a YAML file without them, and the binding happens here, once. The dashboard and
- * the poster proxy both resolve a service through this, so they cannot disagree about which
- * address or key a widget uses.
+ * How this Hangar addresses the services its widgets read. Shared by the dashboard and the image relay, so they
+ * cannot disagree about a widget's address or key.
  */
 export const widgetHost: WidgetHost = {
   domain: env.DOMAIN,

@@ -25,7 +25,6 @@ type DockerGeneralStatsCardProps = {
 /** What the widget loads: the host counts, plus the apps due an image update. */
 type DockerGeneralStats = DockerGeneralStatsCardProps;
 
-/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
 const chrome = { title: "Local", icon: <IconSelfh name="docker" />, className: "@container min-h-64" };
 
 export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStatsCardProps) {
@@ -85,10 +84,7 @@ export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStat
   );
 }
 
-/**
- * One widget for every placement: it renders the daemon's own snapshots, which follow its events,
- * so it has no TTL of its own to set — a compose command shows here as soon as on `/apps`.
- */
+/** One widget for every placement, rendering the daemon's snapshots: no TTL, it follows Docker events. */
 export const dockerGeneralStats = defineWidget({
   id: "docker-general-stats",
   ...chrome,

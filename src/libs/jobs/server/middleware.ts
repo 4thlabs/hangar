@@ -9,26 +9,18 @@ import { MiddlewareHandler } from "hono/types";
  */
 export class SidequestBoot {
   /**
-   * Every four hours, not the every-10s of the stub: each check makes the daemon hit the registry's
-   * manifest endpoint, which counts against Docker Hub's anonymous per-IP limit. Off the hour: at
-   * :00 every other cron on the internet polls the registries too, and every run there came back
-   * rate limited or timed out, while the same check a few minutes later went through.
+   * Every four hours, off the hour: each check counts against Docker Hub's per-IP limit, and :00 is
+   * when every other cron polls the registries too.
    */
   private static readonly ImageCheckSchedule = "17 */4 * * *";
 
-  /**
-   * Nightly, at an hour nobody is using the stacks: each app it touches is a pull and a recreate,
-   * so the containers go down and back up. Off the hour and clear of the 04:17 check, for the same
-   * rate-limit reason.
-   */
+  /** Nightly, when nobody uses the stacks (each update recreates containers), clear of the 04:17 check. */
   private static readonly UpdateSchedule = "47 4 * * *";
 
   /** Whether Sidequest is already started, so later requests go straight through. */
   private configured = false;
 
-  /**
-   * The middleware booting Sidequest behind the first request.
-   */
+  /** The middleware booting Sidequest behind the first request. */
   middleware(): MiddlewareHandler {
     return async (_c, next) => {
       await next();
@@ -51,7 +43,7 @@ export class SidequestBoot {
 
       await Sidequest.build(CheckImageVersion).schedule(SidequestBoot.ImageCheckSchedule);
 
-      // First launched
+      // Once at boot, without waiting for the first scheduled run.
       await Sidequest.build(CheckImageVersion).enqueue();
 
       await Sidequest.build(UpdateOutdatedApps).schedule(SidequestBoot.UpdateSchedule);

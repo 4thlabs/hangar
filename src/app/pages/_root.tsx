@@ -35,9 +35,7 @@ export default function Root({ children }: RootProps) {
   );
 }
 
-/**
- * Dynamic: reads request-scoped theme preferences.
- */
+/** Dynamic: reads request-scoped theme preferences. */
 export const getConfig = async () => {
   return {
     render: "dynamic",

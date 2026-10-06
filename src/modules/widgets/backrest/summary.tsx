@@ -16,7 +16,6 @@ import {
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
-/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
 const chrome = { title: "Backrest", icon: <IconSelfh name="backrest" />, className: "min-h-40" };
 
 /** One repository, already resolved to what the card shows. */
@@ -38,13 +37,7 @@ const count = (value: string | undefined) => Number(value ?? 0);
 /** The same, as a moment: a zero is Backrest saying "never", not midnight in 1970. */
 const moment = (value: string | undefined) => (count(value) === 0 ? undefined : Number(value));
 
-/**
- * What a repository looks like on the card.
- *
- * `recentBackups` is a struct of parallel arrays, newest first, so index `0` is the last run — and
- * absent entirely for a repository that has never backed up. Only `STATUS_SUCCESS` counts as
- * healthy, which is the line Backrest's own dashboard and the Glance widget both draw.
- */
+/** What a repository looks like on the card. Only `STATUS_SUCCESS` counts as healthy, as on Backrest's own dashboard. */
 export function displayRepo(summary: BackrestRepoSummary): RepoBackup {
   const status = summary.recentBackups?.status?.[0];
 
@@ -110,8 +103,7 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
               key={repo.id}
               className="items-start"
               media={
-                // The dot repeats what the status word below already says: colour alone is never
-                // the status.
+                // Decorative: the status word below says the same.
                 <span
                   aria-hidden="true"
                   className={cn("mt-1.5 size-2 shrink-0 rounded-full", HEALTH_DOT_CLASS[repoHealth(repo)])}
@@ -121,9 +113,7 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
             >
               <p className="truncate font-medium text-primary">{repo.id}</p>
 
-              {/* One line, not two: everything a repository has to say fits beside everything
-                  else once the clock is written `18h` instead of `18 hours ago`. It wraps rather
-                  than truncating, so a narrow column loses nothing. */}
+              {/* Wraps rather than truncating, so a narrow column loses nothing. */}
               <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                 <WidgetMetadata>
                   <span className={repoHealth(repo) === "failed" ? "text-destructive" : undefined}>
@@ -143,14 +133,7 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
   );
 }
 
-/**
- * Per-repository backup health: the last run, how it went, and when the next one is due.
- *
- * The placement needs an explicit `link:`, unlike every other service widget here: the store gives
- * Backrest a Traefik router named `backup`, so the default `<container>.<DOMAIN>` guess —
- * `backrest.<DOMAIN>` — points at nothing. `url:` matters too, because the public host sits behind
- * the OIDC middleware while the container network answers straight away.
- */
+/** Per-repository backup health. Needs an explicit `link:`: the store's Traefik router for Backrest is `backup`. */
 export const backrestSummary = (service: WidgetService, ttl?: number) =>
   defineWidget({
     id: "backrest-summary",

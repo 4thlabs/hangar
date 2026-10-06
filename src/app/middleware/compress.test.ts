@@ -41,9 +41,7 @@ async function* read(response: Response) {
 
 describe("compress middleware", () => {
   it("delivers the shell before the rest of the stream exists", async () => {
-    // The regression this middleware was rewritten for: `hono/compress` encodes through
-    // `CompressionStream`, which holds every byte until the stream ends. A page that paints a
-    // shell and fills its Suspense boundaries afterwards then arrives all at once, late.
+    // `hono/compress` holds every byte until the stream ends, so a streamed page would arrive all at once, late.
     let released = false;
 
     async function* frames() {

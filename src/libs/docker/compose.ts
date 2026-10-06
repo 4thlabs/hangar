@@ -108,12 +108,8 @@ export class DockerNotFoundError extends HangarError {
 type Aggregate = { services: Set<string>; containerIds: string[]; runningCount: number; unhealthyCount: number };
 
 /**
- * The Compose topology read out of a set of containers: which projects exist, which services they
- * run, and what state each is in. Pure — it holds the two Engine API views it was handed and
- * derives everything from them, so it never touches the daemon and is safe to construct anywhere.
- *
- * The views it returns are plain objects on purpose, not instances: they cross the RSC boundary
- * into client components, and that serialization does not carry classes.
+ * The Compose topology (projects, services, states) read out of a set of containers; never touches
+ * the daemon. Returns plain objects, since they cross the RSC boundary.
  */
 export class ComposeProjects {
   /** Labels Docker Compose stamps on every container it creates; used to discover and group projects. */

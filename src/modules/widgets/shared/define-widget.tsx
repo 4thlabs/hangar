@@ -6,10 +6,8 @@ import { WidgetError } from "./widget-error.tsx";
 import { WidgetSkeleton } from "./widget-skeleton.tsx";
 
 /**
- * Everything that identifies a widget, declared once.
- *
- * Without this each widget repeats its icon, title and size class three times
- * (card, skeleton, error) and re-implements the same try/catch + log + fallback.
+ * Everything that identifies a widget, read by its card, skeleton and error fallback. Each widget keeps its title,
+ * icon and className in one `chrome` const, so the card and the fallbacks it degrades to cannot disagree.
  */
 export type WidgetDefinition<T> = {
   /** The widget type, as `hangar.yml` names it; the key of an unplaced widget. */
@@ -34,11 +32,7 @@ export type WidgetDefinition<T> = {
       ttl?: number | undefined;
     }
   | {
-      /**
-       * Data some other layer already caches, and keeps fresh on its own terms — the Docker widget
-       * reads the daemon's snapshots, which follow its events. Read as is: caching it again here
-       * would only add a TTL for it to go stale behind.
-       */
+      /** Data another layer already keeps fresh (the Docker daemon's snapshots); read as is, not cached again. */
       snapshot: Snapshot<T>;
     }
 );
@@ -62,13 +56,8 @@ export type Widget = {
 };
 
 /**
- * Every widget's data, cached in one place. Shared rather than per widget, because `WidgetRegistry`
- * rebuilds most widget objects on every render — a cache closed over by one `defineWidget` call
- * would be thrown away with it and cache nothing. The per-call handle below is only the bound
- * key, TTL, grace and loader; the entries it reads live here, so a rebuilt widget finds them.
- *
- * Process-global, keyed by placement (`WidgetKey` in `config.ts`), and therefore only safe while
- * no widget renders per-session data. None does; the day one needs to, it must not read through here.
+ * Module-level so widgets rebuilt per render keep their entries. Process-global, keyed by placement: never put
+ * per-session data here.
  */
 const cache = new Cache();
 

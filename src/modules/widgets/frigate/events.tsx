@@ -23,7 +23,6 @@ type FrigateEventsCardProps = {
   now?: number;
 };
 
-/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
 const chrome = { title: "Frigate", icon: <IconSelfh name="frigate" />, className: "min-h-88" };
 
 function formatCameraName(camera: string) {
@@ -56,8 +55,6 @@ export function FrigateEventsCard({ events, stats, serviceUrl, widget, now = Dat
         <WidgetList empty="No recent events.">
           {events.map(event => {
             const eventUrl = `${serviceUrl}/explore?event_id=${encodeURIComponent(event.id)}`;
-            // Relayed by Hangar: the public Frigate host sits behind the OIDC middleware, which
-            // answers an `<img>` with a login redirect rather than a picture.
             const thumbnailUrl = WidgetImage.url(widget, event.id);
 
             return (
@@ -92,14 +89,7 @@ export function FrigateEventsCard({ events, stats, serviceUrl, widget, now = Dat
   );
 }
 
-/**
- * The latest camera events, and the link into Frigate itself.
- *
- * `link` reaches further here than in other cards: beyond the header link it also builds every
- * per-event deep link, which the visitor's browser resolves and so cannot point at the container
- * network. Thumbnails go the other way, through Hangar's own relay: an `<img>` cannot answer the
- * OIDC challenge the public host puts in front of the API.
- */
+/** The latest camera events. `link` also builds each per-event deep link, which the browser resolves. */
 export const frigateEvents = (service: WidgetService, ttl?: number) =>
   defineWidget({
     id: "frigate-events",

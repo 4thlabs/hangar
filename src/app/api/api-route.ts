@@ -3,19 +3,13 @@ import { getSession } from "#libs/auth";
 import { DockerNotFoundError } from "#libs/docker";
 import { logger } from "#libs/logs";
 
-/**
- * Error response for the API routes. The client only ever renders the message,
- * so the HTTP status carries the machine-readable part.
- * @param message Message shown to the user, in French
- * @param status HTTP status to respond with
- */
+/** Error response for the API routes: the client only renders the message, the status is the machine-readable part. */
 export function apiError(message: string, status: number): Response {
   return Response.json({ success: false, error: { message } }, { status });
 }
 
 /**
- * Streams a Node readable live: no buffering anywhere between the producer and the browser,
- * or the output only shows up once the command is over.
+ * Streams a Node readable live, unbuffered end to end, or the output only shows up once the command is over.
  * @param contentType Defaults to plain text; the event-stream routes go through `sseStream`
  */
 export function apiStream(stream: Readable, contentType = "text/plain; charset=utf-8"): Response {
@@ -54,17 +48,7 @@ type RouteContext = { params?: Record<string, string> };
 
 type Session = NonNullable<Awaited<ReturnType<typeof getSession>>>;
 
-/**
- * Wraps an API route with what all of them owe the caller: reject anonymous requests before
- * touching anything, turn a missing subject into a 404, and turn anything else into a 503 whose
- * body says nothing about the underlying error — the details go to the log, not to the client.
- *
- * The session is handed to the handler rather than looked up again: routes that write
- * notifications need the user id, and a second lookup is a second query for what we already have.
- *
- * @param options Messages for the failure paths
- * @param handler The route body, free to throw
- */
+/** 401 for anonymous, 404 for DockerNotFoundError, opaque 503 (logged) otherwise. Hands the session to the handler. */
 export function apiRoute<C extends RouteContext = RouteContext>(
   options: ApiRouteOptions,
   handler: (request: Request, context: C, session: Session) => Promise<Response>,

@@ -16,9 +16,7 @@ export type HangarApp = {
   containerName: string;
 };
 
-/**
- * Representation of the App Store
- */
+/** The app store on disk: its stacks, the installed links, and the compose commands over them. */
 export class HangarStore {
   /** Run order per compose command: 1 in stack order, -1 in reverse, absent means parallel */
   static readonly CommandOrder: Record<string, number> = { up: 1, start: 1, restart: 1, down: -1, stop: -1 };
@@ -29,16 +27,14 @@ export class HangarStore {
   /** A stack id is a folder name under `store/` (`llama.cpp`): no separator, no leading dot, nothing to climb out with */
   private static readonly StackId = /^[a-z0-9][a-z0-9._-]*$/;
 
-  /** Path of Hangar sata */
   readonly dataPath: string;
 
-  /** Path where the app are installed */
+  /** One symlink per installed app, next to the shared files. */
   readonly installedPath: string;
 
-  /** Path of the store */
+  /** The clone of the store repository. */
   readonly storePath: string;
 
-  /** The URL of the store repository */
   readonly url: string;
 
   /** Configuration shipped by the store, empty until the store is on disk */
@@ -47,16 +43,14 @@ export class HangarStore {
   /** The global environment every stack is composed with */
   readonly env: HangarEnv;
 
-  /** Runtime to launch commands */
   private readonly runtime: CommandRunner;
 
-  /** A list of all available App */
+  /** Every app the store carries, installed or not. */
   apps: Set<HangarApp> = new Set();
 
   /**
-   * Constructs the App Store
-   * @param url URL of the store repository
-   * @param dataDir Directory for storing data
+   * @param url The store repository to clone
+   * @param dataDir Where the store, the installed links and the app data live
    */
   constructor(url: string, dataDir: string, runtime: CommandRunner) {
     this.url = url;
@@ -135,10 +129,7 @@ export class HangarStore {
     await this.refresh();
   }
 
-  /**
-   * Returns true if the store is installed, false otherwise
-   * @returns boolean indicating if the store is installed
-   */
+  /** Whether the store repository has been cloned. */
   async isInstalled() {
     return Runtime.exists(path.join(this.storePath, ".git"));
   }
@@ -334,16 +325,12 @@ export class HangarStore {
     return path.join(this.storePath, "store", id);
   }
 
-  /**
-   * Returns the ids of installed apps.
-   */
+  /** The ids of the installed apps. */
   installedProjectIds(): Set<string> {
     return new Set([...this.apps].flatMap(app => (app.installed ? [app.id] : [])));
   }
 
-  /**
-   * Refreshes store and installed apps.
-   */
+  /** Reloads `hangar.yml` and every app's compose file. */
   async refresh() {
     this.apps.clear();
 
@@ -355,9 +342,7 @@ export class HangarStore {
       const apps = entries.filter(entry => !shared.includes(entry));
       const installed = await readdir(this.installedPath, { recursive: false });
 
-      // One malformed app must not take down the whole store: log it and skip it.
-      // refresh() runs in a module-level await on the server, so a rejection here
-      // fails web app boot entirely.
+      // One malformed app is skipped: a rejection here would fail the server's boot.
       await Promise.all(
         apps.map(async app => {
           try {
@@ -366,9 +351,7 @@ export class HangarStore {
             const metadata = yaml?.["x-hangar"] as { icon?: string } | undefined;
             const services = (yaml?.["services"] ?? {}) as Record<string, { container_name?: string } | undefined>;
 
-            // ponytail: the main service is the one named after the app, else the first declared;
-            // a multi-service app that names neither falls back to its own id, which is what the
-            // dashboard linked to before it read the compose file at all.
+            // The main service is the one named after the app, else the first declared.
             const service = services[app] ?? Object.values(services)[0];
 
             this.apps.add({
@@ -386,12 +369,11 @@ export class HangarStore {
     }
   }
 
-  /** True when the compose args ask for detached mode */
+  /** Whether the compose args ask for detached mode. */
   private static detached(args: string[]) {
     return args.includes("-d") || args.includes("--detach");
   }
 
-  /** Capitalize first letter of a string */
   private static capitalize(s: string) {
     return s && String(s[0]).toUpperCase() + String(s).slice(1);
   }

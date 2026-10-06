@@ -10,10 +10,7 @@ export default function AppsPage({ search }: PageProps<"/apps">) {
     <main>
       {/* Outside the boundary, so the tab title changes on click rather than when Docker replies. */}
       <title>Apps | Hangar</title>
-      {/* Keyed, because Waku renders the route slot unkeyed: the detail page has the same
-          shape, so React would reuse this boundary and — a navigation being a transition —
-          keep that page on screen rather than swap in the spinner. The key is constant: a
-          search-param change must not remount the boundary and flash it. */}
+      {/* Keyed: see `Warm`. Constant, so a search-param change does not remount the boundary and flash it. */}
       <Warm key="apps" ready={appsSnapshot.peek() !== undefined} fallback={<PageSpinner />}>
         <AppsContent search={search} />
       </Warm>

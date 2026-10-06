@@ -33,9 +33,7 @@ export const navigations: readonly NavigationCategory[] = [
 
 /**
  * Whether `href` is the section the router is currently in.
- *
- * Prefix, not equality: `/apps/alpha` belongs to Apps, and an exact match would black out the
- * tab as soon as you open an app. `/` is the exception — as a prefix it would match everything.
+ * A prefix match, so `/apps/alpha` keeps Apps active; `/` is exact, or it would match everything.
  */
 export function isNavigationActive(path: string, href: NavigationPath) {
   return href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`);

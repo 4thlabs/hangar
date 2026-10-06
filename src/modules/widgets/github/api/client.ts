@@ -23,25 +23,17 @@ interface LatestRelease {
 }
 
 /**
- * Talks to the GitHub REST API, for the releases card.
+ * Talks to the GitHub REST API for the releases card. Releases are cached per repo (60 req/h anonymous).
  *
- * A GitHub release is published once and never moves, and the dashboard renders on every page
- * load: without a cache a handful of repositories exhausts the 60 requests/hour of an anonymous
- * client in minutes.
- *
- * ponytail: per-process cache, fine for the single container Hangar runs in.
- * Move the refresh into a sidequest job (like CheckImageVersion) if Hangar ever
- * runs more than one instance.
+ * ponytail: per-process cache; move the refresh into a sidequest job if Hangar ever runs more than one instance.
  */
 export class GithubClient {
   /** How long a release is served before GitHub is asked again. */
   private static readonly Ttl = 30 * 60 * 1_000;
 
   /**
-   * How long a release that GitHub has stopped answering for keeps being served.
-   *
-   * "A half-hour-old tag beats no tag at all" — but not forever: past this the card says it could
-   * not load, rather than showing a tag nobody can tell is a year stale.
+   * How long a stale release is served, at once, while GitHub fails (rate limit, blip). Past it the card errors rather
+   * than show a tag nobody can tell is a year old.
    */
   private static readonly Grace = 24 * 60 * 60 * 1_000;
 
@@ -51,9 +43,7 @@ export class GithubClient {
   /** The ky client, bound to the API and to the token when there is one. */
   private readonly http: KyInstance;
 
-  /**
-   * @param token A GitHub token: 60 requests/hour anonymous, 5000 with one
-   */
+  /** @param token A GitHub token: 60 requests/hour anonymous, 5000 with one */
   constructor(token?: string) {
     this.http = ky.extend({
       baseUrl: "https://api.github.com",
@@ -68,10 +58,8 @@ export class GithubClient {
   }
 
   /**
-   * The latest release of each repository, newest first.
-   *
-   * A repository that has no release, was renamed or is private drops out of the card, so one
-   * bad entry in `hangar.yml` cannot take the whole card down; the log says which one and why.
+   * The latest release of each repository, newest first. A repository with no release, renamed or private is skipped
+   * and logged, so one bad entry cannot take the card down.
    */
   async getLatestReleases(repositories: readonly string[]): Promise<GithubRelease[]> {
     const settled = await Promise.allSettled(repositories.map(repository => this.getLatestRelease(repository)));
@@ -91,12 +79,8 @@ export class GithubClient {
     return releases.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
   }
 
-  /**
-   * One repository's latest release, through the cache.
-   */
+  /** One repository's latest release, through the cache. */
   private getLatestRelease(repository: string): Promise<GithubRelease> {
-    // A rate limit or a blip must not blank a card that already has an answer, which is what
-    // `Grace` buys: a stale release is handed back at once and the retry goes out behind it.
     return this.cache.read(repository, GithubClient.Ttl, GithubClient.Grace, async () => {
       const latest = await this.http.get<LatestRelease>(`repos/${repository}/releases/latest`).json();
 

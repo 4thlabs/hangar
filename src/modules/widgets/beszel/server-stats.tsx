@@ -14,7 +14,6 @@ import {
 } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
 
-/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
 const chrome = { title: "Beszel", icon: <IconSelfh name="beszel" />, className: "min-h-40" };
 
 /** One host, already resolved to what the card shows. */
@@ -34,10 +33,7 @@ export type ServerStats = {
   cpuModel: string | undefined;
 };
 
-/**
- * A reading the agent did not send counts as 0. The bars are only drawn for a host that is up,
- * which reports all three, so the 0 never reaches the card as a real reading.
- */
+/** A missing reading counts as 0; bars are drawn only for a host that is up, which reports all three. */
 const percent = (value: number | undefined) => value ?? 0;
 
 /** What a system looks like on the card. */
@@ -64,12 +60,7 @@ type GaugeProps = {
   value: number;
 };
 
-/**
- * One metric as a labelled bar.
- *
- * A plain `<div>` rather than `ui/progress.tsx`: that one is a client component, and three bars per
- * server is a lot of hydration for a rectangle that never moves after it is painted.
- */
+/** One metric as a labelled bar: a plain `<div>`, since `ui/progress.tsx` is a client component and this never moves. */
 function Gauge({ label, value }: GaugeProps) {
   const hot = value >= HOT;
 
@@ -119,8 +110,7 @@ export function BeszelServerStatsCard({ servers, serviceUrl, now = Date.now() }:
           {servers.map(server => (
             <WidgetListItem key={server.id} className="flex-col items-stretch gap-1">
               <div className="flex min-w-0 items-center gap-2">
-                {/* The dot repeats what the line beside it already says: colour alone is never
-                    the status. */}
+                {/* Decorative: the line beside it says the same. */}
                 <span
                   aria-hidden="true"
                   className={cn("size-2 shrink-0 rounded-full", server.up ? "bg-primary" : "bg-destructive")}
@@ -159,11 +149,8 @@ export function BeszelServerStatsCard({ servers, serviceUrl, now = Date.now() }:
 }
 
 /**
- * Per-host CPU, memory and disk, as the Beszel hub last heard them.
- *
- * Only the `systems` collection is read: it already carries the latest reading of every host in
- * `info`, so the per-system `system_stats` queries the Glance widget makes — one request per
- * server — buy nothing but absolute gigabytes.
+ * Per-host CPU, memory and disk, as the Beszel hub last heard them. Reads only `systems`, whose `info` already holds
+ * each host's latest reading: one request, not one per server.
  */
 export const beszelServerStats = (service: WidgetService, ttl?: number) =>
   defineWidget({

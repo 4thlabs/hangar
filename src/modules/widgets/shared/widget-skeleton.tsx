@@ -8,12 +8,7 @@ type WidgetSkeletonProps = {
   title: string;
 };
 
-/**
- * Placeholder for a widget that cannot render yet: a cold cache on the first render after a
- * start, or a service that is down and never fills one. Warm widgets never get a boundary at
- * all — see `Warm` — so this is not worth shaping per widget; it only has to hold the card's
- * size and say what is loading.
- */
+/** Placeholder holding the card's size while its cache is cold; warm widgets get no boundary (see `Warm`). */
 export function WidgetSkeleton({ className, icon, title }: WidgetSkeletonProps) {
   return (
     <WidgetCard className={className} aria-label={`Loading ${title}`} aria-busy="true">

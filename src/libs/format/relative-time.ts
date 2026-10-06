@@ -34,11 +34,8 @@ export class RelativeTime {
   }
 
   /**
-   * The same moment in as few characters as a dashboard row can spare: `18h`, `in 5h`, `3d`.
-   *
-   * Not a `style: "narrow"` {@link RelativeTime.format}, which still says "18 hr. ago" — and not a
-   * replacement for it either. A row carrying five other facts cannot spend eleven characters on
-   * "18 hours ago"; a notification, which carries one, should.
+   * The same moment as short as a dashboard row needs: `18h`, `in 5h`, `3d`. Intl's `narrow` style
+   * still says "18 hr. ago".
    */
   static compact(timestamp: number, now: number = Date.now()) {
     const seconds = (timestamp - now) / 1_000;

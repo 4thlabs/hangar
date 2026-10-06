@@ -19,25 +19,18 @@ interface MinifluxEntries {
 
 /** Talks to one Miniflux instance. */
 export class MinifluxClient extends ServiceClient {
-  /**
-   * Opens a client for the Miniflux instance `service` points at.
-   */
   static async connect(service: WidgetService) {
     return new MinifluxClient(await ServiceClient.client(service, { prefix: "/v1", apiKeyHeader: "X-Auth-Token" }));
   }
 
-  /**
-   * Gets the newest entries, read or not.
-   */
+  /** The newest entries, read or not. */
   getEntries(limit: number = 8) {
     return this.http
       .get<MinifluxEntries>("entries", { searchParams: { order: "published_at", direction: "desc", limit } })
       .json();
   }
 
-  /**
-   * Counts the unread entries: Miniflux gives the total whatever the limit.
-   */
+  /** Counts the unread entries: Miniflux gives the total whatever the limit. */
   async getUnreadCount() {
     return (await this.http.get<MinifluxEntries>("entries", { searchParams: { status: "unread", limit: 1 } }).json())
       .total;

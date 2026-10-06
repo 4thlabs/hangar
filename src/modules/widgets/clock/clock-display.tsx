@@ -14,11 +14,8 @@ const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "long" });
 const weekdayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "long" });
 
 /**
- * The only export of this module, and a component on purpose: every export of a
- * `"use client"` module crosses the RSC boundary as a client reference, so a
- * constant or an object would arrive as a proxy. The class name comes in as a
- * prop for the same reason — `clock.tsx` owns it, so the card and the skeleton
- * cannot drift apart.
+ * The module's only export: any export of a `"use client"` module reaches the server as a proxy, so the class name
+ * comes in as a prop from `clock.tsx`.
  */
 export function ClockDisplay({ className }: { className?: string | undefined }) {
   const [now, setNow] = useState<Date>(new Date());
@@ -44,10 +41,7 @@ export function ClockDisplay({ className }: { className?: string | undefined }) 
         </div>
 
         <div className="flex flex-col items-end gap-0">
-          {/* The server stamps its own `new Date()`, the client another one milliseconds later, so
-              `dateTime` never matches on hydration — and React leaves a mismatched attribute as the
-              server wrote it. The effect below re-renders with the browser's clock right away; this
-              only silences the warning for the one node that differs on every single load. */}
+          {/* Server and client times always differ by ms. */}
           <time className="text-lg font-semibold tabular-nums" dateTime={now.toISOString()} suppressHydrationWarning>
             {timeFormatter.format(now)}
           </time>

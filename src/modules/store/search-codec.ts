@@ -7,12 +7,8 @@ export type StoreSearch = { q: string; filter: StoreFilter[] };
 export const STORE_FILTERS: StoreFilter[] = ["installed", "available"];
 
 /**
- * Search params of `/store`, shared by the server (via `unstable_searchCodec`
- * in the page's `getConfig`) and the client (via `Unstable_SearchCodecsProvider`).
- *
- * `filter` is a comma-separated multi-select, an empty list meaning "no filter". Unknown
- * values are dropped rather than rejected: a hand-edited URL should not turn into a 400,
- * and the old single-value `?filter=installed` still parses to exactly what it used to mean.
+ * Search params of `/store`, shared by the page's `getConfig` and the client's `Unstable_SearchCodecsProvider`.
+ * `filter`: comma-separated multi-select; empty = no filter, unknown values dropped so a hand-edited URL is no 400.
  */
 export const storeSearchCodec: Unstable_SearchCodec<StoreSearch> = {
   id: "store",

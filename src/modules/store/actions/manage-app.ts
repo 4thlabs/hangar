@@ -9,10 +9,7 @@ import * as z from "zod";
 
 const payloadSchema = z.object({ id: z.string(), source: z.string() });
 
-/**
- * Adds a new store app. `docker compose config` validates it first: its complaint is the message
- * the user needs, so it is shown as is.
- */
+/** Adds a new store app. */
 export const createApp = async (id: string, source: string): Promise<ActionResult> => {
   await requireSession();
 
@@ -22,10 +19,7 @@ export const createApp = async (id: string, source: string): Promise<ActionResul
   });
 };
 
-/**
- * Saves a store app's compose.yml. `docker compose config` validates it first: its complaint is
- * the message the user needs, so it is shown as is.
- */
+/** Saves a store app's compose.yml. */
 export const updateApp = async (id: string, source: string): Promise<ActionResult> => {
   await requireSession();
 
@@ -42,7 +36,10 @@ type AppWrite = {
   success: (id: string) => string;
 };
 
-/** Validates the payload, runs the write, and turns its outcome into what the editor shows. */
+/**
+ * Validates the payload, runs the write, and turns its outcome into what the editor shows.
+ * The store validates the file with `docker compose config`, whose complaint is shown to the user as is.
+ */
 async function writeApp(id: string, source: string, { write, success }: AppWrite): Promise<ActionResult> {
   const parsed = payloadSchema.safeParse({ id, source });
 

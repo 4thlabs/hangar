@@ -26,12 +26,8 @@ export type Category = z.infer<typeof categorySchema>;
 export type Config = z.infer<typeof configSchema>;
 
 /**
- * The configuration of a store, read from the `hangar.yml` it ships.
- *
- * Owned by the HangarStore: it describes how that store's stacks are grouped,
- * so it only exists once the store has been cloned. Until then — a fresh
- * install, or the Waku build, which evaluates the server modules with no data
- * directory — the configuration is simply empty.
+ * The `hangar.yml` a store ships. Empty until the store is cloned (a fresh install, or the Waku
+ * build, which has no data directory).
  */
 export class HangarConfig {
   /** The config file */
@@ -62,8 +58,7 @@ export class HangarConfig {
   public registryThrottling = () => this._registryThrottling;
 
   /**
-   * Constructs the configuration for the given file. Does not read it:
-   * call `load()` once the store is on disk.
+   * Does not read the file: call `load()` once the store is on disk.
    * @param file The path to the configuration file
    */
   constructor(file: string) {

@@ -30,22 +30,9 @@ function decorate(projects: ComposeProjectsSnapshot, outdated: ReadonlySet<strin
 
 /**
  * The apps running an image the last check found the registry has moved past.
- *
- * Recomputed on every read from two snapshots that each refresh on their own clock: the check's
- * stored registry digests, and the digests of what runs now. An update therefore clears the
- * badge as soon as the reloaded containers show it, whoever ran it — this page, the nightly job or
- * a shell — with nothing to invalidate.
+ * Recomputed from both snapshots on every read, so an update clears the badge whoever ran it, with no invalidation.
  */
 export const outdatedSnapshot = Cache.join(docker.runningImages, imageCheckReport.snapshot, Docker.outdated);
 
-/**
- * Everything `/apps` renders, as one snapshot.
- *
- * It exists so the page and the warm loop cannot disagree about what that is. They used to name
- * their ingredients separately, and drifted: the loop warmed the Docker containers and the widgets,
- * while the page also needs the image-update report, which was only ever warmed as a side effect
- * of the `docker-general-stats` widget happening to load it. Take that widget out of `hangar.yml`
- * and `/apps` quietly went back to painting a spinner. Now there is one object to warm and to
- * render from, so removing a widget cannot slow down an unrelated page.
- */
+/** Everything /apps renders; the page and the warm loop share it, so they cannot disagree on what to warm. */
 export const appsSnapshot = Cache.join(docker.projects, outdatedSnapshot, decorate);

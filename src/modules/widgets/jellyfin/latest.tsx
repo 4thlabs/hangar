@@ -17,7 +17,6 @@ import { defineWidget } from "../shared/define-widget.tsx";
 /** How many posters the row holds. */
 const ITEM_COUNT = 10;
 
-/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
 const chrome = { title: "Jellyfin", icon: <IconSelfh name="jellyfin" />, className: "min-h-64" };
 
 /** One poster, already resolved to what the card shows. */
@@ -31,21 +30,12 @@ export type LatestItem = {
 };
 
 /**
- * Which item carries the poster.
- *
- * Not the item the card links to: an episode has its own still while the card points at the show,
- * and an album with no cover of its own borrows the one Jellyfin resolved for its parent. Asking
- * for a poster Jellyfin never had is a 404 and a broken image, so `ImageTags` decides.
+ * Which item carries the poster: the item if `ImageTags` lists one, else the parent Jellyfin resolved (an album
+ * without a cover). Asking for a missing poster is a broken image.
  */
 const imageOf = (item: JellyfinItem) => (item.ImageTags?.Primary ? item.Id : item.ParentPrimaryImageItemId);
 
-/**
- * What a library item looks like on the card.
- *
- * An episode resolves to its series: "latest" lists episodes, but a row of ten stills from the
- * same show is noise where one poster is the answer. Glance's widget makes the same substitution
- * — and so does Jellyfin itself, which returns the series outright when items are grouped.
- */
+/** What a library item looks like on the card. An episode resolves to its series: one poster per show, not ten stills. */
 export function displayItem(item: JellyfinItem): LatestItem {
   const imageId = imageOf(item);
 
@@ -71,8 +61,7 @@ type JellyfinLatestCardProps = {
 export function JellyfinLatestCard({ counts, items, serviceUrl, widget }: JellyfinLatestCardProps) {
   return (
     <WidgetCard className={chrome.className}>
-      {/* The library totals label the row rather than taking a card of their own: they are what
-          the posters are the newest of. `description` draws the divider `bordered` used to. */}
+      {/* The server-wide totals label the row: they are what the posters are the newest of. */}
       <WidgetHeader
         href={serviceUrl}
         icon={chrome.icon}
@@ -89,8 +78,7 @@ export function JellyfinLatestCard({ counts, items, serviceUrl, widget }: Jellyf
 
       <WidgetContent>
         {items.length > 0 ? (
-          // The viewport owns the scrolling, so the row itself no longer sets `overflow-x`. The
-          // padding is what the scrollbar sits in, below the titles rather than over them.
+          // The padding is where the scrollbar sits, below the titles rather than over them.
           <ScrollArea orientation="horizontal" className="w-full">
             <ul className="flex snap-x gap-3 pb-3">
               {items.map(item => (
@@ -101,8 +89,7 @@ export function JellyfinLatestCard({ counts, items, serviceUrl, widget }: Jellyf
                     rel="noreferrer"
                     className="group block"
                   >
-                    {/* Relayed by Hangar: a direct Jellyfin poster URL carries the API key. An item
-                        with no artwork keeps the frame, which is what Jellyfin's own library shows. */}
+                    {/* An item with no artwork keeps the frame, as Jellyfin's own library does. */}
                     {item.imageId ? (
                       <img
                         src={WidgetImage.url(widget, item.imageId)}
@@ -128,13 +115,7 @@ export function JellyfinLatestCard({ counts, items, serviceUrl, widget }: Jellyf
   );
 }
 
-/**
- * The library, as one card: what it holds, and what landed in it last.
- *
- * Takes a user name because Jellyfin's "latest" is scoped to what that user may see — there is no
- * server-wide answer to ask for, so the operator names one in `hangar.yml`. The totals are the one
- * thing here that *is* server-wide, which is why they read as the header's subtitle.
- */
+/** The library, as one card: what it holds, and what landed in it last, as `user` sees it. */
 export const jellyfinLatest = (service: WidgetService, user: string, ttl?: number) =>
   defineWidget({
     id: "jellyfin-latest",
@@ -154,10 +135,7 @@ export const jellyfinLatest = (service: WidgetService, user: string, ttl?: numbe
 
       const items = (await client.getLatest(account.Id, ITEM_COUNT)).map(displayItem);
 
-      // The client over-fetches, because Jellyfin groups only after it has cut the list, so the
-      // row is trimmed here instead. The dedupe is for the React key rather than for a bug on
-      // record: a grouped response still carries the odd bare episode, and two from one series
-      // would both resolve to that series id. Nothing in the current library collides.
+      // The client over-fetches, so trim here. Grouped responses can still repeat a series (unique React keys).
       return { counts, items: [...new Map(items.map(item => [item.id, item])).values()].slice(0, ITEM_COUNT) };
     },
     render: ({ counts, items }: { counts: JellyfinCounts; items: LatestItem[] }, key) => (

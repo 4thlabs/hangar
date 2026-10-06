@@ -5,11 +5,8 @@ import type { CreateJobServices } from "../services.ts";
 import { createWorkerServices } from "../worker.ts";
 
 /**
- * Asks every installed app's registry what it serves for the references they run.
- *
- * The returned report *is* the store: it lands in the job's `result` column, and the Apps pages
- * read the newest completed run back out of it. It holds the registry's answers, not a verdict:
- * the pages compare them with what runs at the time they render, so an update needs no telling.
+ * Asks the registry what it serves for every reference the installed apps run. The returned report
+ * is stored as the job's `result`, which the Apps pages read back and compare with what runs then.
  */
 export class CheckImageVersion extends Job {
   /** Builds what the run works with. */

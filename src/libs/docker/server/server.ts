@@ -5,18 +5,10 @@ import { hangar } from "#libs/hangar/server";
 import { Docker } from "../docker.ts";
 import { DockerEvents } from "../events.ts";
 
-/**
- * The one Engine API client the web server talks through.
- *
- * Constructed with no options so it applies its own defaults, `DOCKER_HOST` included. This is the
- * only place the package is imported as a value: everywhere else takes the client by injection,
- * which keeps the rest of the lib out of the browser bundle.
- */
+/** The web server's Engine API client; no options, so it honours `DOCKER_HOST`. */
 const client = new Dockerode();
 
-/**
- * The Docker layer for the web server, scoped to the apps this Hangar installed.
- */
+/** The Docker layer for the web server, scoped to the apps this Hangar installed. */
 export const docker = new Docker(client, hangar.store);
 
 /**

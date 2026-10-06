@@ -9,7 +9,6 @@ type GithubReleasesCardProps = {
   now?: number;
 };
 
-/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
 const chrome = { title: "Releases", icon: <IconSelfh name="github" /> };
 
 export function GithubReleasesCard({ releases, now = Date.now() }: GithubReleasesCardProps) {

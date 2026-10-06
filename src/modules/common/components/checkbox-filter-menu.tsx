@@ -27,13 +27,7 @@ type CheckboxFilterMenuProps = {
   onChange: (selected: string[]) => void;
 };
 
-/**
- * A multi-select filter as a dropdown of checkboxes. An empty selection means "no filter",
- * so the unfiltered view needs no "all" option.
- *
- * Shared by the apps and store filters: the two stay identical because they are the same
- * component, not because someone remembered to copy a change across.
- */
+/** A multi-select filter as a dropdown of checkboxes, shared by the apps and store filters; empty = no filter. */
 export function CheckboxFilterMenu({ label, options, selected, onChange }: CheckboxFilterMenuProps) {
   const toggle = (value: string, checked: boolean) =>
     // Rebuilt from `options` so the selection keeps a stable order whatever the click order.

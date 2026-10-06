@@ -19,9 +19,8 @@ import type { ContainerStatsSample } from "./stats.ts";
 const NOT_FOUND = 404;
 
 /**
- * The values of the calls that succeeded. A container that went away mid-way (404) is dropped
- * quietly; any other failure is dropped too, so one container cannot sink the whole read, but
- * logged, since it is not the expected race.
+ * The values of the calls that succeeded. Failures are dropped so one container cannot sink the
+ * whole read; all but the expected 404 race are logged.
  * @param operation What was being done, for the log line
  */
 function fulfilledValues<T>(results: PromiseSettledResult<T>[], operation: string): T[] {
@@ -72,114 +71,72 @@ export type DockerChange = "containers" | "images" | "overview";
 /** Every {@link DockerChange}, for a caller that cannot tell which one happened. */
 export const DockerChanges: readonly DockerChange[] = ["containers", "images", "overview"];
 
-/**
- * The slice of `HangarStore` this layer needs: which apps Hangar installed, and so which
- * Compose projects a caller may see. An interface rather than the class so a test can pass a
- * literal, the way `HangarStore` takes a `CommandRunner`.
- */
+/** The slice of `HangarStore` this layer needs: which Compose projects a caller may see. */
 export interface InstalledApps {
   installedProjectIds(): Set<string>;
 }
 
 /**
- * The Docker Engine API, scoped to the apps Hangar installed. Talks to the socket directly
- * rather than shelling out: an inspect costs ~5ms instead of a process spawn, and a stats sample
- * comes back as numbers instead of strings like `"2.87GiB"` that would have to be parsed back.
+ * The Docker Engine API over the socket, scoped to the apps Hangar installed: an inspect costs
+ * ~5 ms instead of a process spawn. Compose commands go through the CLI (`hangar.store`).
  *
- * Compose operations are not part of this API and still go through the CLI; see `hangar.store`.
- *
- * No `server-only` guard here on purpose: Sidequest runs a job by `import()`ing its module in a
- * plain Node process, where that marker throws. `dockerode` is only ever a type in this file, so
- * the guard lives at the composition root that constructs it — see `./server/server.ts`.
+ * No `server-only` guard: see AGENTS.md § server-only.
  */
 export class Docker {
   /** A full or short container id, as the Engine API spells them. */
   private static readonly ContainerId = /^[a-f0-9]{12,64}$/i;
 
   /**
-   * Pause between two registry calls. The daemon asks the registry once per call, and Docker Hub
-   * and ghcr.io both rate-limit a burst from one IP.
-   * ponytail: a single gap shared by every registry, not a bucket per registry. Split them if a
-   * host that mixes Hub and ghcr makes the check noticeably slow.
+   * Pause between two registry calls: Docker Hub and ghcr.io both rate-limit a burst from one IP.
+   * ponytail: one gap shared by every registry; split it if a mixed host makes the check slow.
    */
   private static readonly RegistryGapMs = 100;
 
   /** What {@link Docker.remoteDigest} returns once the registry says "too many requests". */
   private static readonly RateLimited = Symbol("rate-limited");
 
-  /** The Engine API client. */
   private readonly docker: Dockerode;
 
-  /** What Hangar installed; read per call, so a freshly installed app shows up without a restart. */
+  /** Read per call, so a freshly installed app shows up without a restart. */
   private readonly apps: InstalledApps;
 
   /**
-   * Default {@link ttl}. Liveness is not its job: `DockerEvents` reloads the containers the moment the
-   * daemon reports a change. This is the net for a change the stream never reported — an action
-   * the filter misses, or a stream gone quiet without dropping — and a minute bounds that, while
-   * the warm loop no longer reloads them on every tick for nothing.
+   * Default {@link ttl}. `DockerEvents` keeps the containers live; this is only the net for a
+   * change the event stream missed.
    */
   private static readonly Ttl = 60_000;
 
-  /**
-   * How long past its TTL {@link containers} is still handed out while it reloads behind the caller. Comfortably
-   * longer than the warm loop's tick, so a page render still finds a snapshot when a tick runs late
-   * or fails — the moment it does not, `/apps` goes back to waiting on the daemon.
-   */
+  /** How long past its TTL a snapshot is still served while it reloads; longer than a warm-loop tick. */
   private static readonly Grace = 120_000;
 
-  /**
-   * `df` is the slowest call the daemon has, and every event that moves these counts refreshes them
-   * anyway; this is the same net as {@link Ttl}, looser because only the dashboard reads it.
-   */
+  /** Same net as {@link Ttl}, looser: `df` is the daemon's slowest call and only the dashboard reads it. */
   private static readonly OverviewTtl = 300_000;
 
-  /** Longer grace than the containers': nothing here changes fast enough to be worth blocking a paint. */
+  /** Nothing here changes fast enough to be worth blocking a paint. */
   private static readonly OverviewGrace = 3_600_000;
 
-  /** The daemon reads this client serves from a snapshot. */
   private readonly cache = new Cache();
 
-  /**
-   * Every Compose-labeled container on the host, in both API views. One read for everyone: the
-   * apps list, one project's detail and a log stream all narrow this in memory through
-   * `ComposeProjects` rather than asking the daemon again.
-   */
+  /** Every Compose-labeled container on the host; every other read narrows it in memory. */
   private readonly containers: Snapshot<ComposeContainerSource[]>;
 
   /** The registry digests of every local image, by image id; see {@link listImages}. */
   private readonly images: Snapshot<Map<string, string[]>>;
 
   /**
-   * Every app Hangar installed, as lightweight summaries of their Docker state.
-   *
-   * Public as the handle rather than as a `listProjects()` / `peekProjects()` pair: those were one
-   * read described twice, and each rebuilt the projection in its own words. A caller that can wait
-   * calls `read()`, one that must not calls `peek()`, and both are the same declaration.
-   *
-   * ponytail: {@link loadContainers} inspects every Compose container on the host and throws away the ones
-   * Hangar did not install. There is no daemon-side fix: Docker ANDs repeated `label` filters, so
-   * asking for several projects at once matches a container in *all* of them, i.e. nothing.
-   * Narrowing would mean one list call per installed project, which is worse. Left as is.
+   * Every installed app, as summaries of its Docker state: `read()` to wait, `peek()` not to.
+   * ponytail: every Compose container is inspected, then filtered; Docker ANDs repeated `label`
+   * filters, so the only daemon-side narrowing is one list per project, which is worse.
    */
   readonly projects: Snapshot<ComposeProjectsSnapshot>;
 
   /**
-   * Every container of an installed app, with the registry digests of the image it runs — what
-   * {@link Docker.outdated} compares the last check against.
-   *
-   * Over the same containers as {@link projects}, so a change that refreshes one moves the other: the
-   * badge goes the moment the containers it was about do.
+   * Every container of an installed app, with the registry digests of the image it runs. Joined on
+   * the same containers as {@link projects}, so the update badge moves with them.
    */
   readonly runningImages: Snapshot<RunningImage[]>;
 
-  /**
-   * Host-wide counts for the local daemon: the whole engine, not just the apps Hangar installed,
-   * so the dashboard reports the local environment the way Arcane reports a remote one.
-   *
-   * A handle like {@link projects} rather than a method, so the dashboard widget renders straight
-   * from it instead of caching a second copy with its own TTL to fall out of step.
-   */
+  /** Host-wide counts for the whole engine, not just the installed apps, as Arcane reports a remote one. */
   readonly overview: Snapshot<DockerOverview>;
 
   /**
@@ -216,11 +173,8 @@ export class Docker {
   }
 
   /**
-   * The registry digests of every local image, by image id. One call for the whole host rather
-   * than an inspect per image: the list already carries `RepoDigests`.
-   *
-   * Never rejects: the digests only feed the update badge, which is an extra, never a reason for
-   * the Apps page to fail. An unreadable list leaves every app without a badge until the next one.
+   * The registry digests of every local image, by image id. Never rejects: the digests only feed
+   * the update badge, which must never fail the Apps page.
    */
   private readonly listImages = async (): Promise<Map<string, string[]>> => {
     try {
@@ -233,12 +187,8 @@ export class Docker {
   };
 
   /**
-   * The load behind {@link containers}: one list call, then an inspect per container.
-   *
-   * An inspect costs a few milliseconds over the socket, so they all go out at once — and with
-   * `allSettled`, because a container that exits between the list and its inspect answers 404,
-   * and one container going away must not cost the whole load. That is the common case right
-   * after a `compose down`, not an edge one.
+   * The load behind {@link containers}: one list, then every inspect at once. A container that exits
+   * in between answers 404, common right after a `compose down`, so it must not fail the load.
    */
   private readonly loadContainers = async (): Promise<ComposeContainerSource[]> => {
     const listed = await this.docker.listContainers({
@@ -253,13 +203,8 @@ export class Docker {
   };
 
   /**
-   * Reloads the daemon reads a change made stale, while every reader keeps the current snapshot
-   * until the new one lands — so a page rendered meanwhile still paints at once.
-   *
-   * `DockerEvents` calls this for whatever the daemon reports, whoever caused it: a Compose command
-   * from the web, the CLI or a job, or a container that crashed on its own. A caller that is about
-   * to read the new state awaits it instead, as the Compose stream does before the page reloads.
-   *
+   * Reloads what a change made stale; readers keep the current snapshot meanwhile. Called by
+   * `DockerEvents`, and awaited by a caller about to read the new state.
    * @param changes What went stale; everything when the caller cannot tell
    * @returns Settles once each reload has, and never rejects
    */
@@ -270,24 +215,17 @@ export class Docker {
   }
 
   /**
-   * Asks the registry what it serves for every reference the installed apps run. The daemon does
-   * the talking (`/distribution/{name}/json`), so its own registry credentials apply and nothing
-   * here handles auth.
-   *
-   * One call per *reference*: replicas of a service share an image, and two apps may share one
-   * too. Only for images that carry a registry digest — one built here has nothing to compare
-   * against, and asking about it would spend a rate-limited round trip to learn nothing. A
-   * reference the registry could not answer for is left out, which {@link Docker.outdated} reads
-   * as "don't know", never as a false "update available".
+   * Asks the registry, through the daemon so its credentials apply, what it serves for each
+   * reference the installed apps run. Skips local builds and pinned references; an unanswered
+   * reference is left out, which {@link Docker.outdated} reads as "don't know".
    */
   async remoteDigests(gap = Docker.RegistryGapMs): Promise<RemoteDigests> {
     const running = await this.runningImages.read();
     const references = [...new Set(running.filter(r => r.digests.length && !Docker.pinned(r.image)).map(r => r.image))];
     const remotes: RemoteDigests = {};
 
-    // One at a time and spaced out, not a burst: the calls count against a per-IP limit. Once the
-    // registry says "too many requests", every call after it would be refused too and would
-    // still spend quota, so the rest stay unknown until the next run.
+    // Spaced out, since the calls count against a per-IP limit; after a 429 the rest would be
+    // refused too, so they stay unknown until the next run.
     for (const [index, image] of references.entries()) {
       if (index > 0) {
         await sleep(gap);
@@ -312,7 +250,6 @@ export class Docker {
 
   /**
    * Asks the registry about every installed image, then compares its answers with what runs now.
-   * The two steps every job checking for updates takes, in that order.
    * @param gap Pause between two registry calls, from the store's `registryThrottling`
    */
   async checkUpdates(gap = Docker.RegistryGapMs): Promise<UpdateCheck> {
@@ -323,12 +260,8 @@ export class Docker {
   }
 
   /**
-   * The apps running an image the registry has moved past. Pure, so it can sit in a
-   * `Cache.join` and be recomputed on every read against whatever runs now.
-   *
-   * A container counts only when both sides are known: an image with no registry digest, or a
-   * reference the registry was not asked about (pinned, rate-limited, unreachable), is no claim
-   * either way.
+   * The apps running an image the registry has moved past. A container counts only when both its
+   * local digests and the registry's answer are known.
    * @param running What runs now, from {@link runningImages}
    * @param remotes What the registry served, from {@link remoteDigests}
    */
@@ -347,7 +280,6 @@ export class Docker {
   /**
    * What the registry serves for this reference, `null` when it could not say, or
    * {@link Docker.RateLimited} when it refused to answer at all.
-   * One call per reference: replicas of a service share an image, and two apps may share one too.
    * @param image The reference as Compose runs it, e.g. `nginx:alpine`
    */
   private async remoteDigest(image: string): Promise<string | null | typeof Docker.RateLimited> {
@@ -382,12 +314,7 @@ export class Docker {
     return (error as { statusCode?: number })?.statusCode === 429 || /toomanyrequests|429/i.test(String(error));
   }
 
-  /**
-   * The load behind {@link overview}.
-   *
-   * Two endpoints because neither answers alone: `info` carries the container tallies and the
-   * daemon version, `df` the disk usage (which images nothing runs, which volumes nothing mounts).
-   */
+  /** The load behind {@link overview}: `info` for the containers and version, `df` for the disk usage. */
   private readonly loadOverview = async (): Promise<DockerOverview> => {
     const [info, usage] = (await Promise.all([this.docker.info(), this.docker.df()])) as [SystemInfo, SystemDiskUsage];
     const images = usage.Images ?? [];
@@ -433,10 +360,8 @@ export class Docker {
       throw new DockerNotFoundError(`container ${containerId}`);
     }
 
-    // Narrowing to the project, rather than inspecting the id directly, means an id from another
-    // project is indistinguishable from one that doesn't exist: no cross-project probing. The
-    // filter is `ComposeProjects`' rather than the daemon's, and `find` only ever searches what it
-    // kept, so the guarantee is the same one — it just no longer costs a load of its own.
+    // Looked up within the project, so an id from another project reads as missing: no
+    // cross-project probing.
     const compose = new ComposeProjects(await this.containers.read(), project);
     const container = compose.find(containerId);
 
@@ -474,12 +399,8 @@ export class Docker {
   }
 
   /**
-   * Takes one sample of every running Compose container, in parallel. Covers the whole host
-   * rather than one app: the caller reads whichever ids it happens to be showing.
-   *
-   * Not cached: this is the source of a live stream, and its callers already pace themselves.
-   * `allSettled` because a container stopping mid-sample answers 404, and one exiting container
-   * must not end the stats stream for every open tab.
+   * One sample of every running Compose container, host-wide. Not cached: it feeds a live stream
+   * whose callers pace themselves. A container stopping mid-sample must not end the stream.
    */
   async sampleStats(): Promise<Samples> {
     const running = await this.docker.listContainers({ filters: { label: [ComposeProjects.Label.project] } });

@@ -10,7 +10,6 @@ type GluetunVpnStatusCardProps = {
   publicIp: GluetunPublicIp;
 };
 
-/** Stated once, so the card and the fallbacks it degrades to cannot disagree. */
 const chrome = { title: "Gluetun", icon: <IconSelfh name="gluetun" />, className: "min-h-32" };
 
 export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
@@ -28,7 +27,7 @@ export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
           <span className={cn(!connected && "text-destructive")}>
             Your VPN is {connected ? "connected" : "not connected"}!
           </span>
-          {/* The dot repeats what the sentence already says: colour alone is never the status. */}
+          {/* Decorative: the sentence says the same. */}
           <span
             aria-hidden="true"
             className={cn("size-2 shrink-0 rounded-full", connected ? "bg-primary" : "bg-destructive")}
@@ -46,12 +45,7 @@ export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
   );
 }
 
-/**
- * Whether the tunnel is up, and where it comes out.
- *
- * No header link: gluetun's control server answers JSON and nothing else, and the stack carries no
- * Traefik router, so there is no page to send anyone to.
- */
+/** Whether the tunnel is up, and where it comes out. No header link: gluetun has no web page. */
 export const gluetunVpnStatus = (service: WidgetService, ttl?: number) =>
   defineWidget({
     id: "gluetun-vpn-status",

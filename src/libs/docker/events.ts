@@ -12,18 +12,11 @@ type DockerEvent = {
 };
 
 /**
- * Follows the daemon's event stream and reports what each event made stale, so the cached reads
- * move when the daemon does rather than when a caller remembers to say so.
+ * Follows the daemon's event stream and reports what each event made stale, whoever caused it.
+ * Batched per {@link DockerChange}: the first event opens a window the rest join, so a steady
+ * trickle cannot postpone the reload the way a debounce would.
  *
- * Every path that changes a container is covered by construction — a Compose command from the
- * web, the CLI or a Sidequest job (another process, out of reach of the web server's cache), a
- * `docker compose` typed on the host, a container that crashed or restarted on its own.
- *
- * Events are batched per {@link DockerChange}: a `compose up` emits dozens of them, and they cost
- * one reload, not one each. The first event of a batch opens a window and the rest join it, so a
- * steady trickle cannot postpone the reload indefinitely the way a debounce would.
- *
- * No `server-only` guard, for the same reason as `Docker`: see `./server/server.ts`.
+ * No `server-only` guard: see AGENTS.md § server-only.
  */
 export class DockerEvents {
   /**
@@ -71,7 +64,6 @@ export class DockerEvents {
   /** The longest pause between two reconnection attempts. */
   private static readonly MaxRetry = 30_000;
 
-  /** The Engine API client. */
   private readonly docker: Dockerode;
 
   /** Told what went stale, once per batch. */

@@ -12,10 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tool
 import { RelativeTime } from "#libs/format";
 import type { NotificationPayload } from "#libs/notifications";
 
-/**
- * How many unseen notifications may toast at once. A batch of ten finished apps is worth one
- * glance, not a wall of panels; the rest are waiting in the bell.
- */
+/** How many unseen notifications may toast at once; the rest wait in the bell. */
 const TOAST_LIMIT = 3;
 
 function NotificationItem({ notification }: { notification: NotificationPayload }) {
@@ -50,11 +47,7 @@ function NotificationItem({ notification }: { notification: NotificationPayload 
 
 /**
  * The bell, its panel, and the stream that fills them.
- *
- * It owns the stream because the navbar mounts it exactly once — one grid for both layouts. A
- * second mounted copy would open a second stream and toast everything twice.
- *
- * @param initial The list rendered server-side, newest first
+ * It owns the stream because the navbar mounts it exactly once; a second copy would toast everything twice.
  */
 export function NotificationsMenu({ initial }: { initial: NotificationPayload[] }) {
   const router = useRouter();
@@ -86,15 +79,13 @@ export function NotificationsMenu({ initial }: { initial: NotificationPayload[] 
       }
       setItems(current => [...fresh.reverse(), ...current]);
 
-      // Something finished server-side, so whatever the page is showing about it is stale. Once
-      // per arrival, and never from inside the state updater — React may run that twice, and two
-      // overlapping reloads abort each other's render.
+      // Whatever the page shows is now stale. Reloaded here, not in the state updater: React may run that twice,
+      // and two overlapping reloads abort each other.
       void router.reload();
     };
 
     return () => source.close();
     // Mounted once: the stream carries its own cursor from there on.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -118,9 +109,7 @@ export function NotificationsMenu({ initial }: { initial: NotificationPayload[] 
 
   const unread = items.filter(item => !item.read).length;
 
-  // On close, not on open: the list is worth reading with its unread marks still on, and closing
-  // it is the moment the user is done with them. It also means no "mark everything read" button —
-  // there is nothing left for one to do.
+  // Marked read on close, not on open: the list is worth reading with its unread marks still on.
   function onOpenChange(open: boolean) {
     if (open || unread === 0) {
       return;
