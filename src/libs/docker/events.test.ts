@@ -1,6 +1,6 @@
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DockerChange } from "./docker.ts";
+import type { DockerChange } from "./events.ts";
 
 // The pause before reconnecting is real seconds in production; here it is only an ordering point.
 vi.mock("node:timers/promises", () => ({ setTimeout: () => Promise.resolve() }));

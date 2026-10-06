@@ -45,12 +45,12 @@ async function runOne(operation: AppOperation, project: string, userId: string, 
 
   output.write(`\n$ docker compose ${appOperationArguments[operation].join(" ")} — ${project}\n`);
 
-  // Refreshed before the notification goes out, so the client's reload is served the new state, not a spinner;
-  // always, since a run that fails half-way still leaves containers it started. Not `df`: slow, events refresh it.
+  // Settled before the notification goes out, so the client's reload is served the new state, not a spinner;
+  // always, since a run that fails half-way still leaves containers it started.
   try {
     await hangar.store
       .compose(project, [...appOperationArguments[operation]], { pipe: output })
-      .finally(() => docker.refresh(["containers", "images"]));
+      .finally(() => docker.settle());
   } catch (error) {
     logger.error("Docker Compose stream command failed", { error, project, operation });
     await notifications.notify({

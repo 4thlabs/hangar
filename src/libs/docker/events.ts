@@ -3,7 +3,15 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type Dockerode from "dockerode";
 import { logger } from "#libs/logs";
 import { ComposeProjects } from "./compose.ts";
-import { DockerChanges, type DockerChange } from "./docker.ts";
+
+/**
+ * What a daemon event can make stale: the Compose containers, the local image list, or the
+ * host-wide overview. Internal to the library: callers ask `Docker.settle` instead.
+ */
+export type DockerChange = "containers" | "images" | "overview";
+
+/** Every {@link DockerChange}, for a (re)connection that cannot tell which one happened. */
+export const DockerChanges: readonly DockerChange[] = ["containers", "images", "overview"];
 
 /** The fields of a daemon event this class reads; the client hands them back untyped. */
 type DockerEvent = {
@@ -14,7 +22,8 @@ type DockerEvent = {
 /**
  * Follows the daemon's event stream and reports what each event made stale, whoever caused it.
  * Batched per {@link DockerChange}: the first event opens a window the rest join, so a steady
- * trickle cannot postpone the reload the way a debounce would.
+ * trickle cannot postpone the reload the way a debounce would. Owned by `Docker`, which starts it
+ * from `Docker.follow`; not part of the library's barrel.
  *
  * No `server-only` guard: see AGENTS.md § server-only.
  */
@@ -77,7 +86,7 @@ export class DockerEvents {
 
   /**
    * @param docker An Engine API client; injected so the composition root owns the connection
-   * @param onChange Called with what went stale, `docker.refresh` in production
+   * @param onChange Called with what went stale; `Docker` reloads the matching snapshot
    */
   constructor(docker: Dockerode, onChange: (change: DockerChange) => void) {
     this.docker = docker;
