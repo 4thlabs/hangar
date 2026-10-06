@@ -10,5 +10,8 @@
   "trailingComma": "all",
   "tabWidth": 2,
   "useTabs": false,
-  "endOfLine": "lf"
+  "endOfLine": "lf",
+  "plugins": ["@ianvs/prettier-plugin-sort-imports"],
+  "importOrder": ["<BUILTIN_MODULES>", "<THIRD_PARTY_MODULES>", "^#libs/", "^#", "^[.]"],
+  "importOrderTypeScriptVersion": "5.0.0"
 }
