@@ -1,5 +1,4 @@
 import winston from "winston";
-
 import { formatLine } from "./line.ts";
 
 export const logger = winston.createLogger({

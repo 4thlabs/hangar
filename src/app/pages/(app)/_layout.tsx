@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { MobileTabBar } from "#modules/common/components/navbar-mobile.tsx";
-import { AppNavbar } from "#modules/common/components/navbar.tsx";
 import { requireSession } from "#libs/auth";
 import { notifications as centre } from "#libs/notifications/server";
+import { MobileTabBar } from "#modules/common/components/navbar-mobile.tsx";
+import { AppNavbar } from "#modules/common/components/navbar.tsx";
 
 type AppLayoutProps = { children: ReactNode };
 

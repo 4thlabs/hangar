@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { SearchIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useRouter } from "waku";
 import { useSearch_UNSTABLE, useSetSearch_UNSTABLE } from "waku/router/client";
 import { Field, FieldLabel } from "#modules/common/ui/field.tsx";
@@ -33,7 +33,9 @@ function RouteSearchField({ id, autoFocus, from }: NavbarSearchProps & { from: s
     if (value === routeQuery) {
       return;
     }
+
     const timer = setTimeout(() => void setSearch({ q: value } as never, { history: "replace" }), DEBOUNCE_MS);
+
     return () => clearTimeout(timer);
   }, [value, routeQuery, setSearch]);
 

@@ -1,6 +1,6 @@
+import { hangar } from "#libs/hangar/server";
 import { Warm } from "#modules/common/components/warm.tsx";
 import { type DashboardColumn } from "#modules/widgets/config/config.ts";
-import { hangar } from "#libs/hangar/server";
 import { widgetRegistry } from "#modules/widgets/server/server.ts";
 
 const COLUMNS: readonly DashboardColumn[] = [1, 2, 3];
@@ -20,6 +20,7 @@ function Dashboard() {
     <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[1fr_3fr_1fr]">
       {COLUMNS.map(column => {
         const columnPlacements = placements.filter(placement => placement.column === column);
+
         if (columnPlacements.length === 0) {
           return null;
         }

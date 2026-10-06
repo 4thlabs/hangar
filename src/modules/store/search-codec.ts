@@ -23,9 +23,11 @@ export const storeSearchCodec: Unstable_SearchCodec<StoreSearch> = {
   },
   serialize: ({ q, filter }) => {
     const params = new URLSearchParams();
+
     if (q) {
       params.set("q", q);
     }
+
     if (filter.length > 0) {
       params.set("filter", filter.join(","));
     }

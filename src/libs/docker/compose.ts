@@ -170,12 +170,15 @@ export class ComposeProjects {
     if (unhealthyCount > 0) {
       return "unhealthy";
     }
+
     if (containerCount > 0 && runningCount === containerCount) {
       return "running";
     }
+
     if (runningCount === 0) {
       return "stopped";
     }
+
     return "partial";
   }
 
@@ -184,6 +187,7 @@ export class ComposeProjects {
    */
   private static replica(labels: Record<string, string>) {
     const replica = Number.parseInt(labels[ComposeProjects.Label.containerNumber] ?? "", 10);
+
     return Number.isFinite(replica) ? replica : null;
   }
 
@@ -235,6 +239,7 @@ export class ComposeProjects {
     for (const container of this.containers) {
       const labels = container.info.Labels;
       const aggregate = projects.get(labels[ComposeProjects.Label.project] ?? "");
+
       if (!aggregate) {
         continue;
       }
@@ -272,6 +277,7 @@ export class ComposeProjects {
             (left.replica ?? Number.MAX_SAFE_INTEGER) - (right.replica ?? Number.MAX_SAFE_INTEGER) ||
             ComposeProjects.compare(left.name, right.name),
         );
+
         const runningCount = sorted.filter(container => container.state === "running").length;
         const unhealthyCount = sorted.filter(container => container.health === "unhealthy").length;
 

@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { Dashboard } from "./api/type.ts";
-import { ArcaneGeneralStatsCard, arcaneGeneralStats } from "./general-stats.tsx";
 import { aService } from "../mock/mock.ts";
+import type { Dashboard } from "./api/type.ts";
+import { arcaneGeneralStats, ArcaneGeneralStatsCard } from "./general-stats.tsx";
 
 const dashboard: Dashboard = {
   versionInfo: {

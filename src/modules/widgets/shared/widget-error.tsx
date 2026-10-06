@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { CircleAlertIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { WidgetCard, WidgetContent, WidgetHeader } from "./widget.tsx";
 

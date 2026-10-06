@@ -1,15 +1,15 @@
 "use client";
 
+import { RotateCcwIcon, XIcon } from "lucide-react";
+import type { JobData, JobState } from "sidequest";
+import { useRouter } from "waku";
 import type { ActionResult } from "#modules/common/actions/action-result.ts";
+import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#modules/common/ui/empty.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
-import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
-import { RotateCcwIcon, XIcon } from "lucide-react";
-import type { JobData, JobState } from "sidequest";
-import { useRouter } from "waku";
 
 const stateLabel: Record<JobState, string> = {
   waiting: "En attente",

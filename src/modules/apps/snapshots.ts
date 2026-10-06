@@ -10,6 +10,7 @@ import { imageCheckReport } from "#libs/jobs";
  */
 function decorate(snapshot: ComposeProjectsSnapshot, outdated: ReadonlySet<string>): ComposeProjectsSnapshot {
   const categories = hangar.config.categories();
+
   // Nothing stops a stack from being listed twice: the first match wins, as it does for Arcane tags.
   // Only the name and colour travel to the client; the stack list would be dead weight on every row.
   const categoryOf = (stack: string) => {

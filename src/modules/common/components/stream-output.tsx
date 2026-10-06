@@ -1,7 +1,7 @@
 "use client";
 
-import { type UIEvent, useEffect, useRef } from "react";
-import { type StreamStatus, streamStatusLabel } from "#modules/common/hooks/use-stream-text.ts";
+import { useEffect, useRef, type UIEvent } from "react";
+import { streamStatusLabel, type StreamStatus } from "#modules/common/hooks/use-stream-text.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 
 /** Where a `useStreamText` stream stands, for a sheet header. */
@@ -25,6 +25,7 @@ export function StreamOutput({ text, error, placeholder, follow = true, onScroll
 
   useEffect(() => {
     const viewport = viewportRef.current;
+
     if (viewport && follow) {
       viewport.scrollTop = viewport.scrollHeight;
     }

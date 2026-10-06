@@ -1,14 +1,14 @@
-import { cancelJob, runJob } from "#modules/settings/actions/manage-job.ts";
+import { Sidequest } from "sidequest";
+import { hangar } from "#libs/hangar/server";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#modules/common/ui/tabs.tsx";
 import { saveConfig } from "#modules/settings/actions/manage-config.ts";
 import { saveEnv } from "#modules/settings/actions/manage-env.ts";
+import { cancelJob, runJob } from "#modules/settings/actions/manage-job.ts";
 import { manageStore } from "#modules/settings/actions/manage-store.ts";
 import { ConfigSettingsCard } from "#modules/settings/components/config-settings-card.tsx";
 import { EnvSettingsCard } from "#modules/settings/components/env-settings-card.tsx";
 import { JobsSettingsCard } from "#modules/settings/components/jobs-settings-card.tsx";
 import { StoreSettingsCard } from "#modules/settings/components/store-settings-card.tsx";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "#modules/common/ui/tabs.tsx";
-import { hangar } from "#libs/hangar/server";
-import { Sidequest } from "sidequest";
 
 export default async function SettingsPage() {
   const installed = await hangar.store.isInstalled();

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { WidgetKey, WidgetService, widgetConfigSchema, type WidgetConfig } from "./config.ts";
 import { noSecret } from "../mock/mock.ts";
+import { widgetConfigSchema, WidgetKey, WidgetService, type WidgetConfig } from "./config.ts";
 
 const DOMAIN = "test.local";
 

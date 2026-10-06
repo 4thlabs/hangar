@@ -1,9 +1,8 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { apiRoute, sseEvent, sseStream } from "#app/api/api-route.ts";
-import type { Samples } from "#libs/docker";
+import { ContainerStats, type Samples } from "#libs/docker";
 import { docker } from "#libs/docker/server";
-import { ContainerStats } from "#libs/docker";
 import { logger } from "#libs/logs";
+import { apiRoute, sseEvent, sseStream } from "#app/api/api-route.ts";
 
 /** How often a frame goes out. Also the window the CPU percentage is measured over. */
 const INTERVAL = 1_000;

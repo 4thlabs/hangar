@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { migrateDb } from "#libs/db";
 import { Notifications } from "./notifications.ts";
 

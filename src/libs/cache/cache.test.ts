@@ -152,6 +152,7 @@ describe("Cache.peek", () => {
   it("keeps answering while a reload is in flight", async () => {
     const cache = new Cache();
     let release: (value: string) => void = () => undefined;
+
     const load = vi
       .fn()
       .mockResolvedValueOnce("first")
@@ -251,6 +252,7 @@ describe("join", () => {
     const cache = new Cache();
     const first = vi.fn<() => Promise<string>>().mockResolvedValueOnce("a1").mockResolvedValueOnce("a2");
     const second = vi.fn<() => Promise<string>>().mockResolvedValueOnce("b1").mockResolvedValueOnce("b2");
+
     const derived = Cache.join(
       cache.define("a", TTL, GRACE, first),
       cache.define("b", TTL, GRACE, second),

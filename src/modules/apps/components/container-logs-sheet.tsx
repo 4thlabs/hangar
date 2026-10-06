@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { EraserIcon, FileTextIcon, RefreshCwIcon } from "lucide-react";
-import { useStreamText } from "#modules/common/hooks/use-stream-text.ts";
+import { useState } from "react";
 import { StreamOutput, StreamStatusBadge } from "#modules/common/components/stream-output.tsx";
+import { useStreamText } from "#modules/common/hooks/use-stream-text.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   Sheet,
@@ -28,6 +28,7 @@ export function ContainerLogsSheet({ project, containerId, containerName }: Cont
   const endpoint = open
     ? `/api/docker/apps/${encodeURIComponent(project)}/containers/${encodeURIComponent(containerId)}/logs`
     : null;
+
   const { text: logs, status, error, clear, reconnect } = useStreamText(endpoint);
 
   function handleOpenChange(nextOpen: boolean) {
@@ -35,6 +36,7 @@ export function ContainerLogsSheet({ project, containerId, containerName }: Cont
       clear();
       setFollowing(true);
     }
+
     setOpen(nextOpen);
   }
 

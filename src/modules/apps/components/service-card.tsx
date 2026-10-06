@@ -1,9 +1,9 @@
+import type { ComposeService } from "#libs/docker";
 import { s } from "#modules/apps/format.ts";
+import type { ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import { statusLabel, statusVariant } from "#modules/apps/status.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
-import type { ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import type { ComposeService } from "#libs/docker";
 import { ContainerTable } from "./container-table.tsx";
 
 type ServiceCardProps = { project: string; service: ComposeService; stats: ContainerStats };

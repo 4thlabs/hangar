@@ -2,6 +2,8 @@
 
 import { ArrowUpFromLineIcon, PowerIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { actionLabel, type AppOperation } from "#modules/apps/actions/app-operation.ts";
+import { ComposeOutputSheet } from "#modules/apps/components/compose-output-sheet.tsx";
+import type { useComposeRun } from "#modules/apps/hooks/use-compose-run.ts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,8 +16,6 @@ import {
 } from "#modules/common/ui/alert-dialog.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
-import { ComposeOutputSheet } from "#modules/apps/components/compose-output-sheet.tsx";
-import type { useComposeRun } from "#modules/apps/hooks/use-compose-run.ts";
 
 /** Operations that replace or destroy containers, so the ones that need confirming before they run. */
 export type DestructiveOperation = Exclude<AppOperation, "up">;
@@ -135,11 +135,13 @@ const TARGET_WORDING = {
 export function ComposeRunDialogs({ compose, subject, count }: ComposeRunDialogsProps) {
   const { confirmation, setConfirmation, running, targets, run, close, finished } = compose;
   const { apps, staysListed } = count > 1 ? TARGET_WORDING.many : TARGET_WORDING.one;
+
   const title: Record<DestructiveOperation, string> = {
     down: `Arrêter ${subject} ?`,
     recreate: `Recréer ${subject} ?`,
     update: `Mettre à jour ${subject} ?`,
   };
+
   const description: Record<DestructiveOperation, string> = {
     down: `Docker Compose supprimera les conteneurs et réseaux de ${apps}. ${staysListed}, à l’arrêt.`,
     recreate: `Tous les conteneurs de ${apps} seront recréés, même si leur configuration n’a pas changé.`,

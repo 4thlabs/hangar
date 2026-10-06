@@ -76,6 +76,7 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
   async notify(input: NotificationInput): Promise<void> {
     try {
       const targets = await this.recipients(input.userId);
+
       if (targets.length === 0) {
         return;
       }

@@ -144,6 +144,7 @@ export class WidgetKey {
         ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1)))
         : value,
     );
+
     let hash = 0x811c9dc5;
 
     for (const char of text) {

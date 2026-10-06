@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
-import { describe, expect, it } from "vitest";
 import { Hono } from "hono/tiny";
+import { describe, expect, it } from "vitest";
 import compress from "./compress.ts";
 
 /** Big enough to clear the threshold, compressible enough to prove the body survived. */
@@ -14,6 +14,7 @@ const LATE = `LATE ${"y".repeat(4_000)}`;
  */
 function app(contentType: string | null, frames: AsyncIterable<string>, path = "/") {
   const hono = new Hono();
+
   hono.use(compress());
   hono.get(
     path,
@@ -34,6 +35,7 @@ async function* read(response: Response) {
     : response.body!;
 
   const decoder = new TextDecoder();
+
   for await (const chunk of body as unknown as AsyncIterable<Uint8Array>) {
     yield decoder.decode(chunk);
   }
@@ -50,10 +52,12 @@ describe("compress middleware", () => {
       while (!released) {
         await new Promise(resolve => setTimeout(resolve, 5));
       }
+
       yield LATE;
     }
 
     const response = await app("text/plain; charset=utf-8", frames());
+
     expect(response.headers.get("Content-Encoding")).toBe("gzip");
     expect(response.headers.get("Vary")).toBe("Accept-Encoding");
 
@@ -64,9 +68,11 @@ describe("compress middleware", () => {
     released = true;
 
     const rest = [];
+
     for await (const chunk of chunks) {
       rest.push(chunk);
     }
+
     expect(rest.join("")).toContain("LATE");
   });
 

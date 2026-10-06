@@ -1,8 +1,7 @@
-import type { GithubRelease } from "./api/client.ts";
-import { githubClient } from "./api/client.ts";
 import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
-import { WidgetCard, WidgetContent, WidgetHeader, WidgetList, WidgetListItem, WidgetTime } from "../shared/index.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
+import { WidgetCard, WidgetContent, WidgetHeader, WidgetList, WidgetListItem, WidgetTime } from "../shared/index.ts";
+import { githubClient, type GithubRelease } from "./api/client.ts";
 
 type GithubReleasesCardProps = {
   releases: GithubRelease[];

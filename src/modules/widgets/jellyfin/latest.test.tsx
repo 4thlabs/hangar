@@ -1,9 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearWidgetCache } from "../mock/index.ts";
-import type { JellyfinCounts, JellyfinItem } from "./api/client.ts";
-import { JellyfinLatestCard, displayItem, jellyfinLatest } from "./latest.tsx";
 import { aService } from "../mock/mock.ts";
+import type { JellyfinCounts, JellyfinItem } from "./api/client.ts";
+import { displayItem, jellyfinLatest, JellyfinLatestCard } from "./latest.tsx";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -55,6 +55,7 @@ describe("displayItem", () => {
     expect(displayItem({ Id: "a", Name: "Rumours", Type: "MusicAlbum", AlbumArtist: "Fleetwood Mac" }).subtitle).toBe(
       "Fleetwood Mac",
     );
+
     expect(displayItem({ Id: "m", Name: "Dune", Type: "Movie", ProductionYear: 2021 }).subtitle).toBe("2021");
   });
 });
@@ -161,6 +162,7 @@ describe("jellyfinLatest", () => {
       "http://jellyfin:8096/Users",
       "http://jellyfin:8096/Items/Latest?userId=u-2&limit=100&includeItemTypes=Movie%2CEpisode%2CMusicAlbum&groupItems=true&enableImageTypes=Primary",
     ]);
+
     // The whole reason the poster is proxied: the key must not reach the page.
     expect(html).not.toContain("s3cret");
     expect(html).toContain("/api/widgets/jellyfin-latest/image/m-1");
@@ -174,6 +176,7 @@ describe("jellyfinLatest", () => {
       Type: "Movie",
       ImageTags: { Primary: "tag" },
     }));
+
     stub([{ Id: "u-2", Name: "thomas" }], many);
 
     const html = renderToStaticMarkup(<>{await jellyfinLatest(service, "thomas").Widget()}</>);
@@ -185,6 +188,7 @@ describe("jellyfinLatest", () => {
 
   it("counts two episodes of one series once, so the row keys stay unique", async () => {
     const episode = (Id: string) => ({ Id, Name: Id, Type: "Episode", SeriesId: "s-1", SeriesName: "Severance" });
+
     stub([{ Id: "u-2", Name: "thomas" }], [episode("ep-1"), episode("ep-2")]);
 
     const html = renderToStaticMarkup(<>{await jellyfinLatest(service, "thomas").Widget()}</>);

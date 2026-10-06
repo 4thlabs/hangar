@@ -109,6 +109,7 @@ export class Cache {
         if (this.entries.get(key) !== entry) {
           return;
         }
+
         entry.settled = { data };
         entry.until = Date.now() + ttl;
       },
@@ -116,6 +117,7 @@ export class Cache {
         if (this.entries.get(key) !== entry) {
           return;
         }
+
         if (previous) {
           this.entries.set(key, previous);
         } else {

@@ -7,6 +7,7 @@ vi.mock("waku", () => ({
   Link: ({ children }: { children: ReactNode }) => <a href="/apps/alpha">{children}</a>,
   useRouter: () => ({ reload: async () => {} }),
 }));
+
 vi.mock("waku/router/client", () => ({
   useSearch_UNSTABLE: () => ({ q: "", status: [], category: [], update: [], sort: null }),
   useSetSearch_UNSTABLE: () => () => {},
@@ -70,6 +71,7 @@ describe("Docker apps views", () => {
       runningCount: 0,
       stoppedCount: 0,
     };
+
     const html = renderToStaticMarkup(<AppsTable projects={[...snapshot.projects, stopped]} />);
 
     expect(html).toContain("alpha");

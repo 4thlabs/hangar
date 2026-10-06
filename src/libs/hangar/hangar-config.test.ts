@@ -1,13 +1,15 @@
-import { describe, expect, it } from "vitest";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { describe, expect, it } from "vitest";
 import { HangarConfig } from "./hangar-config.ts";
 
 async function configFile(contents: string) {
   const dir = await mkdtemp(path.join(tmpdir(), "hangar-config-"));
   const file = path.join(dir, "hangar.yml");
+
   await writeFile(file, contents, "utf8");
+
   return file;
 }
 

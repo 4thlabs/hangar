@@ -1,18 +1,17 @@
 import { cn } from "cn";
-import type { BeszelSystem } from "./api/client.ts";
-import { BeszelClient } from "./api/client.ts";
-import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
+import type { WidgetService } from "../config/config.ts";
+import { defineWidget } from "../shared/define-widget.tsx";
 import {
+  RelativeTime,
   WidgetCard,
   WidgetContent,
   WidgetHeader,
   WidgetList,
   WidgetListItem,
   WidgetMetadata,
-  RelativeTime,
 } from "../shared/index.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import { BeszelClient, type BeszelSystem } from "./api/client.ts";
 
 const chrome = { title: "Beszel", icon: <IconSelfh name="beszel" />, className: "min-h-40" };
 

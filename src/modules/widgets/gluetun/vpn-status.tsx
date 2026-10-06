@@ -1,10 +1,9 @@
 import { cn } from "cn";
-import type { GluetunPublicIp } from "./api/client.ts";
-import { GluetunClient } from "./api/client.ts";
-import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
-import { WidgetCard, WidgetContent, WidgetHeader } from "../shared/index.ts";
+import type { WidgetService } from "../config/config.ts";
 import { defineWidget } from "../shared/define-widget.tsx";
+import { WidgetCard, WidgetContent, WidgetHeader } from "../shared/index.ts";
+import { GluetunClient, type GluetunPublicIp } from "./api/client.ts";
 
 type GluetunVpnStatusCardProps = {
   publicIp: GluetunPublicIp;

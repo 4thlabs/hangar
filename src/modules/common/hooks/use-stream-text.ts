@@ -38,10 +38,13 @@ export function useStreamText(endpoint: string | null, method: "GET" | "POST" = 
 
       try {
         const response = await fetch(url, { method, signal: controller.signal });
+
         if (!response.ok) {
           const body = (await response.json()) as { error?: { message?: string } };
+
           throw new Error(body.error?.message ?? "Impossible de charger le flux.");
         }
+
         if (!response.body) {
           throw new Error("Le serveur n’a retourné aucun flux.");
         }
@@ -52,18 +55,22 @@ export function useStreamText(endpoint: string | null, method: "GET" | "POST" = 
 
         while (!controller.signal.aborted) {
           const { done, value } = await reader.read();
+
           if (done) {
             break;
           }
 
           const chunk = decoder.decode(value, { stream: true });
+
           setText(current => `${current}${chunk}`.slice(-MAX_STREAM_CHARACTERS));
         }
 
         const remainder = decoder.decode();
+
         if (remainder) {
           setText(current => `${current}${remainder}`.slice(-MAX_STREAM_CHARACTERS));
         }
+
         if (!controller.signal.aborted) {
           setStatus("ended");
         }
@@ -71,12 +78,14 @@ export function useStreamText(endpoint: string | null, method: "GET" | "POST" = 
         if (controller.signal.aborted) {
           return;
         }
+
         setStatus("error");
         setError(reason instanceof Error ? reason.message : "Le flux a été interrompu.");
       }
     }
 
     void follow(endpoint);
+
     return () => controller.abort();
   }, [endpoint, generation, method]);
 

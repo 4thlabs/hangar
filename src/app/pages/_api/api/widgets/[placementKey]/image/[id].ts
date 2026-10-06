@@ -1,5 +1,5 @@
 import type { ApiContext } from "waku/router";
-import { apiRoute, apiError } from "#app/api/api-route.ts";
+import { apiError, apiRoute } from "#app/api/api-route.ts";
 import { widgetImages } from "#modules/widgets/server/server.ts";
 
 /** A poster or a thumbnail never changes; a day of browser cache saves the service the repeat. */

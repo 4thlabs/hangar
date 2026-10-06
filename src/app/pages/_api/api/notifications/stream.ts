@@ -1,8 +1,8 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { apiRoute, sseEvent, sseStream } from "#app/api/api-route.ts";
 import { imageCheckReport } from "#libs/jobs";
-import { notifications } from "#libs/notifications/server";
 import { logger } from "#libs/logs";
+import { notifications } from "#libs/notifications/server";
+import { apiRoute, sseEvent, sseStream } from "#app/api/api-route.ts";
 
 /**
  * Polls SQLite: jobs write from another process, where an in-memory emitter would never be heard.
@@ -31,11 +31,13 @@ async function* frames(userId: string, from: Date, signal: AbortSignal) {
       if (newest !== cursor.getTime()) {
         alreadySent.clear();
       }
+
       for (const item of fresh) {
         if (item.createdAt === newest) {
           alreadySent.add(item.id);
         }
       }
+
       cursor = new Date(newest);
 
       // A notification may mean a job finished: refresh the image report first, since the client reloads on it.

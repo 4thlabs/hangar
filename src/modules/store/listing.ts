@@ -13,6 +13,7 @@ const filterOf = (app: HangarApp): StoreFilter => (app.installed ? "installed" :
 /** Applies the filter, then the name search, to every store app; an empty selection means no filter. */
 export function storeListing(all: readonly HangarApp[], search: StoreSearch): StoreListing {
   const filtered = search.filter.length === 0 ? all : all.filter(app => search.filter.includes(filterOf(app)));
+
   const counts = {
     installed: all.filter(app => filterOf(app) === "installed").length,
     available: all.filter(app => filterOf(app) === "available").length,

@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { lstat, mkdir, mkdtemp, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { CommandRunner } from "./runtime/runtime.ts";
-import { HangarStore } from "./hangar-store.ts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HangarRuntimeError } from "./hangar-error.ts";
+import { HangarStore } from "./hangar-store.ts";
+import type { CommandRunner } from "./runtime/runtime.ts";
 
 const STORE_URL = "https://example.com/store.git";
 
@@ -73,6 +73,7 @@ describe("HangarStore", () => {
     const store = await createStore(dataDir, createRuntime());
     const source = path.join(store.storePath, "store", "alpha-app");
     const destination = path.join(store.installedPath, "alpha-app");
+
     await mkdir(source, { recursive: true });
     await mkdir(store.installedPath, { recursive: true });
 
@@ -88,6 +89,7 @@ describe("HangarStore", () => {
   it("pulls an installed store", async () => {
     const runtime = createRuntime();
     const store = await createStore(dataDir, runtime);
+
     await mkdir(path.join(store.storePath, ".git"), { recursive: true });
 
     await store.install();
@@ -105,13 +107,16 @@ describe("HangarStore", () => {
           mkdir(path.join(dataDir, "app-store", "store", "gamma-app"), { recursive: true }),
           mkdir(path.join(dataDir, "app-store", "config"), { recursive: true }),
         ]);
+
         await Promise.all([
           writeFile(path.join(dataDir, "app-store", "config", "hangar.yml"), CATEGORIES),
           writeFile(path.join(dataDir, "app-store", "store", "networks.yml"), "networks: {}\n"),
         ]);
+
         return { code: 0, stdout: "" };
       }),
     };
+
     // No config up front: the categories it links by only arrive with the clone.
     const store = new HangarStore(STORE_URL, dataDir, runtime);
 
@@ -131,10 +136,12 @@ describe("HangarStore", () => {
   it("bootstraps the global env with the variables the stacks reference", async () => {
     const store = await createStore(dataDir, createRuntime());
     const alphaApp = path.join(store.storePath, "store", "alpha-app");
+
     await Promise.all([
       mkdir(path.join(store.storePath, ".git"), { recursive: true }),
       mkdir(alphaApp, { recursive: true }),
     ]);
+
     await Promise.all([
       writeFile(
         path.join(alphaApp, "compose.yml"),
@@ -153,11 +160,13 @@ describe("HangarStore", () => {
   it("keeps shared files out of the app list", async () => {
     const store = await createStore(dataDir, createRuntime());
     const alphaApp = path.join(store.storePath, "store", "alpha-app");
+
     await Promise.all([
       mkdir(path.join(store.storePath, ".git"), { recursive: true }),
       mkdir(alphaApp, { recursive: true }),
       mkdir(store.installedPath, { recursive: true }),
     ]);
+
     await Promise.all([
       writeFile(path.join(alphaApp, "compose.yml"), "services: {}\n"),
       writeFile(path.join(store.storePath, "store", "networks.yml"), "networks: {}\n"),
@@ -172,12 +181,14 @@ describe("HangarStore", () => {
     const store = await createStore(dataDir, createRuntime());
     const alphaApp = path.join(store.storePath, "store", "alpha-app");
     const betaApp = path.join(store.storePath, "store", "beta-app");
+
     await Promise.all([
       mkdir(path.join(store.storePath, ".git"), { recursive: true }),
       mkdir(alphaApp, { recursive: true }),
       mkdir(betaApp, { recursive: true }),
       mkdir(store.installedPath, { recursive: true }),
     ]);
+
     await Promise.all([
       writeFile(path.join(alphaApp, "compose.yml"), "name: Alpha App\nx-hangar:\n  icon: alpha.svg\n"),
       writeFile(path.join(betaApp, "compose.yml"), "x-hangar:\n  icon: beta.svg\n"),
@@ -192,6 +203,7 @@ describe("HangarStore", () => {
         { id: "beta-app", name: "Beta-app", icon: "beta.svg", installed: false, containerName: "beta-app" },
       ]),
     );
+
     expect(store.apps).toHaveLength(2);
   });
 
@@ -199,12 +211,14 @@ describe("HangarStore", () => {
     const store = await createStore(dataDir, createRuntime());
     const named = path.join(store.storePath, "store", "frigate");
     const sidecarFirst = path.join(store.storePath, "store", "immich");
+
     await Promise.all([
       mkdir(path.join(store.storePath, ".git"), { recursive: true }),
       mkdir(named, { recursive: true }),
       mkdir(sidecarFirst, { recursive: true }),
       mkdir(store.installedPath, { recursive: true }),
     ]);
+
     await Promise.all([
       // The container the reverse proxy routes to is not the app's directory name.
       writeFile(path.join(named, "compose.yml"), "services:\n  frigate:\n    container_name: frigate-nvr\n"),
@@ -226,6 +240,7 @@ describe("HangarStore", () => {
     const good = path.join(store.storePath, "store", "good-app");
     const noMetadata = path.join(store.storePath, "store", "no-metadata-app");
     const noCompose = path.join(store.storePath, "store", "no-compose-app");
+
     await Promise.all([
       mkdir(path.join(store.storePath, ".git"), { recursive: true }),
       mkdir(good, { recursive: true }),
@@ -233,6 +248,7 @@ describe("HangarStore", () => {
       mkdir(noCompose, { recursive: true }),
       mkdir(store.installedPath, { recursive: true }),
     ]);
+
     await Promise.all([
       writeFile(path.join(good, "compose.yml"), "name: Good\nx-hangar:\n  icon: good.svg\n"),
       writeFile(path.join(noMetadata, "compose.yml"), "name: No Metadata\nservices: {}\n"),
@@ -254,11 +270,13 @@ describe("HangarStore", () => {
         },
       ]),
     );
+
     expect(store.apps).toHaveLength(2);
   });
 
   it("clears stale app metadata when the store is absent", async () => {
     const store = await createStore(dataDir, createRuntime());
+
     store.apps.add({ id: "old", name: "Old", icon: "old.svg", installed: true, containerName: "old" });
 
     await store.refresh();
@@ -268,6 +286,7 @@ describe("HangarStore", () => {
 
   it("returns only installed app ids", async () => {
     const store = await createStore(dataDir, createRuntime());
+
     store.apps.add({ id: "a", name: "A", icon: undefined, installed: true, containerName: "a" });
     store.apps.add({ id: "b", name: "B", icon: undefined, installed: false, containerName: "b" });
 
@@ -276,6 +295,7 @@ describe("HangarStore", () => {
 
   it("looks up a store app by id", async () => {
     const store = await createStore(dataDir, createRuntime());
+
     store.apps.add({ id: "a", name: "A", icon: undefined, installed: true, containerName: "a" });
 
     expect(store.app("a")).toMatchObject({ id: "a" });
@@ -284,6 +304,7 @@ describe("HangarStore", () => {
 
   it("links and lists a stack a saved config adds", async () => {
     const store = await createStore(dataDir, createRuntime());
+
     await mkdir(store.installedPath, { recursive: true });
     await mkdir(path.join(store.storePath, ".git"));
     await mkdir(path.join(store.storePath, "store", "delta-app"), { recursive: true });
@@ -301,6 +322,7 @@ describe("HangarStore", () => {
     it("adds a new app once docker compose accepts it", async () => {
       const runtime = createRuntime();
       const store = await createStore(dataDir, runtime);
+
       await mkdir(store.installedPath, { recursive: true });
       await mkdir(path.join(store.storePath, ".git"));
 
@@ -321,6 +343,7 @@ describe("HangarStore", () => {
 
     it("leaves nothing behind when docker compose rejects a new app", async () => {
       const runtime = createRuntime();
+
       runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "services must be a mapping"));
       const store = await createStore(dataDir, runtime);
 
@@ -332,6 +355,7 @@ describe("HangarStore", () => {
       const runtime = createRuntime();
       const store = await createStore(dataDir, runtime);
       const folder = path.join(store.storePath, "store", "delta-app");
+
       await mkdir(folder, { recursive: true });
       await writeFile(path.join(folder, "compose.yml"), COMPOSE);
       runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "invalid"));
@@ -344,6 +368,7 @@ describe("HangarStore", () => {
 
     it("refuses ids that escape the store, shared files, creating an existing app and editing a missing one", async () => {
       const store = await createStore(dataDir, createRuntime());
+
       await mkdir(path.join(store.storePath, "store", "delta-app"), { recursive: true });
 
       await expect(store.createApp("../config", COMPOSE)).rejects.toThrow(/Invalid app id/);
@@ -360,12 +385,14 @@ describe("HangarStore.compose", () => {
   const withStacks = async (...stacks: string[]) => {
     const runtime = createRuntime();
     const store = await createStore(dataDir, runtime);
+
     await Promise.all(
       stacks.map(async stack => {
         await mkdir(path.join(store.installedPath, stack), { recursive: true });
         await writeFile(path.join(store.installedPath, stack, "compose.yml"), "services: {}\n");
       }),
     );
+
     return { store, runtime };
   };
 
@@ -415,6 +442,7 @@ describe("HangarStore.compose", () => {
 
   it("pins the project name to the stack, not the compose file's display name", async () => {
     const { store, runtime } = await withStacks("alpha-app");
+
     await writeFile(path.join(store.installedPath, "alpha-app", "compose.yml"), "name: Alpha App\nservices: {}\n");
 
     await store.compose("alpha-app", ["up", "-d"]);
@@ -468,12 +496,15 @@ describe("HangarStore.compose", () => {
 
   it("stops an ordered run at the first failure but completes an unordered one", async () => {
     const { store } = await withStacks("alpha-app", "beta-app", "gamma-app");
+
     const failing = vi.fn(async (_c: string, args: string[]) => {
       if (args.some(arg => arg.includes("beta-app"))) {
         throw new HangarRuntimeError(2, "boom");
       }
+
       return { code: 0 };
     });
+
     Object.assign(store, { runtime: { run: failing } });
 
     await expect(store.compose("up", ["-d"])).rejects.toMatchObject({ code: 2 });

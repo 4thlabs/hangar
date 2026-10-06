@@ -1,8 +1,8 @@
+import { MiddlewareHandler } from "hono/types";
 import { Sidequest } from "sidequest";
 import { env } from "#libs/env";
 import { CheckImageVersion } from "../jobs/check-image-version.ts";
 import { UpdateOutdatedApps } from "../jobs/update-outdated-apps.ts";
-import { MiddlewareHandler } from "hono/types";
 
 /**
  * Starts Sidequest and schedules Hangar's jobs, once, after the first request the server answers.

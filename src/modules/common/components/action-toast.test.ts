@@ -10,6 +10,7 @@ describe("createActionToast", () => {
       description: "Done",
       type: "success",
     });
+
     expect(createActionToast({ success: false, message: "Not done" }, titles)).toEqual({
       title: "Failure",
       description: "Not done",

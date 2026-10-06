@@ -1,9 +1,10 @@
 "use client";
 
-import { SearchIcon } from "lucide-react";
 import { cn } from "cn";
+import { SearchIcon } from "lucide-react";
 import { Link, useRouter } from "waku";
 import { NavbarSearch } from "#modules/common/components/searchbar.tsx";
+import { isNavigationActive, navigations } from "#modules/common/navigations.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   Sheet,
@@ -13,7 +14,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "#modules/common/ui/sheet.tsx";
-import { isNavigationActive, navigations } from "#modules/common/navigations.ts";
 
 /** The magnifier and its sheet, which stand in for the search field until it fits at `md`. */
 export function MobileSearch() {

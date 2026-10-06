@@ -4,7 +4,9 @@ import type { DockerOverview } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { outdatedSnapshot } from "#modules/apps/snapshots.ts";
 import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
+import { defineWidget } from "../shared/define-widget.tsx";
 import {
+  Units,
   WidgetCard,
   WidgetContent,
   WidgetFooter,
@@ -12,9 +14,7 @@ import {
   WidgetMetadata,
   WidgetMetric,
   WidgetMetricGrid,
-  Units,
 } from "../shared/index.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
 
 type DockerGeneralStatsCardProps = {
   overview: DockerOverview;

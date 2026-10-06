@@ -1,10 +1,10 @@
 "use client";
 
 import { useSearch_UNSTABLE, useSetSearch_UNSTABLE } from "waku/router/client";
+import type { ComposeProjectStatus } from "#libs/docker";
+import { APP_STATUSES } from "#modules/apps/search-codec.ts";
 import { statusLabel } from "#modules/apps/status.ts";
 import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
-import { APP_STATUSES } from "#modules/apps/search-codec.ts";
-import type { ComposeProjectStatus } from "#libs/docker";
 
 type AppsStatusFilterProps = {
   /** How many projects carry each status, shown beside its checkbox. */

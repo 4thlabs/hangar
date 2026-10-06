@@ -1,4 +1,4 @@
-import { searchByName } from "#modules/common/search.ts";
+import type { ComposeProjectSummary } from "#libs/docker";
 import {
   APP_STATUSES,
   type AppSortColumn,
@@ -6,7 +6,7 @@ import {
   type AppsSort,
   type AppUpdate,
 } from "#modules/apps/search-codec.ts";
-import type { ComposeProjectSummary } from "#libs/docker";
+import { searchByName } from "#modules/common/search.ts";
 
 /** What each sortable column compares on. Status sorts by severity, i.e. `APP_STATUSES` order. */
 const sortValue: Record<AppSortColumn, (project: ComposeProjectSummary) => number | string> = {
@@ -79,8 +79,10 @@ export function countBy(
   key: (project: ComposeProjectSummary) => string | undefined,
 ): Record<string, number> {
   const counts: Record<string, number> = {};
+
   for (const project of projects) {
     const value = key(project);
+
     if (value !== undefined) {
       counts[value] = (counts[value] ?? 0) + 1;
     }

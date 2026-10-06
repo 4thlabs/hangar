@@ -1,9 +1,10 @@
 import { cn } from "cn";
-import type { BackrestRepoSummary } from "./api/client.ts";
-import { BackrestClient } from "./api/client.ts";
-import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
+import type { WidgetService } from "../config/config.ts";
+import { defineWidget } from "../shared/define-widget.tsx";
 import {
+  RelativeTime,
+  Units,
   WidgetCard,
   WidgetContent,
   WidgetHeader,
@@ -11,10 +12,8 @@ import {
   WidgetListItem,
   WidgetMetadata,
   WidgetTime,
-  Units,
-  RelativeTime,
 } from "../shared/index.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import { BackrestClient, type BackrestRepoSummary } from "./api/client.ts";
 
 const chrome = { title: "Backrest", icon: <IconSelfh name="backrest" />, className: "min-h-40" };
 

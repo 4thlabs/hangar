@@ -48,6 +48,7 @@ describe("appsSearchCodec", () => {
 
   it("round-trips a query and a selection", () => {
     const query = "q=next&status=running%2Cstopped&category=media%2Cinfra&update=available";
+
     expect(appsSearchCodec.serialize(appsSearchCodec.parse(query))).toBe(query);
   });
 });

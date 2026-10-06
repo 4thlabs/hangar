@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { BackrestRepoSummary } from "./api/client.ts";
-import { BackrestSummaryCard, backrestSummary, displayRepo } from "./summary.tsx";
 import { aService, clearWidgetCache } from "../mock/mock.ts";
+import type { BackrestRepoSummary } from "./api/client.ts";
+import { backrestSummary, BackrestSummaryCard, displayRepo } from "./summary.tsx";
 
 afterEach(() => vi.unstubAllGlobals());
 beforeEach(clearWidgetCache);
@@ -96,6 +96,7 @@ describe("BackrestSummaryCard", () => {
 
   it("marks a failed repository in words, not only in colour", () => {
     const failed = displayRepo({ ...healthy, recentBackups: { status: ["STATUS_ERROR"], timestampMs: [String(NOW)] } });
+
     const html = renderToStaticMarkup(
       <BackrestSummaryCard repos={[failed]} serviceUrl="https://backup.test.local" now={NOW} />,
     );

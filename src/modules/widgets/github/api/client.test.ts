@@ -70,6 +70,7 @@ describe("getLatestReleases", () => {
 
   it("serves the cached release instead of asking again", async () => {
     const fetcher = respond({ "glanceapp/glance": release("v0.8.4", "2026-09-18T10:00:00Z") });
+
     vi.stubGlobal("fetch", fetcher);
 
     await client.getLatestReleases(["glanceapp/glance"]);
@@ -81,6 +82,7 @@ describe("getLatestReleases", () => {
 
   it("refetches once the cache went stale", async () => {
     const fetcher = respond({ "glanceapp/glance": release("v0.8.4", "2026-09-18T10:00:00Z") });
+
     vi.stubGlobal("fetch", fetcher);
 
     await client.getLatestReleases(["glanceapp/glance"]);
@@ -98,6 +100,7 @@ describe("getLatestReleases", () => {
       "fetch",
       vi.fn(() => Promise.resolve(new Response("rate limited", { status: 403 }))),
     );
+
     vi.setSystemTime(START + 31 * 60 * 1_000);
     const releases = await client.getLatestReleases(["glanceapp/glance"]);
 

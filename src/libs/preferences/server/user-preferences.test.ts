@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { UserPreferencesStore } from "./user-preferences.ts";
 import { Theme } from "../theme.ts";
+import { UserPreferencesStore } from "./user-preferences.ts";
 
 describe("UserPreferencesStore", () => {
   it("uses defaults when no preferences are stored", () => {

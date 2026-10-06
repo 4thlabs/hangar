@@ -126,6 +126,7 @@ export class DockerEvents {
     for (const timer of this.batches.values()) {
       clearTimeout(timer);
     }
+
     this.batches.clear();
   }
 

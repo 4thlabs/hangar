@@ -39,6 +39,7 @@ async function readFrames(response: Response, controller: AbortController, count
   }
 
   controller.abort();
+
   return frames.map(frame => JSON.parse(frame.replace(/^data: /, "")) as Record<string, { cpuPercent: number | null }>);
 }
 
@@ -60,6 +61,7 @@ describe("GET Docker container statistics", () => {
 
   it("streams frames as bytes, with the CPU delta only from the second one", async () => {
     let used = 0;
+
     dockerMock.stats.mockImplementation(() => Promise.resolve(statsSample((used += 100))));
     const controller = new AbortController();
 
@@ -89,6 +91,7 @@ describe("GET Docker container statistics", () => {
     const controller = new AbortController();
 
     const response = await GET(new Request("http://localhost/api/docker/stats", { signal: controller.signal }));
+
     // The status line is already sent, so the second sample failing can only end the stream.
     dockerMock.listContainers.mockRejectedValue(new Error("private socket detail"));
 

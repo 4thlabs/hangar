@@ -46,6 +46,7 @@ describe("Compose project aggregation", () => {
         containerIds: ["beta-1"],
       },
     ]);
+
     expect(new ComposeProjects(containers).summaries(new Set(["alpha"])).map(summary => summary.name)).toEqual([
       "alpha",
     ]);

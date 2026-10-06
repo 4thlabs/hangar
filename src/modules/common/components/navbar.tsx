@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { ChevronDownIcon, LogOutIcon, SettingsIcon } from "lucide-react";
+import { useState } from "react";
 import { Link, useRouter } from "waku";
+import { authClient } from "#libs/auth/client";
+import type { NotificationPayload } from "#libs/notifications";
 import { MobileSearch } from "#modules/common/components/navbar-mobile.tsx";
-import { NotificationsMenu } from "#modules/notifications/components/notifications-menu.tsx";
 import { NavbarSearch } from "#modules/common/components/searchbar.tsx";
 import { UserAvatar, type AvatarUser } from "#modules/common/components/user-avatar.tsx";
 import { isNavigationActive, navigations } from "#modules/common/navigations.ts";
@@ -22,8 +23,7 @@ import { Spinner } from "#modules/common/ui/spinner.tsx";
 import { Tabs, TabsList, TabsTrigger } from "#modules/common/ui/tabs.tsx";
 import { toast } from "#modules/common/ui/toast.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
-import { authClient } from "#libs/auth/client";
-import type { NotificationPayload } from "#libs/notifications";
+import { NotificationsMenu } from "#modules/notifications/components/notifications-menu.tsx";
 
 type AppNavbarProps = {
   user: AvatarUser;
@@ -119,6 +119,7 @@ function UserMenu({ user }: { user: AvatarUser }) {
 
       if (result.error) {
         toast.add(SIGN_OUT_ERROR_TOAST);
+
         return;
       }
 

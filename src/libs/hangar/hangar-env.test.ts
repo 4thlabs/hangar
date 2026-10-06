@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { parse } from "dotenv";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { parse } from "dotenv";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HangarEnv } from "./hangar-env.ts";
 
 describe("HangarEnv", () => {
@@ -42,6 +42,7 @@ describe("HangarEnv", () => {
       "alpha-app",
       "services:\n  alpha:\n    image: alpha:${ALPHA_APP_TAG:-latest}\n    working_dir: ${PWD}\n    environment:\n      DOMAIN: $DOMAIN\n      PRICE: $$5\n",
     );
+
     await writeFile(path.join(installedPath, "networks.yml"), "networks:\n  web:\n    name: ${NETWORK}\n", "utf8");
 
     // PWD is compose's to fill, `$$5` is an escaped dollar, everything else is the operator's.
@@ -162,6 +163,7 @@ describe("HangarEnv", () => {
       "alpha-app",
       "services:\n  alpha:\n    image: alpha\n    environment:\n      TAG: ${ALPHA_APP_TAG}\n      KEY: ${ALPHA_APP_KEY}\n",
     );
+
     await env.write({ ALPHA_APP_TAG: "v1" });
 
     await env.ensure();
@@ -254,6 +256,7 @@ describe("HangarEnv", () => {
 
     // The first write had nothing to back up; the next two each kept the state they replaced.
     const backups = (await readdir(dir)).filter(entry => entry.endsWith(".bak")).sort();
+
     const contents = await Promise.all(
       backups.map(async backup => parse(await readFile(path.join(dir, backup), "utf8"))),
     );

@@ -94,6 +94,7 @@ describe("defineWidget caching", () => {
       .fn<() => Promise<string>>()
       .mockRejectedValueOnce(new Error("service down"))
       .mockResolvedValue("payload");
+
     const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
 
     expect(renderToStaticMarkup(await widget.Widget())).toContain("Could not load.");

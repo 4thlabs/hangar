@@ -1,5 +1,4 @@
 import "server-only";
-
 import { db } from "#libs/db/server";
 import { Notifications } from "../notifications.ts";
 

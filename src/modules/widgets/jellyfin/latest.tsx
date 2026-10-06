@@ -1,18 +1,17 @@
-import type { JellyfinCounts, JellyfinItem } from "./api/client.ts";
-import { JellyfinClient } from "./api/client.ts";
-import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
 import { ScrollArea } from "#modules/common/ui/scroll-area.tsx";
+import type { WidgetService } from "../config/config.ts";
+import { defineWidget } from "../shared/define-widget.tsx";
 import {
+  Units,
   WidgetCard,
   WidgetContent,
   WidgetEmptyState,
   WidgetHeader,
-  WidgetMetadata,
-  Units,
   WidgetImage,
+  WidgetMetadata,
 } from "../shared/index.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import { JellyfinClient, type JellyfinCounts, type JellyfinItem } from "./api/client.ts";
 
 /** How many posters the row holds. */
 const ITEM_COUNT = 10;

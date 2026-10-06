@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MinifluxEntry } from "./api/client.ts";
-import { MinifluxEntriesCard, minifluxEntries } from "./entries.tsx";
 import { clearWidgetCache } from "../shared/define-widget.tsx";
+import type { MinifluxEntry } from "./api/client.ts";
+import { minifluxEntries, MinifluxEntriesCard } from "./entries.tsx";
 
 beforeEach(clearWidgetCache);
 afterEach(() => vi.unstubAllGlobals());
@@ -63,6 +63,7 @@ describe("MinifluxEntriesCard", () => {
       link: "https://miniflux.test.local",
       apiKey: () => Promise.resolve("s3cret"),
     });
+
     const html = renderToStaticMarkup(<>{await Widget()}</>);
 
     expect(called.every(request => request.url.startsWith("http://miniflux:8080/v1/entries?"))).toBe(true);
@@ -80,6 +81,7 @@ describe("MinifluxEntriesCard", () => {
       link: "https://miniflux.test.local",
       apiKey: () => Promise.resolve(undefined),
     });
+
     const html = renderToStaticMarkup(<>{await Widget()}</>);
 
     expect(html).toContain("unavailable");

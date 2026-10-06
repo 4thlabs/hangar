@@ -1,12 +1,13 @@
 "use client";
 
-import { useLayoutEffect } from "react";
 import { useAtomValue } from "jotai";
-import { colorModeAtom, themePaletteAtom } from "#modules/common/atoms/theme.ts";
+import { useLayoutEffect } from "react";
 import { Theme, type ColorMode } from "#libs/preferences";
+import { colorModeAtom, themePaletteAtom } from "#modules/common/atoms/theme.ts";
 
 function persistPreference(name: string, value: string) {
   const secure = window.location.protocol === "https:" ? "; secure" : "";
+
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${Theme.CookieMaxAge}; samesite=lax${secure}`;
 }
 
@@ -39,6 +40,7 @@ export function ThemeEffects() {
     }
 
     colorScheme.addEventListener("change", applySystemPreference);
+
     return () => colorScheme.removeEventListener("change", applySystemPreference);
   }, [mode]);
 

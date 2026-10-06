@@ -1,6 +1,8 @@
 import { PassThrough, type Readable } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
 import type Dockerode from "dockerode";
+import { Cache, type Snapshot } from "#libs/cache";
+import { logger } from "#libs/logs";
 import {
   ComposeProjects,
   DockerNotFoundError,
@@ -11,8 +13,6 @@ import {
   type RunningImage,
   type UpdateCheck,
 } from "./compose.ts";
-import { logger } from "#libs/logs";
-import { Cache, type Snapshot } from "#libs/cache";
 import type { ContainerStatsSample } from "./stats.ts";
 
 /** What the daemon answers for a container that went away between a list and a call on it. */
@@ -195,6 +195,7 @@ export class Docker {
       all: true,
       filters: { label: [ComposeProjects.Label.project] },
     });
+
     const inspected = await Promise.allSettled(
       listed.map(async info => ({ info, detail: await this.docker.getContainer(info.Id).inspect() })),
     );
@@ -237,6 +238,7 @@ export class Docker {
         logger.warn(
           `Registry rate limit hit on ${image} (${index} checked), skipping the remaining ${references.length - index - 1}`,
         );
+
         break;
       }
 
@@ -393,6 +395,7 @@ export class Docker {
       logger.warn("A container log stream failed", { error, container: container.info.Id });
       output.end();
     });
+
     signal.addEventListener("abort", () => logs.destroy());
 
     return output;
@@ -404,6 +407,7 @@ export class Docker {
    */
   async sampleStats(): Promise<Samples> {
     const running = await this.docker.listContainers({ filters: { label: [ComposeProjects.Label.project] } });
+
     const samples = await Promise.allSettled(
       running.map(
         async entry =>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AppsSearch } from "#modules/apps/search-codec.ts";
 import type { ComposeProjectSummary } from "#libs/docker";
+import type { AppsSearch } from "#modules/apps/search-codec.ts";
 import { countBy, filterProjects, nextSort, updateState } from "./filter.ts";
 
 /** The `/apps` search params, defaulting every dimension to "no filter". */
@@ -77,6 +77,7 @@ describe("filterProjects", () => {
 
   it("leaves the caller's array untouched", () => {
     const original = [...projects];
+
     filterProjects(projects, search());
 
     expect(projects).toEqual(original);
@@ -102,6 +103,7 @@ describe("sorting", () => {
       { ...project("a", "running"), containerCount: 9 },
       { ...project("b", "running"), containerCount: 10 },
     ];
+
     const result = filterProjects(wide, search({ sort: { column: "containers", descending: true } }));
 
     // A string compare would put "9" after "10".
@@ -181,9 +183,11 @@ describe("update filter", () => {
 describe("nextSort", () => {
   it("cycles a column through ascending, descending, then off", () => {
     const ascending = nextSort(null, "name");
+
     expect(ascending).toEqual({ column: "name", descending: false });
 
     const descending = nextSort(ascending, "name");
+
     expect(descending).toEqual({ column: "name", descending: true });
 
     // Back to null: there has to be a way back to relevance ordering while searching.

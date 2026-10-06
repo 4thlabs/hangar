@@ -2,8 +2,8 @@
 
 import { useState, type SubmitEvent } from "react";
 import { useRouter } from "waku";
-import { AuthEmailField, AuthFormCard, AuthPasswordField } from "#modules/auth/components/auth-form-card.tsx";
 import { authClient } from "#libs/auth/client";
+import { AuthEmailField, AuthFormCard, AuthPasswordField } from "#modules/auth/components/auth-form-card.tsx";
 
 export function LoginForm() {
   const router = useRouter();
@@ -24,6 +24,7 @@ export function LoginForm() {
 
       if (result.error) {
         setError(result.error.message ?? "Unable to sign in.");
+
         return;
       }
 

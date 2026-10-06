@@ -1,10 +1,10 @@
 "use server";
 
-import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
-import { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
 import { requireSession } from "#libs/auth";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
+import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
+import { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
 
 const UNKNOWN_APP = "Cette application n’existe pas dans le store.";
 
@@ -13,6 +13,7 @@ async function findApp(appId: string, rejected: string) {
   await requireSession();
 
   const app = hangar.store.app(appId);
+
   if (!app) {
     logger.warn(rejected, { appId });
   }
@@ -22,6 +23,7 @@ async function findApp(appId: string, rejected: string) {
 
 export const installApp = async (appId: string): Promise<StoreActionResult> => {
   const app = await findApp(appId, "App installation rejected: unknown app");
+
   if (!app) {
     return StoreActionResult.failure(UNKNOWN_APP);
   }
@@ -50,6 +52,7 @@ export const installApp = async (appId: string): Promise<StoreActionResult> => {
 
 export const uninstallApp = async (appId: string): Promise<StoreActionResult> => {
   const app = await findApp(appId, "App uninstallation rejected: unknown app");
+
   if (!app) {
     return StoreActionResult.failure(UNKNOWN_APP);
   }

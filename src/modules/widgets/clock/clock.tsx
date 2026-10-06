@@ -1,6 +1,6 @@
 import { ClockIcon } from "lucide-react";
-import { ClockDisplay } from "./clock-display.tsx";
 import { defineWidget } from "../shared/define-widget.tsx";
+import { ClockDisplay } from "./clock-display.tsx";
 
 const clockWidgetClassName = "h-20";
 

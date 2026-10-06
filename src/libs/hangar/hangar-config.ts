@@ -1,7 +1,7 @@
-import { load } from "js-yaml";
 import { readFile, writeFile } from "node:fs/promises";
-import { logger } from "#libs/logs";
+import { load } from "js-yaml";
 import * as z from "zod";
+import { logger } from "#libs/logs";
 import { defaultWidgets, widgetConfigSchema, type WidgetConfig } from "#modules/widgets/config/config.ts";
 import { HangarError } from "./hangar-error.ts";
 
@@ -107,6 +107,7 @@ export class HangarConfig {
    */
   async write(source: string) {
     const config = this.parse(source);
+
     await writeFile(this._configFile, source, "utf8");
     this.apply(config);
   }

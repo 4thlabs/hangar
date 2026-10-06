@@ -144,9 +144,11 @@ describe("Docker.openLogs", () => {
   it("follows the container's output from the tail", async () => {
     givenContainers([logged(inAlpha)]);
     const source = new PassThrough();
+
     dockerMock.logs.mockResolvedValue(source);
 
     const stream = await client("alpha").openLogs("alpha", CONTAINER_ID, signal);
+
     source.write("hello\n");
 
     await expect(new Promise(resolve => stream.once("data", resolve))).resolves.toEqual(Buffer.from("hello\n"));
@@ -172,6 +174,7 @@ describe("Docker.openLogs", () => {
   it("tears the log stream down when the request is aborted", async () => {
     givenContainers([logged(inAlpha)]);
     const source = new PassThrough();
+
     dockerMock.logs.mockResolvedValue(source);
     const controller = new AbortController();
 
@@ -188,6 +191,7 @@ describe("Docker.sampleStats", () => {
       container(),
       container({ Id: "container-2", labels: { [LABEL.project]: "beta", [LABEL.service]: "api" } }),
     ]);
+
     dockerMock.stats.mockImplementation((id: string) => Promise.resolve({ id }));
 
     const samples = await client("alpha").sampleStats();
@@ -208,6 +212,7 @@ describe("Docker.remoteDigests", () => {
       container(),
       container({ Id: "container-2", labels: { [LABEL.project]: "beta", [LABEL.service]: "web" } }),
     ]);
+
     givenImages("nginx@sha256:local");
     dockerMock.distribution.mockResolvedValue({ Descriptor: { digest: "sha256:remote" } });
 
@@ -236,10 +241,12 @@ describe("Docker.remoteDigests", () => {
     givenImages("x@sha256:local");
     let inFlight = 0;
     let peak = 0;
+
     dockerMock.distribution.mockImplementation(async () => {
       peak = Math.max(peak, ++inFlight);
       await Promise.resolve();
       inFlight--;
+
       return { Descriptor: { digest: "sha256:remote" } };
     });
 
@@ -347,6 +354,7 @@ describe("Docker.overview", () => {
       ContainersRunning: 4,
       ContainersStopped: 1,
     });
+
     dockerMock.df.mockResolvedValue({
       LayersSize: 1_073_741_824,
       Images: [{ Containers: 2 }, { Containers: 0 }],
@@ -368,6 +376,7 @@ describe("Docker.overview", () => {
       ContainersRunning: 0,
       ContainersStopped: 0,
     });
+
     dockerMock.df.mockResolvedValue({ LayersSize: 0, Images: null, Volumes: null });
 
     const overview = await client().overview.read();
@@ -400,6 +409,7 @@ describe("Docker.loadContainers", () => {
 
   it("keeps the containers it could inspect when one has gone away mid-load", async () => {
     const sources = [container(), container({ Id: "container-2", name: "/alpha-web-2" })];
+
     givenContainers(sources);
 
     // A container that exits between the list and its inspect answers 404, which is the common
@@ -452,6 +462,7 @@ describe("Docker.loadContainers", () => {
 
   it("does not cache a failed load", async () => {
     const docker = client("alpha");
+
     dockerMock.listContainers.mockRejectedValueOnce(new Error("socket gone"));
 
     await expect(docker.projects.read()).rejects.toThrow("socket gone");
@@ -482,11 +493,13 @@ describe("Docker snapshot staleness", () => {
       ContainersRunning: 1,
       ContainersStopped: 0,
     });
+
     dockerMock.df.mockResolvedValue({ LayersSize: 0, Images: null, Volumes: null });
   };
 
   it("serves a stale overview at once and refreshes behind it", async () => {
     const docker = client("alpha");
+
     givenDaemon("27.3.1");
 
     expect((await docker.overview.read()).version).toBe("27.3.1");
@@ -505,6 +518,7 @@ describe("Docker snapshot staleness", () => {
 
   it("stops serving a stale overview once the daemon has been down past the grace window", async () => {
     const docker = client("alpha");
+
     givenDaemon("27.3.1");
     await docker.overview.read();
 

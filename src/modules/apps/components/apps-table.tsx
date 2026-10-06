@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
+import { useState } from "react";
 import { Link } from "waku";
+import type { ComposeProjectSummary } from "#libs/docker";
 import { categoryBadgeClass } from "#modules/apps/category.ts";
-import { plural, s } from "#modules/apps/format.ts";
 import { ComposeOperationButtons, ComposeRunDialogs } from "#modules/apps/components/compose-operations.tsx";
+import { plural, s } from "#modules/apps/format.ts";
 import { useComposeRun } from "#modules/apps/hooks/use-compose-run.ts";
+import type { AppSortColumn, AppsSort } from "#modules/apps/search-codec.ts";
 import { statusLabel, statusVariant } from "#modules/apps/status.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
-import type { AppSortColumn, AppsSort } from "#modules/apps/search-codec.ts";
-import type { ComposeProjectSummary } from "#libs/docker";
 
 type AppsTableProps = {
   projects: ComposeProjectSummary[];
@@ -68,11 +68,13 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
   function toggle(name: string, checked: boolean) {
     setSelection(current => {
       const next = new Set(current);
+
       if (checked) {
         next.add(name);
       } else {
         next.delete(name);
       }
+
       return next;
     });
   }

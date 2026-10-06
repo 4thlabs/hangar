@@ -1,18 +1,17 @@
-import type { FrigateEvent, FrigateStats } from "./api/client.ts";
-import { FrigateClient } from "./api/client.ts";
-import type { WidgetService } from "../config/config.ts";
 import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
+import type { WidgetService } from "../config/config.ts";
+import { defineWidget } from "../shared/define-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
   WidgetHeader,
+  WidgetImage,
   WidgetList,
   WidgetListItem,
   WidgetMetadata,
   WidgetTime,
-  WidgetImage,
 } from "../shared/index.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import { FrigateClient, type FrigateEvent, type FrigateStats } from "./api/client.ts";
 
 type FrigateEventsCardProps = {
   events: FrigateEvent[];

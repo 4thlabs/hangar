@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { GluetunPublicIp } from "./api/client.ts";
-import { GluetunVpnStatusCard, gluetunVpnStatus } from "./vpn-status.tsx";
 import { aService } from "../mock/mock.ts";
+import type { GluetunPublicIp } from "./api/client.ts";
+import { gluetunVpnStatus, GluetunVpnStatusCard } from "./vpn-status.tsx";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -56,6 +56,7 @@ describe("GluetunVpnStatusCard", () => {
       link: "https://gluetun.test.local",
       apiKey: () => Promise.resolve("s3cret"),
     });
+
     const html = renderToStaticMarkup(<>{await Widget()}</>);
 
     expect(called.map(request => request.url)).toEqual(["http://gluetun:8000/v1/publicip/ip"]);
