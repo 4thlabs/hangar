@@ -556,13 +556,18 @@ describe("Docker.follow", () => {
 
   let docker: InstanceType<typeof Docker>;
 
+  /** The stream each test follows, ended afterwards so the follower's read loop exits. */
+  let stream: PassThrough;
+
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     docker = client("alpha");
+    stream = new PassThrough();
   });
 
   afterEach(() => {
     docker.unfollow();
+    stream.end();
     vi.useRealTimers();
     dockerMock.getEvents.mockReset();
     dockerMock.listImages.mockReset();
@@ -570,10 +575,8 @@ describe("Docker.follow", () => {
     dockerMock.df.mockReset();
   });
 
-  /** Follows a stream the test writes to, once the reloads every connection triggers have drained. */
+  /** Follows {@link stream}, once the reloads every connection triggers have drained. */
   const follow = async () => {
-    const stream = new PassThrough();
-
     dockerMock.getEvents.mockResolvedValueOnce(stream);
     dockerMock.listImages.mockResolvedValue([]);
     dockerMock.info.mockResolvedValue({
@@ -588,14 +591,12 @@ describe("Docker.follow", () => {
     docker.follow();
     await vi.advanceTimersByTimeAsync(BATCHES);
     vi.clearAllMocks();
-
-    return stream;
   };
 
   it("moves the projects when a Compose container changes on the host", async () => {
     givenContainers([container({ state: "running" })]);
     await docker.projects.read();
-    const stream = await follow();
+    await follow();
 
     givenContainers([container({ state: "exited" })]);
     stream.write(line({ Type: "container", Action: "die", Actor: { Attributes: { [LABEL.project]: "alpha" } } }));
@@ -607,7 +608,7 @@ describe("Docker.follow", () => {
 
   it("reloads the image list and the overview, not the containers, when an image changes", async () => {
     givenContainers([container()]);
-    const stream = await follow();
+    await follow();
 
     // Loaded once, since a snapshot nobody has read yet has nothing to reload.
     await docker.runningImages.read();
@@ -632,7 +633,7 @@ describe("Docker.follow", () => {
 
   it("reloads nothing more once unfollowed", async () => {
     givenContainers([container()]);
-    const stream = await follow();
+    await follow();
 
     await docker.runningImages.read();
     vi.clearAllMocks();

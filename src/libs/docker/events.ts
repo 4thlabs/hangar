@@ -11,7 +11,7 @@ import { ComposeProjects } from "./compose.ts";
 export type DockerChange = "containers" | "images" | "overview";
 
 /** Every {@link DockerChange}, for a (re)connection that cannot tell which one happened. */
-export const DockerChanges: readonly DockerChange[] = ["containers", "images", "overview"];
+const DockerChanges: readonly DockerChange[] = ["containers", "images", "overview"];
 
 /** The fields of a daemon event this class reads; the client hands them back untyped. */
 type DockerEvent = {

@@ -131,6 +131,9 @@ export class Docker {
   /** Host-wide counts for the whole engine, not just the installed apps, as Arcane reports a remote one. */
   readonly overview: Snapshot<DockerOverview>;
 
+  /** The snapshot each {@link DockerChange} makes stale. */
+  private readonly snapshotsByChange: Record<DockerChange, Snapshot<unknown>>;
+
   /** The daemon's event stream, reloading what each event made stale; idle until {@link follow}. */
   private readonly events: DockerEvents;
 
@@ -165,7 +168,8 @@ export class Docker {
     });
 
     this.overview = this.cache.define("overview", Docker.OverviewTtl, Docker.OverviewGrace, this.loadOverview);
-    this.events = new DockerEvents(docker, change => void this.snapshotOf(change).refresh());
+    this.snapshotsByChange = { containers: this.containers, images: this.images, overview: this.overview };
+    this.events = new DockerEvents(docker, change => void this.snapshotsByChange[change].refresh());
   }
 
   /**
@@ -192,17 +196,6 @@ export class Docker {
    */
   settle(): Promise<void> {
     return Promise.all([this.containers.refresh(), this.images.refresh()]).then(() => undefined);
-  }
-
-  /** The snapshot a {@link DockerChange} made stale. */
-  private snapshotOf(change: DockerChange): Snapshot<unknown> {
-    const snapshots: Record<DockerChange, Snapshot<unknown>> = {
-      containers: this.containers,
-      images: this.images,
-      overview: this.overview,
-    };
-
-    return snapshots[change];
   }
 
   /**
