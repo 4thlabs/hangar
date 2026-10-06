@@ -55,10 +55,10 @@ type JellyfinLatestCardProps = {
   items: LatestItem[];
   serviceUrl: string;
   /** The placement's key, which its relayed posters are addressed by. */
-  widget: string;
+  placementKey: string;
 };
 
-export function JellyfinLatestCard({ counts, items, serviceUrl, widget }: JellyfinLatestCardProps) {
+export function JellyfinLatestCard({ counts, items, serviceUrl, placementKey }: JellyfinLatestCardProps) {
   return (
     <WidgetCard className={chrome.className}>
       {/* The server-wide totals label the row: they are what the posters are the newest of. */}
@@ -92,7 +92,7 @@ export function JellyfinLatestCard({ counts, items, serviceUrl, widget }: Jellyf
                     {/* An item with no artwork keeps the frame, as Jellyfin's own library does. */}
                     {item.imageId ? (
                       <img
-                        src={WidgetImage.url(widget, item.imageId)}
+                        src={WidgetImage.url(placementKey, item.imageId)}
                         alt=""
                         loading="lazy"
                         className="aspect-2/3 w-full rounded-sm bg-muted object-cover"
@@ -138,7 +138,7 @@ export const jellyfinLatest = (service: WidgetService, user: string, ttl?: numbe
       // The client over-fetches, so trim here. Grouped responses can still repeat a series (unique React keys).
       return { counts, items: [...new Map(items.map(item => [item.id, item])).values()].slice(0, ITEM_COUNT) };
     },
-    render: ({ counts, items }: { counts: JellyfinCounts; items: LatestItem[] }, key) => (
-      <JellyfinLatestCard counts={counts} items={items} serviceUrl={service.link} widget={key} />
+    render: ({ counts, items }: { counts: JellyfinCounts; items: LatestItem[] }, placementKey) => (
+      <JellyfinLatestCard counts={counts} items={items} serviceUrl={service.link} placementKey={placementKey} />
     ),
   });

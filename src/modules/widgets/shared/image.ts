@@ -4,7 +4,7 @@
  */
 export class WidgetImage {
   /** Where a card points an `<img>`, by placement key: two placements of one type may read different servers. */
-  static url(widget: string, id: string) {
-    return `/api/widgets/${widget}/image/${encodeURIComponent(id)}`;
+  static url(placementKey: string, id: string) {
+    return `/api/widgets/${placementKey}/image/${encodeURIComponent(id)}`;
   }
 }

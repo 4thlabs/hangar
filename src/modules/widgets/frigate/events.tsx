@@ -19,7 +19,7 @@ type FrigateEventsCardProps = {
   stats: FrigateStats;
   serviceUrl: string;
   /** The placement's key, which its relayed thumbnails are addressed by. */
-  widget: string;
+  placementKey: string;
   now?: number;
 };
 
@@ -29,7 +29,13 @@ function formatCameraName(camera: string) {
   return camera.replace(/^frigate_/, "").replaceAll("_", " ");
 }
 
-export function FrigateEventsCard({ events, stats, serviceUrl, widget, now = Date.now() }: FrigateEventsCardProps) {
+export function FrigateEventsCard({
+  events,
+  stats,
+  serviceUrl,
+  placementKey,
+  now = Date.now(),
+}: FrigateEventsCardProps) {
   const detectors = Object.entries(stats.detectors);
 
   return (
@@ -55,7 +61,7 @@ export function FrigateEventsCard({ events, stats, serviceUrl, widget, now = Dat
         <WidgetList empty="No recent events.">
           {events.map(event => {
             const eventUrl = `${serviceUrl}/explore?event_id=${encodeURIComponent(event.id)}`;
-            const thumbnailUrl = WidgetImage.url(widget, event.id);
+            const thumbnailUrl = WidgetImage.url(placementKey, event.id);
 
             return (
               <WidgetListItem
@@ -101,7 +107,7 @@ export const frigateEvents = (service: WidgetService, ttl?: number) =>
 
       return await Promise.all([client.getEvents(), client.getStats()]);
     },
-    render: ([events, stats]: [FrigateEvent[], FrigateStats], key) => (
-      <FrigateEventsCard events={events} stats={stats} serviceUrl={service.link} widget={key} />
+    render: ([events, stats]: [FrigateEvent[], FrigateStats], placementKey) => (
+      <FrigateEventsCard events={events} stats={stats} serviceUrl={service.link} placementKey={placementKey} />
     ),
   });

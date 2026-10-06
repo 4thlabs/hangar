@@ -30,15 +30,15 @@ export class WidgetImages {
   }
 
   /**
-   * One image, fetched from the service of the placement `widget` names. `undefined` (a 404) for an unplaced key, a
+   * One image, fetched from the service of the placement `placementKey` names. `undefined` (a 404) for an unplaced key, a
    * widget that relays nothing, or an id no service would issue.
    */
-  async fetch(widget: string, id: string): Promise<Response | undefined> {
+  async fetch(placementKey: string, id: string): Promise<Response | undefined> {
     if (!WidgetImages.Id.test(id)) {
       return undefined;
     }
 
-    const config = this.placed(widget);
+    const config = this.placed(placementKey);
     const relay = config && WidgetImages.Relays[config.type];
 
     return relay && (await relay(WidgetService.of(config, this.host), id));

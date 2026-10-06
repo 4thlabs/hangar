@@ -68,7 +68,7 @@ describe("JellyfinLatestCard", () => {
         counts={counts}
         items={items}
         serviceUrl="https://jellyfin.test.local"
-        widget="jellyfin-latest-k1"
+        placementKey="jellyfin-latest-k1"
       />,
     );
 
@@ -82,7 +82,7 @@ describe("JellyfinLatestCard", () => {
         counts={counts}
         items={items}
         serviceUrl="https://jellyfin.test.local"
-        widget="jellyfin-latest-k1"
+        placementKey="jellyfin-latest-k1"
       />,
     );
 
@@ -98,7 +98,7 @@ describe("JellyfinLatestCard", () => {
         counts={counts}
         items={[{ id: "s-1", imageId: undefined, title: "Drifters", subtitle: undefined }]}
         serviceUrl="https://jellyfin.test.local"
-        widget="jellyfin-latest-k1"
+        placementKey="jellyfin-latest-k1"
       />,
     );
 
@@ -113,7 +113,7 @@ describe("JellyfinLatestCard", () => {
         counts={counts}
         items={[]}
         serviceUrl="https://jellyfin.test.local"
-        widget="jellyfin-latest-k1"
+        placementKey="jellyfin-latest-k1"
       />,
     );
 

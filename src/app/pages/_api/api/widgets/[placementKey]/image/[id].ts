@@ -6,10 +6,10 @@ import { widgetImages } from "#modules/widgets/server/server.ts";
 const CACHE = "private, max-age=86400";
 
 /** Relays a widget image: keeps API keys out of the HTML and gets past OIDC. */
-export const GET = apiRoute<ApiContext<"/api/widgets/[widget]/image/[id]">>(
+export const GET = apiRoute<ApiContext<"/api/widgets/[placementKey]/image/[id]">>(
   { log: "Failed to proxy a widget image", unavailable: "Les images des widgets sont indisponibles." },
   async (_request, { params }) => {
-    const image = await widgetImages.fetch(params.widget, params.id);
+    const image = await widgetImages.fetch(params.placementKey, params.id);
 
     // No such placement, a widget that relays nothing, or an id no service would issue.
     if (!image) {

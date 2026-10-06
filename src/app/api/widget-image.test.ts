@@ -28,13 +28,13 @@ vi.mock("#libs/hangar/server", () => ({
   },
 }));
 
-const { GET } = await import("#app/pages/_api/api/widgets/[widget]/image/[id].ts");
+const { GET } = await import("#app/pages/_api/api/widgets/[placementKey]/image/[id].ts");
 const { WidgetKey } = await import("#modules/widgets/config/config.ts");
 
 const [clock, jellyfin, kids] = WidgetKey.all(mocks.widgets) as [string, string, string];
 
-const get = (widget: string, id: string) =>
-  GET(new Request("http://hangar.test/"), { params: { widget, id } } as never);
+const get = (placementKey: string, id: string) =>
+  GET(new Request("http://hangar.test/"), { params: { placementKey, id } } as never);
 
 describe("GET a relayed widget image", () => {
   beforeEach(() => {

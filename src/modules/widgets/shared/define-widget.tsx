@@ -21,9 +21,9 @@ export type WidgetDefinition<T> = {
   errorDescription: string;
   /**
    * Renders the loaded data. Return null to fall back to the error state.
-   * @param key The placement's key, for anything addressed per placement, like a relayed image
+   * @param placementKey For anything addressed per placement, like a relayed image
    */
-  render: (data: T, key: string) => ReactNode;
+  render: (data: T, placementKey: string) => ReactNode;
 } & (
   | {
       /** Fetches the data. Anything thrown here becomes the error state. */
@@ -96,13 +96,13 @@ export function defineWidget<T>(definition: WidgetDefinition<T>): Widget {
           try {
             return render(data, key) ?? fallback();
           } catch (error: unknown) {
-            logger.error(`Failed to render the ${title} widget`, { error, widget: key });
+            logger.error(`Failed to render the ${title} widget`, { error, placementKey: key });
             return fallback();
           }
         };
 
         return renderSnapshot(snapshot, show, (error: unknown) => {
-          logger.error(`Failed to load the ${title} widget`, { error, widget: key });
+          logger.error(`Failed to load the ${title} widget`, { error, placementKey: key });
 
           return fallback();
         });

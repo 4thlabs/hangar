@@ -43,7 +43,7 @@ describe("FrigateEventsCard", () => {
         events={events}
         stats={stats}
         serviceUrl="https://frigate.example.com"
-        widget="frigate-events-k1"
+        placementKey="frigate-events-k1"
         now={now}
       />,
     );
@@ -66,7 +66,7 @@ describe("FrigateEventsCard", () => {
         events={[]}
         stats={stats}
         serviceUrl="https://frigate.example.com"
-        widget="frigate-events-k1"
+        placementKey="frigate-events-k1"
         now={now}
       />,
     );

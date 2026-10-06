@@ -34,7 +34,7 @@ describe("displayRepo", () => {
     expect(displayRepo(healthy)).toEqual({
       id: "homelab-b2",
       status: "SUCCESS",
-      ok: true,
+      health: "healthy",
       lastRunAt: NOW - 7_200_000,
       successes: 28,
       bytesAdded: 4_509_715_660,
@@ -48,7 +48,7 @@ describe("displayRepo", () => {
     expect(displayRepo({ id: "fresh" })).toEqual({
       id: "fresh",
       status: undefined,
-      ok: false,
+      health: "never-run",
       lastRunAt: undefined,
       successes: 0,
       bytesAdded: 0,
@@ -60,7 +60,7 @@ describe("displayRepo", () => {
   it("counts anything that is not a success as unhealthy", () => {
     const failed = displayRepo({ ...healthy, recentBackups: { status: ["STATUS_ERROR"], timestampMs: ["1"] } });
 
-    expect(failed).toMatchObject({ status: "ERROR", ok: false });
+    expect(failed).toMatchObject({ status: "ERROR", health: "failed" });
   });
 });
 

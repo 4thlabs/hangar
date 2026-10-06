@@ -8,7 +8,7 @@ import { imageCheckReport } from "#libs/jobs";
  * Decorates the Docker snapshot with what only the store knows: the update badge, the icon and
  * the category. Pure, because {@link appsSnapshot} runs it on every read and every peek.
  */
-function decorate(projects: ComposeProjectsSnapshot, outdated: ReadonlySet<string>): ComposeProjectsSnapshot {
+function decorate(snapshot: ComposeProjectsSnapshot, outdated: ReadonlySet<string>): ComposeProjectsSnapshot {
   const categories = hangar.config.categories();
   // Nothing stops a stack from being listed twice: the first match wins, as it does for Arcane tags.
   // Only the name and colour travel to the client; the stack list would be dead weight on every row.
@@ -19,11 +19,11 @@ function decorate(projects: ComposeProjectsSnapshot, outdated: ReadonlySet<strin
   };
 
   return {
-    projects: projects.projects.map(p => ({
-      ...p,
-      updateAvailable: outdated.has(p.name),
-      icon: hangar.store.app(p.name)?.icon,
-      category: categoryOf(p.name),
+    projects: snapshot.projects.map(project => ({
+      ...project,
+      updateAvailable: outdated.has(project.name),
+      icon: hangar.store.app(project.name)?.icon,
+      category: categoryOf(project.name),
     })),
   };
 }

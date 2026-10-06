@@ -18,12 +18,15 @@ import { defineWidget } from "../shared/define-widget.tsx";
 
 const chrome = { title: "Backrest", icon: <IconSelfh name="backrest" />, className: "min-h-40" };
 
+/** A repository that has never run, whose last run succeeded, or whose last run did not. */
+type RepoHealth = "never-run" | "healthy" | "failed";
+
 /** One repository, already resolved to what the card shows. */
 export type RepoBackup = {
   id: string;
   /** The last run's outcome, without Backrest's `STATUS_` prefix. Absent until the repo has run. */
   status: string | undefined;
-  ok: boolean;
+  health: RepoHealth;
   lastRunAt: number | undefined;
   successes: number;
   bytesAdded: number;
@@ -37,31 +40,29 @@ const count = (value: string | undefined) => Number(value ?? 0);
 /** The same, as a moment: a zero is Backrest saying "never", not midnight in 1970. */
 const moment = (value: string | undefined) => (count(value) === 0 ? undefined : Number(value));
 
-/** What a repository looks like on the card. Only `STATUS_SUCCESS` counts as healthy, as on Backrest's own dashboard. */
+/** Only `STATUS_SUCCESS` counts as healthy, as on Backrest's own dashboard. */
+function healthOf(status: string | undefined): RepoHealth {
+  if (status === undefined) {
+    return "never-run";
+  }
+
+  return status === "STATUS_SUCCESS" ? "healthy" : "failed";
+}
+
+/** What a repository looks like on the card. */
 export function displayRepo(summary: BackrestRepoSummary): RepoBackup {
   const status = summary.recentBackups?.status?.[0];
 
   return {
     id: summary.id,
     status: status?.replace(/^STATUS_/, ""),
-    ok: status === "STATUS_SUCCESS",
+    health: healthOf(status),
     lastRunAt: moment(summary.recentBackups?.timestampMs?.[0]),
     successes: count(summary.backupsSuccessLast30days),
     bytesAdded: count(summary.bytesAddedLast30days),
     protectedBytes: count(summary.protectedBytes),
     nextBackupAt: moment(summary.nextBackupTimeMs),
   };
-}
-
-/** A repository that has never run, whose last run succeeded, or whose last run did not. */
-type RepoHealth = "never-run" | "healthy" | "failed";
-
-function repoHealth(repo: RepoBackup): RepoHealth {
-  if (repo.status === undefined) {
-    return "never-run";
-  }
-
-  return repo.ok ? "healthy" : "failed";
 }
 
 /** Muted for a repository that has not run, which is neither healthy nor failed. */
@@ -106,7 +107,7 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
                 // Decorative: the status word below says the same.
                 <span
                   aria-hidden="true"
-                  className={cn("mt-1.5 size-2 shrink-0 rounded-full", HEALTH_DOT_CLASS[repoHealth(repo)])}
+                  className={cn("mt-1.5 size-2 shrink-0 rounded-full", HEALTH_DOT_CLASS[repo.health])}
                 />
               }
               trailing={repo.lastRunAt !== undefined && <WidgetTime at={repo.lastRunAt} now={now} style="compact" />}
@@ -116,7 +117,7 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
               {/* Wraps rather than truncating, so a narrow column loses nothing. */}
               <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                 <WidgetMetadata>
-                  <span className={repoHealth(repo) === "failed" ? "text-destructive" : undefined}>
+                  <span className={repo.health === "failed" ? "text-destructive" : undefined}>
                     {repo.status ?? "No backup yet"}
                   </span>
                   <span>{repo.successes} ok / 30d</span>
