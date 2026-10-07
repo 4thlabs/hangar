@@ -14,7 +14,7 @@ export function ServiceCard({ project, service, stats }: ServiceCardProps) {
       <CardHeader>
         <CardTitle>{service.name}</CardTitle>
         <CardDescription>
-          {service.runningCount}/{service.containerCount} conteneur{s(service.containerCount)} actif
+          {service.runningCount}/{service.containers.length} conteneur{s(service.containers.length)} actif
           {s(service.runningCount)}
           {service.unhealthyCount > 0 ? ` · ${service.unhealthyCount} unhealthy` : ""}
         </CardDescription>

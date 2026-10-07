@@ -12,9 +12,7 @@ export type ComposeProjectSummary = {
   name: string;
   status: ComposeProjectStatus;
   serviceCount: number;
-  containerCount: number;
   runningCount: number;
-  stoppedCount: number;
   unhealthyCount: number;
   /** Full ids of this project's containers, so a client can pick its rows out of the stats stream. */
   containerIds: string[];
@@ -73,7 +71,6 @@ export type ComposeContainer = {
 export type ComposeService = {
   name: string;
   status: ComposeProjectStatus;
-  containerCount: number;
   runningCount: number;
   unhealthyCount: number;
   containers: ComposeContainer[];
@@ -255,9 +252,7 @@ export class ComposeProjects {
         name,
         status: ComposeProjects.status(aggregate.containerIds.length, aggregate.runningCount, aggregate.unhealthyCount),
         serviceCount: aggregate.services.size,
-        containerCount: aggregate.containerIds.length,
         runningCount: aggregate.runningCount,
-        stoppedCount: aggregate.containerIds.length - aggregate.runningCount,
         unhealthyCount: aggregate.unhealthyCount,
         containerIds: aggregate.containerIds,
       }))
@@ -284,7 +279,6 @@ export class ComposeProjects {
         return {
           name,
           status: ComposeProjects.status(sorted.length, runningCount, unhealthyCount),
-          containerCount: sorted.length,
           runningCount,
           unhealthyCount,
           containers: sorted,

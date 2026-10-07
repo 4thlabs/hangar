@@ -15,7 +15,7 @@ const sortValue: Record<AppSortColumn, (project: ComposeProjectSummary) => numbe
   category: project => project.category?.name ?? "\uffff",
   status: project => APP_STATUSES.indexOf(project.status),
   services: project => project.serviceCount,
-  containers: project => project.containerCount,
+  containers: project => project.containerIds.length,
   unhealthy: project => project.unhealthyCount,
 };
 

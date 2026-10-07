@@ -9,7 +9,7 @@ import { imageCheckReport } from "#libs/jobs/server";
  * the category. Pure, because {@link appsSnapshot} runs it on every read.
  */
 function decorate(snapshot: ComposeProjectsSnapshot, outdated: ReadonlySet<string>): ComposeProjectsSnapshot {
-  const categories = hangar.config.categories();
+  const categories = hangar.store.config.categories();
 
   // Nothing stops a stack from being listed twice: the first match wins, as it does for Arcane tags.
   // Only the name and colour travel to the client; the stack list would be dead weight on every row.

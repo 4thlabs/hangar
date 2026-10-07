@@ -168,22 +168,13 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
     }
   }
 
-  /**
-   * Marks notifications as read, clearing the bell's badge.
-   * @param ids The notifications to mark, or every unread one when omitted
-   */
-  async markRead(userId: string, ids?: string[]): Promise<void> {
+  /** Marks every unread notification as read, clearing the bell's badge. */
+  async markRead(userId: string): Promise<void> {
     try {
       await this.db
         .update(notification)
         .set({ readAt: new Date() })
-        .where(
-          and(
-            eq(notification.userId, userId),
-            isNull(notification.readAt),
-            ...(ids ? [inArray(notification.id, ids)] : []),
-          ),
-        );
+        .where(and(eq(notification.userId, userId), isNull(notification.readAt)));
     } catch (error) {
       logger.error("Failed to mark notifications as read", { error, userId });
     }

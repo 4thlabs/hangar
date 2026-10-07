@@ -18,9 +18,7 @@ const project = (name: string, status: ComposeProjectSummary["status"], category
   status,
   ...(category ? { category: { name: category, color: "blue" } } : {}),
   serviceCount: 1,
-  containerCount: 1,
   runningCount: status === "running" ? 1 : 0,
-  stoppedCount: status === "running" ? 0 : 1,
   unhealthyCount: status === "unhealthy" ? 1 : 0,
   containerIds: [`${name}-1`],
 });
@@ -100,8 +98,8 @@ describe("sorting", () => {
 
   it("sorts counts numerically", () => {
     const wide = [
-      { ...project("a", "running"), containerCount: 9 },
-      { ...project("b", "running"), containerCount: 10 },
+      { ...project("a", "running"), containerIds: Array.from({ length: 9 }, (_, index) => `a-${index}`) },
+      { ...project("b", "running"), containerIds: Array.from({ length: 10 }, (_, index) => `b-${index}`) },
     ];
 
     const result = filterProjects(wide, search({ sort: { column: "containers", descending: true } }));

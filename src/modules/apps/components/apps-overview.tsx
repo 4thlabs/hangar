@@ -72,7 +72,7 @@ export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
     (result, project) => ({
       services: result.services + project.serviceCount,
       running: result.running + project.runningCount,
-      stopped: result.stopped + project.stoppedCount,
+      stopped: result.stopped + project.containerIds.length - project.runningCount,
     }),
     { services: 0, running: 0, stopped: 0 },
   );
