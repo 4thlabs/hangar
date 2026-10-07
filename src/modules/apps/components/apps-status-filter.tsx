@@ -8,7 +8,7 @@ import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-m
 
 type AppsStatusFilterProps = {
   /** How many projects carry each status, shown beside its checkbox. */
-  counts: Record<string, number>;
+  counts: Partial<Record<ComposeProjectStatus, number>>;
 };
 
 export function AppsStatusFilter({ counts }: AppsStatusFilterProps) {

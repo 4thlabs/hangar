@@ -1,5 +1,5 @@
 import type Docker from "dockerode";
-import { HangarError } from "#libs/hangar";
+import { NotFoundError } from "#libs/hangar";
 
 /** Aggregate run state of a Compose project or service. */
 export type ComposeProjectStatus = "running" | "partial" | "stopped" | "unhealthy";
@@ -88,10 +88,10 @@ export type ComposeContainerSource = { info: Docker.ContainerInfo; detail: Docke
 
 /**
  * Thrown when a requested Docker subject doesn't exist, or isn't one the caller may see.
- * A `HangarError` so the CLI's error mapping covers the docker layer too, rather than logging
- * these as unexpected defects.
+ * A `NotFoundError`, so the API routes answer it with a 404 and the CLI prints its message
+ * rather than logging it as an unexpected defect.
  */
-export class DockerNotFoundError extends HangarError {
+export class DockerNotFoundError extends NotFoundError {
   /**
    * @param subject What was looked for, e.g. `container abc123`
    */

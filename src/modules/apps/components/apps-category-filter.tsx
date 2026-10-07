@@ -5,7 +5,7 @@ import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-m
 
 type AppsCategoryFilterProps = {
   /** How many projects carry each category, shown beside its checkbox. */
-  counts: Record<string, number>;
+  counts: Partial<Record<string, number>>;
 };
 
 /** Lists categories from the installed apps, not `hangar.yml`, so no option filters to nothing. */

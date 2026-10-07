@@ -2,9 +2,14 @@
 
 import * as z from "zod";
 import { requireSession } from "#libs/auth";
+import { HangarEnv } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { ActionResult, SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
+
+const InvalidName = "nom de variable invalide";
+
+const variableName = z.string().refine(name => HangarEnv.isVariableName(name), InvalidName);
 
 /**
  * What the browser may put in .env.global. Every container reads that file, so a stray newline in a value
@@ -12,10 +17,12 @@ import { ActionResult, SERVER_LOG_HINT } from "#modules/common/actions/action-re
  */
 const payloadSchema = z.object({
   updates: z.record(
-    z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "nom de variable invalide"),
+    variableName,
     z.string().refine(value => !/[\r\n]/.test(value), "une valeur ne peut pas contenir de retour à la ligne"),
+    // A bad key surfaces as zod's generic `invalid_key` issue, wrapping the refine's message.
+    { error: issue => (issue.code === "invalid_key" ? InvalidName : undefined) },
   ),
-  remove: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "nom de variable invalide")),
+  remove: z.array(variableName),
 });
 
 export type EnvPayload = z.infer<typeof payloadSchema>;

@@ -1,4 +1,5 @@
 import type { HangarApp } from "#libs/hangar";
+import { countBy } from "#modules/common/count-by.ts";
 import { searchByName } from "#modules/common/search.ts";
 import type { StoreFilter, StoreSearch } from "#modules/store/search-codec.ts";
 
@@ -14,10 +15,7 @@ const filterOf = (app: HangarApp): StoreFilter => (app.installed ? "installed" :
 export function storeListing(all: readonly HangarApp[], search: StoreSearch): StoreListing {
   const filtered = search.filter.length === 0 ? all : all.filter(app => search.filter.includes(filterOf(app)));
 
-  const counts = {
-    installed: all.filter(app => filterOf(app) === "installed").length,
-    available: all.filter(app => filterOf(app) === "available").length,
-  };
+  const counts = { installed: 0, available: 0, ...countBy(all, filterOf) };
 
   return { apps: searchByName(search.q, filtered), counts };
 }

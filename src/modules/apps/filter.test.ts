@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ComposeProjectSummary } from "#libs/docker";
 import type { AppsSearch } from "#modules/apps/search-codec.ts";
-import { countBy, filterProjects, nextSort, updateState } from "./filter.ts";
+import { countBy } from "#modules/common/count-by.ts";
+import { filterProjects, nextSort, updateState } from "./filter.ts";
 
 /** The `/apps` search params, defaulting every dimension to "no filter". */
 const search = (selected: Partial<AppsSearch> = {}): AppsSearch => ({
