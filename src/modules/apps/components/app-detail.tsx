@@ -67,7 +67,7 @@ export function AppDetail({ detail }: { detail: ComposeProjectDetail }) {
             {detail.updateAvailable && <Badge variant="outline">Mise à jour disponible</Badge>}
           </div>
           <p className="text-sm text-muted-foreground">
-            {detail.serviceCount} service{s(detail.serviceCount)} · {detail.runningCount}/{detail.containerCount}{" "}
+            {detail.serviceCount} service{s(detail.serviceCount)} · {detail.runningCount}/{detail.containerIds.length}{" "}
             conteneurs actifs
           </p>
         </div>

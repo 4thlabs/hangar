@@ -156,7 +156,7 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
               </TableCell>
               <TableCell className="tabular-nums">{project.serviceCount}</TableCell>
               <TableCell className="tabular-nums">
-                {project.runningCount}/{project.containerCount}
+                {project.runningCount}/{project.containerIds.length}
               </TableCell>
               <TableCell className="tabular-nums">
                 {project.unhealthyCount > 0 ? project.unhealthyCount : "—"}

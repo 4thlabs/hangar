@@ -12,7 +12,7 @@ const updateLabel: Record<AppUpdate, string> = {
 
 type AppsUpdateFilterProps = {
   /** How many projects carry each update state, shown beside its checkbox. */
-  counts: Record<string, number>;
+  counts: Partial<Record<AppUpdate, number>>;
 };
 
 export function AppsUpdateFilter({ counts }: AppsUpdateFilterProps) {

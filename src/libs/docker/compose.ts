@@ -1,5 +1,5 @@
 import type Docker from "dockerode";
-import { HangarError } from "#libs/hangar";
+import { NotFoundError } from "#libs/hangar";
 
 /** Aggregate run state of a Compose project or service. */
 export type ComposeProjectStatus = "running" | "partial" | "stopped" | "unhealthy";
@@ -12,9 +12,7 @@ export type ComposeProjectSummary = {
   name: string;
   status: ComposeProjectStatus;
   serviceCount: number;
-  containerCount: number;
   runningCount: number;
-  stoppedCount: number;
   unhealthyCount: number;
   /** Full ids of this project's containers, so a client can pick its rows out of the stats stream. */
   containerIds: string[];
@@ -73,7 +71,6 @@ export type ComposeContainer = {
 export type ComposeService = {
   name: string;
   status: ComposeProjectStatus;
-  containerCount: number;
   runningCount: number;
   unhealthyCount: number;
   containers: ComposeContainer[];
@@ -91,10 +88,10 @@ export type ComposeContainerSource = { info: Docker.ContainerInfo; detail: Docke
 
 /**
  * Thrown when a requested Docker subject doesn't exist, or isn't one the caller may see.
- * A `HangarError` so the CLI's error mapping covers the docker layer too, rather than logging
- * these as unexpected defects.
+ * A `NotFoundError`, so the API routes answer it with a 404 and the CLI prints its message
+ * rather than logging it as an unexpected defect.
  */
-export class DockerNotFoundError extends HangarError {
+export class DockerNotFoundError extends NotFoundError {
   /**
    * @param subject What was looked for, e.g. `container abc123`
    */
@@ -255,9 +252,7 @@ export class ComposeProjects {
         name,
         status: ComposeProjects.status(aggregate.containerIds.length, aggregate.runningCount, aggregate.unhealthyCount),
         serviceCount: aggregate.services.size,
-        containerCount: aggregate.containerIds.length,
         runningCount: aggregate.runningCount,
-        stoppedCount: aggregate.containerIds.length - aggregate.runningCount,
         unhealthyCount: aggregate.unhealthyCount,
         containerIds: aggregate.containerIds,
       }))
@@ -284,7 +279,6 @@ export class ComposeProjects {
         return {
           name,
           status: ComposeProjects.status(sorted.length, runningCount, unhealthyCount),
-          containerCount: sorted.length,
           runningCount,
           unhealthyCount,
           containers: sorted,

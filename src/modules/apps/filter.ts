@@ -15,7 +15,7 @@ const sortValue: Record<AppSortColumn, (project: ComposeProjectSummary) => numbe
   category: project => project.category?.name ?? "\uffff",
   status: project => APP_STATUSES.indexOf(project.status),
   services: project => project.serviceCount,
-  containers: project => project.containerCount,
+  containers: project => project.containerIds.length,
   unhealthy: project => project.unhealthyCount,
 };
 
@@ -68,25 +68,4 @@ export function nextSort(current: AppsSort, column: AppSortColumn): AppsSort {
   }
 
   return current.descending ? null : { column, descending: true };
-}
-
-/**
- * How many projects carry each value, for the counts shown beside each checkbox.
- * A project the key does not apply to — an app in no category — counts towards nothing.
- */
-export function countBy(
-  projects: ComposeProjectSummary[],
-  key: (project: ComposeProjectSummary) => string | undefined,
-): Record<string, number> {
-  const counts: Record<string, number> = {};
-
-  for (const project of projects) {
-    const value = key(project);
-
-    if (value !== undefined) {
-      counts[value] = (counts[value] ?? 0) + 1;
-    }
-  }
-
-  return counts;
 }

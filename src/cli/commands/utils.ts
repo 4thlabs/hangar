@@ -9,14 +9,16 @@ let instance: Promise<Hangar> | undefined;
  * Memoized and lazy: building it reads the store's hangar.yml, and `--help` must not touch the disk.
  */
 export const createHangar = () => {
-  instance ??= Hangar.create(env.HANGAR_STORE_URL, env.HANGAR_DATA_DIR).then(async hangar => {
+  instance ??= (async () => {
+    const hangar = Hangar.create(env.HANGAR_STORE_URL, env.HANGAR_DATA_DIR);
+
     hangar.runtime.signals();
 
     // The CLI has no boot step: load the categories `store up` needs.
     await hangar.store.config.load();
 
     return hangar;
-  });
+  })();
 
   return instance;
 };
@@ -25,13 +27,11 @@ export const createHangar = () => {
  * Runs a command body and maps its outcome to a process exit code.
  * Wraps Hangar construction too: a bad config reports one line and an exit code, not a stack dump.
  */
-export const run = async (body: (hangar: Hangar) => Promise<number | unknown>) => {
+export const run = async (body: (hangar: Hangar) => Promise<unknown>) => {
   try {
-    const hangar = await createHangar();
-    const result = await body(hangar);
+    await body(await createHangar());
 
-    // A body may return its own exit code; otherwise success.
-    return typeof result === "number" ? result : 0;
+    return 0;
   } catch (error: unknown) {
     // Config and runtime failures are operator errors: report the message. Anything else is a defect: keep the stack.
     if (error instanceof HangarError) {

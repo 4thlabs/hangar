@@ -31,7 +31,7 @@ describe("Docker.projects", () => {
     const { projects } = await client("alpha", "gamma").projects();
 
     expect(projects.map(project => project.name)).toEqual(["alpha", "gamma"]);
-    expect(projects[1]).toMatchObject({ status: "stopped", containerCount: 0 });
+    expect(projects[1]).toMatchObject({ status: "stopped", containerIds: [] });
   });
 
   it("ignores containers from projects Hangar did not install", async () => {
@@ -60,7 +60,7 @@ describe("Docker.projectDetail", () => {
     const detail = await client("alpha").projectDetail("alpha");
 
     expect(detail.services.map(service => service.name)).toEqual(["web"]);
-    expect(detail.containerCount).toBe(1);
+    expect(detail.containerIds).toHaveLength(1);
   });
 
   it("returns an empty detail for an installed app without containers", async () => {
@@ -421,7 +421,7 @@ describe("Docker.loadContainers", () => {
 
     const { projects } = await client("alpha").projects();
 
-    expect(projects[0]).toMatchObject({ name: "alpha", containerCount: 1 });
+    expect(projects[0]).toMatchObject({ name: "alpha", containerIds: [expect.any(String)] });
   });
 
   it("asks again once the loaded containers have expired", async () => {

@@ -25,9 +25,7 @@ const snapshot: ComposeProjectsSnapshot = {
       name: "alpha",
       status: "partial",
       serviceCount: 2,
-      containerCount: 3,
       runningCount: 2,
-      stoppedCount: 1,
       unhealthyCount: 0,
       containerIds: ["container-1", "container-2", "container-3"],
     },
@@ -67,9 +65,8 @@ describe("Docker apps views", () => {
       name: "gamma",
       status: "stopped" as const,
       serviceCount: 0,
-      containerCount: 0,
       runningCount: 0,
-      stoppedCount: 0,
+      containerIds: [],
     };
 
     const html = renderToStaticMarkup(<AppsTable projects={[...snapshot.projects, stopped]} />);

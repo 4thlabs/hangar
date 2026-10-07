@@ -31,6 +31,15 @@ export class HangarEnv {
   /** The files compose interpolates: its own fragments and the `env_file:` targets beside them */
   private static readonly Interpolated = /\.(ya?ml|env)$/;
 
+  /** What compose accepts as a variable name */
+  private static readonly VariableName = /[A-Za-z_][A-Za-z0-9_]*/;
+
+  /** A whole string that is a variable name */
+  private static readonly WholeVariableName = new RegExp(`^${HangarEnv.VariableName.source}$`);
+
+  /** A reference to a variable in a compose file, `$FOO` or `${FOO…}`, capturing its name */
+  private static readonly Reference = new RegExp(String.raw`\$\{?(${HangarEnv.VariableName.source})`);
+
   private static readonly Header = "# Global Environment Variables\n# These variables are available to all projects\n";
 
   private readonly _file: string;
@@ -204,7 +213,9 @@ export class HangarEnv {
 
           // `$$` is compose's escape for a literal dollar: strip those first, or `$$FOO` reads
           // as a reference to FOO.
-          return [...source.replaceAll("$$", "").matchAll(/\$\{?([A-Za-z_][A-Za-z0-9_]*)/g)].map(match => match[1]!);
+          return [...source.replaceAll("$$", "").matchAll(new RegExp(HangarEnv.Reference, "g"))].map(
+            match => match[1]!,
+          );
         }),
     );
 
@@ -226,6 +237,11 @@ export class HangarEnv {
 
       throw new HangarError(`Cannot back up the global env at ${this._file}: ${error.code ?? error.message}`);
     });
+  }
+
+  /** Whether `name` is a variable name compose accepts. */
+  static isVariableName(name: string) {
+    return HangarEnv.WholeVariableName.test(name);
   }
 
   /**

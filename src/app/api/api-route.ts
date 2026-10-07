@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 import { getSession } from "#libs/auth";
-import { DockerNotFoundError } from "#libs/docker";
+import { NotFoundError } from "#libs/hangar";
 import { logger } from "#libs/logs";
 
 /** Error response for the API routes: the client only renders the message, the status is the machine-readable part. */
@@ -40,7 +40,7 @@ type ApiRouteOptions = {
   log: string;
   /** Returned with 503 when the handler throws something unexpected. */
   unavailable: string;
-  /** Returned with 404 when the handler throws `DockerNotFoundError`. Omit to treat it as a 503. */
+  /** Returned with 404 when the handler throws a `NotFoundError`. Omit to treat it as a 503. */
   notFound?: string;
 };
 
@@ -48,7 +48,7 @@ type RouteContext = { params?: Record<string, string> };
 
 type Session = NonNullable<Awaited<ReturnType<typeof getSession>>>;
 
-/** 401 for anonymous, 404 for DockerNotFoundError, opaque 503 (logged) otherwise. Hands the session to the handler. */
+/** 401 for anonymous, 404 for NotFoundError, opaque 503 (logged) otherwise. Hands the session to the handler. */
 export function apiRoute<C extends RouteContext = RouteContext>(
   options: ApiRouteOptions,
   handler: (request: Request, context: C, session: Session) => Promise<Response>,
@@ -63,7 +63,7 @@ export function apiRoute<C extends RouteContext = RouteContext>(
     try {
       return await handler(request, context, session);
     } catch (error) {
-      if (options.notFound !== undefined && error instanceof DockerNotFoundError) {
+      if (options.notFound !== undefined && error instanceof NotFoundError) {
         return apiError(options.notFound, 404);
       }
 

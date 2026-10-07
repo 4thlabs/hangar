@@ -6,6 +6,14 @@ export class HangarError extends Error {
   }
 }
 
+/** A requested subject (app, project, container) doesn't exist, or isn't one the caller may see. */
+export class NotFoundError extends HangarError {
+  constructor(message: string) {
+    super(message);
+    this.name = "NotFoundError";
+  }
+}
+
 /** A failed or interrupted child command; `code` becomes the CLI's exit code. */
 export class HangarRuntimeError extends HangarError {
   /** The child's exit code, or 130 when interrupted. */
