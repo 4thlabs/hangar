@@ -28,7 +28,7 @@ export class RelativeTime {
    */
   static format(timestamp: number, now: number = Date.now(), locale = "en") {
     const seconds = (timestamp - now) / 1_000;
-    const { unit, divisor } = RelativeTime.unitOf(Math.abs(seconds));
+    const { unit, divisor } = RelativeTime.unit(Math.abs(seconds));
 
     return RelativeTime.formatter(locale).format(Math.round(seconds / divisor), unit);
   }
@@ -40,7 +40,7 @@ export class RelativeTime {
   static compact(timestamp: number, now: number = Date.now()) {
     const seconds = (timestamp - now) / 1_000;
     const absoluteSeconds = Math.abs(seconds);
-    const { suffix, divisor } = RelativeTime.unitOf(absoluteSeconds);
+    const { suffix, divisor } = RelativeTime.unit(absoluteSeconds);
     const value = Math.round(absoluteSeconds / divisor);
 
     return seconds < 0 ? `${value}${suffix}` : `in ${value}${suffix}`;
@@ -49,7 +49,7 @@ export class RelativeTime {
   /**
    * The rung of {@link RelativeTime.Units} a span of seconds is written in, and what to divide it by.
    */
-  private static unitOf(absoluteSeconds: number) {
+  private static unit(absoluteSeconds: number) {
     const index = RelativeTime.Units.findIndex(([threshold]) => absoluteSeconds < threshold);
     const [, suffix, unit] = RelativeTime.Units[index]!;
 

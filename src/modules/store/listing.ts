@@ -9,13 +9,24 @@ export type StoreListing = {
   counts: Record<StoreFilter, number>;
 };
 
-const filterOf = (app: HangarApp): StoreFilter => (app.installed ? "installed" : "available");
+/** The store page's catalogue: which apps it lists, and how many each filter holds. */
+export class StoreCatalog {
+  /**
+   * Applies the filter, then the name search, to every store app; an empty selection means no filter.
+   */
+  static list(all: readonly HangarApp[], search: StoreSearch): StoreListing {
+    const filtered =
+      search.filter.length === 0 ? all : all.filter(app => search.filter.includes(StoreCatalog.filter(app)));
 
-/** Applies the filter, then the name search, to every store app; an empty selection means no filter. */
-export function storeListing(all: readonly HangarApp[], search: StoreSearch): StoreListing {
-  const filtered = search.filter.length === 0 ? all : all.filter(app => search.filter.includes(filterOf(app)));
+    const counts = { installed: 0, available: 0, ...countBy(all, StoreCatalog.filter) };
 
-  const counts = { installed: 0, available: 0, ...countBy(all, filterOf) };
+    return { apps: searchByName(search.q, filtered), counts };
+  }
 
-  return { apps: searchByName(search.q, filtered), counts };
+  /**
+   * The filter an app falls under.
+   */
+  private static filter(app: HangarApp): StoreFilter {
+    return app.installed ? "installed" : "available";
+  }
 }

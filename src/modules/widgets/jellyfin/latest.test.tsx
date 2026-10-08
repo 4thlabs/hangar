@@ -4,7 +4,7 @@ import { clearWidgetCache } from "../mock/index.ts";
 import { aService, aWidget } from "../mock/mock.ts";
 import type { JellyfinCounts, JellyfinItem } from "./api/client.ts";
 import { jellyfinLatestDescriptor } from "./descriptor.ts";
-import { displayItem, jellyfinLatest, JellyfinLatestCard } from "./latest.tsx";
+import { jellyfinLatest, JellyfinLatestCard, JellyfinPoster } from "./latest.tsx";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -18,7 +18,7 @@ beforeEach(clearWidgetCache);
 
 const counts: JellyfinCounts = { MovieCount: 1284, SeriesCount: 97, EpisodeCount: 4512, SongCount: 8903 };
 
-describe("displayItem", () => {
+describe("JellyfinPoster.display", () => {
   it("shows an episode as its series, so ten stills of one show become one poster", () => {
     const episode: JellyfinItem = {
       Id: "ep-1",
@@ -29,7 +29,7 @@ describe("displayItem", () => {
       ImageTags: { Primary: "tag" },
     };
 
-    expect(displayItem(episode)).toEqual({
+    expect(JellyfinPoster.display(episode)).toEqual({
       id: "series-9",
       imageId: "ep-1",
       title: "Severance",
@@ -38,7 +38,7 @@ describe("displayItem", () => {
   });
 
   it("falls back to the episode itself when Jellyfin reports no series", () => {
-    expect(displayItem({ Id: "ep-1", Name: "Chapter One", Type: "Episode" })).toMatchObject({
+    expect(JellyfinPoster.display({ Id: "ep-1", Name: "Chapter One", Type: "Episode" })).toMatchObject({
       id: "ep-1",
       title: "Chapter One",
     });
@@ -46,18 +46,24 @@ describe("displayItem", () => {
 
   it("asks for no poster when the item has none, and borrows the parent's when it has one", () => {
     // A series Jellyfin never found art for: asking anyway is a 404 and a broken image.
-    expect(displayItem({ Id: "s-1", Name: "Drifters", Type: "Series", ImageTags: {} }).imageId).toBeUndefined();
     expect(
-      displayItem({ Id: "a-1", Name: "Rumours", Type: "MusicAlbum", ParentPrimaryImageItemId: "artist-3" }).imageId,
+      JellyfinPoster.display({ Id: "s-1", Name: "Drifters", Type: "Series", ImageTags: {} }).imageId,
+    ).toBeUndefined();
+
+    expect(
+      JellyfinPoster.display({ Id: "a-1", Name: "Rumours", Type: "MusicAlbum", ParentPrimaryImageItemId: "artist-3" })
+        .imageId,
     ).toBe("artist-3");
   });
 
   it("credits an album to its artist and a movie to its year", () => {
-    expect(displayItem({ Id: "a", Name: "Rumours", Type: "MusicAlbum", AlbumArtist: "Fleetwood Mac" }).subtitle).toBe(
-      "Fleetwood Mac",
-    );
+    expect(
+      JellyfinPoster.display({ Id: "a", Name: "Rumours", Type: "MusicAlbum", AlbumArtist: "Fleetwood Mac" }).subtitle,
+    ).toBe("Fleetwood Mac");
 
-    expect(displayItem({ Id: "m", Name: "Dune", Type: "Movie", ProductionYear: 2021 }).subtitle).toBe("2021");
+    expect(JellyfinPoster.display({ Id: "m", Name: "Dune", Type: "Movie", ProductionYear: 2021 }).subtitle).toBe(
+      "2021",
+    );
   });
 });
 

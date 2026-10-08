@@ -6,12 +6,12 @@ import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { installApp, uninstallApp } from "#modules/store/actions/store-apps.ts";
 import { StoreAppCard } from "#modules/store/components/store-app-card.tsx";
 import { StoreFilterMenu } from "#modules/store/components/store-filter-menu.tsx";
-import { storeListing } from "#modules/store/listing.ts";
+import { StoreCatalog } from "#modules/store/listing.ts";
 import { storeSearchCodec } from "#modules/store/search-codec.ts";
 
 export default function StorePage({ search }: PageProps<"/store">) {
   const all = [...hangar.store.apps];
-  const { apps, counts } = storeListing(all, search);
+  const { apps, counts } = StoreCatalog.list(all, search);
 
   return (
     <main>

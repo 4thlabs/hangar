@@ -103,7 +103,7 @@ export class DockerEvents {
    * Every container counts for the overview, which reports the whole host; only a Compose one
    * counts for the containers, which never hold the others.
    */
-  static changesOf(event: DockerEvent): DockerChange[] {
+  static changes(event: DockerEvent): DockerChange[] {
     switch (event.Type) {
       case "container": {
         const isComposeContainer = Boolean(event.Actor?.Attributes?.[ComposeProjects.Label.project]);
@@ -219,7 +219,7 @@ export class DockerEvents {
       return;
     }
 
-    for (const change of DockerEvents.changesOf(event)) {
+    for (const change of DockerEvents.changes(event)) {
       this.schedule(change);
     }
   }
