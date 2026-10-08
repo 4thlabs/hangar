@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { load } from "js-yaml";
 import * as z from "zod";
 import { logger } from "#libs/logs";
-import { defaultWidgets, widgetConfigSchema, type WidgetConfig } from "#modules/widgets/config/config.ts";
+import { defaultWidgets, widgetConfigSchema, type WidgetConfig } from "#modules/widgets/config/widgets.ts";
 import { HangarError } from "./hangar-error.ts";
 
 /** A Stack category */

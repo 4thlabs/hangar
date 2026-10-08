@@ -1,7 +1,6 @@
 import { cn } from "cn";
-import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
 import type { WidgetService } from "../config/config.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
   RelativeTime,
   Units,
@@ -14,8 +13,9 @@ import {
   WidgetTime,
 } from "../shared/index.ts";
 import { BackrestClient, type BackrestRepoSummary } from "./api/client.ts";
+import { backrestSummaryDescriptor } from "./descriptor.ts";
 
-const chrome = { title: "Backrest", icon: <IconSelfh name="backrest" />, className: "min-h-40" };
+const { appearance } = backrestSummaryDescriptor;
 
 /** A repository that has never run, whose last run succeeded, or whose last run did not. */
 type RepoHealth = "never-run" | "healthy" | "failed";
@@ -81,11 +81,11 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
   const protectedBytes = repos.reduce((total, repo) => total + repo.protectedBytes, 0);
 
   return (
-    <WidgetCard className={chrome.className}>
+    <WidgetCard className={appearance.className}>
       <WidgetHeader
         href={serviceUrl}
-        icon={chrome.icon}
-        title={chrome.title}
+        icon={appearance.icon}
+        title={appearance.title}
         description={
           <WidgetMetadata>
             <span>
@@ -134,13 +134,7 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
 }
 
 /** Per-repository backup health. Needs an explicit `link:`: the store's Traefik router for Backrest is `backup`. */
-export const backrestSummary = (service: WidgetService, ttl?: number) =>
-  defineWidget({
-    id: "backrest-summary",
-    ttl,
-    ...chrome,
-    errorDescription: "The backup status could not be loaded.",
-    load: async () =>
-      ((await (await BackrestClient.connect(service)).getSummary()).repoSummaries ?? []).map(displayRepo),
-    render: (repos: RepoBackup[]) => <BackrestSummaryCard repos={repos} serviceUrl={service.link} />,
-  });
+export const backrestSummary = (service: WidgetService): WidgetBody<RepoBackup[]> => ({
+  load: async () => ((await (await BackrestClient.connect(service)).getSummary()).repoSummaries ?? []).map(displayRepo),
+  render: repos => <BackrestSummaryCard repos={repos} serviceUrl={service.link} />,
+});

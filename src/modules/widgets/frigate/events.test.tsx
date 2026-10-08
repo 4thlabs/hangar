@@ -1,8 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { aService } from "../mock/mock.ts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { aService, aWidget, clearWidgetCache } from "../mock/mock.ts";
 import type { FrigateEvent, FrigateStats } from "./api/client.ts";
+import { frigateEventsDescriptor } from "./descriptor.ts";
 import { frigateEvents, FrigateEventsCard } from "./events.tsx";
+
+// The widget cache is process-global, and every widget built here shares one key.
+beforeEach(clearWidgetCache);
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -89,24 +93,27 @@ describe("FrigateEventsCard", () => {
       );
     });
 
-    const { Widget } = frigateEvents({
-      api: "http://frigate:5000",
-      link: "https://frigate.test.local",
-      apiKey: () => Promise.resolve("s3cret"),
-    });
+    const { Widget } = aWidget(
+      frigateEventsDescriptor,
+      frigateEvents({
+        api: "http://frigate:5000",
+        link: "https://frigate.test.local",
+        apiKey: () => Promise.resolve("s3cret"),
+      }),
+    );
 
     const html = renderToStaticMarkup(<>{await Widget()}</>);
 
     expect(called.every(request => request.url.startsWith("http://frigate:5000/api/"))).toBe(true);
     // The key the operator put in .env.global has to reach the request, not just the factory.
     expect(called.map(request => request.headers.get("x-api-key"))).toEqual(["s3cret", "s3cret"]);
-    expect(html).toContain('src="/api/widgets/frigate-events/image/');
+    expect(html).toContain('src="/api/widgets/test-widget/image/');
     expect(html).toContain("https://frigate.test.local/explore?event_id=");
     expect(html).not.toContain("frigate:5000");
   });
 
   it("exposes a titled skeleton through the widget definition", () => {
-    const { Skeleton } = frigateEvents(aService());
+    const { Skeleton } = aWidget(frigateEventsDescriptor, frigateEvents(aService()));
     const html = renderToStaticMarkup(<Skeleton />);
 
     expect(html).toContain("Frigate");

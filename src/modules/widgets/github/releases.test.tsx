@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { aWidget } from "../mock/mock.ts";
 import type { GithubRelease } from "./api/client.ts";
+import { githubReleasesDescriptor } from "./descriptor.ts";
 import { githubReleases, GithubReleasesCard } from "./releases.tsx";
 
 const now = Date.parse("2026-09-18T12:00:00Z");
@@ -41,7 +43,7 @@ describe("GithubReleasesCard", () => {
   });
 
   it("exposes a titled skeleton through the widget definition", () => {
-    const { Skeleton } = githubReleases(["glanceapp/glance"]);
+    const { Skeleton } = aWidget(githubReleasesDescriptor, githubReleases(["glanceapp/glance"]));
     const html = renderToStaticMarkup(<Skeleton />);
 
     expect(html).toContain("Releases");

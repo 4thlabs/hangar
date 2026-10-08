@@ -1,7 +1,6 @@
 import { cn } from "cn";
-import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
 import type { WidgetService } from "../config/config.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
   RelativeTime,
   WidgetCard,
@@ -12,8 +11,9 @@ import {
   WidgetMetadata,
 } from "../shared/index.ts";
 import { BeszelClient, type BeszelSystem } from "./api/client.ts";
+import { beszelServerStatsDescriptor } from "./descriptor.ts";
 
-const chrome = { title: "Beszel", icon: <IconSelfh name="beszel" />, className: "min-h-40" };
+const { appearance } = beszelServerStatsDescriptor;
 
 /** One host, already resolved to what the card shows. */
 export type ServerStats = {
@@ -89,11 +89,11 @@ export function BeszelServerStatsCard({ servers, serviceUrl, now = Date.now() }:
   const down = servers.filter(server => !server.up).length;
 
   return (
-    <WidgetCard className={chrome.className}>
+    <WidgetCard className={appearance.className}>
       <WidgetHeader
         href={serviceUrl}
-        icon={chrome.icon}
-        title={chrome.title}
+        icon={appearance.icon}
+        title={appearance.title}
         description={
           <WidgetMetadata>
             <span>
@@ -151,12 +151,7 @@ export function BeszelServerStatsCard({ servers, serviceUrl, now = Date.now() }:
  * Per-host CPU, memory and disk, as the Beszel hub last heard them. Reads only `systems`, whose `info` already holds
  * each host's latest reading: one request, not one per server.
  */
-export const beszelServerStats = (service: WidgetService, ttl?: number) =>
-  defineWidget({
-    id: "beszel-server-stats",
-    ttl,
-    ...chrome,
-    errorDescription: "The server stats could not be loaded.",
-    load: async () => (await (await BeszelClient.connect(service)).listSystems()).items.map(displaySystem),
-    render: (servers: ServerStats[]) => <BeszelServerStatsCard servers={servers} serviceUrl={service.link} />,
-  });
+export const beszelServerStats = (service: WidgetService): WidgetBody<ServerStats[]> => ({
+  load: async () => (await (await BeszelClient.connect(service)).listSystems()).items.map(displaySystem),
+  render: servers => <BeszelServerStatsCard servers={servers} serviceUrl={service.link} />,
+});

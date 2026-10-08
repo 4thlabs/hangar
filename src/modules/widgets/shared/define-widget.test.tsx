@@ -1,23 +1,26 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Cache, peek } from "#libs/cache";
-import { clearWidgetCache, defineWidget } from "./define-widget.tsx";
+import { Cache, fulfilled, peek } from "#libs/cache";
+import { WidgetIcon } from "../config/config.ts";
+import { clearWidgetCache, defineWidget, type WidgetBody } from "./define-widget.tsx";
 
-const base = {
-  id: "test-widget",
+const appearance = {
   title: "Test",
-  icon: null,
+  icon: new WidgetIcon("/test.svg"),
   className: "min-h-10",
   errorDescription: "Could not load.",
 };
+
+/** A widget over a body whose module is already loaded, as a warm dashboard has it. */
+const warmWidget = <T,>(body: WidgetBody<T>, ttl?: number) =>
+  defineWidget({ id: "test-widget", appearance, body: () => fulfilled(body), ttl });
 
 // The widget cache is process-global and keyed by placement, and every unplaced widget here shares one key.
 beforeEach(clearWidgetCache);
 
 describe("defineWidget", () => {
   it("renders the loaded data", async () => {
-    const widget = defineWidget({
-      ...base,
+    const widget = warmWidget({
       load: async () => "payload",
       render: data => <p>{data}</p>,
     });
@@ -26,8 +29,7 @@ describe("defineWidget", () => {
   });
 
   it("falls back to the error card when load rejects", async () => {
-    const widget = defineWidget({
-      ...base,
+    const widget = warmWidget({
       load: async () => {
         throw new Error("upstream down");
       },
@@ -42,8 +44,7 @@ describe("defineWidget", () => {
   });
 
   it("does not leak the upstream error message to the page", async () => {
-    const widget = defineWidget({
-      ...base,
+    const widget = warmWidget({
       load: async () => {
         throw new Error("postgres://user:secret@db:5432 refused");
       },
@@ -54,8 +55,7 @@ describe("defineWidget", () => {
   });
 
   it("falls back when render returns null", async () => {
-    const widget = defineWidget({
-      ...base,
+    const widget = warmWidget({
       load: async () => null,
       render: () => null,
     });
@@ -64,8 +64,7 @@ describe("defineWidget", () => {
   });
 
   it("derives the skeleton from the same identity", () => {
-    const widget = defineWidget({
-      ...base,
+    const widget = warmWidget({
       load: async () => "x",
       render: () => <p>x</p>,
     });
@@ -78,10 +77,51 @@ describe("defineWidget", () => {
   });
 });
 
+describe("defineWidget over a module", () => {
+  it("renders the card's error state when the widget's module fails to load", async () => {
+    const widget = defineWidget({
+      id: "test-widget",
+      appearance,
+      body: () => Promise.reject(new Error("chunk missing")),
+    });
+
+    const html = renderToStaticMarkup(await widget.Widget());
+
+    expect(html).toContain("Test is unavailable");
+    expect(html).not.toContain("chunk missing");
+  });
+
+  it("renders the card's error state when building the body throws before any promise", async () => {
+    const widget = defineWidget({
+      id: "test-widget",
+      appearance,
+      body: () => {
+        throw new Error("no descriptor");
+      },
+    });
+
+    expect(renderToStaticMarkup(await widget.Widget())).toContain("Test is unavailable");
+  });
+
+  it("suspends only its own card while the module loads, behind a skeleton drawn from its appearance", async () => {
+    let loaded: (body: WidgetBody) => void = () => undefined;
+    const body = new Promise<WidgetBody>(resolve => (loaded = resolve));
+    const widget = defineWidget({ id: "test-widget", appearance, body: () => body });
+
+    const card = widget.Widget();
+
+    expect(peek(card)).toBeUndefined();
+    expect(renderToStaticMarkup(<widget.Skeleton />)).toContain("Test");
+
+    loaded({ load: async () => "payload", render: data => <p>{String(data)}</p> });
+    expect(renderToStaticMarkup(await card)).toContain("payload");
+  });
+});
+
 describe("defineWidget caching", () => {
   it("renders a second time from the cache rather than loading again", async () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
-    const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
+    const widget = warmWidget({ load, render: data => <p>{data}</p> });
 
     await widget.Widget();
     await widget.Widget();
@@ -95,7 +135,7 @@ describe("defineWidget caching", () => {
       .mockRejectedValueOnce(new Error("service down"))
       .mockResolvedValue("payload");
 
-    const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
+    const widget = warmWidget({ load, render: data => <p>{data}</p> });
 
     expect(renderToStaticMarkup(await widget.Widget())).toContain("Could not load.");
     expect(renderToStaticMarkup(await widget.Widget())).toContain("payload");
@@ -104,7 +144,7 @@ describe("defineWidget caching", () => {
   it("caches the rendered card, so a warm render runs neither the load nor render", async () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
     const render = vi.fn((data: string) => <p>{data}</p>);
-    const widget = defineWidget({ ...base, load, render });
+    const widget = warmWidget({ load, render });
 
     await widget.Widget();
     await widget.Widget();
@@ -116,8 +156,7 @@ describe("defineWidget caching", () => {
 describe("defineWidget placements", () => {
   it("keeps one cache entry per placement, so two of one type never share data", async () => {
     // Two `github-releases` blocks watching different repositories: one type, two answers.
-    const make = (answer: string) =>
-      defineWidget({ ...base, load: () => Promise.resolve(answer), render: data => <p>{data}</p> });
+    const make = (answer: string) => warmWidget({ load: () => Promise.resolve(answer), render: data => <p>{data}</p> });
 
     const first = make("first").at("test-widget-a");
     const second = make("second").at("test-widget-b");
@@ -127,14 +166,14 @@ describe("defineWidget placements", () => {
   });
 
   it("binds a copy, leaving a shared widget as it was", () => {
-    const widget = defineWidget({ ...base, load: async () => "x", render: () => <p>x</p> });
+    const widget = warmWidget({ load: async () => "x", render: () => <p>x</p> });
 
     expect(widget.at("test-widget-a").key).toBe("test-widget-a");
     expect(widget.key).toBe("test-widget");
   });
 
   it("hands its key to render, for whatever the card addresses per placement", async () => {
-    const widget = defineWidget({ ...base, load: async () => "x", render: (_data, key) => <p>{key}</p> });
+    const widget = warmWidget({ load: async () => "x", render: (_data, key) => <p>{key}</p> });
 
     expect(renderToStaticMarkup(await widget.at("test-widget-a").Widget())).toContain("test-widget-a");
   });
@@ -148,7 +187,7 @@ describe("defineWidget freshness", () => {
 
   it("reloads once past the TTL its placement declared", async () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
-    const widget = defineWidget({ ...base, ttl: 5_000, load, render: data => <p>{data}</p> });
+    const widget = warmWidget({ load, render: data => <p>{data}</p> }, 5_000);
 
     await widget.Widget();
     vi.setSystemTime(START + 6_000);
@@ -159,7 +198,7 @@ describe("defineWidget freshness", () => {
 
   it("holds a widget that declared none for the default minute", async () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
-    const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
+    const widget = warmWidget({ load, render: data => <p>{data}</p> });
 
     await widget.Widget();
     vi.setSystemTime(START + 6_000);
@@ -172,7 +211,7 @@ describe("defineWidget freshness", () => {
 describe("defineWidget rendering without suspending", () => {
   it("hands out a settled card once warm, which React renders without a fallback", async () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
-    const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
+    const widget = warmWidget({ load, render: data => <p>{data}</p> });
 
     await widget.Widget();
 
@@ -184,7 +223,7 @@ describe("defineWidget rendering without suspending", () => {
 
   it("still suspends when it has nothing cached", () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
-    const widget = defineWidget({ ...base, load, render: data => <p>{data}</p> });
+    const widget = warmWidget({ load, render: data => <p>{data}</p> });
 
     expect(peek(widget.Widget())).toBeUndefined();
   });
@@ -195,7 +234,7 @@ describe("defineWidget over a source", () => {
     const owner = new Cache();
     const load = vi.fn<() => Promise<string>>().mockResolvedValueOnce("first").mockResolvedValueOnce("second");
     const source = () => owner.get("source", { ttl: 60_000 }, load);
-    const widget = defineWidget({ ...base, source, render: data => <p>{data}</p> });
+    const widget = warmWidget({ source, render: data => <p>{data}</p> });
 
     expect(renderToStaticMarkup(await widget.Widget())).toContain("first");
 
@@ -205,8 +244,7 @@ describe("defineWidget over a source", () => {
   });
 
   it("falls back to the error card when the source cannot be read", async () => {
-    const widget = defineWidget({
-      ...base,
+    const widget = warmWidget({
       source: () => Promise.reject(new Error("socket gone")),
       render: () => <p>never</p>,
     });

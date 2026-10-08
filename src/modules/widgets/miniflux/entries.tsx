@@ -1,7 +1,6 @@
 import { cn } from "cn";
-import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
 import type { WidgetService } from "../config/config.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -11,7 +10,10 @@ import {
   WidgetMetadata,
   WidgetTime,
 } from "../shared/index.ts";
-import { MinifluxClient, type MinifluxEntry } from "./api/client.ts";
+import { MinifluxClient, type MinifluxEntries, type MinifluxEntry } from "./api/client.ts";
+import { minifluxEntriesDescriptor } from "./descriptor.ts";
+
+const { appearance } = minifluxEntriesDescriptor;
 
 type MinifluxEntriesCardProps = {
   entries: MinifluxEntry[];
@@ -20,15 +22,13 @@ type MinifluxEntriesCardProps = {
   now?: number;
 };
 
-const chrome = { title: "Miniflux", icon: <IconSelfh name="miniflux" /> };
-
 export function MinifluxEntriesCard({ entries, unread, serviceUrl, now = Date.now() }: MinifluxEntriesCardProps) {
   return (
     <WidgetCard>
       <WidgetHeader
         href={serviceUrl}
-        icon={chrome.icon}
-        title={chrome.title}
+        icon={appearance.icon}
+        title={appearance.title}
         bordered={entries.length > 0}
         description={
           <WidgetMetadata>
@@ -76,18 +76,13 @@ export function MinifluxEntriesCard({ entries, unread, serviceUrl, now = Date.no
 }
 
 /** The newest feed entries, each marked when not read yet. */
-export const minifluxEntries = (service: WidgetService, ttl?: number) =>
-  defineWidget({
-    id: "miniflux-entries",
-    ttl,
-    ...chrome,
-    errorDescription: "The feed entries could not be loaded.",
-    load: async () => {
-      const client = await MinifluxClient.connect(service);
+export const minifluxEntries = (service: WidgetService): WidgetBody<[MinifluxEntries, number]> => ({
+  load: async () => {
+    const client = await MinifluxClient.connect(service);
 
-      return await Promise.all([client.getEntries(), client.getUnreadCount()]);
-    },
-    render: ([{ entries }, unread]) => (
-      <MinifluxEntriesCard entries={entries} unread={unread} serviceUrl={service.link} />
-    ),
-  });
+    return await Promise.all([client.getEntries(), client.getUnreadCount()]);
+  },
+  render: ([{ entries }, unread]) => (
+    <MinifluxEntriesCard entries={entries} unread={unread} serviceUrl={service.link} />
+  ),
+});

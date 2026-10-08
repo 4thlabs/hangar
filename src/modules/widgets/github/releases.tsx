@@ -1,19 +1,19 @@
-import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
-import { defineWidget } from "../shared/define-widget.tsx";
+import type { WidgetBody } from "../shared/define-widget.tsx";
 import { WidgetCard, WidgetContent, WidgetHeader, WidgetList, WidgetListItem, WidgetTime } from "../shared/index.ts";
 import { githubClient, type GithubRelease } from "./api/client.ts";
+import { githubReleasesDescriptor } from "./descriptor.ts";
+
+const { appearance } = githubReleasesDescriptor;
 
 type GithubReleasesCardProps = {
   releases: GithubRelease[];
   now?: number;
 };
 
-const chrome = { title: "Releases", icon: <IconSelfh name="github" /> };
-
 export function GithubReleasesCard({ releases, now = Date.now() }: GithubReleasesCardProps) {
   return (
     <WidgetCard>
-      <WidgetHeader icon={chrome.icon} title={chrome.title} bordered={releases.length > 0} />
+      <WidgetHeader icon={appearance.icon} title={appearance.title} bordered={releases.length > 0} />
 
       <WidgetContent>
         <WidgetList empty="No releases found.">
@@ -40,12 +40,7 @@ export function GithubReleasesCard({ releases, now = Date.now() }: GithubRelease
 }
 
 /** The latest release of each watched repository, newest first. */
-export const githubReleases = (repositories: readonly string[], ttl?: number) =>
-  defineWidget({
-    id: "github-releases",
-    ttl,
-    ...chrome,
-    errorDescription: "The GitHub releases could not be loaded.",
-    load: () => githubClient.getLatestReleases(repositories),
-    render: (releases: GithubRelease[]) => <GithubReleasesCard releases={releases} />,
-  });
+export const githubReleases = (repositories: readonly string[]): WidgetBody<GithubRelease[]> => ({
+  load: () => githubClient.getLatestReleases(repositories),
+  render: releases => <GithubReleasesCard releases={releases} />,
+});

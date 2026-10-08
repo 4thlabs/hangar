@@ -1,10 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
-import { defaultWidgets, widgetConfigSchema } from "./config/config.ts";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { defaultWidgets, widgetConfigSchema } from "./config/widgets.ts";
 import { noSecret } from "./mock/mock.ts";
 import { WidgetRegistry } from "./registry.ts";
 
-// The registry pulls in the Docker widget, and through it the server-only client.
-vi.mock("server-only", () => ({}));
+// A widget that fails logs it; the test only cares that the failure stays inside its card.
+vi.mock("#libs/logs", () => ({ logger: { error: vi.fn() } }));
+
+afterEach(() => vi.unstubAllGlobals());
 
 const host = { domain: "test.local", containerName: (app: string) => app, secret: noSecret };
 
@@ -38,22 +41,39 @@ describe("WidgetRegistry", () => {
     expect(new WidgetRegistry(host).resolve(defaultWidgets)).toHaveLength(defaultWidgets.length);
   });
 
-  it("asks for the container of the app its widget type names", () => {
-    const containerName = vi.fn((app: string) => `${app}-1`);
+  it("places a widget without importing it or resolving its service", () => {
+    const containerName = vi.fn((app: string) => app);
 
     new WidgetRegistry({ domain: "test.local", containerName, secret: noSecret }).resolve([
       { type: "frigate-events", column: 3 },
     ]);
 
-    expect(containerName).toHaveBeenCalledWith("frigate");
+    expect(containerName).not.toHaveBeenCalled();
   });
 
-  it("resolves a widget that needs no service without asking for a container", () => {
+  it("asks for the container of the app its descriptor reads once the card loads, and keeps a failure in it", async () => {
+    const containerName = vi.fn((app: string) => `${app}-1`);
+
+    vi.stubGlobal("fetch", () => Promise.reject(new Error("unreachable")));
+
+    const [placement] = new WidgetRegistry({ domain: "test.local", containerName, secret: noSecret }).resolve([
+      { type: "frigate-events", column: 3 },
+    ]);
+
+    const html = renderToStaticMarkup(await placement!.widget.Widget());
+
+    expect(containerName).toHaveBeenCalledWith("frigate");
+    expect(html).toContain("Frigate is unavailable");
+  });
+
+  it("renders a widget that needs no service without asking for a container", async () => {
     const containerName = vi.fn((app: string) => app);
 
-    new WidgetRegistry({ domain: "test.local", containerName, secret: noSecret }).resolve([
+    const [placement] = new WidgetRegistry({ domain: "test.local", containerName, secret: noSecret }).resolve([
       { type: "clock", column: 1 },
     ]);
+
+    await placement!.widget.Widget();
 
     expect(containerName).not.toHaveBeenCalled();
   });

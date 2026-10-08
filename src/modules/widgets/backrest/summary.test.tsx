@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { aService, clearWidgetCache } from "../mock/mock.ts";
+import { aService, aWidget, clearWidgetCache } from "../mock/mock.ts";
 import type { BackrestRepoSummary } from "./api/client.ts";
+import { backrestSummaryDescriptor } from "./descriptor.ts";
 import { backrestSummary, BackrestSummaryCard, displayRepo } from "./summary.tsx";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -127,7 +128,9 @@ describe("backrestSummary", () => {
       );
     });
 
-    const html = renderToStaticMarkup(<>{await backrestSummary(service).Widget()}</>);
+    const html = renderToStaticMarkup(
+      <>{await aWidget(backrestSummaryDescriptor, backrestSummary(service)).Widget()}</>,
+    );
 
     expect(called.map(request => request.url)).toEqual(["http://backrest:9898/v1.Backrest/GetSummaryDashboard"]);
     expect(called[0]?.method).toBe("POST");
@@ -140,12 +143,16 @@ describe("backrestSummary", () => {
   it("degrades to the error card when Backrest is unreachable", async () => {
     vi.stubGlobal("fetch", () => Promise.reject(new Error("ECONNREFUSED")));
 
-    const html = renderToStaticMarkup(<>{await backrestSummary(service).Widget()}</>);
+    const html = renderToStaticMarkup(
+      <>{await aWidget(backrestSummaryDescriptor, backrestSummary(service)).Widget()}</>,
+    );
 
     expect(html).toContain("unavailable");
   });
 
   it("exposes a titled skeleton through the widget definition", () => {
-    expect(renderToStaticMarkup(<>{backrestSummary(aService()).Skeleton()}</>)).toContain("Backrest");
+    expect(
+      renderToStaticMarkup(<>{aWidget(backrestSummaryDescriptor, backrestSummary(aService())).Skeleton()}</>),
+    ).toContain("Backrest");
   });
 });

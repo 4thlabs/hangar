@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { WidgetIcon } from "../config/config.ts";
 import {
   WidgetCard,
   WidgetContent,
@@ -20,7 +21,7 @@ describe("widget primitives", () => {
       <WidgetCard className="min-h-64">
         <WidgetHeader
           href="https://service.example.com"
-          icon={<span aria-hidden="true">Icon</span>}
+          icon={new WidgetIcon("/icon.svg")}
           title="Service"
           description={
             <WidgetMetadata>

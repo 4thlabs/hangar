@@ -1,7 +1,6 @@
-import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
 import { ScrollArea } from "#modules/common/ui/scroll-area.tsx";
 import type { WidgetService } from "../config/config.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
   Units,
   WidgetCard,
@@ -12,11 +11,12 @@ import {
   WidgetMetadata,
 } from "../shared/index.ts";
 import { JellyfinClient, type JellyfinCounts, type JellyfinItem } from "./api/client.ts";
+import { jellyfinLatestDescriptor } from "./descriptor.ts";
+
+const { appearance } = jellyfinLatestDescriptor;
 
 /** How many posters the row holds. */
 const ITEM_COUNT = 10;
-
-const chrome = { title: "Jellyfin", icon: <IconSelfh name="jellyfin" />, className: "min-h-64" };
 
 /** One poster, already resolved to what the card shows. */
 export type LatestItem = {
@@ -59,12 +59,12 @@ type JellyfinLatestCardProps = {
 
 export function JellyfinLatestCard({ counts, items, serviceUrl, placementKey }: JellyfinLatestCardProps) {
   return (
-    <WidgetCard className={chrome.className}>
+    <WidgetCard className={appearance.className}>
       {/* The server-wide totals label the row: they are what the posters are the newest of. */}
       <WidgetHeader
         href={serviceUrl}
-        icon={chrome.icon}
-        title={chrome.title}
+        icon={appearance.icon}
+        title={appearance.title}
         description={
           <WidgetMetadata>
             <span>{Units.Integer.format(counts.MovieCount)} movies</span>
@@ -115,29 +115,27 @@ export function JellyfinLatestCard({ counts, items, serviceUrl, placementKey }: 
 }
 
 /** The library, as one card: what it holds, and what landed in it last, as `user` sees it. */
-export const jellyfinLatest = (service: WidgetService, user: string, ttl?: number) =>
-  defineWidget({
-    id: "jellyfin-latest",
-    ttl,
-    ...chrome,
-    errorDescription: "The Jellyfin library could not be loaded.",
-    load: async () => {
-      const client = await JellyfinClient.connect(service);
-      // Independent calls, so they go together; only "latest" has to wait on the user lookup.
-      const [counts, users] = await Promise.all([client.getCounts(), client.getUsers()]);
-      const account = users.find(candidate => candidate.Name === user);
+export const jellyfinLatest = (
+  service: WidgetService,
+  user: string,
+): WidgetBody<{ counts: JellyfinCounts; items: LatestItem[] }> => ({
+  load: async () => {
+    const client = await JellyfinClient.connect(service);
+    // Independent calls, so they go together; only "latest" has to wait on the user lookup.
+    const [counts, users] = await Promise.all([client.getCounts(), client.getUsers()]);
+    const account = users.find(candidate => candidate.Name === user);
 
-      // Naming the operator's own typo beats an error card that says only "could not be loaded".
-      if (!account) {
-        throw new Error(`No Jellyfin user named ${user}`);
-      }
+    // Naming the operator's own typo beats an error card that says only "could not be loaded".
+    if (!account) {
+      throw new Error(`No Jellyfin user named ${user}`);
+    }
 
-      const items = (await client.getLatest(account.Id, ITEM_COUNT)).map(displayItem);
+    const items = (await client.getLatest(account.Id, ITEM_COUNT)).map(displayItem);
 
-      // The client over-fetches, so trim here. Grouped responses can still repeat a series (unique React keys).
-      return { counts, items: [...new Map(items.map(item => [item.id, item])).values()].slice(0, ITEM_COUNT) };
-    },
-    render: ({ counts, items }: { counts: JellyfinCounts; items: LatestItem[] }, placementKey) => (
-      <JellyfinLatestCard counts={counts} items={items} serviceUrl={service.link} placementKey={placementKey} />
-    ),
-  });
+    // The client over-fetches, so trim here. Grouped responses can still repeat a series (unique React keys).
+    return { counts, items: [...new Map(items.map(item => [item.id, item])).values()].slice(0, ITEM_COUNT) };
+  },
+  render: ({ counts, items }, placementKey) => (
+    <JellyfinLatestCard counts={counts} items={items} serviceUrl={service.link} placementKey={placementKey} />
+  ),
+});

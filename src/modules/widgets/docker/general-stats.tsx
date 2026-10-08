@@ -3,9 +3,8 @@ import { all, map } from "#libs/cache";
 import type { DockerOverview } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { outdatedApps } from "#modules/apps/snapshots.ts";
-import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
 import { navigationPrefetch } from "#modules/common/navigations.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
   Units,
   WidgetCard,
@@ -16,6 +15,9 @@ import {
   WidgetMetric,
   WidgetMetricGrid,
 } from "../shared/index.ts";
+import { dockerGeneralStatsDescriptor } from "./descriptor.ts";
+
+const { appearance } = dockerGeneralStatsDescriptor;
 
 type DockerGeneralStatsCardProps = {
   overview: DockerOverview;
@@ -26,16 +28,14 @@ type DockerGeneralStatsCardProps = {
 /** What the widget loads: the host counts, plus the apps due an image update. */
 type DockerGeneralStats = DockerGeneralStatsCardProps;
 
-const chrome = { title: "Local", icon: <IconSelfh name="docker" />, className: "@container min-h-64" };
-
 export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStatsCardProps) {
   const { version, containers, images, volumes } = overview;
 
   return (
-    <WidgetCard className={chrome.className}>
+    <WidgetCard className={appearance.className}>
       <WidgetHeader
-        icon={chrome.icon}
-        title={chrome.title}
+        icon={appearance.icon}
+        title={appearance.title}
         description={
           <WidgetMetadata>
             <span>Docker {version}</span>
@@ -87,17 +87,12 @@ export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStat
 }
 
 /** One widget for every placement, rendering the daemon's cached reads: no TTL, it follows Docker events. */
-export const dockerGeneralStats = defineWidget({
-  id: "docker-general-stats",
-  ...chrome,
-  errorDescription: "The local Docker statistics could not be loaded.",
+export const dockerGeneralStats: WidgetBody<DockerGeneralStats> = {
   // The last completed check against what runs now; the widget never talks to a registry itself.
   source: () =>
     map(all([docker.overview(), outdatedApps()]), ([overview, outdated]) => ({
       overview,
       outdated: [...outdated].sort(),
     })),
-  render: ({ overview, outdated }: DockerGeneralStats) => (
-    <DockerGeneralStatsCard overview={overview} outdated={outdated} />
-  ),
-});
+  render: ({ overview, outdated }) => <DockerGeneralStatsCard overview={overview} outdated={outdated} />,
+};

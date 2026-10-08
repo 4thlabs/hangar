@@ -1,8 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { aService } from "../mock/mock.ts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { aService, aWidget, clearWidgetCache } from "../mock/mock.ts";
 import type { GluetunPublicIp } from "./api/client.ts";
+import { gluetunVpnStatusDescriptor } from "./descriptor.ts";
 import { gluetunVpnStatus, GluetunVpnStatusCard } from "./vpn-status.tsx";
+
+// The widget cache is process-global, and every widget built here shares one key.
+beforeEach(clearWidgetCache);
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -51,11 +55,14 @@ describe("GluetunVpnStatusCard", () => {
       );
     });
 
-    const { Widget } = gluetunVpnStatus({
-      api: "http://gluetun:8000",
-      link: "https://gluetun.test.local",
-      apiKey: () => Promise.resolve("s3cret"),
-    });
+    const { Widget } = aWidget(
+      gluetunVpnStatusDescriptor,
+      gluetunVpnStatus({
+        api: "http://gluetun:8000",
+        link: "https://gluetun.test.local",
+        apiKey: () => Promise.resolve("s3cret"),
+      }),
+    );
 
     const html = renderToStaticMarkup(<>{await Widget()}</>);
 
@@ -66,7 +73,7 @@ describe("GluetunVpnStatusCard", () => {
   });
 
   it("exposes a titled skeleton through the widget definition", () => {
-    const { Skeleton } = gluetunVpnStatus(aService());
+    const { Skeleton } = aWidget(gluetunVpnStatusDescriptor, gluetunVpnStatus(aService()));
     const html = renderToStaticMarkup(<Skeleton />);
 
     expect(html).toContain("Gluetun");

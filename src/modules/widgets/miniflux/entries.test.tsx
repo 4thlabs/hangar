@@ -1,7 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { aWidget } from "../mock/mock.ts";
 import { clearWidgetCache } from "../shared/define-widget.tsx";
 import type { MinifluxEntry } from "./api/client.ts";
+import { minifluxEntriesDescriptor } from "./descriptor.ts";
 import { minifluxEntries, MinifluxEntriesCard } from "./entries.tsx";
 
 beforeEach(clearWidgetCache);
@@ -58,11 +60,14 @@ describe("MinifluxEntriesCard", () => {
       return Promise.resolve(Response.json({ total: request.url.includes("status=unread") ? 7 : 2, entries }));
     });
 
-    const { Widget } = minifluxEntries({
-      api: "http://miniflux:8080",
-      link: "https://miniflux.test.local",
-      apiKey: () => Promise.resolve("s3cret"),
-    });
+    const { Widget } = aWidget(
+      minifluxEntriesDescriptor,
+      minifluxEntries({
+        api: "http://miniflux:8080",
+        link: "https://miniflux.test.local",
+        apiKey: () => Promise.resolve("s3cret"),
+      }),
+    );
 
     const html = renderToStaticMarkup(<>{await Widget()}</>);
 
@@ -76,11 +81,14 @@ describe("MinifluxEntriesCard", () => {
   it("falls back to the error card when Miniflux does not answer", async () => {
     vi.stubGlobal("fetch", () => Promise.resolve(new Response("nope", { status: 500 })));
 
-    const { Widget } = minifluxEntries({
-      api: "http://miniflux:8080",
-      link: "https://miniflux.test.local",
-      apiKey: () => Promise.resolve(undefined),
-    });
+    const { Widget } = aWidget(
+      minifluxEntriesDescriptor,
+      minifluxEntries({
+        api: "http://miniflux:8080",
+        link: "https://miniflux.test.local",
+        apiKey: () => Promise.resolve(undefined),
+      }),
+    );
 
     const html = renderToStaticMarkup(<>{await Widget()}</>);
 

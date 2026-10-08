@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { aService, clearWidgetCache } from "../mock/mock.ts";
+import { aService, aWidget, clearWidgetCache } from "../mock/mock.ts";
 import type { BeszelSystem } from "./api/client.ts";
+import { beszelServerStatsDescriptor } from "./descriptor.ts";
 import { beszelServerStats, BeszelServerStatsCard, displaySystem } from "./server-stats.tsx";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -112,7 +113,9 @@ describe("beszelServerStats", () => {
       );
     });
 
-    const html = renderToStaticMarkup(<>{await beszelServerStats(service).Widget()}</>);
+    const html = renderToStaticMarkup(
+      <>{await aWidget(beszelServerStatsDescriptor, beszelServerStats(service)).Widget()}</>,
+    );
 
     expect(called).toHaveLength(1);
     expect(called[0]?.url).toBe(
@@ -128,10 +131,14 @@ describe("beszelServerStats", () => {
   it("degrades to the error card when the hub is unreachable", async () => {
     vi.stubGlobal("fetch", () => Promise.reject(new Error("ECONNREFUSED")));
 
-    expect(renderToStaticMarkup(<>{await beszelServerStats(service).Widget()}</>)).toContain("unavailable");
+    expect(
+      renderToStaticMarkup(<>{await aWidget(beszelServerStatsDescriptor, beszelServerStats(service)).Widget()}</>),
+    ).toContain("unavailable");
   });
 
   it("exposes a titled skeleton through the widget definition", () => {
-    expect(renderToStaticMarkup(<>{beszelServerStats(aService()).Skeleton()}</>)).toContain("Beszel");
+    expect(
+      renderToStaticMarkup(<>{aWidget(beszelServerStatsDescriptor, beszelServerStats(aService())).Skeleton()}</>),
+    ).toContain("Beszel");
   });
 });

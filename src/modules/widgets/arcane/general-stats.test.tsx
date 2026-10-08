@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { aService } from "../mock/mock.ts";
+import { aService, aWidget } from "../mock/mock.ts";
 import type { Dashboard } from "./api/type.ts";
+import { arcaneGeneralStatsDescriptor } from "./descriptor.ts";
 import { arcaneGeneralStats, ArcaneGeneralStatsCard } from "./general-stats.tsx";
 
 const dashboard: Dashboard = {
@@ -75,7 +76,7 @@ describe("ArcaneGeneralStatsCard", () => {
   });
 
   it("exposes a titled skeleton through the widget definition", () => {
-    const { Skeleton } = arcaneGeneralStats(aService());
+    const { Skeleton } = aWidget(arcaneGeneralStatsDescriptor, arcaneGeneralStats(aService()));
     const html = renderToStaticMarkup(<Skeleton />);
 
     expect(html).toContain("Arcane");

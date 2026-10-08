@@ -1,16 +1,9 @@
-import { ClockIcon } from "lucide-react";
-import { defineWidget } from "../shared/define-widget.tsx";
+import type { WidgetBody } from "../shared/define-widget.tsx";
 import { ClockDisplay } from "./clock-display.tsx";
+import { clockDescriptor } from "./descriptor.ts";
 
-const clockWidgetClassName = "h-20";
-
-/** The date and time, ticking in the browser. Loads nothing, but goes through `defineWidget` for its skeleton. */
-export const clockWidget = defineWidget({
-  id: "clock",
-  title: "Clock",
-  icon: <ClockIcon />,
-  className: clockWidgetClassName,
-  errorDescription: "The clock could not be rendered.",
+/** The date and time, ticking in the browser: the card loads nothing. */
+export const clockWidget: WidgetBody<null> = {
   load: () => Promise.resolve(null),
-  render: () => <ClockDisplay className={clockWidgetClassName} />,
-});
+  render: () => <ClockDisplay className={clockDescriptor.appearance.className} />,
+};

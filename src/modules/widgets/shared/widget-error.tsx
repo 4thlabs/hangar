@@ -1,12 +1,12 @@
 import { CircleAlertIcon } from "lucide-react";
-import type { ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
+import type { WidgetIcon } from "../config/config.ts";
 import { WidgetCard, WidgetContent, WidgetHeader } from "./widget.tsx";
 
 type WidgetErrorProps = {
   className?: string | undefined;
   description: string;
-  icon: ReactNode;
+  icon: WidgetIcon;
   name: string;
 };
 

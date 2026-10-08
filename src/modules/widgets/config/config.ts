@@ -1,14 +1,13 @@
 import * as z from "zod";
+import type { WidgetBody } from "../shared/define-widget.tsx";
 
-// The `widgets:` section of `hangar.yml`. No JSX: the CLI imports this; the components live in `registry.ts`.
+// What a widget descriptor is built from. No JSX: the CLI parses `hangar.yml` through the descriptors.
 
 /** Grid columns a widget can be placed in. */
 export type DashboardColumn = 1 | 2 | 3;
 
-const columnSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
-
-/** `owner/repo` — the only form the GitHub releases API takes. */
-const repositorySchema = z.string().regex(/^[\w.-]+\/[\w.-]+$/, "must be owner/repo");
+/** The column a declaration places its widget in. */
+export const columnSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 
 /**
  * `url`: server-side address. `link`: what the browser opens. http(s) only: `frigate:5000` would otherwise parse as
@@ -18,35 +17,102 @@ const serviceUrl = z.url({ protocol: /^https?$/ });
 
 const serviceUrlFields = { url: serviceUrl.optional(), link: serviceUrl.optional() };
 
-/** Freshness in seconds; absent = widget default. Not offered to the clock and Docker widgets, which cache nothing. */
-const ttlField = { ttl: z.int().positive().optional() };
+/**
+ * Freshness in seconds; absent = widget default. Not offered to the Docker widget, whose daemon keeps its data fresh,
+ * nor to the clock, which ticks in the browser.
+ */
+export const ttlField = { ttl: z.int().positive().optional() };
 
-export const widgetConfigSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("clock"), column: columnSchema }),
-  z.object({ type: z.literal("docker-general-stats"), column: columnSchema }),
-  z.object({ type: z.literal("arcane-general-stats"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
-  z.object({ type: z.literal("backrest-summary"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
-  z.object({ type: z.literal("beszel-server-stats"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
-  z.object({ type: z.literal("frigate-events"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
-  z.object({ type: z.literal("gluetun-vpn-status"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
-  z.object({ type: z.literal("miniflux-entries"), column: columnSchema, ...serviceUrlFields, ...ttlField }),
-  z.object({
-    type: z.literal("jellyfin-latest"),
-    column: columnSchema,
-    ...serviceUrlFields,
-    ...ttlField,
-    /** Jellyfin scopes "latest" to a user, so there is no server-wide answer to ask for. */
-    user: z.string().min(1),
-  }),
-  z.object({
-    type: z.literal("github-releases"),
-    column: columnSchema,
-    ...ttlField,
-    repositories: z.array(repositorySchema).min(1),
-  }),
-]);
+/** The declarations a widget schema is built from. */
+export class WidgetSchema {
+  /** The declaration of a widget that reads nothing a store app serves: only where it sits. */
+  static local<const Type extends string>(type: Type) {
+    return z.object({ type: z.literal(type), column: columnSchema });
+  }
 
-export type WidgetConfig = z.infer<typeof widgetConfigSchema>;
+  /** The declaration of a widget that reads a service: where it sits, where its service is, how fresh it stays. */
+  static service<const Type extends string>(type: Type) {
+    return z.object({ type: z.literal(type), column: columnSchema, ...serviceUrlFields, ...ttlField });
+  }
+}
+
+/**
+ * What every declaration may carry. A widget's schema picks the fields it offers; this is the shape the dashboard and
+ * the image relay read without knowing which widget a declaration is for.
+ */
+export type WidgetDeclaration = {
+  type: string;
+  column: DashboardColumn;
+  url?: string | undefined;
+  link?: string | undefined;
+  /** Freshness in seconds. */
+  ttl?: number | undefined;
+};
+
+/** A widget's icon, as image URLs: a descriptor names it rather than renders it, so the CLI loads no JSX. */
+export class WidgetIcon {
+  /** Where Dashboard Icons serves its SVGs. */
+  private static readonly DashboardIcons = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg";
+
+  readonly src: string;
+
+  /** The variant drawn on a dark theme, for an icon the dark background would swallow. */
+  readonly dark: string | undefined;
+
+  constructor(src: string, dark?: string) {
+    this.src = src;
+    this.dark = dark;
+  }
+
+  /** An icon from Dashboard Icons by name, and the name of its dark-theme variant (`github-light`) if it needs one. */
+  static dashboard(name: string, dark?: string): WidgetIcon {
+    const url = (icon: string) => `${WidgetIcon.DashboardIcons}/${icon}.svg`;
+
+    return new WidgetIcon(url(name), dark === undefined ? undefined : url(dark));
+  }
+}
+
+/** What identifies a widget on its card, its skeleton and its error state. */
+export type WidgetAppearance = {
+  /** Display name, shown in the header, skeleton and error state. */
+  title: string;
+  icon: WidgetIcon;
+  /** Size/layout classes for the card. */
+  className?: string;
+  /** Shown in the error state, after "<title> is unavailable". */
+  errorDescription: string;
+};
+
+/**
+ * One widget type, whole: what `hangar.yml` may declare, the app it reads, what its card looks like, and how to build
+ * it. No JSX: `module` imports the components only when the dashboard first shows the widget, inside its own card.
+ */
+export type WidgetDescriptor<
+  Schema extends z.ZodType<WidgetDeclaration> = z.ZodType<WidgetDeclaration>,
+  Module = unknown,
+> = {
+  /** The declaration, discriminated by its literal `type`. */
+  schema: Schema;
+  /** The store app whose service the widget reads, which names its container and key. Absent when it reads none. */
+  app?: string;
+  /** What its card, skeleton and error state show, without its module loaded. */
+  appearance: WidgetAppearance;
+  // Methods rather than properties: their parameters are checked bivariantly, so every descriptor fits one list.
+  /** The widget's code, imported on first use. */
+  module(): Promise<Module>;
+  /**
+   * What one declaration loads and renders, from the imported module.
+   * @param service The service the declaration points at, resolved when called; a widget that reads none never calls it
+   */
+  create(module: Module, config: z.infer<Schema>, service: () => WidgetService): WidgetBody;
+  /** Fetches one image the widget shows but a browser cannot fetch itself. Absent for a widget that relays none. */
+  relay?(service: WidgetService, id: string): Promise<Response>;
+};
+
+/** Types `create` against the descriptor's own schema and module. */
+export const describeWidget = <Schema extends z.ZodType<WidgetDeclaration>, Module>(
+  descriptor: WidgetDescriptor<Schema, Module>,
+) => descriptor;
 
 /**
  * What resolving a widget's service needs to know, passed in rather than read here: reaching for
@@ -78,87 +144,17 @@ export class WidgetService {
   }
 
   /**
-   * `link` defaults to `https://<container>.<domain>`, `api` to `link`. The key is read lazily; an absent one means
-   * the service takes none.
+   * The service a declaration of `descriptor` points at. `link` defaults to `https://<container>.<domain>`, `api` to
+   * `link`. The key is read lazily; an absent one means the service takes none.
    */
-  static resolve(
-    config: { url?: string | undefined; link?: string | undefined },
-    containerName: string,
-    domain: string,
-    secret: (container: string) => Promise<string | undefined>,
-  ): WidgetService {
-    const link = config.link ?? `https://${containerName}.${domain}`;
-
-    return new WidgetService({ link, api: config.url ?? link, apiKey: () => secret(containerName) });
-  }
-
-  /** The service a declaration points at; a type without `url` (a clock) gets the defaults. */
-  static of(config: WidgetConfig, host: WidgetHost): WidgetService {
-    return WidgetService.resolve(
-      "url" in config ? { url: config.url, link: config.link } : {},
-      host.containerName(WidgetService.appOf(config.type)),
-      host.domain,
-      host.secret,
-    );
-  }
-
-  /** `frigate-events` → the `frigate` app: a widget type is prefixed by the app it reads. */
-  static appOf(type: string) {
-    return type.split("-")[0]!;
-  }
-}
-
-/**
- * Identifies a placed widget (cache entry, React key, image relay path). `<type>-<hash>` over everything but `column`,
- * so moving a card keeps its cached data; duplicates get `-2`, `-3`.
- */
-export class WidgetKey {
-  /** The key of every declaration, in the same order. */
-  static all(configs: readonly WidgetConfig[]): string[] {
-    const seen = new Map<string, number>();
-
-    return configs.map(config => {
-      const key = `${config.type}-${WidgetKey.hash(config)}`;
-      const count = (seen.get(key) ?? 0) + 1;
-
-      seen.set(key, count);
-
-      return count === 1 ? key : `${key}-${count}`;
-    });
-  }
-
-  /** The declaration a key names, or `undefined` when the store places nothing under it. */
-  static find(configs: readonly WidgetConfig[], key: string): WidgetConfig | undefined {
-    const index = WidgetKey.all(configs).indexOf(key);
-
-    return index === -1 ? undefined : configs[index];
-  }
-
-  /**
-   * FNV-1a over the declaration without its column, in base 36. Keys are sorted first, so the order
-   * the operator wrote the fields in does not matter; array order does, as it does on the card.
-   */
-  private static hash({ column: _column, ...declaration }: WidgetConfig) {
-    const text = JSON.stringify(declaration, (_key, value: unknown) =>
-      value && typeof value === "object" && !Array.isArray(value)
-        ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1)))
-        : value,
-    );
-
-    let hash = 0x811c9dc5;
-
-    for (const char of text) {
-      hash ^= char.codePointAt(0)!;
-      hash = Math.imul(hash, 0x01000193);
+  static resolve(config: WidgetDeclaration, descriptor: WidgetDescriptor, host: WidgetHost): WidgetService {
+    if (descriptor.app === undefined) {
+      throw new Error(`The ${config.type} widget reads no service`);
     }
 
-    return (hash >>> 0).toString(36);
+    const container = host.containerName(descriptor.app);
+    const link = config.link ?? `https://${container}.${host.domain}`;
+
+    return new WidgetService({ link, api: config.url ?? link, apiKey: () => host.secret(container) });
   }
 }
-
-/** The dashboard of a store whose `hangar.yml` declares no `widgets:`. */
-export const defaultWidgets: readonly WidgetConfig[] = [
-  { type: "clock", column: 1 },
-  { type: "docker-general-stats", column: 1 },
-  { type: "frigate-events", column: 3 },
-];
