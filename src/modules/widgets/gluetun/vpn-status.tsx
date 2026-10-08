@@ -1,15 +1,15 @@
 import { cn } from "cn";
-import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
 import type { WidgetService } from "../config/config.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import type { WidgetBody } from "../shared/define-widget.tsx";
 import { WidgetCard, WidgetContent, WidgetHeader } from "../shared/index.ts";
 import { GluetunClient, type GluetunPublicIp } from "./api/client.ts";
+import { gluetunVpnStatusDescriptor } from "./descriptor.ts";
+
+const { appearance } = gluetunVpnStatusDescriptor;
 
 type GluetunVpnStatusCardProps = {
   publicIp: GluetunPublicIp;
 };
-
-const chrome = { title: "Gluetun", icon: <IconSelfh name="gluetun" />, className: "min-h-32" };
 
 export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
   const { public_ip: address, city, country } = publicIp;
@@ -18,8 +18,8 @@ export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
   const location = [city, country].filter(part => part.length > 0).join(", ");
 
   return (
-    <WidgetCard className={chrome.className}>
-      <WidgetHeader bordered icon={chrome.icon} title={chrome.title} />
+    <WidgetCard className={appearance.className}>
+      <WidgetHeader bordered icon={appearance.icon} title={appearance.title} />
 
       <WidgetContent className="flex flex-col gap-1">
         <p className="flex items-center gap-2 font-medium">
@@ -45,12 +45,7 @@ export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
 }
 
 /** Whether the tunnel is up, and where it comes out. No header link: gluetun has no web page. */
-export const gluetunVpnStatus = (service: WidgetService, ttl?: number) =>
-  defineWidget({
-    id: "gluetun-vpn-status",
-    ttl,
-    ...chrome,
-    errorDescription: "The VPN status could not be read.",
-    load: async () => (await GluetunClient.connect(service)).getPublicIp(),
-    render: (publicIp: GluetunPublicIp) => <GluetunVpnStatusCard publicIp={publicIp} />,
-  });
+export const gluetunVpnStatus = (service: WidgetService): WidgetBody<GluetunPublicIp> => ({
+  load: async () => (await GluetunClient.connect(service)).getPublicIp(),
+  render: publicIp => <GluetunVpnStatusCard publicIp={publicIp} />,
+});

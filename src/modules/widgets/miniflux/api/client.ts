@@ -12,7 +12,7 @@ export interface MinifluxEntry {
 }
 
 /** One page of entries, with the total the filter matches. */
-interface MinifluxEntries {
+export interface MinifluxEntries {
   total: number;
   entries: MinifluxEntry[];
 }

@@ -1,6 +1,5 @@
-import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
 import type { WidgetService } from "../config/config.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
   Units,
   WidgetCard,
@@ -13,13 +12,14 @@ import {
 } from "../shared/index.ts";
 import { ArcaneClient } from "./api/client.ts";
 import type { Dashboard } from "./api/type.ts";
+import { arcaneGeneralStatsDescriptor } from "./descriptor.ts";
+
+const { appearance } = arcaneGeneralStatsDescriptor;
 
 type ArcaneGeneralStatsCardProps = {
   dashboard: Dashboard;
   serviceUrl: string;
 };
-
-const chrome = { title: "Arcane", icon: <IconSelfh name="arcane" />, className: "@container min-h-64" };
 
 function actionColor(severity: string) {
   if (severity === "critical") {
@@ -38,11 +38,11 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
   const counts = containers.counts;
 
   return (
-    <WidgetCard className={chrome.className}>
+    <WidgetCard className={appearance.className}>
       <WidgetHeader
         href={serviceUrl}
-        icon={chrome.icon}
-        title={chrome.title}
+        icon={appearance.icon}
+        title={appearance.title}
         description={
           <WidgetMetadata>
             {versionInfo.updateAvailable ? (
@@ -100,20 +100,15 @@ export function ArcaneGeneralStatsCard({ dashboard, serviceUrl }: ArcaneGeneralS
 }
 
 /** Arcane's own view of the host, and the link into it. */
-export const arcaneGeneralStats = (service: WidgetService, ttl?: number) =>
-  defineWidget({
-    id: "arcane-general-stats",
-    ttl,
-    ...chrome,
-    errorDescription: "The general statistics could not be loaded.",
-    load: async () => {
-      const response = await (await ArcaneClient.connect(service)).getDashboard();
+export const arcaneGeneralStats = (service: WidgetService): WidgetBody<Dashboard> => ({
+  load: async () => {
+    const response = await (await ArcaneClient.connect(service)).getDashboard();
 
-      if (!response.success) {
-        throw new Error(response.detail ?? "Unsuccessful response");
-      }
+    if (!response.success) {
+      throw new Error(response.detail ?? "Unsuccessful response");
+    }
 
-      return response.data;
-    },
-    render: (dashboard: Dashboard) => <ArcaneGeneralStatsCard dashboard={dashboard} serviceUrl={service.link} />,
-  });
+    return response.data;
+  },
+  render: dashboard => <ArcaneGeneralStatsCard dashboard={dashboard} serviceUrl={service.link} />,
+});

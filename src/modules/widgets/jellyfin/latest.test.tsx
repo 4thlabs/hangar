@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearWidgetCache } from "../mock/index.ts";
-import { aService } from "../mock/mock.ts";
+import { aService, aWidget } from "../mock/mock.ts";
 import type { JellyfinCounts, JellyfinItem } from "./api/client.ts";
+import { jellyfinLatestDescriptor } from "./descriptor.ts";
 import { displayItem, jellyfinLatest, JellyfinLatestCard } from "./latest.tsx";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -155,7 +156,9 @@ describe("jellyfinLatest", () => {
       [{ Id: "m-1", Name: "Dune", Type: "Movie", ProductionYear: 2021, ImageTags: { Primary: "tag" } }],
     );
 
-    const html = renderToStaticMarkup(<>{await jellyfinLatest(service, "thomas").Widget()}</>);
+    const html = renderToStaticMarkup(
+      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget()}</>,
+    );
 
     expect(urls(called)).toEqual([
       "http://jellyfin:8096/Items/Counts",
@@ -165,7 +168,7 @@ describe("jellyfinLatest", () => {
 
     // The whole reason the poster is proxied: the key must not reach the page.
     expect(html).not.toContain("s3cret");
-    expect(html).toContain("/api/widgets/jellyfin-latest/image/m-1");
+    expect(html).toContain("/api/widgets/test-widget/image/m-1");
   });
 
   it("fills the row from an over-fetched list, because Jellyfin groups after it cuts", async () => {
@@ -179,7 +182,9 @@ describe("jellyfinLatest", () => {
 
     stub([{ Id: "u-2", Name: "thomas" }], many);
 
-    const html = renderToStaticMarkup(<>{await jellyfinLatest(service, "thomas").Widget()}</>);
+    const html = renderToStaticMarkup(
+      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget()}</>,
+    );
 
     expect(cells(html)).toBe(10);
     expect(html).toContain("Film 0");
@@ -191,7 +196,9 @@ describe("jellyfinLatest", () => {
 
     stub([{ Id: "u-2", Name: "thomas" }], [episode("ep-1"), episode("ep-2")]);
 
-    const html = renderToStaticMarkup(<>{await jellyfinLatest(service, "thomas").Widget()}</>);
+    const html = renderToStaticMarkup(
+      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget()}</>,
+    );
 
     expect(cells(html)).toBe(1);
   });
@@ -199,7 +206,9 @@ describe("jellyfinLatest", () => {
   it("degrades to the error card when the configured user does not exist", async () => {
     stub([{ Id: "u-1", Name: "someone-else" }], []);
 
-    const html = renderToStaticMarkup(<>{await jellyfinLatest(service, "thomas").Widget()}</>);
+    const html = renderToStaticMarkup(
+      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget()}</>,
+    );
 
     expect(html).toContain("unavailable");
   });
@@ -209,7 +218,9 @@ describe("jellyfinLatest", () => {
     // Token="..."`; both are easy to get wrong because every other service here does the opposite.
     const called = stub([{ Id: "u-2", Name: "thomas" }], []);
 
-    const html = renderToStaticMarkup(<>{await jellyfinLatest(service, "thomas").Widget()}</>);
+    const html = renderToStaticMarkup(
+      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget()}</>,
+    );
 
     expect(called[0]?.url).toBe("http://jellyfin:8096/Items/Counts");
     expect(called[0]?.headers.get("authorization")).toBe('MediaBrowser Token="s3cret"');
@@ -220,6 +231,8 @@ describe("jellyfinLatest", () => {
   });
 
   it("exposes a titled skeleton through the widget definition", () => {
-    expect(renderToStaticMarkup(<>{jellyfinLatest(aService(), "thomas").Skeleton()}</>)).toContain("Jellyfin");
+    expect(
+      renderToStaticMarkup(<>{aWidget(jellyfinLatestDescriptor, jellyfinLatest(aService(), "thomas")).Skeleton()}</>),
+    ).toContain("Jellyfin");
   });
 });

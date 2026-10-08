@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { WidgetIcon } from "../config/config.ts";
 import { WidgetError } from "./widget-error.tsx";
 
 describe("WidgetError", () => {
@@ -7,7 +8,7 @@ describe("WidgetError", () => {
     const html = renderToStaticMarkup(
       <WidgetError
         className="min-h-64"
-        icon={<span aria-hidden="true">Icon</span>}
+        icon={new WidgetIcon("/icon.svg")}
         name="Service"
         description="The widget could not be loaded."
       />,

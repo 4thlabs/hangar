@@ -30,8 +30,8 @@ in column 3.
 
 ## How a service widget finds its service
 
-The first part of a widget's type names the store app it reads: `frigate-events` reads the
-`frigate` app. From that app Hangar takes the `container_name` of its main service, then:
+Each service widget reads one store app, named by the first part of its type: `frigate-events`
+reads the `frigate` app. From that app Hangar takes the `container_name` of its main service, then:
 
 - **Link:** `link`, or else `https://<container>.<DOMAIN>`.
 - **API:** `url`, or else the link — the call then leaves the host and comes back through your

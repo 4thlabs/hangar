@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { all, fulfilled, map, peek, recover, track } from "./settled.ts";
+import { all, chain, fulfilled, map, peek, recover, track } from "./settled.ts";
 
 /** A promise that settles on a later tick, as a real load does. */
 const later = <T>(value: T) => track(new Promise<T>(resolve => setTimeout(() => resolve(value), 0)));
@@ -53,6 +53,33 @@ describe("map", () => {
     const derived = map((await failedWith(new Error("source gone"))).promise, () => "never");
 
     expect(() => peek(derived)).toThrow("source gone");
+  });
+});
+
+describe("chain", () => {
+  it("is settled in the same call when its source and the next promise are", () => {
+    expect(peek(chain(fulfilled(2), value => fulfilled(value * 3)))).toEqual({ value: 6 });
+  });
+
+  it("waits for a source still pending, then for the next promise", async () => {
+    const chained = chain(later(2), value => later(value * 3));
+
+    expect(peek(chained)).toBeUndefined();
+    await expect(chained).resolves.toBe(6);
+  });
+
+  it("rejects at once when the source already failed, without building the next promise", async () => {
+    const { promise } = await failedWith(new Error("module gone"));
+    let built = false;
+
+    const chained = chain(promise, () => {
+      built = true;
+
+      return fulfilled("never");
+    });
+
+    expect(() => peek(chained)).toThrow("module gone");
+    expect(built).toBe(false);
   });
 });
 

@@ -1,7 +1,8 @@
 import "server-only";
 import { env } from "#libs/env";
 import { hangar } from "#libs/hangar/server";
-import { WidgetKey, type WidgetHost } from "../config/config.ts";
+import type { WidgetHost } from "../config/config.ts";
+import { WidgetKey } from "../config/widgets.ts";
 import { WidgetRegistry } from "../registry.ts";
 import { WidgetImages } from "./images.ts";
 

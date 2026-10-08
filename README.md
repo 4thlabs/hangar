@@ -110,4 +110,5 @@ is in [Getting started](docs/getting-started.md).
 [Drizzle ORM](https://orm.drizzle.team) on SQLite · [Better Auth](https://better-auth.com) ·
 [Sidequest](https://github.com/sidequestjs/sidequest) for scheduled jobs · [dockerode](https://github.com/apocas/dockerode) ·
 [Tailwind CSS](https://tailwindcss.com) and [shadcn/ui](https://ui.shadcn.com).
-App icons come from [selfh.st/icons](https://selfh.st/icons).
+App icons come from [selfh.st/icons](https://selfh.st/icons), widget icons from
+[Dashboard Icons](https://dashboardicons.com), and the clock's from [Fluent Emoji](https://github.com/microsoft/fluentui-emoji).

@@ -81,11 +81,20 @@ export function peek<T>(promise: Promise<T>): { value: T } | undefined {
  * @param project Builds the derived value; may throw, which rejects the result
  */
 export function map<T, U>(source: Promise<T>, project: (value: T) => U): Promise<U> {
+  return chain(source, value => fulfilled(project(value)));
+}
+
+/**
+ * Waits for `source`, then for the promise `next` builds from its value: settled in the same call
+ * when `source` already is and `next` hands back a settled promise; pending in, a promise out.
+ * @param next Builds the second promise; may throw, which rejects the result
+ */
+export function chain<T, U>(source: Promise<T>, next: (value: T) => Promise<U>): Promise<U> {
   const tracked = source as TrackedPromise<T>;
 
   if (tracked.status === "fulfilled") {
     try {
-      return fulfilled(project(tracked.value as T));
+      return next(tracked.value as T);
     } catch (error) {
       return rejected(error);
     }
@@ -95,7 +104,7 @@ export function map<T, U>(source: Promise<T>, project: (value: T) => U): Promise
     return rejected(tracked.reason);
   }
 
-  return track(source.then(project));
+  return track(source.then(next));
 }
 
 /** Several sources as one tuple, settled at once when they all already are or one already failed. */

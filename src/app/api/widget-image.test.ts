@@ -29,7 +29,7 @@ vi.mock("#libs/hangar/server", () => ({
 }));
 
 const { GET } = await import("#app/pages/_api/api/widgets/[placementKey]/image/[id].ts");
-const { WidgetKey } = await import("#modules/widgets/config/config.ts");
+const { WidgetKey } = await import("#modules/widgets/config/widgets.ts");
 
 const [clock, jellyfin, kids] = WidgetKey.all(mocks.widgets) as [string, string, string];
 

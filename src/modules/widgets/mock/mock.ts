@@ -1,4 +1,6 @@
-import type { WidgetService } from "../config/config.ts";
+import { fulfilled } from "#libs/cache";
+import type { WidgetDescriptor, WidgetService } from "../config/config.ts";
+import { defineWidget, type Widget, type WidgetBody } from "../shared/define-widget.tsx";
 
 export { clearWidgetCache } from "../shared/define-widget.tsx";
 
@@ -12,3 +14,7 @@ export const aService = (overrides: Partial<WidgetService> = {}): WidgetService 
   apiKey: noSecret,
   ...overrides,
 });
+
+/** A widget built straight from its descriptor and body, as the registry builds one once its module has loaded. */
+export const aWidget = (descriptor: WidgetDescriptor, body: WidgetBody): Widget =>
+  defineWidget({ id: "test-widget", appearance: descriptor.appearance, body: () => fulfilled(body) });

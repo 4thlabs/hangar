@@ -1,6 +1,5 @@
-import { IconSelfh } from "#modules/common/components/icon-selfh.tsx";
 import type { WidgetService } from "../config/config.ts";
-import { defineWidget } from "../shared/define-widget.tsx";
+import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -12,6 +11,9 @@ import {
   WidgetTime,
 } from "../shared/index.ts";
 import { FrigateClient, type FrigateEvent, type FrigateStats } from "./api/client.ts";
+import { frigateEventsDescriptor } from "./descriptor.ts";
+
+const { appearance } = frigateEventsDescriptor;
 
 type FrigateEventsCardProps = {
   events: FrigateEvent[];
@@ -21,8 +23,6 @@ type FrigateEventsCardProps = {
   placementKey: string;
   now?: number;
 };
-
-const chrome = { title: "Frigate", icon: <IconSelfh name="frigate" />, className: "min-h-88" };
 
 function formatCameraName(camera: string) {
   return camera.replace(/^frigate_/, "").replaceAll("_", " ");
@@ -38,11 +38,11 @@ export function FrigateEventsCard({
   const detectors = Object.entries(stats.detectors);
 
   return (
-    <WidgetCard className={chrome.className}>
+    <WidgetCard className={appearance.className}>
       <WidgetHeader
         href={serviceUrl}
-        icon={chrome.icon}
-        title={chrome.title}
+        icon={appearance.icon}
+        title={appearance.title}
         description={
           <WidgetMetadata>
             <span>{Object.keys(stats.cameras).length} cameras</span>
@@ -95,18 +95,13 @@ export function FrigateEventsCard({
 }
 
 /** The latest camera events. `link` also builds each per-event deep link, which the browser resolves. */
-export const frigateEvents = (service: WidgetService, ttl?: number) =>
-  defineWidget({
-    id: "frigate-events",
-    ttl,
-    ...chrome,
-    errorDescription: "The camera events could not be loaded.",
-    load: async () => {
-      const client = await FrigateClient.connect(service);
+export const frigateEvents = (service: WidgetService): WidgetBody<[FrigateEvent[], FrigateStats]> => ({
+  load: async () => {
+    const client = await FrigateClient.connect(service);
 
-      return await Promise.all([client.getEvents(), client.getStats()]);
-    },
-    render: ([events, stats]: [FrigateEvent[], FrigateStats], placementKey) => (
-      <FrigateEventsCard events={events} stats={stats} serviceUrl={service.link} placementKey={placementKey} />
-    ),
-  });
+    return await Promise.all([client.getEvents(), client.getStats()]);
+  },
+  render: ([events, stats], placementKey) => (
+    <FrigateEventsCard events={events} stats={stats} serviceUrl={service.link} placementKey={placementKey} />
+  ),
+});

@@ -3,7 +3,9 @@ import { ExternalLinkIcon } from "lucide-react";
 import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
 import { RelativeTime } from "#libs/format";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
+import type { WidgetIcon } from "../config/config.ts";
 import { Units } from "./format.ts";
+import { WidgetIconImage } from "./widget-icon.tsx";
 
 export function WidgetCard({ className, ...props }: ComponentProps<typeof Card>) {
   return <Card className={cn("w-full gap-3 bg-background pt-0", className)} {...props} />;
@@ -13,7 +15,7 @@ type WidgetHeaderProps = Omit<ComponentProps<typeof CardHeader>, "title"> & {
   bordered?: boolean;
   description?: ReactNode;
   href?: string;
-  icon: ReactNode;
+  icon: WidgetIcon;
   title: ReactNode;
 };
 
@@ -28,7 +30,7 @@ export function WidgetHeader({
 }: WidgetHeaderProps) {
   const titleContent = (
     <>
-      {icon}
+      <WidgetIconImage icon={icon} />
       {title?.toString().toUpperCase()}
       {href && <ExternalLinkIcon aria-hidden="true" className="size-3.5" />}
     </>

@@ -1,10 +1,10 @@
-import type { ReactNode } from "react";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
+import type { WidgetIcon } from "../config/config.ts";
 import { WidgetCard, WidgetContent, WidgetHeader } from "./widget.tsx";
 
 type WidgetSkeletonProps = {
   className?: string | undefined;
-  icon: ReactNode;
+  icon: WidgetIcon;
   title: string;
 };
 

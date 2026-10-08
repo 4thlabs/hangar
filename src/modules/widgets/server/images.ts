@@ -1,17 +1,8 @@
-import { WidgetService, type WidgetConfig, type WidgetHost } from "../config/config.ts";
-import { FrigateClient } from "../frigate/api/index.ts";
-import { JellyfinClient } from "../jellyfin/api/index.ts";
+import { WidgetService, type WidgetHost } from "../config/config.ts";
+import { WidgetDescriptors, type WidgetConfig } from "../config/widgets.ts";
 
 /** Relays the images a widget shows but a browser cannot fetch itself. */
 export class WidgetImages {
-  /** The widgets that relay images, and the call that fetches one. */
-  private static readonly Relays: Partial<
-    Record<WidgetConfig["type"], (service: WidgetService, id: string) => Promise<Response>>
-  > = {
-    "frigate-events": async (service, id) => (await FrigateClient.connect(service)).getThumbnail(id),
-    "jellyfin-latest": async (service, id) => (await JellyfinClient.connect(service)).getPoster(id),
-  };
-
   /**
    * Ids as the services spell them: a Jellyfin uuid, or Frigate's `<timestamp>-<label>`. Checked rather than escaped:
    * the id lands in the upstream path, and the relay is not a general-purpose proxy.
@@ -39,8 +30,13 @@ export class WidgetImages {
     }
 
     const config = this.placed(placementKey);
-    const relay = config && WidgetImages.Relays[config.type];
 
-    return relay && (await relay(WidgetService.of(config, this.host), id));
+    if (!config) {
+      return undefined;
+    }
+
+    const descriptor = WidgetDescriptors.get(config.type);
+
+    return descriptor.relay?.(WidgetService.resolve(config, descriptor, this.host), id);
   }
 }

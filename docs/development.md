@@ -69,11 +69,14 @@ down in [`AGENTS.md`](../AGENTS.md). Read it before adding a library or a module
 
 ## Adding a widget
 
-1. Add the type to the `widgetConfigSchema` union in `src/modules/widgets/config/config.ts`. Its
-   first segment must be the store app it reads (`foo-status` reads the `foo` app).
-2. Create `src/modules/widgets/<app>/`: an `api/client.ts` built on `ServiceClient`, and a widget
-   built with `defineWidget`, which provides the cache, the skeleton and the error card.
-3. Register it in `src/modules/widgets/registry.ts`.
+1. Create `src/modules/widgets/<app>/`: an `api/client.ts` built on `ServiceClient`, and a `.tsx`
+   exporting the widget's body (`load` and `render`), which `defineWidget` wraps in the cache, the
+   skeleton and the error card.
+2. Describe it in `<app>/descriptor.ts` with `describeWidget`: its schema
+   (`WidgetSchema.service("foo-status")` for a widget that reads a store app), the `app` it reads,
+   its title, its icon from [Dashboard Icons](https://dashboardicons.com) (`WidgetIcon.dashboard`)
+   and how to build it from its lazily imported module. No JSX there: the CLI loads the descriptors.
+3. List the descriptor in `src/modules/widgets/config/widgets.ts`.
 4. Document it in [`docs/widgets.md`](widgets.md).
 
 The existing widgets each come with tests next to them, against a mocked service; follow one of
