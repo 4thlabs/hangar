@@ -3,7 +3,7 @@ import { ServiceClient } from "../../shared/service-client.ts";
 
 /**
  * An `int64` as Connect encodes it: a JSON string, never a number. Typed as what arrives (read as a number it yields
- * `NaN`) and converted once, in `displayRepo`.
+ * `NaN`) and converted once, in `BackrestRepo`.
  */
 type Int64 = string;
 

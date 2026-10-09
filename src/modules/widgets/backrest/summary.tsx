@@ -33,35 +33,50 @@ export type RepoBackup = {
   nextBackupAt: number | undefined;
 };
 
-/** A Connect `int64`, which arrives as a string and is absent when it would have been zero. */
-const count = (value: string | undefined) => Number(value ?? 0);
+/** A Backrest repository summary, resolved to what the card shows. */
+export class BackrestRepo {
+  /**
+   * What a repository looks like on the card.
+   */
+  static display(summary: BackrestRepoSummary): RepoBackup {
+    const status = summary.recentBackups?.status?.[0];
 
-/** The same, as a moment: a zero is Backrest saying "never", not midnight in 1970. */
-const moment = (value: string | undefined) => (count(value) === 0 ? undefined : Number(value));
-
-/** Only `STATUS_SUCCESS` counts as healthy, as on Backrest's own dashboard. */
-function healthOf(status: string | undefined): RepoHealth {
-  if (status === undefined) {
-    return "never-run";
+    return {
+      id: summary.id,
+      status: status?.replace(/^STATUS_/, ""),
+      health: BackrestRepo.health(status),
+      lastRunAt: BackrestRepo.moment(summary.recentBackups?.timestampMs?.[0]),
+      successes: BackrestRepo.count(summary.backupsSuccessLast30days),
+      bytesAdded: BackrestRepo.count(summary.bytesAddedLast30days),
+      protectedBytes: BackrestRepo.count(summary.protectedBytes),
+      nextBackupAt: BackrestRepo.moment(summary.nextBackupTimeMs),
+    };
   }
 
-  return status === "STATUS_SUCCESS" ? "healthy" : "failed";
-}
+  /**
+   * Only `STATUS_SUCCESS` counts as healthy, as on Backrest's own dashboard.
+   */
+  private static health(status: string | undefined): RepoHealth {
+    if (status === undefined) {
+      return "never-run";
+    }
 
-/** What a repository looks like on the card. */
-export function displayRepo(summary: BackrestRepoSummary): RepoBackup {
-  const status = summary.recentBackups?.status?.[0];
+    return status === "STATUS_SUCCESS" ? "healthy" : "failed";
+  }
 
-  return {
-    id: summary.id,
-    status: status?.replace(/^STATUS_/, ""),
-    health: healthOf(status),
-    lastRunAt: moment(summary.recentBackups?.timestampMs?.[0]),
-    successes: count(summary.backupsSuccessLast30days),
-    bytesAdded: count(summary.bytesAddedLast30days),
-    protectedBytes: count(summary.protectedBytes),
-    nextBackupAt: moment(summary.nextBackupTimeMs),
-  };
+  /**
+   * A Connect `int64`, which arrives as a string and is absent when it would have been zero.
+   */
+  private static count(value: string | undefined) {
+    return Number(value ?? 0);
+  }
+
+  /**
+   * The same, as a moment: a zero is Backrest saying "never", not midnight in 1970.
+   */
+  private static moment(value: string | undefined) {
+    return BackrestRepo.count(value) === 0 ? undefined : Number(value);
+  }
 }
 
 /** Muted for a repository that has not run, which is neither healthy nor failed. */
@@ -135,6 +150,7 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
 
 /** Per-repository backup health. Needs an explicit `link:`: the store's Traefik router for Backrest is `backup`. */
 export const backrestSummary = (service: WidgetService): WidgetBody<RepoBackup[]> => ({
-  load: async () => ((await (await BackrestClient.connect(service)).getSummary()).repoSummaries ?? []).map(displayRepo),
+  load: async () =>
+    ((await (await BackrestClient.connect(service)).getSummary()).repoSummaries ?? []).map(BackrestRepo.display),
   render: repos => <BackrestSummaryCard repos={repos} serviceUrl={service.link} />,
 });

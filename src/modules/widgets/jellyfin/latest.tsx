@@ -28,25 +28,33 @@ export type LatestItem = {
   subtitle: string | undefined;
 };
 
-/**
- * Which item carries the poster: the item if `ImageTags` lists one, else the parent Jellyfin resolved (an album
- * without a cover). Asking for a missing poster is a broken image.
- */
-const imageOf = (item: JellyfinItem) => (item.ImageTags?.Primary ? item.Id : item.ParentPrimaryImageItemId);
+/** A Jellyfin library item, resolved to the poster the card shows. */
+export class JellyfinPoster {
+  /**
+   * What a library item looks like on the card. An episode resolves to its series: one poster per show, not ten
+   * stills.
+   */
+  static display(item: JellyfinItem): LatestItem {
+    const imageId = JellyfinPoster.imageId(item);
 
-/** What a library item looks like on the card. An episode resolves to its series: one poster per show, not ten stills. */
-export function displayItem(item: JellyfinItem): LatestItem {
-  const imageId = imageOf(item);
+    if (item.Type === "Episode") {
+      return { id: item.SeriesId ?? item.Id, imageId, title: item.SeriesName ?? item.Name, subtitle: undefined };
+    }
 
-  if (item.Type === "Episode") {
-    return { id: item.SeriesId ?? item.Id, imageId, title: item.SeriesName ?? item.Name, subtitle: undefined };
+    if (item.Type === "MusicAlbum") {
+      return { id: item.Id, imageId, title: item.Name, subtitle: item.AlbumArtist };
+    }
+
+    return { id: item.Id, imageId, title: item.Name, subtitle: item.ProductionYear?.toString() };
   }
 
-  if (item.Type === "MusicAlbum") {
-    return { id: item.Id, imageId, title: item.Name, subtitle: item.AlbumArtist };
+  /**
+   * Which item carries the poster: the item if `ImageTags` lists one, else the parent Jellyfin resolved (an album
+   * without a cover). Asking for a missing poster is a broken image.
+   */
+  private static imageId(item: JellyfinItem) {
+    return item.ImageTags?.Primary ? item.Id : item.ParentPrimaryImageItemId;
   }
-
-  return { id: item.Id, imageId, title: item.Name, subtitle: item.ProductionYear?.toString() };
 }
 
 type JellyfinLatestCardProps = {
@@ -130,7 +138,7 @@ export const jellyfinLatest = (
       throw new Error(`No Jellyfin user named ${user}`);
     }
 
-    const items = (await client.getLatest(account.Id, ITEM_COUNT)).map(displayItem);
+    const items = (await client.getLatest(account.Id, ITEM_COUNT)).map(JellyfinPoster.display);
 
     // The client over-fetches, so trim here. Grouped responses can still repeat a series (unique React keys).
     return { counts, items: [...new Map(items.map(item => [item.id, item])).values()].slice(0, ITEM_COUNT) };

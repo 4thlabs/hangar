@@ -2,7 +2,7 @@ import { Link } from "waku";
 import { all, map } from "#libs/cache";
 import type { DockerOverview } from "#libs/docker";
 import { docker } from "#libs/docker/server";
-import { outdatedApps } from "#modules/apps/snapshots.ts";
+import { AppsSnapshot } from "#modules/apps/snapshots.ts";
 import { navigationPrefetch } from "#modules/common/navigations.ts";
 import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
@@ -90,7 +90,7 @@ export function DockerGeneralStatsCard({ overview, outdated }: DockerGeneralStat
 export const dockerGeneralStats: WidgetBody<DockerGeneralStats> = {
   // The last completed check against what runs now; the widget never talks to a registry itself.
   source: () =>
-    map(all([docker.overview(), outdatedApps()]), ([overview, outdated]) => ({
+    map(all([docker.overview(), AppsSnapshot.outdated()]), ([overview, outdated]) => ({
       overview,
       outdated: [...outdated].sort(),
     })),

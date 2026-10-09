@@ -45,18 +45,16 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("DockerEvents.changesOf", () => {
+describe("DockerEvents.changes", () => {
   it("refreshes the containers for a Compose container, and the overview for any container", () => {
-    expect(DockerEvents.changesOf(composeContainer("start"))).toEqual(["containers", "overview"]);
-    expect(DockerEvents.changesOf({ Type: "container", Actor: { Attributes: { name: "loose" } } })).toEqual([
-      "overview",
-    ]);
+    expect(DockerEvents.changes(composeContainer("start"))).toEqual(["containers", "overview"]);
+    expect(DockerEvents.changes({ Type: "container", Actor: { Attributes: { name: "loose" } } })).toEqual(["overview"]);
   });
 
   it("refreshes the image list for an image, and the overview for an image or a volume", () => {
-    expect(DockerEvents.changesOf({ Type: "image" })).toEqual(["images", "overview"]);
-    expect(DockerEvents.changesOf({ Type: "volume" })).toEqual(["overview"]);
-    expect(DockerEvents.changesOf({ Type: "network" })).toEqual([]);
+    expect(DockerEvents.changes({ Type: "image" })).toEqual(["images", "overview"]);
+    expect(DockerEvents.changes({ Type: "volume" })).toEqual(["overview"]);
+    expect(DockerEvents.changes({ Type: "network" })).toEqual([]);
   });
 });
 

@@ -6,7 +6,7 @@ import { DockerNotFoundError } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import { logger } from "#libs/logs";
 import { AppDetail } from "#modules/apps/components/app-detail.tsx";
-import { outdatedApps } from "#modules/apps/snapshots.ts";
+import { AppsSnapshot } from "#modules/apps/snapshots.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
@@ -20,7 +20,7 @@ import {
 
 /** Docker half of `/apps/[project]`, a child so a cold read suspends inside the boundary (see `AppsContent`). */
 export function AppDetailContent({ project }: { project: string }): Promise<ReactNode> {
-  const detail = map(all([docker.projectDetail(project), outdatedApps()]), ([loaded, outdated]) => (
+  const detail = map(all([docker.projectDetail(project), AppsSnapshot.outdated()]), ([loaded, outdated]) => (
     <AppDetail detail={{ ...loaded, updateAvailable: outdated.has(project) }} />
   ));
 

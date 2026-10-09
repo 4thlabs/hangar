@@ -124,22 +124,22 @@ export class Docker {
     this.apps = apps;
     this.cache = cache;
     this.policy = { ttl, maxStale: Docker.MaxStale };
-    this.events = new DockerEvents(docker, change => void this.cache.refresh(Docker.keyOf(change)));
+    this.events = new DockerEvents(docker, change => void this.cache.refresh(Docker.key(change)));
   }
 
   /** The cache key of what a {@link DockerChange} makes stale. */
-  private static keyOf(change: DockerChange) {
+  private static key(change: DockerChange) {
     return `docker:${change}`;
   }
 
   /** Every Compose-labeled container on the host; every other read narrows it in memory. */
   private containers(): Promise<ComposeContainerSource[]> {
-    return this.cache.get(Docker.keyOf("containers"), this.policy, this.loadContainers);
+    return this.cache.get(Docker.key("containers"), this.policy, this.loadContainers);
   }
 
   /** The registry digests of every local image, by image id; see {@link listImages}. */
   private images(): Promise<Map<string, string[]>> {
-    return this.cache.get(Docker.keyOf("images"), this.policy, this.listImages);
+    return this.cache.get(Docker.key("images"), this.policy, this.listImages);
   }
 
   /**
@@ -176,7 +176,7 @@ export class Docker {
 
   /** Host-wide counts for the whole engine, not just the installed apps, as Arcane reports a remote one. */
   overview(): Promise<DockerOverview> {
-    return this.cache.get(Docker.keyOf("overview"), Docker.OverviewPolicy, this.loadOverview);
+    return this.cache.get(Docker.key("overview"), Docker.OverviewPolicy, this.loadOverview);
   }
 
   /**
@@ -202,7 +202,7 @@ export class Docker {
    * @returns Settles once both reloads have, and never rejects
    */
   settle(): Promise<void> {
-    const refreshes = [this.cache.refresh(Docker.keyOf("containers")), this.cache.refresh(Docker.keyOf("images"))];
+    const refreshes = [this.cache.refresh(Docker.key("containers")), this.cache.refresh(Docker.key("images"))];
 
     return Promise.all(refreshes).then(() => undefined);
   }

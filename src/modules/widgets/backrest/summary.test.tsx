@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { aService, aWidget, clearWidgetCache } from "../mock/mock.ts";
 import type { BackrestRepoSummary } from "./api/client.ts";
 import { backrestSummaryDescriptor } from "./descriptor.ts";
-import { backrestSummary, BackrestSummaryCard, displayRepo } from "./summary.tsx";
+import { BackrestRepo, backrestSummary, BackrestSummaryCard } from "./summary.tsx";
 
 afterEach(() => vi.unstubAllGlobals());
 beforeEach(clearWidgetCache);
@@ -30,9 +30,9 @@ const healthy: BackrestRepoSummary = {
   },
 };
 
-describe("displayRepo", () => {
+describe("BackrestRepo.display", () => {
   it("reads Connect's string int64s as numbers and trims the status prefix", () => {
-    expect(displayRepo(healthy)).toEqual({
+    expect(BackrestRepo.display(healthy)).toEqual({
       id: "homelab-b2",
       status: "SUCCESS",
       health: "healthy",
@@ -46,7 +46,7 @@ describe("displayRepo", () => {
 
   it("treats every omitted field as the zero Connect declined to send", () => {
     // A repository configured but never run: no `recentBackups`, no counts, no next run.
-    expect(displayRepo({ id: "fresh" })).toEqual({
+    expect(BackrestRepo.display({ id: "fresh" })).toEqual({
       id: "fresh",
       status: undefined,
       health: "never-run",
@@ -59,7 +59,10 @@ describe("displayRepo", () => {
   });
 
   it("counts anything that is not a success as unhealthy", () => {
-    const failed = displayRepo({ ...healthy, recentBackups: { status: ["STATUS_ERROR"], timestampMs: ["1"] } });
+    const failed = BackrestRepo.display({
+      ...healthy,
+      recentBackups: { status: ["STATUS_ERROR"], timestampMs: ["1"] },
+    });
 
     expect(failed).toMatchObject({ status: "ERROR", health: "failed" });
   });
@@ -69,7 +72,10 @@ describe("BackrestSummaryCard", () => {
   it("sums what every repository protects into the header", () => {
     const html = renderToStaticMarkup(
       <BackrestSummaryCard
-        repos={[displayRepo(healthy), displayRepo({ ...healthy, id: "local-usb", protectedBytes: "869730877440" })]}
+        repos={[
+          BackrestRepo.display(healthy),
+          BackrestRepo.display({ ...healthy, id: "local-usb", protectedBytes: "869730877440" }),
+        ]}
         serviceUrl="https://backup.test.local"
         now={NOW}
       />,
@@ -82,7 +88,7 @@ describe("BackrestSummaryCard", () => {
 
   it("shows the last run, the 30-day tally and when the next one is due", () => {
     const html = renderToStaticMarkup(
-      <BackrestSummaryCard repos={[displayRepo(healthy)]} serviceUrl="https://backup.test.local" now={NOW} />,
+      <BackrestSummaryCard repos={[BackrestRepo.display(healthy)]} serviceUrl="https://backup.test.local" now={NOW} />,
     );
 
     expect(html).toContain("homelab-b2");
@@ -96,7 +102,10 @@ describe("BackrestSummaryCard", () => {
   });
 
   it("marks a failed repository in words, not only in colour", () => {
-    const failed = displayRepo({ ...healthy, recentBackups: { status: ["STATUS_ERROR"], timestampMs: [String(NOW)] } });
+    const failed = BackrestRepo.display({
+      ...healthy,
+      recentBackups: { status: ["STATUS_ERROR"], timestampMs: [String(NOW)] },
+    });
 
     const html = renderToStaticMarkup(
       <BackrestSummaryCard repos={[failed]} serviceUrl="https://backup.test.local" now={NOW} />,
