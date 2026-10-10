@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { constants, type Stats } from "node:fs";
-import { mkdir, open, readdir, rename, rm, stat, type FileHandle } from "node:fs/promises";
+import { constants } from "node:fs";
+import { mkdir, open, readdir } from "node:fs/promises";
 import path from "node:path";
 import { logger } from "#libs/logs";
 import { HangarError } from "./hangar-error.ts";
@@ -27,6 +26,9 @@ export class EditableFile {
 
   /** No blocking on a FIFO, and no following a symlink swapped in after the path was resolved */
   private static readonly ReadFlags = constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW;
+
+  /** The same for a write, which must find the file there: no `O_CREAT`, so nothing is created through a late symlink */
+  private static readonly RewriteFlags = constants.O_WRONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW;
 
   /** Refuses invalid UTF-8 instead of replacing it, and keeps a byte order mark so a save writes it back */
   private static readonly Utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
@@ -71,53 +73,21 @@ export class EditableFile {
   }
 
   /**
-   * Writes `source` to `file`, creating its missing folders. The content goes to a hidden file
-   * beside it first, renamed onto `file` once complete: a symlink swapped in for `file` after its
-   * path was checked is then replaced, not followed.
+   * Writes `source` to `file`, creating it and its missing folders when it does not exist yet.
+   * An existing file is rewritten in place: a container that bind-mounts that single file holds on to
+   * its inode, and only sees an edit made to that same inode, not a new file renamed over it.
    * @param file The file, symlinks resolved
    * @param relativePath The file's path inside its app folder, named in the errors
+   * @throws {HangarError} When it is not a regular file, a symlink swapped in after its path was
+   * resolved included, or when it appeared while being created
    */
   static async write(file: string, relativePath: string, source: string) {
-    await mkdir(path.dirname(file), { recursive: true });
-
-    const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${randomUUID()}.tmp`);
-
-    try {
-      await EditableFile.writeReplacement(temporary, file, relativePath, source);
-      await rename(temporary, file);
-    } catch (error) {
-      await rm(temporary, { force: true });
-      throw error;
-    }
-  }
-
-  /**
-   * Writes `source` to `temporary`, a new file meant to be renamed onto `file`, with the mode and
-   * owner `file` has: a container may need both to read it.
-   * @throws {HangarError} When `file` exists but is not a regular file
-   */
-  static async writeReplacement(temporary: string, file: string, relativePath: string, source: string) {
-    const current = await stat(file).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") {
-        return undefined;
-      }
-
-      throw error;
-    });
-
-    if (current && !current.isFile()) {
-      throw new HangarError(`${relativePath} is not a file`);
-    }
-
-    // `wx`: a path already taken, a planted symlink included, fails instead of being written through.
-    const handle = await open(temporary, "wx");
+    const handle =
+      (await EditableFile.openExisting(file, relativePath)) ?? (await EditableFile.openNew(file, relativePath));
 
     try {
+      await handle.truncate(0);
       await handle.writeFile(source, "utf8");
-
-      if (current) {
-        await EditableFile.copyOwnership(handle, current);
-      }
     } finally {
       await handle.close();
     }
@@ -143,15 +113,54 @@ export class EditableFile {
     await handle.close();
   }
 
-  private static async copyOwnership(handle: FileHandle, original: Stats) {
-    const written = await handle.stat();
+  /**
+   * `file` opened for writing, its mode, owner and inode kept, or `undefined` when it does not exist.
+   * @throws {HangarError} When it is not a regular file, or a symlink
+   */
+  private static async openExisting(file: string, relativePath: string) {
+    const handle = await open(file, EditableFile.RewriteFlags).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") {
+        return undefined;
+      }
 
-    await handle.chmod(original.mode & 0o7777);
+      // ELOOP: a symlink swapped in for the file after its path was resolved, refused instead of followed.
+      // EISDIR, ENXIO: a folder, or a FIFO no one reads.
+      if (error.code === "ELOOP" || error.code === "EISDIR" || error.code === "ENXIO") {
+        throw new HangarError(`${relativePath} is not a file`);
+      }
 
-    // Only root may give a file away: a process editing its own files keeps them as they are.
-    if (written.uid !== original.uid || written.gid !== original.gid) {
-      await handle.chown(original.uid, original.gid);
+      throw error;
+    });
+
+    if (!handle) {
+      return undefined;
     }
+
+    // Checked through the handle, so the file written is the one checked.
+    if (!(await handle.stat()).isFile()) {
+      await handle.close();
+      throw new HangarError(`${relativePath} is not a file`);
+    }
+
+    return handle;
+  }
+
+  /**
+   * `file` created for writing, with its missing folders.
+   * @throws {HangarError} When something appeared at that path since it was found missing
+   */
+  private static async openNew(file: string, relativePath: string) {
+    await mkdir(path.dirname(file), { recursive: true });
+
+    // `wx`: whatever took the path in the meantime, a symlink included, is refused rather than written
+    // through; the operator reopens the file to see what is there now.
+    return open(file, "wx").catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "EEXIST") {
+        throw new HangarError(`${relativePath} appeared while it was being saved: reopen it before saving again`);
+      }
+
+      throw error;
+    });
   }
 
   /** The whole of a regular file, read once its size is known to fit. */

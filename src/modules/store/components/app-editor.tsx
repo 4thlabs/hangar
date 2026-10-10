@@ -6,7 +6,6 @@ import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { CodeEditor } from "#modules/common/ui/code-editor.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 import { AppFileTree } from "#modules/store/components/app-file-tree.tsx";
-import { COMPOSE_FILE } from "#modules/store/compose-file.ts";
 import { useAppFiles, type AppFilesOptions } from "#modules/store/hooks/use-app-files.ts";
 
 type AppEditorProps = Omit<AppFilesOptions, "onSaved">;
@@ -17,9 +16,10 @@ export function AppEditor(props: AppEditorProps) {
 
   const files = useAppFiles({
     ...props,
-    onSaved: relativePath => {
-      // Its save may rename the app or change its icon, which the page and the store list show.
-      if (relativePath === COMPOSE_FILE) {
+    onSaved: ({ composeChanged }) => {
+      // The compose file may rename the app or change its icon, which the page and the store list show.
+      // The server tells, as an alias or another case may lead to it.
+      if (composeChanged) {
         router.reload();
       }
     },

@@ -10,6 +10,9 @@ import { ActionResult, SERVER_LOG_HINT } from "#modules/common/actions/action-re
 /** A read of one app file: its content when it succeeded, why not otherwise. */
 export type AppFileResult = { success: true; source: string } | { success: false; message: string };
 
+/** A save of one app file, and whether it wrote the app's compose file, whatever path led to it. */
+export type SaveAppFileResult = ActionResult & { composeChanged: boolean };
+
 const payloadSchema = z.object({ id: z.string(), source: z.string() });
 const filePathSchema = z.object({ id: z.string(), relativePath: z.string() });
 const filePayloadSchema = filePathSchema.extend({ source: z.string() });
@@ -29,17 +32,24 @@ export const createApp = async (id: string, source: string): Promise<ActionResul
 };
 
 /** Saves one file of a store app, creating it when missing. */
-export const saveAppFile = async (id: string, relativePath: string, source: string): Promise<ActionResult> => {
+export const saveAppFile = async (id: string, relativePath: string, source: string): Promise<SaveAppFileResult> => {
   await sessions.require();
 
-  return writeApp(
+  // Stays false unless the write goes through: a refused save changed nothing.
+  let composeChanged = false;
+
+  const result = await writeApp(
     filePayloadSchema,
     { id, relativePath, source },
     {
-      write: payload => hangar.store.writeAppFile(payload.id, payload.relativePath, payload.source),
+      write: async payload => {
+        ({ composeChanged } = await hangar.store.writeAppFile(payload.id, payload.relativePath, payload.source));
+      },
       success: payload => `${payload.relativePath} a été enregistré.`,
     },
   );
+
+  return { ...result, composeChanged };
 };
 
 /** Creates an empty file in a store app; an existing path, whatever it holds, is refused. */

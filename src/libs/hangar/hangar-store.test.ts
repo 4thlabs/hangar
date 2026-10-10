@@ -32,9 +32,12 @@ categories:
 shared: [networks.yml]
 `;
 
+/** The copy of a compose file awaiting `docker compose config`, one per save, beside the real one. */
+const PENDING_COMPOSE = /\/\.compose\.[0-9a-f-]{36}\.pending\.yml$/;
+
 const createRuntime = () =>
   ({
-    run: vi.fn(async () => ({ code: 0, stdout: "" })),
+    run: vi.fn<CommandRunner["run"]>(async () => ({ code: 0, stdout: "" })),
   }) satisfies CommandRunner;
 
 /** A store whose configuration is already on disk and loaded, as after an install. */
@@ -344,11 +347,7 @@ describe("HangarStore", () => {
       expect(store.app("delta-app")?.name).toBe("Delta");
       expect(runtime.run).toHaveBeenCalledWith(
         "docker",
-        expect.arrayContaining([
-          "config",
-          "-q",
-          path.join(store.storePath, "store", "delta-app", ".compose.pending.yml"),
-        ]),
+        expect.arrayContaining(["config", "-q", expect.stringMatching(PENDING_COMPOSE)]),
         { capture: true },
       );
     });
@@ -377,6 +376,13 @@ describe("HangarStore", () => {
   describe("app files", () => {
     const COMPOSE = "name: Delta\nservices:\n  delta-app:\n    image: nginx\n";
 
+    /** A pending compose file an interrupted save left behind */
+    const LEFTOVER_PENDING = ".compose.00000000-0000-0000-0000-000000000000.pending.yml";
+
+    /** The pending compose files in an app folder */
+    const pendingFiles = async (folder: string) =>
+      (await readdir(folder)).filter(name => PENDING_COMPOSE.test(path.join(folder, name)));
+
     /** A store app on disk with a compose file, an env file, a nested config and the files the listing skips. */
     const withApp = async (runtime = createRuntime()) => {
       const store = await createStore(dataDir, runtime);
@@ -389,7 +395,7 @@ describe("HangarStore", () => {
         writeFile(path.join(folder, "compose.yml"), COMPOSE),
         writeFile(path.join(folder, "delta.env"), "DELTA_PORT=8080\n"),
         writeFile(path.join(folder, "config", "settings.yml"), "theme: dark\n"),
-        writeFile(path.join(folder, ".compose.pending.yml"), "services: {}\n"),
+        writeFile(path.join(folder, LEFTOVER_PENDING), "services: {}\n"),
         writeFile(path.join(folder, ".cache", "state.json"), "{}"),
         writeFile(path.join(folder, "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x1a])),
       ]);
@@ -420,7 +426,7 @@ describe("HangarStore", () => {
 
       await expect(store.writeAppFile("delta-app", "compose.yml", "services: 3\n")).rejects.toThrow(/mapping/);
       expect(await store.appFile("delta-app", "compose.yml")).toBe(COMPOSE);
-      await expect(lstat(path.join(folder, ".compose.pending.yml"))).rejects.toThrow(/ENOENT/);
+      expect(await pendingFiles(folder)).toEqual([LEFTOVER_PENDING]);
 
       await store.writeAppFile("delta-app", "compose.yml", "name: Renamed\nservices: {}\n");
 
@@ -532,12 +538,16 @@ describe("HangarStore", () => {
       await expect(store.writeAppFile("delta-app", "alias.yml", "services: 3\n")).rejects.toThrow(/mapping/);
       expect(await store.appFile("delta-app", "compose.yml")).toBe(COMPOSE);
 
-      await store.writeAppFile("delta-app", "alias.yml", "name: Aliased\nservices: {}\n");
+      await expect(store.writeAppFile("delta-app", "alias.yml", "name: Aliased\nservices: {}\n")).resolves.toEqual({
+        composeChanged: true,
+      });
 
       expect(await store.appFile("delta-app", "compose.yml")).toBe("name: Aliased\nservices: {}\n");
       expect((await lstat(path.join(folder, "alias.yml"))).isSymbolicLink()).toBe(true);
 
-      await store.writeAppFile("delta-app", "Compose.yml", "services: {}\n");
+      await expect(store.writeAppFile("delta-app", "Compose.yml", "services: {}\n")).resolves.toEqual({
+        composeChanged: true,
+      });
 
       expect(runtime.run).toHaveBeenCalledTimes(3);
       expect(runtime.run).toHaveBeenLastCalledWith("docker", expect.arrayContaining(["config", "-q"]), {
@@ -545,16 +555,57 @@ describe("HangarStore", () => {
       });
     });
 
-    it("writes through a temporary file renamed onto the target, keeping its mode", async () => {
+    it("rewrites a file in place, keeping the inode a container mounting it holds, and its mode", async () => {
       const { store, folder } = await withApp();
+      const file = path.join(folder, "delta.env");
 
-      await chmod(path.join(folder, "delta.env"), 0o640);
+      await chmod(file, 0o640);
 
-      await store.writeAppFile("delta-app", "delta.env", "DELTA_PORT=9090\n");
+      const before = await stat(file);
 
-      expect(await readFile(path.join(folder, "delta.env"), "utf8")).toBe("DELTA_PORT=9090\n");
-      expect((await stat(path.join(folder, "delta.env"))).mode & 0o777).toBe(0o640);
-      expect((await readdir(folder)).filter(name => name.endsWith(".tmp"))).toEqual([]);
+      await expect(store.writeAppFile("delta-app", "delta.env", "DELTA_PORT=9090\n")).resolves.toEqual({
+        composeChanged: false,
+      });
+
+      const after = await stat(file);
+
+      expect(await readFile(file, "utf8")).toBe("DELTA_PORT=9090\n");
+      expect(after.ino).toBe(before.ino);
+      expect(after.mode & 0o777).toBe(0o640);
+    });
+
+    it("validates two compose saves made at once, neither removing the other's pending copy", async () => {
+      const { store, runtime, folder } = await withApp();
+      let releaseValidations = () => {};
+      const bothValidating = new Promise<void>(resolve => (releaseValidations = resolve));
+      const validated: string[] = [];
+
+      runtime.run.mockImplementation(async (_command, args) => {
+        const pending = args[args.indexOf("-f") + 1] ?? "";
+
+        validated.push(await readFile(pending, "utf8"));
+
+        if (validated.length === 2) {
+          releaseValidations();
+        }
+
+        await bothValidating;
+
+        return { code: 0, stdout: "" };
+      });
+
+      const first = "name: First\nservices: {}\n";
+      const second = "name: Second\nservices: {}\n";
+
+      await Promise.all([
+        store.writeAppFile("delta-app", "compose.yml", first),
+        store.writeAppFile("delta-app", "compose.yml", second),
+      ]);
+
+      expect(validated.sort()).toEqual([first, second]);
+      expect([first, second]).toContain(await store.appFile("delta-app", "compose.yml"));
+      expect(await pendingFiles(folder)).toEqual([LEFTOVER_PENDING]);
+      expect(await store.appFiles("delta-app")).toEqual(["compose.yml", "config/settings.yml", "delta.env"]);
     });
 
     it("refuses a path with a NUL byte or going through a file as invalid, not as a server failure", async () => {
@@ -574,7 +625,7 @@ describe("HangarStore", () => {
       await expect(store.appFile("delta-app", "../alpha-app/compose.yml")).rejects.toThrow(/Invalid file path/);
       await expect(store.writeAppFile("delta-app", "config/../../x.yml", "")).rejects.toThrow(/Invalid file path/);
       await expect(store.writeAppFile("delta-app", "/etc/passwd", "")).rejects.toThrow(/Invalid file path/);
-      await expect(store.writeAppFile("delta-app", ".compose.pending.yml", "")).rejects.toThrow(/Invalid file path/);
+      await expect(store.writeAppFile("delta-app", LEFTOVER_PENDING, "")).rejects.toThrow(/Invalid file path/);
       await expect(store.writeAppFile("delta-app", "config", "")).rejects.toThrow(/not a file/);
     });
 

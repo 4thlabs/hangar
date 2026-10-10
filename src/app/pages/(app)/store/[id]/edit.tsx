@@ -23,8 +23,10 @@ export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">)
         <h1 className="text-2xl font-semibold">{app.name}</h1>
         <p className="text-sm text-muted-foreground">
           Les fichiers de l’app, chacun vérifié avant d’être écrit : le <code>compose.yml</code> par{" "}
-          <code>docker compose config</code>, les autres <code>.yml</code> et les <code>.env</code> par une lecture de
-          leur syntaxe. Une app installée prend les changements à son prochain démarrage.
+          <code>docker compose config</code>, les autres <code>.yml</code> et <code>.yaml</code> et les{" "}
+          <code>.env</code> par une lecture de leur syntaxe. Ces autres fichiers sont modifiés sur place : un conteneur
+          qui les monte voit le nouveau contenu aussitôt. Les changements du <code>compose.yml</code> s’appliquent au
+          prochain démarrage de l’app.
         </p>
       </div>
       {"refusal" in compose ? (

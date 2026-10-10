@@ -1,4 +1,5 @@
-import { lstat, mkdir, readdir, readFile, realpath, rename, rm, symlink, unlink } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { lstat, mkdir, readdir, readFile, realpath, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { load } from "js-yaml";
 import { logger } from "#libs/logs";
@@ -273,7 +274,7 @@ export class HangarStore {
 
   /**
    * The text files of a store app, as paths relative to its folder (`config/settings.yml`), sorted.
-   * Hidden files (`.compose.pending.yml`), binaries, symlinks and files too large to edit are left
+   * Hidden files (`.compose.<uuid>.pending.yml`), binaries, symlinks and files too large to edit are left
    * out: none of them is the operator's to edit. The listing stops a few folders deep and after a
    * few hundred files, and skips what it cannot read: an app may bind-mount its data into its folder.
    * @param id The app id, its folder under `store/`; must already exist
@@ -308,18 +309,21 @@ export class HangarStore {
    * @param id The app id, its folder under `store/`; must already exist
    * @param relativePath The file's path inside the app folder (`config/settings.yml`)
    * @param source The file's new content
+   * @returns Whether the app's compose file was written, which may rename the app or change its icon
    */
-  async writeAppFile(id: string, relativePath: string, source: string) {
+  async writeAppFile(id: string, relativePath: string, source: string): Promise<{ composeChanged: boolean }> {
     const location = await this.locateAppFile(id, relativePath);
 
     if (await HangarStore.isComposeFile(location)) {
       await this.writeValidatedCompose(location.folder, location.file, source);
 
-      return;
+      return { composeChanged: true };
     }
 
     AppFileSyntax.check(relativePath, source);
     await EditableFile.write(location.file, relativePath, source);
+
+    return { composeChanged: false };
   }
 
   /**
@@ -397,17 +401,20 @@ export class HangarStore {
   /**
    * Writes `source` to `target`, the compose file of the app in `folder`, if `docker compose config`
    * accepts it, then reloads the apps. On a rejection only the pending copy is removed.
+   *
+   * Unlike the other files, compose.yml is replaced rather than rewritten in place: it must stay
+   * untouched until validated, and compose reads it anew on every command, so no container holds it.
    */
   private async writeValidatedCompose(folder: string, target: string, source: string) {
-    // Next to the real file, so the paths it references resolve the same way.
-    const pending = path.join(folder, ".compose.pending.yml");
+    // Next to the real file, so the paths it references resolve the same way; hidden, so the
+    // listing leaves it out; named once per save, so two saves at once never remove each other's.
+    const pending = path.join(folder, `.compose.${randomUUID()}.pending.yml`);
 
     // No `-p`: compose rejects some folder names as project names (`llama.cpp`), and a
     // validation does not need one.
     try {
-      // A copy an interrupted save left behind would make the exclusive write below fail.
-      await rm(pending, { force: true });
-      await EditableFile.writeReplacement(pending, target, HangarStore.ComposeFile, source);
+      // `wx`: a path already taken, a planted symlink included, fails instead of being written through.
+      await writeFile(pending, source, { encoding: "utf8", flag: "wx" });
 
       // prettier-ignore
       await this.runtime.run("docker", [
@@ -416,12 +423,13 @@ export class HangarStore {
         "-f", pending,
         "config", "-q",
       ], { capture: true });
+
+      await rename(pending, target);
     } catch (error) {
       await rm(pending, { force: true });
       throw error;
     }
 
-    await rename(pending, target);
     await this.refresh();
   }
 

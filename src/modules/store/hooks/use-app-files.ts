@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import type { ActionResult } from "#modules/common/actions/action-result.ts";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
-import type { AppFileResult } from "#modules/store/actions/manage-app.ts";
+import type { AppFileResult, SaveAppFileResult } from "#modules/store/actions/manage-app.ts";
 
 const SAVE_TITLES = { success: "Fichier enregistré", error: "Fichier refusé" };
 const CREATE_TITLES = { success: "Fichier créé", error: "Fichier refusé" };
@@ -16,10 +16,10 @@ export type AppFilesOptions = {
   /** The file open on arrival, read by the page so the editor shows it without a round trip */
   initialFile: { path: string; source: string };
   readFile: (id: string, relativePath: string) => Promise<AppFileResult>;
-  saveFile: (id: string, relativePath: string, source: string) => Promise<ActionResult>;
+  saveFile: (id: string, relativePath: string, source: string) => Promise<SaveAppFileResult>;
   createFile: (id: string, relativePath: string) => Promise<ActionResult>;
-  /** Runs once a file is written, with its path */
-  onSaved: (relativePath: string) => void;
+  /** Runs once a file is written, with what its save reports */
+  onSaved: (result: SaveAppFileResult) => void;
 };
 
 /**
@@ -43,13 +43,15 @@ export function useAppFiles({ id, files, initialFile, readFile, saveFile, create
     setErrors(current => ({ ...current, [relativePath]: message }));
 
   /** Shows why a write was refused under `relativePath`, or runs `onWritten` once it went through. */
-  const settleWrite = (relativePath: string, onWritten: () => void) => (result: ActionResult | null) => {
-    setError(relativePath, result && !result.success ? result.message : null);
+  const settleWrite =
+    <Result extends ActionResult>(relativePath: string, onWritten: (result: Result) => void) =>
+    (result: Result | null) => {
+      setError(relativePath, result && !result.success ? result.message : null);
 
-    if (result?.success) {
-      onWritten();
-    }
-  };
+      if (result?.success) {
+        onWritten(result);
+      }
+    };
 
   /** Stores what a file holds on disk, which its draft then starts from or is compared to. */
   const remember = (relativePath: string, source: string) => {
@@ -96,9 +98,9 @@ export function useAppFiles({ id, files, initialFile, readFile, saveFile, create
     run(
       () => saveFile(id, relativePath, source),
       SAVE_TITLES,
-      settleWrite(relativePath, () => {
+      settleWrite(relativePath, result => {
         setSavedSources(current => ({ ...current, [relativePath]: source }));
-        onSaved(relativePath);
+        onSaved(result);
       }),
     );
   };
