@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { load } from "js-yaml";
 import { logger } from "#libs/logs";
+import { AppFiles } from "./app-files.ts";
 import { HangarConfig } from "./hangar-config.ts";
 import { HangarEnv } from "./hangar-env.ts";
 import { HangarError, HangarRuntimeError } from "./hangar-error.ts";
@@ -165,7 +167,7 @@ export class HangarStore {
    * @param options Run options, forwarded to the runtime (`pipe` to capture the output)
    */
   private async composeStack(stack: string, args: string[], options?: RunOptions) {
-    const compose = path.join(this.installedPath, stack, "compose.yml");
+    const compose = path.join(this.installedPath, stack, AppFiles.ComposeFile);
 
     if (!(await Runtime.exists(compose))) {
       throw new HangarRuntimeError(1, `Failed to find project: ${stack}`);
@@ -235,11 +237,6 @@ export class HangarStore {
     return undefined;
   }
 
-  /** The raw compose.yml of a store app. */
-  async appSource(id: string) {
-    return readFile(path.join(this.stackPath(id), "compose.yml"), "utf8");
-  }
-
   /**
    * Adds a new store app once `docker compose config` accepts its compose.yml. A rejected source
    * creates nothing.
@@ -256,7 +253,7 @@ export class HangarStore {
     await mkdir(folder, { recursive: true });
 
     try {
-      await this.writeValidatedCompose(folder, source);
+      await this.writeValidatedCompose(folder, path.join(folder, AppFiles.ComposeFile), source);
     } catch (error) {
       await rm(folder, { recursive: true, force: true });
       throw error;
@@ -264,19 +261,19 @@ export class HangarStore {
   }
 
   /**
-   * Replaces a store app's compose.yml once `docker compose config` accepts it. A rejected source
-   * leaves the app untouched.
-   * @param id The app id, its folder under `store/`; must already exist
-   * @param source The compose YAML
+   * The files of a store app, to list, read and write.
+   * @param id The app id, its folder under `store/`; must already exist and not be a shared file
    */
-  async updateApp(id: string, source: string) {
+  async files(id: string) {
     const folder = this.appFolder(id);
 
     if (!(await Runtime.exists(folder))) {
       throw new HangarError(`The app ${id} does not exist`);
     }
 
-    await this.writeValidatedCompose(folder, source);
+    return new AppFiles(id, folder, (appFolder, target, source) =>
+      this.writeValidatedCompose(appFolder, target, source),
+    );
   }
 
   /** The folder of an app that may be created or edited: not one of the shared files. */
@@ -291,17 +288,22 @@ export class HangarStore {
   }
 
   /**
-   * Writes `source` as the folder's compose.yml if `docker compose config` accepts it, then
-   * reloads the apps. On a rejection only the pending copy is removed.
+   * Writes `source` to `target`, the compose file of the app in `folder`, if `docker compose config`
+   * accepts it, then reloads the apps. On a rejection only the pending copy is removed.
+   *
+   * Unlike the other files, compose.yml is replaced rather than rewritten in place: it must stay
+   * untouched until validated, and compose reads it anew on every command, so no container holds it.
    */
-  private async writeValidatedCompose(folder: string, source: string) {
-    // Next to the real file, so the paths it references resolve the same way.
-    const pending = path.join(folder, ".compose.pending.yml");
+  private async writeValidatedCompose(folder: string, target: string, source: string) {
+    // Next to the real file, so the paths it references resolve the same way; hidden, so the
+    // listing leaves it out; named once per save, so two saves at once never remove each other's.
+    const pending = path.join(folder, `.compose.${randomUUID()}.pending.yml`);
 
     // No `-p`: compose rejects some folder names as project names (`llama.cpp`), and a
     // validation does not need one.
     try {
-      await writeFile(pending, source, "utf8");
+      // `wx`: a path already taken, a planted symlink included, fails instead of being written through.
+      await writeFile(pending, source, { encoding: "utf8", flag: "wx" });
 
       // prettier-ignore
       await this.runtime.run("docker", [
@@ -310,12 +312,13 @@ export class HangarStore {
         "-f", pending,
         "config", "-q",
       ], { capture: true });
+
+      await rename(pending, target);
     } catch (error) {
       await rm(pending, { force: true });
       throw error;
     }
 
-    await rename(pending, path.join(folder, "compose.yml"));
     await this.refresh();
   }
 
@@ -349,8 +352,8 @@ export class HangarStore {
       await Promise.all(
         apps.map(async app => {
           try {
-            const source = await readFile(path.join(this.storePath, "store", app, "compose.yml"), "utf8");
-            const yaml = load(source, { filename: "compose.yml" }) as Record<string, unknown> | undefined;
+            const source = await readFile(path.join(this.storePath, "store", app, AppFiles.ComposeFile), "utf8");
+            const yaml = load(source, { filename: AppFiles.ComposeFile }) as Record<string, unknown> | undefined;
             const metadata = yaml?.["x-hangar"] as { icon?: string } | undefined;
             const services = (yaml?.["services"] ?? {}) as Record<string, { container_name?: string } | undefined>;
 

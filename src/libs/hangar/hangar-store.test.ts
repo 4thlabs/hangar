@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readlink, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,9 +20,12 @@ categories:
 shared: [networks.yml]
 `;
 
+/** The copy of a compose file awaiting `docker compose config`, one per save, beside the real one. */
+const PENDING_COMPOSE = /\/\.compose\.[0-9a-f-]{36}\.pending\.yml$/;
+
 const createRuntime = () =>
   ({
-    run: vi.fn(async () => ({ code: 0, stdout: "" })),
+    run: vi.fn<CommandRunner["run"]>(async () => ({ code: 0, stdout: "" })),
   }) satisfies CommandRunner;
 
 /** A store whose configuration is already on disk and loaded, as after an install. */
@@ -316,7 +319,7 @@ describe("HangarStore", () => {
     expect(store.app("delta-app")?.installed).toBe(true);
   });
 
-  describe("createApp and updateApp", () => {
+  describe("createApp", () => {
     const COMPOSE = "name: Delta\nservices:\n  delta-app:\n    image: nginx\n";
 
     it("adds a new app once docker compose accepts it", async () => {
@@ -328,15 +331,11 @@ describe("HangarStore", () => {
 
       await store.createApp("delta-app", COMPOSE);
 
-      expect(await store.appSource("delta-app")).toBe(COMPOSE);
+      expect(await (await store.files("delta-app")).read("compose.yml")).toBe(COMPOSE);
       expect(store.app("delta-app")?.name).toBe("Delta");
       expect(runtime.run).toHaveBeenCalledWith(
         "docker",
-        expect.arrayContaining([
-          "config",
-          "-q",
-          path.join(store.storePath, "store", "delta-app", ".compose.pending.yml"),
-        ]),
+        expect.arrayContaining(["config", "-q", expect.stringMatching(PENDING_COMPOSE)]),
         { capture: true },
       );
     });
@@ -351,22 +350,7 @@ describe("HangarStore", () => {
       await expect(lstat(path.join(store.storePath, "store", "delta-app"))).rejects.toThrow(/ENOENT/);
     });
 
-    it("keeps the current compose when an edit is rejected", async () => {
-      const runtime = createRuntime();
-      const store = await createStore(dataDir, runtime);
-      const folder = path.join(store.storePath, "store", "delta-app");
-
-      await mkdir(folder, { recursive: true });
-      await writeFile(path.join(folder, "compose.yml"), COMPOSE);
-      runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "invalid"));
-
-      await expect(store.updateApp("delta-app", "services: 3\n")).rejects.toThrow();
-
-      expect(await store.appSource("delta-app")).toBe(COMPOSE);
-      await expect(lstat(path.join(folder, ".compose.pending.yml"))).rejects.toThrow(/ENOENT/);
-    });
-
-    it("refuses ids that escape the store, shared files, creating an existing app and editing a missing one", async () => {
+    it("refuses ids that escape the store, shared files and creating an existing app", async () => {
       const store = await createStore(dataDir, createRuntime());
 
       await mkdir(path.join(store.storePath, "store", "delta-app"), { recursive: true });
@@ -374,7 +358,87 @@ describe("HangarStore", () => {
       await expect(store.createApp("../config", COMPOSE)).rejects.toThrow(/Invalid app id/);
       await expect(store.createApp("networks.yml", COMPOSE)).rejects.toThrow(/shared/);
       await expect(store.createApp("delta-app", COMPOSE)).rejects.toThrow(/already exists/);
-      await expect(store.updateApp("other-app", COMPOSE)).rejects.toThrow(/does not exist/);
+    });
+  });
+
+  describe("files", () => {
+    const COMPOSE = "name: Delta\nservices:\n  delta-app:\n    image: nginx\n";
+
+    /** A pending compose file an interrupted save left behind */
+    const LEFTOVER_PENDING = ".compose.00000000-0000-0000-0000-000000000000.pending.yml";
+
+    /** The pending compose files in an app folder */
+    const pendingFiles = async (folder: string) =>
+      (await readdir(folder)).filter(name => PENDING_COMPOSE.test(path.join(folder, name)));
+
+    /** A store app on disk with its compose file, and a pending one an interrupted save left. */
+    const withApp = async (runtime = createRuntime()) => {
+      const store = await createStore(dataDir, runtime);
+      const folder = path.join(store.storePath, "store", "delta-app");
+
+      await mkdir(folder, { recursive: true });
+
+      await Promise.all([
+        writeFile(path.join(folder, "compose.yml"), COMPOSE),
+        writeFile(path.join(folder, LEFTOVER_PENDING), "services: {}\n"),
+      ]);
+
+      return { store, runtime, folder };
+    };
+
+    it("writes the compose file only once docker compose accepts it", async () => {
+      const { store, runtime, folder } = await withApp();
+      const files = await store.files("delta-app");
+
+      runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "services must be a mapping"));
+
+      await expect(files.write("compose.yml", "services: 3\n")).rejects.toThrow(/mapping/);
+      expect(await files.read("compose.yml")).toBe(COMPOSE);
+      expect(await pendingFiles(folder)).toEqual([LEFTOVER_PENDING]);
+
+      await files.write("compose.yml", "name: Renamed\nservices: {}\n");
+
+      expect(await files.read("compose.yml")).toBe("name: Renamed\nservices: {}\n");
+      expect(runtime.run).toHaveBeenCalledWith("docker", expect.arrayContaining(["config", "-q"]), { capture: true });
+    });
+
+    it("validates two compose saves made at once, neither removing the other's pending copy", async () => {
+      const { store, runtime, folder } = await withApp();
+      const files = await store.files("delta-app");
+      let releaseValidations = () => {};
+      const bothValidating = new Promise<void>(resolve => (releaseValidations = resolve));
+      const validated: string[] = [];
+
+      runtime.run.mockImplementation(async (_command, args) => {
+        const pending = args[args.indexOf("-f") + 1] ?? "";
+
+        validated.push(await readFile(pending, "utf8"));
+
+        if (validated.length === 2) {
+          releaseValidations();
+        }
+
+        await bothValidating;
+
+        return { code: 0, stdout: "" };
+      });
+
+      const first = "name: First\nservices: {}\n";
+      const second = "name: Second\nservices: {}\n";
+
+      await Promise.all([files.write("compose.yml", first), files.write("compose.yml", second)]);
+
+      expect(validated.sort()).toEqual([first, second]);
+      expect([first, second]).toContain(await files.read("compose.yml"));
+      expect(await pendingFiles(folder)).toEqual([LEFTOVER_PENDING]);
+      expect(await files.list()).toEqual(["compose.yml"]);
+    });
+
+    it("refuses the files of a shared file or of a missing app", async () => {
+      const { store } = await withApp();
+
+      await expect(store.files("networks.yml")).rejects.toThrow(/shared/);
+      await expect(store.files("other-app")).rejects.toThrow(/does not exist/);
     });
   });
 });
