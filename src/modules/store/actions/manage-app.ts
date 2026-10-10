@@ -6,7 +6,9 @@ import { HangarError } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { ActionResult, SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
-import { AppFileResult } from "#modules/store/actions/app-file-result.ts";
+
+/** A read of one app file: its content when it succeeded, why not otherwise. */
+export type AppFileResult = { success: true; source: string } | { success: false; message: string };
 
 const payloadSchema = z.object({ id: z.string(), source: z.string() });
 const filePathSchema = z.object({ id: z.string(), relativePath: z.string() });
@@ -40,6 +42,20 @@ export const saveAppFile = async (id: string, relativePath: string, source: stri
   );
 };
 
+/** Creates an empty file in a store app; an existing path, whatever it holds, is refused. */
+export const createAppFile = async (id: string, relativePath: string): Promise<ActionResult> => {
+  await sessions.require();
+
+  return writeApp(
+    filePathSchema,
+    { id, relativePath },
+    {
+      write: payload => hangar.store.createAppFile(payload.id, payload.relativePath),
+      success: payload => `${payload.relativePath} a été créé.`,
+    },
+  );
+};
+
 /** Reads one file of a store app, for the editor to open. */
 export const readAppFile = async (id: string, relativePath: string): Promise<AppFileResult> => {
   await sessions.require();
@@ -49,19 +65,19 @@ export const readAppFile = async (id: string, relativePath: string): Promise<App
   if (!parsed.success) {
     logger.warn("Store app file read rejected", { issues: parsed.error.issues });
 
-    return AppFileResult.failure("Requête invalide.");
+    return { success: false, message: "Requête invalide." };
   }
 
   try {
-    return AppFileResult.success(await hangar.store.appFile(parsed.data.id, parsed.data.relativePath));
+    return { success: true, source: await hangar.store.appFile(parsed.data.id, parsed.data.relativePath) };
   } catch (error) {
     if (error instanceof HangarError) {
-      return AppFileResult.failure(error.message);
+      return { success: false, message: error.message };
     }
 
     logger.error("Store app file read failed", { error, ...parsed.data });
 
-    return AppFileResult.failure(`La lecture de ${parsed.data.relativePath} a échoué. ${SERVER_LOG_HINT}`);
+    return { success: false, message: `La lecture de ${parsed.data.relativePath} a échoué. ${SERVER_LOG_HINT}` };
   }
 };
 

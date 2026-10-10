@@ -1,6 +1,34 @@
 import { parse } from "dotenv";
-import { load } from "js-yaml";
+import { CORE_SCHEMA, defineMappingTag, defineScalarTag, defineSequenceTag, loadAll } from "js-yaml";
 import { HangarError } from "./hangar-error.ts";
+
+/** Matches every local tag (`!secret`, `!include`): the check reads the syntax, never what a tag means. */
+const anyLocalTag = { matchByTagPrefix: true, identify: () => false } as const;
+
+/**
+ * The schema the YAML check parses with: the default one, plus any local tag on any kind of node, as
+ * Home Assistant's `!secret db_password` or `!include automations.yaml`.
+ */
+const TolerantSchema = CORE_SCHEMA.withTags(
+  defineScalarTag("!", { ...anyLocalTag, resolve: source => source }),
+  defineSequenceTag<unknown[]>("!", {
+    ...anyLocalTag,
+    create: () => [],
+    addItem: (items, item) => void items.push(item),
+  }),
+  defineMappingTag<Map<unknown, unknown>>("!", {
+    ...anyLocalTag,
+    create: () => new Map(),
+    addPair: (pairs, key, value) => {
+      pairs.set(key, value);
+
+      return "";
+    },
+    has: (pairs, key) => pairs.has(key),
+    keys: pairs => pairs.keys(),
+    get: (pairs, key) => pairs.get(key),
+  }),
+);
 
 /**
  * The syntax check an app file gets before it is written, chosen by its extension. The root
@@ -10,9 +38,6 @@ export class AppFileSyntax {
   private static readonly Yaml = /\.ya?ml$/;
 
   private static readonly Env = /\.env$/;
-
-  /** The quotes dotenv lets a value span several lines with */
-  private static readonly Quotes = ["'", '"', "`"];
 
   /**
    * Throws a {@link HangarError} saying what is wrong when `source` does not parse as its
@@ -29,9 +54,10 @@ export class AppFileSyntax {
     }
   }
 
+  /** Several documents (`---`) and local tags are valid YAML, which `load` alone would refuse. */
   private static checkYaml(relativePath: string, source: string) {
     try {
-      load(source, { filename: relativePath });
+      loadAll(source, { filename: relativePath, schema: TolerantSchema });
     } catch (error) {
       throw new HangarError(error instanceof Error ? error.message : String(error));
     }
@@ -39,44 +65,22 @@ export class AppFileSyntax {
 
   /**
    * dotenv never rejects a file: it skips every line it cannot read, so a typo silently drops a
-   * variable. Each line must then be blank, a comment, the rest of a quoted multi-line value, or
-   * declare a variable dotenv reads.
+   * variable. Each line must then be blank, a comment, declare a variable, or be one of the lines
+   * dotenv took into a quoted multi-line value (the closing one with its quote).
    */
   private static checkEnv(relativePath: string, source: string) {
-    let openQuote: string | undefined;
+    const multiLineValues = Object.values(parse(source)).filter(value => value.includes("\n"));
+    const valueLines = new Set(multiLineValues.flatMap(value => value.split("\n")));
 
     for (const [index, line] of source.split(/\r?\n/).entries()) {
-      if (openQuote !== undefined) {
-        if (line.includes(openQuote)) {
-          openQuote = undefined;
-        }
-
-        continue;
-      }
-
       const trimmed = line.trim();
+      const isBlankOrComment = trimmed === "" || trimmed.startsWith("#");
+      const isDeclaration = Object.keys(parse(line)).length > 0;
+      const isInsideValue = valueLines.has(line) || valueLines.has(line.trimEnd().replace(/["'`]$/, ""));
 
-      if (trimmed === "" || trimmed.startsWith("#")) {
-        continue;
-      }
-
-      if (Object.keys(parse(line)).length === 0) {
+      if (!isBlankOrComment && !isDeclaration && !isInsideValue) {
         throw new HangarError(`${relativePath}, line ${index + 1}: expected VARIABLE=value, got "${trimmed}"`);
       }
-
-      openQuote = AppFileSyntax.unclosedQuote(line);
     }
-  }
-
-  /** The quote a value opens on this line without closing it, so the lines after it belong to it. */
-  private static unclosedQuote(line: string) {
-    const value = line.slice(line.indexOf("=") + 1).trimStart();
-    const quote = AppFileSyntax.Quotes.find(candidate => value.startsWith(candidate));
-
-    if (quote === undefined || value.slice(1).includes(quote)) {
-      return undefined;
-    }
-
-    return quote;
   }
 }

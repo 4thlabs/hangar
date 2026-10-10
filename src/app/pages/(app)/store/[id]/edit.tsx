@@ -1,11 +1,11 @@
 import type { PageProps } from "waku/router";
 import { unstable_notFound } from "waku/router/server";
+import { HangarError } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
-import { readAppFile, saveAppFile } from "#modules/store/actions/manage-app.ts";
+import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
+import { createAppFile, readAppFile, saveAppFile } from "#modules/store/actions/manage-app.ts";
 import { AppEditor } from "#modules/store/components/app-editor.tsx";
-
-/** The file the editor opens on: the one every app has, and the one Hangar reads it from. */
-const DEFAULT_FILE = "compose.yml";
+import { COMPOSE_FILE } from "#modules/store/compose-file.ts";
 
 export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">) {
   const app = hangar.store.app(id);
@@ -14,10 +14,7 @@ export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">)
     unstable_notFound();
   }
 
-  const [files, source] = await Promise.all([
-    hangar.store.appFiles(app.id),
-    hangar.store.appFile(app.id, DEFAULT_FILE),
-  ]);
+  const [files, compose] = await Promise.all([hangar.store.appFiles(app.id), readComposeFile(app.id)]);
 
   return (
     <main>
@@ -30,15 +27,39 @@ export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">)
           leur syntaxe. Une app installée prend les changements à son prochain démarrage.
         </p>
       </div>
-      <AppEditor
-        id={app.id}
-        files={files}
-        initialFile={{ path: DEFAULT_FILE, source }}
-        readFile={readAppFile}
-        saveFile={saveAppFile}
-      />
+      {"refusal" in compose ? (
+        <Alert variant="destructive">
+          <AlertTitle>Cette app ne peut pas être modifiée ici</AlertTitle>
+          <AlertDescription>{compose.refusal}</AlertDescription>
+        </Alert>
+      ) : (
+        <AppEditor
+          id={app.id}
+          files={files}
+          initialFile={{ path: COMPOSE_FILE, source: compose.source }}
+          readFile={readAppFile}
+          saveFile={saveAppFile}
+          createFile={createAppFile}
+        />
+      )}
     </main>
   );
+}
+
+/**
+ * The compose.yml the editor opens on, or why it cannot be: one the store refuses to edit, such as a
+ * symlink leading out of the app folder, leaves the page up with the reason instead of failing it.
+ */
+async function readComposeFile(id: string): Promise<{ source: string } | { refusal: string }> {
+  try {
+    return { source: await hangar.store.appFile(id, COMPOSE_FILE) };
+  } catch (error) {
+    if (error instanceof HangarError) {
+      return { refusal: error.message };
+    }
+
+    throw error;
+  }
 }
 
 export const getConfig = async () => {

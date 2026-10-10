@@ -1,8 +1,20 @@
-import { lstat, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  readlink,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { HangarRuntimeError } from "./hangar-error.ts";
+import { HangarError, HangarRuntimeError } from "./hangar-error.ts";
 import { HangarStore } from "./hangar-store.ts";
 import type { CommandRunner } from "./runtime/runtime.ts";
 
@@ -455,6 +467,105 @@ describe("HangarStore", () => {
 
       expect(await readFile(path.join(folder, "config", "nginx", "site.conf"), "utf8")).toBe("server { listen 80 }\n");
       expect(await store.appFiles("delta-app")).toContain("notes.txt");
+    });
+
+    it("skips what it cannot read, files too large to edit and folders too deep, and lists the rest", async () => {
+      const { store, folder } = await withApp();
+      const tooDeep = path.join(folder, "a", "b", "c", "d", "e", "f");
+
+      await mkdir(path.join(folder, "locked"));
+      await writeFile(path.join(folder, "locked", "hidden.yml"), "a: 1\n");
+      await writeFile(path.join(folder, "large.log"), "x".repeat(1024 * 1024 + 1));
+      await mkdir(tooDeep, { recursive: true });
+      await writeFile(path.join(tooDeep, "deep.yml"), "a: 1\n");
+      await writeFile(path.join(folder, "a", "b", "c", "d", "e", "shallow.yml"), "a: 1\n");
+      await chmod(path.join(folder, "locked"), 0o000);
+
+      try {
+        expect(await store.appFiles("delta-app")).toEqual([
+          "a/b/c/d/e/shallow.yml",
+          "compose.yml",
+          "config/settings.yml",
+          "delta.env",
+        ]);
+      } finally {
+        await chmod(path.join(folder, "locked"), 0o755);
+      }
+    });
+
+    it("refuses to open a file too large to edit, or one that is not UTF-8 text", async () => {
+      const { store, folder } = await withApp();
+
+      await writeFile(path.join(folder, "large.log"), "x".repeat(1024 * 1024 + 1));
+      await writeFile(path.join(folder, "latin1.conf"), Buffer.from("caf\xe9\n", "latin1"));
+
+      await expect(store.appFile("delta-app", "large.log")).rejects.toThrow(/too large/);
+      await expect(store.appFile("delta-app", "latin1.conf")).rejects.toThrow(/not UTF-8/);
+    });
+
+    it("creates an empty file and its folders", async () => {
+      const { store, folder } = await withApp();
+
+      await store.createAppFile("delta-app", "config/nginx/site.conf");
+
+      expect(await readFile(path.join(folder, "config", "nginx", "site.conf"), "utf8")).toBe("");
+    });
+
+    it("refuses to create a file over anything already there, binaries and symlinks included", async () => {
+      const { store, folder } = await withApp();
+
+      await symlink(path.join(folder, "delta.env"), path.join(folder, "linked.env"));
+
+      await expect(store.createAppFile("delta-app", "logo.png")).rejects.toThrow(/logo\.png already exists/);
+      await expect(store.createAppFile("delta-app", "linked.env")).rejects.toThrow(/linked\.env already exists/);
+      await expect(store.createAppFile("delta-app", "delta.env")).rejects.toThrow(HangarError);
+      expect((await readFile(path.join(folder, "logo.png"))).length).toBe(6);
+      expect(await readFile(path.join(folder, "delta.env"), "utf8")).toBe("DELTA_PORT=8080\n");
+    });
+
+    it("validates the compose file with docker compose whatever path leads to it", async () => {
+      const { store, runtime, folder } = await withApp();
+
+      await symlink("compose.yml", path.join(folder, "alias.yml"));
+      runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "services must be a mapping"));
+
+      await expect(store.writeAppFile("delta-app", "alias.yml", "services: 3\n")).rejects.toThrow(/mapping/);
+      expect(await store.appFile("delta-app", "compose.yml")).toBe(COMPOSE);
+
+      await store.writeAppFile("delta-app", "alias.yml", "name: Aliased\nservices: {}\n");
+
+      expect(await store.appFile("delta-app", "compose.yml")).toBe("name: Aliased\nservices: {}\n");
+      expect((await lstat(path.join(folder, "alias.yml"))).isSymbolicLink()).toBe(true);
+
+      await store.writeAppFile("delta-app", "Compose.yml", "services: {}\n");
+
+      expect(runtime.run).toHaveBeenCalledTimes(3);
+      expect(runtime.run).toHaveBeenLastCalledWith("docker", expect.arrayContaining(["config", "-q"]), {
+        capture: true,
+      });
+    });
+
+    it("writes through a temporary file renamed onto the target, keeping its mode", async () => {
+      const { store, folder } = await withApp();
+
+      await chmod(path.join(folder, "delta.env"), 0o640);
+
+      await store.writeAppFile("delta-app", "delta.env", "DELTA_PORT=9090\n");
+
+      expect(await readFile(path.join(folder, "delta.env"), "utf8")).toBe("DELTA_PORT=9090\n");
+      expect((await stat(path.join(folder, "delta.env"))).mode & 0o777).toBe(0o640);
+      expect((await readdir(folder)).filter(name => name.endsWith(".tmp"))).toEqual([]);
+    });
+
+    it("refuses a path with a NUL byte or going through a file as invalid, not as a server failure", async () => {
+      const { store } = await withApp();
+
+      await expect(store.appFile("delta-app", "compose\0.yml")).rejects.toThrow(/Invalid file path/);
+      await expect(store.writeAppFile("delta-app", "compose.yml/x.yml", "a: 1\n")).rejects.toThrow(
+        /goes through a file/,
+      );
+
+      await expect(store.createAppFile("delta-app", "compose.yml/x.yml")).rejects.toThrow(HangarError);
     });
 
     it("refuses paths that climb out, are absolute or hidden, and folders taken for files", async () => {

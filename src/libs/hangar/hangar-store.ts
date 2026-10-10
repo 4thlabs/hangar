@@ -1,21 +1,9 @@
-import {
-  lstat,
-  mkdir,
-  open,
-  readdir,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  stat,
-  symlink,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, realpath, rename, rm, symlink, unlink } from "node:fs/promises";
 import path from "node:path";
 import { load } from "js-yaml";
 import { logger } from "#libs/logs";
 import { AppFileSyntax } from "./app-file-syntax.ts";
+import { EditableFile } from "./editable-file.ts";
 import { HangarConfig } from "./hangar-config.ts";
 import { HangarEnv } from "./hangar-env.ts";
 import { HangarError, HangarRuntimeError, NotFoundError } from "./hangar-error.ts";
@@ -28,6 +16,14 @@ export type HangarApp = {
   installed: boolean;
   /** The container the app's own service declares, which Traefik routes `<container>.<DOMAIN>` to. */
   containerName: string;
+};
+
+/** A file of a store app, with symlinks resolved. */
+type AppFileLocation = {
+  /** The app folder */
+  folder: string;
+  /** The file, inside the app folder; it may not exist yet */
+  file: string;
 };
 
 /** The app store on disk: its stacks, the installed links, and the compose commands over them. */
@@ -43,9 +39,6 @@ export class HangarStore {
 
   /** The file that makes a folder under `store/` an app, validated by `docker compose config` */
   private static readonly ComposeFile = "compose.yml";
-
-  /** How much of a file is read to tell text from binary, as much as git reads */
-  private static readonly BinarySniffLength = 8000;
 
   readonly dataPath: string;
 
@@ -185,7 +178,7 @@ export class HangarStore {
    * @param options Run options, forwarded to the runtime (`pipe` to capture the output)
    */
   private async composeStack(stack: string, args: string[], options?: RunOptions) {
-    const compose = path.join(this.installedPath, stack, "compose.yml");
+    const compose = path.join(this.installedPath, stack, HangarStore.ComposeFile);
 
     if (!(await Runtime.exists(compose))) {
       throw new HangarRuntimeError(1, `Failed to find project: ${stack}`);
@@ -271,7 +264,7 @@ export class HangarStore {
     await mkdir(folder, { recursive: true });
 
     try {
-      await this.writeValidatedCompose(folder, source);
+      await this.writeValidatedCompose(folder, path.join(folder, HangarStore.ComposeFile), source);
     } catch (error) {
       await rm(folder, { recursive: true, force: true });
       throw error;
@@ -280,22 +273,13 @@ export class HangarStore {
 
   /**
    * The text files of a store app, as paths relative to its folder (`config/settings.yml`), sorted.
-   * Hidden files (`.compose.pending.yml`), binaries and symlinks are left out: none of them is the
-   * operator's to edit.
+   * Hidden files (`.compose.pending.yml`), binaries, symlinks and files too large to edit are left
+   * out: none of them is the operator's to edit. The listing stops a few folders deep and after a
+   * few hundred files, and skips what it cannot read: an app may bind-mount its data into its folder.
    * @param id The app id, its folder under `store/`; must already exist
    */
   async appFiles(id: string) {
-    const folder = await this.existingAppFolder(id);
-    const entries = await readdir(folder, { recursive: true, withFileTypes: true });
-
-    const files = entries
-      .filter(entry => entry.isFile())
-      .map(entry => path.relative(folder, path.join(entry.parentPath, entry.name)))
-      .filter(file => !HangarStore.isHidden(file));
-
-    const isText = await Promise.all(files.map(file => HangarStore.isTextFile(path.join(folder, file))));
-
-    return files.filter((_, index) => isText[index]).sort();
+    return EditableFile.list(await this.existingAppFolder(id));
   }
 
   /**
@@ -304,39 +288,50 @@ export class HangarStore {
    * @param relativePath The file's path inside the app folder, as {@link appFiles} lists it
    */
   async appFile(id: string, relativePath: string) {
-    const file = await this.appFilePath(id, relativePath);
+    const { file } = await this.locateAppFile(id, relativePath);
 
-    if (!(await Runtime.exists(file))) {
-      throw new NotFoundError(`The app ${id} has no file ${relativePath}`);
+    try {
+      return await EditableFile.read(file, relativePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new NotFoundError(`The app ${id} has no file ${relativePath}`);
+      }
+
+      throw error;
     }
-
-    if (!(await HangarStore.isTextFile(file))) {
-      throw new HangarError(`${relativePath} is not a text file`);
-    }
-
-    return readFile(file, "utf8");
   }
 
   /**
    * Writes one file of a store app, creating it and its folders when missing, once its syntax
-   * checks out: `docker compose config` for the root compose.yml, a parse for YAML and env files,
-   * nothing for the others. A rejected source leaves the file untouched.
+   * checks out: `docker compose config` for the app's compose.yml, whatever path leads to it, a
+   * parse for YAML and env files, nothing for the others. A rejected source leaves the file untouched.
    * @param id The app id, its folder under `store/`; must already exist
    * @param relativePath The file's path inside the app folder (`config/settings.yml`)
    * @param source The file's new content
    */
   async writeAppFile(id: string, relativePath: string, source: string) {
-    const file = await this.appFilePath(id, relativePath);
+    const location = await this.locateAppFile(id, relativePath);
 
-    if (relativePath === HangarStore.ComposeFile) {
-      await this.writeValidatedCompose(path.dirname(file), source);
+    if (await HangarStore.isComposeFile(location)) {
+      await this.writeValidatedCompose(location.folder, location.file, source);
 
       return;
     }
 
     AppFileSyntax.check(relativePath, source);
-    await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, source, "utf8");
+    await EditableFile.write(location.file, relativePath, source);
+  }
+
+  /**
+   * Creates an empty file in a store app, and its folders when missing.
+   * @param id The app id, its folder under `store/`; must already exist
+   * @param relativePath The file's path inside the app folder; nothing may exist there yet, not even
+   * a file the listing hides
+   */
+  async createAppFile(id: string, relativePath: string) {
+    const { file } = await this.locateAppFile(id, relativePath);
+
+    await EditableFile.create(file, relativePath);
   }
 
   /** The folder of an app that may be edited, which must already be on disk. */
@@ -351,37 +346,41 @@ export class HangarStore {
   }
 
   /**
-   * Where a file of an app lives, once its path is known to stay inside the app folder: no
-   * absolute path, no `..`, no hidden segment, and no symlink leading out of the folder.
+   * Where a file of an app really is, once its path is known to stay inside the app folder: no NUL
+   * byte, no absolute path, no `..`, no hidden segment, nothing going through a file, and no
+   * symlink leading out of the folder. Both paths come with symlinks resolved, so a write lands
+   * where the check looked; a file that does not exist yet is placed under its closest existing folder.
    */
-  private async appFilePath(id: string, relativePath: string) {
+  private async locateAppFile(id: string, relativePath: string): Promise<AppFileLocation> {
     const folder = await this.existingAppFolder(id);
     const segments = relativePath.split("/");
 
     // A leading dot covers `.` and `..` too, and keeps the files the listing hides out of reach.
     const isMalformed =
-      path.isAbsolute(relativePath) || segments.some(segment => segment === "" || segment.startsWith("."));
+      relativePath.includes("\0") ||
+      path.isAbsolute(relativePath) ||
+      segments.some(segment => segment === "" || segment.startsWith("."));
 
     if (isMalformed) {
       throw new HangarError(`Invalid file path: ${relativePath}`);
     }
 
-    const file = path.join(folder, ...segments);
-    const [realFolder, realFile] = await Promise.all([realpath(folder), HangarStore.realpathOfExisting(file)]);
-    const relativeToFolder = path.relative(realFolder, realFile);
+    const [realFolder, realFile] = await Promise.all([
+      realpath(folder),
+      HangarStore.realpathOfExisting(path.join(folder, ...segments)).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOTDIR") {
+          throw new HangarError(`${relativePath} goes through a file, not a folder`);
+        }
 
-    const isOutside =
-      relativeToFolder === ".." || relativeToFolder.startsWith(`..${path.sep}`) || path.isAbsolute(relativeToFolder);
+        throw error;
+      }),
+    ]);
 
-    if (isOutside) {
+    if (!HangarStore.isInside(realFolder, realFile)) {
       throw new HangarError(`${relativePath} leads outside the app ${id}`);
     }
 
-    if ((await Runtime.exists(file)) && !(await stat(file)).isFile()) {
-      throw new HangarError(`${relativePath} is not a file`);
-    }
-
-    return file;
+    return { folder: realFolder, file: realFile };
   }
 
   /** The folder of an app that may be created or edited: not one of the shared files. */
@@ -396,17 +395,19 @@ export class HangarStore {
   }
 
   /**
-   * Writes `source` as the folder's compose.yml if `docker compose config` accepts it, then
-   * reloads the apps. On a rejection only the pending copy is removed.
+   * Writes `source` to `target`, the compose file of the app in `folder`, if `docker compose config`
+   * accepts it, then reloads the apps. On a rejection only the pending copy is removed.
    */
-  private async writeValidatedCompose(folder: string, source: string) {
+  private async writeValidatedCompose(folder: string, target: string, source: string) {
     // Next to the real file, so the paths it references resolve the same way.
     const pending = path.join(folder, ".compose.pending.yml");
 
     // No `-p`: compose rejects some folder names as project names (`llama.cpp`), and a
     // validation does not need one.
     try {
-      await writeFile(pending, source, "utf8");
+      // A copy an interrupted save left behind would make the exclusive write below fail.
+      await rm(pending, { force: true });
+      await EditableFile.writeReplacement(pending, target, HangarStore.ComposeFile, source);
 
       // prettier-ignore
       await this.runtime.run("docker", [
@@ -420,7 +421,7 @@ export class HangarStore {
       throw error;
     }
 
-    await rename(pending, path.join(folder, HangarStore.ComposeFile));
+    await rename(pending, target);
     await this.refresh();
   }
 
@@ -454,8 +455,8 @@ export class HangarStore {
       await Promise.all(
         apps.map(async app => {
           try {
-            const source = await readFile(path.join(this.storePath, "store", app, "compose.yml"), "utf8");
-            const yaml = load(source, { filename: "compose.yml" }) as Record<string, unknown> | undefined;
+            const source = await readFile(path.join(this.storePath, "store", app, HangarStore.ComposeFile), "utf8");
+            const yaml = load(source, { filename: HangarStore.ComposeFile }) as Record<string, unknown> | undefined;
             const metadata = yaml?.["x-hangar"] as { icon?: string } | undefined;
             const services = (yaml?.["services"] ?? {}) as Record<string, { container_name?: string } | undefined>;
 
@@ -477,28 +478,29 @@ export class HangarStore {
     }
   }
 
-  /** Whether a path inside an app folder has a hidden segment (`.compose.pending.yml`, `.cache/x`). */
-  private static isHidden(relativePath: string) {
-    return relativePath.split(path.sep).some(segment => segment.startsWith("."));
+  /**
+   * Whether a located file is the app's compose file, which `docker compose config` must accept:
+   * reached through a symlink (`alias.yml`), or spelled in another case (`Compose.yml`), which a
+   * case-insensitive file system takes for the same file.
+   */
+  private static async isComposeFile({ folder, file }: AppFileLocation) {
+    const compose = await HangarStore.realpathOfExisting(path.join(folder, HangarStore.ComposeFile));
+    const isAtRoot = path.dirname(file) === folder;
+
+    return file === compose || (isAtRoot && path.basename(file).toLowerCase() === HangarStore.ComposeFile);
   }
 
-  /** Git's heuristic: a NUL byte in the first few kilobytes makes a file binary. */
-  private static async isTextFile(file: string) {
-    const handle = await open(file, "r");
+  /** Whether `target` is `folder` or under it, both with symlinks resolved. */
+  private static isInside(folder: string, target: string) {
+    const relativePath = path.relative(folder, target);
 
-    try {
-      const head = Buffer.alloc(HangarStore.BinarySniffLength);
-      const { bytesRead } = await handle.read(head, 0, head.length, 0);
-
-      return !head.subarray(0, bytesRead).includes(0);
-    } finally {
-      await handle.close();
-    }
+    return !(relativePath === ".." || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath));
   }
 
   /**
-   * The real path of `target`, or of its closest existing ancestor while it does not exist yet. A
-   * dangling symlink is refused: writing through it would create its target, wherever it points.
+   * The real path of `target`, or while it does not exist yet, the real path of its closest existing
+   * ancestor joined with the rest. A dangling symlink is refused: writing through it would create its
+   * target, wherever it points.
    */
   private static async realpathOfExisting(target: string): Promise<string> {
     try {
@@ -521,7 +523,7 @@ export class HangarStore {
       throw new HangarError(`${path.basename(target)} is a broken symlink`);
     }
 
-    return HangarStore.realpathOfExisting(path.dirname(target));
+    return path.join(await HangarStore.realpathOfExisting(path.dirname(target)), path.basename(target));
   }
 
   /** Whether the compose args ask for detached mode. */
