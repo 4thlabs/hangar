@@ -1,7 +1,7 @@
 "use server";
 
 import * as z from "zod";
-import { requireSession } from "#libs/auth";
+import { sessions } from "#libs/auth/server";
 import { HangarError } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
@@ -11,7 +11,7 @@ const payloadSchema = z.object({ id: z.string(), source: z.string() });
 
 /** Adds a new store app. */
 export const createApp = async (id: string, source: string): Promise<ActionResult> => {
-  await requireSession();
+  await sessions.require();
 
   return writeApp(id, source, {
     write: payload => hangar.store.createApp(payload.id, payload.source),
@@ -21,7 +21,7 @@ export const createApp = async (id: string, source: string): Promise<ActionResul
 
 /** Saves a store app's compose.yml. */
 export const updateApp = async (id: string, source: string): Promise<ActionResult> => {
-  await requireSession();
+  await sessions.require();
 
   return writeApp(id, source, {
     write: payload => hangar.store.updateApp(payload.id, payload.source),

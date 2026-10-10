@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ getSession: vi.fn(), logger: { error: vi.fn(), warn: vi.fn() } }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("#libs/auth", () => ({ getSession: mocks.getSession }));
+vi.mock("#libs/auth/server", () => ({ sessions: { get: mocks.getSession } }));
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
 // One small singleton stands in for the whole layer: the class itself is tested against a fake
 // client in `src/libs/docker/docker.test.ts`.

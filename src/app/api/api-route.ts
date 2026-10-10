@@ -1,5 +1,5 @@
 import { Readable } from "node:stream";
-import { getSession } from "#libs/auth";
+import { sessions } from "#libs/auth/server";
 import { NotFoundError } from "#libs/hangar";
 import { logger } from "#libs/logs";
 
@@ -46,7 +46,7 @@ type ApiRouteOptions = {
 
 type RouteContext = { params?: Record<string, string> };
 
-type Session = NonNullable<Awaited<ReturnType<typeof getSession>>>;
+type Session = NonNullable<Awaited<ReturnType<typeof sessions.get>>>;
 
 /** 401 for anonymous, 404 for NotFoundError, opaque 503 (logged) otherwise. Hands the session to the handler. */
 export function apiRoute<C extends RouteContext = RouteContext>(
@@ -54,7 +54,7 @@ export function apiRoute<C extends RouteContext = RouteContext>(
   handler: (request: Request, context: C, session: Session) => Promise<Response>,
 ) {
   return async (request: Request, context = {} as C): Promise<Response> => {
-    const session = await getSession(request);
+    const session = await sessions.get(request);
 
     if (!session) {
       return apiError("Authentification requise.", 401);
