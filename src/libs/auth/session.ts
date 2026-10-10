@@ -31,15 +31,4 @@ export class Sessions {
 
     return session;
   }
-
-  /**
-   * The `Set-Cookie` values that renew the session cookies of this request, if any are due. A check
-   * made by {@link Sessions.get} drops them, so without this the cookie cache would only live for
-   * its first `maxAge` after sign-in. Answered from the cookie cache while it is valid.
-   */
-  async renewedCookies(request: Request) {
-    const { headers } = await this.auth.api.getSession({ headers: request.headers, returnHeaders: true });
-
-    return headers.getSetCookie();
-  }
 }

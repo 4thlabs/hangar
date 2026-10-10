@@ -5,11 +5,13 @@ import { authRelations, migrateDb } from "#libs/db";
 import { createAuth } from "./auth.ts";
 import { Sessions } from "./session.ts";
 
-// Only loads under the `react-server` condition; every test here passes its request explicitly.
-vi.mock("waku/router/server", () => ({ unstable_getRequest: vi.fn(), unstable_redirect: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getRequest: vi.fn(), redirect: vi.fn() }));
 
-// A real better-auth on an in-memory SQLite: what is under test is whether a check reaches the
-// database, which a stubbed `auth.api` could not tell.
+// Only loads under the `react-server` condition; the request and the redirect are Waku's.
+vi.mock("waku/router/server", () => ({ unstable_getRequest: mocks.getRequest, unstable_redirect: mocks.redirect }));
+
+// A real better-auth on an in-memory SQLite: `createAuth` takes its database by injection, so the
+// session checks run against real rows instead of a stubbed `auth.api`.
 const database = drizzle({ client: migrateDb(":memory:").$client, relations: { ...authRelations } });
 const auth = createAuth(database);
 const sessions = new Sessions(auth);
@@ -19,54 +21,57 @@ const cookieHeader = (setCookies: string[]) => setCookies.map(cookie => cookie.s
 
 const requestWith = (cookie: string) => new Request("http://localhost/", { headers: { Cookie: cookie } });
 
-/** Signs a fresh account up and returns the cookies the browser gets back. */
+/** Signs a fresh account up and returns the request its browser would send next. */
 async function signUp() {
   const { headers } = await auth.api.signUpEmail({
     body: { name: "Alice", email: "alice@example.com", password: "correct horse battery" },
     returnHeaders: true,
   });
 
-  return headers.getSetCookie();
+  return requestWith(cookieHeader(headers.getSetCookie()));
 }
 
 describe("Sessions", () => {
   beforeEach(() => {
+    mocks.getRequest.mockReset();
+    mocks.redirect.mockReset();
     database.run(sql`delete from session`);
     database.run(sql`delete from account`);
     database.run(sql`delete from user`);
   });
 
-  it("answers from the cookie cache without reading the session table", async () => {
-    const cookies = await signUp();
+  it("finds the session of a signed-in request", async () => {
+    const request = await signUp();
+
+    expect(await sessions.get(request)).toMatchObject({ user: { email: "alice@example.com" } });
+  });
+
+  it("checks the database on every call, so a deleted session is gone at once", async () => {
+    const request = await signUp();
 
     database.run(sql`delete from session`);
 
-    expect(await sessions.get(requestWith(cookieHeader(cookies)))).toMatchObject({
-      user: { email: "alice@example.com" },
-    });
+    expect(await sessions.get(request)).toBeNull();
   });
 
-  it("falls back to the database once the cookie cache is gone", async () => {
-    const cookies = await signUp();
-    const sessionTokenOnly = cookies.filter(cookie => cookie.includes("session_token"));
+  it("checks the request being handled when none is given", async () => {
+    mocks.getRequest.mockReturnValue(await signUp());
 
-    database.run(sql`delete from session`);
-
-    expect(await sessions.get(requestWith(cookieHeader(sessionTokenOnly)))).toBeNull();
+    expect(await sessions.get()).toMatchObject({ user: { email: "alice@example.com" } });
   });
 
-  it("renews the cookie cache of a request that lost it", async () => {
-    const cookies = await signUp();
-    const sessionTokenOnly = cookies.filter(cookie => cookie.includes("session_token"));
+  it("redirects an anonymous request to the login page", async () => {
+    mocks.getRequest.mockReturnValue(new Request("http://localhost/"));
 
-    const renewedCookies = await sessions.renewedCookies(requestWith(cookieHeader(sessionTokenOnly)));
+    await sessions.require();
 
-    expect(renewedCookies.some(cookie => cookie.includes("session_data"))).toBe(true);
+    expect(mocks.redirect).toHaveBeenCalledWith("/login");
   });
 
-  it("renews nothing while the cookie cache is valid", async () => {
-    const cookies = await signUp();
+  it("hands a signed-in request its session without redirecting", async () => {
+    mocks.getRequest.mockReturnValue(await signUp());
 
-    expect(await sessions.renewedCookies(requestWith(cookieHeader(cookies)))).toEqual([]);
+    expect(await sessions.require()).toMatchObject({ user: { email: "alice@example.com" } });
+    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 });
