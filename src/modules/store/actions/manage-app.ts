@@ -43,7 +43,9 @@ export const saveAppFile = async (id: string, relativePath: string, source: stri
     { id, relativePath, source },
     {
       write: async payload => {
-        ({ composeChanged } = await hangar.store.writeAppFile(payload.id, payload.relativePath, payload.source));
+        const appFiles = await hangar.store.files(payload.id);
+
+        ({ composeChanged } = await appFiles.write(payload.relativePath, payload.source));
       },
       success: payload => `${payload.relativePath} a été enregistré.`,
     },
@@ -60,7 +62,11 @@ export const createAppFile = async (id: string, relativePath: string): Promise<A
     filePathSchema,
     { id, relativePath },
     {
-      write: payload => hangar.store.createAppFile(payload.id, payload.relativePath),
+      write: async payload => {
+        const appFiles = await hangar.store.files(payload.id);
+
+        await appFiles.create(payload.relativePath);
+      },
       success: payload => `${payload.relativePath} a été créé.`,
     },
   );
@@ -79,7 +85,9 @@ export const readAppFile = async (id: string, relativePath: string): Promise<App
   }
 
   try {
-    return { success: true, source: await hangar.store.appFile(parsed.data.id, parsed.data.relativePath) };
+    const appFiles = await hangar.store.files(parsed.data.id);
+
+    return { success: true, source: await appFiles.read(parsed.data.relativePath) };
   } catch (error) {
     if (error instanceof HangarError) {
       return { success: false, message: error.message };

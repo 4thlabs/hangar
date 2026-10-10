@@ -1,6 +1,6 @@
 import type { PageProps } from "waku/router";
 import { unstable_notFound } from "waku/router/server";
-import { HangarError } from "#libs/hangar";
+import { HangarError, type AppFiles } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { createAppFile, readAppFile, saveAppFile } from "#modules/store/actions/manage-app.ts";
@@ -14,7 +14,8 @@ export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">)
     unstable_notFound();
   }
 
-  const [files, compose] = await Promise.all([hangar.store.appFiles(app.id), readComposeFile(app.id)]);
+  const appFiles = await hangar.store.files(app.id);
+  const [files, compose] = await Promise.all([appFiles.list(), readComposeFile(appFiles)]);
 
   return (
     <main>
@@ -52,9 +53,9 @@ export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">)
  * The compose.yml the editor opens on, or why it cannot be: one the store refuses to edit, such as a
  * symlink leading out of the app folder, leaves the page up with the reason instead of failing it.
  */
-async function readComposeFile(id: string): Promise<{ source: string } | { refusal: string }> {
+async function readComposeFile(appFiles: AppFiles): Promise<{ source: string } | { refusal: string }> {
   try {
-    return { source: await hangar.store.appFile(id, COMPOSE_FILE) };
+    return { source: await appFiles.read(COMPOSE_FILE) };
   } catch (error) {
     if (error instanceof HangarError) {
       return { refusal: error.message };
