@@ -1,10 +1,24 @@
-import { mkdir, readdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { load } from "js-yaml";
 import { logger } from "#libs/logs";
+import { AppFileSyntax } from "./app-file-syntax.ts";
 import { HangarConfig } from "./hangar-config.ts";
 import { HangarEnv } from "./hangar-env.ts";
-import { HangarError, HangarRuntimeError } from "./hangar-error.ts";
+import { HangarError, HangarRuntimeError, NotFoundError } from "./hangar-error.ts";
 import { Runtime, type CommandRunner, type RunOptions } from "./runtime/runtime.ts";
 
 export type HangarApp = {
@@ -26,6 +40,12 @@ export class HangarStore {
 
   /** A stack id is a folder name under `store/` (`llama.cpp`): no separator, no leading dot, nothing to climb out with */
   private static readonly StackId = /^[a-z0-9][a-z0-9._-]*$/;
+
+  /** The file that makes a folder under `store/` an app, validated by `docker compose config` */
+  private static readonly ComposeFile = "compose.yml";
+
+  /** How much of a file is read to tell text from binary, as much as git reads */
+  private static readonly BinarySniffLength = 8000;
 
   readonly dataPath: string;
 
@@ -235,11 +255,6 @@ export class HangarStore {
     return undefined;
   }
 
-  /** The raw compose.yml of a store app. */
-  async appSource(id: string) {
-    return readFile(path.join(this.stackPath(id), "compose.yml"), "utf8");
-  }
-
   /**
    * Adds a new store app once `docker compose config` accepts its compose.yml. A rejected source
    * creates nothing.
@@ -264,19 +279,109 @@ export class HangarStore {
   }
 
   /**
-   * Replaces a store app's compose.yml once `docker compose config` accepts it. A rejected source
-   * leaves the app untouched.
+   * The text files of a store app, as paths relative to its folder (`config/settings.yml`), sorted.
+   * Hidden files (`.compose.pending.yml`), binaries and symlinks are left out: none of them is the
+   * operator's to edit.
    * @param id The app id, its folder under `store/`; must already exist
-   * @param source The compose YAML
    */
-  async updateApp(id: string, source: string) {
+  async appFiles(id: string) {
+    const folder = await this.existingAppFolder(id);
+    const entries = await readdir(folder, { recursive: true, withFileTypes: true });
+
+    const files = entries
+      .filter(entry => entry.isFile())
+      .map(entry => path.relative(folder, path.join(entry.parentPath, entry.name)))
+      .filter(file => !HangarStore.isHidden(file));
+
+    const isText = await Promise.all(files.map(file => HangarStore.isTextFile(path.join(folder, file))));
+
+    return files.filter((_, index) => isText[index]).sort();
+  }
+
+  /**
+   * One text file of a store app.
+   * @param id The app id, its folder under `store/`; must already exist
+   * @param relativePath The file's path inside the app folder, as {@link appFiles} lists it
+   */
+  async appFile(id: string, relativePath: string) {
+    const file = await this.appFilePath(id, relativePath);
+
+    if (!(await Runtime.exists(file))) {
+      throw new NotFoundError(`The app ${id} has no file ${relativePath}`);
+    }
+
+    if (!(await HangarStore.isTextFile(file))) {
+      throw new HangarError(`${relativePath} is not a text file`);
+    }
+
+    return readFile(file, "utf8");
+  }
+
+  /**
+   * Writes one file of a store app, creating it and its folders when missing, once its syntax
+   * checks out: `docker compose config` for the root compose.yml, a parse for YAML and env files,
+   * nothing for the others. A rejected source leaves the file untouched.
+   * @param id The app id, its folder under `store/`; must already exist
+   * @param relativePath The file's path inside the app folder (`config/settings.yml`)
+   * @param source The file's new content
+   */
+  async writeAppFile(id: string, relativePath: string, source: string) {
+    const file = await this.appFilePath(id, relativePath);
+
+    if (relativePath === HangarStore.ComposeFile) {
+      await this.writeValidatedCompose(path.dirname(file), source);
+
+      return;
+    }
+
+    AppFileSyntax.check(relativePath, source);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, source, "utf8");
+  }
+
+  /** The folder of an app that may be edited, which must already be on disk. */
+  private async existingAppFolder(id: string) {
     const folder = this.appFolder(id);
 
     if (!(await Runtime.exists(folder))) {
       throw new HangarError(`The app ${id} does not exist`);
     }
 
-    await this.writeValidatedCompose(folder, source);
+    return folder;
+  }
+
+  /**
+   * Where a file of an app lives, once its path is known to stay inside the app folder: no
+   * absolute path, no `..`, no hidden segment, and no symlink leading out of the folder.
+   */
+  private async appFilePath(id: string, relativePath: string) {
+    const folder = await this.existingAppFolder(id);
+    const segments = relativePath.split("/");
+
+    // A leading dot covers `.` and `..` too, and keeps the files the listing hides out of reach.
+    const isMalformed =
+      path.isAbsolute(relativePath) || segments.some(segment => segment === "" || segment.startsWith("."));
+
+    if (isMalformed) {
+      throw new HangarError(`Invalid file path: ${relativePath}`);
+    }
+
+    const file = path.join(folder, ...segments);
+    const [realFolder, realFile] = await Promise.all([realpath(folder), HangarStore.realpathOfExisting(file)]);
+    const relativeToFolder = path.relative(realFolder, realFile);
+
+    const isOutside =
+      relativeToFolder === ".." || relativeToFolder.startsWith(`..${path.sep}`) || path.isAbsolute(relativeToFolder);
+
+    if (isOutside) {
+      throw new HangarError(`${relativePath} leads outside the app ${id}`);
+    }
+
+    if ((await Runtime.exists(file)) && !(await stat(file)).isFile()) {
+      throw new HangarError(`${relativePath} is not a file`);
+    }
+
+    return file;
   }
 
   /** The folder of an app that may be created or edited: not one of the shared files. */
@@ -315,7 +420,7 @@ export class HangarStore {
       throw error;
     }
 
-    await rename(pending, path.join(folder, "compose.yml"));
+    await rename(pending, path.join(folder, HangarStore.ComposeFile));
     await this.refresh();
   }
 
@@ -370,6 +475,53 @@ export class HangarStore {
         }),
       );
     }
+  }
+
+  /** Whether a path inside an app folder has a hidden segment (`.compose.pending.yml`, `.cache/x`). */
+  private static isHidden(relativePath: string) {
+    return relativePath.split(path.sep).some(segment => segment.startsWith("."));
+  }
+
+  /** Git's heuristic: a NUL byte in the first few kilobytes makes a file binary. */
+  private static async isTextFile(file: string) {
+    const handle = await open(file, "r");
+
+    try {
+      const head = Buffer.alloc(HangarStore.BinarySniffLength);
+      const { bytesRead } = await handle.read(head, 0, head.length, 0);
+
+      return !head.subarray(0, bytesRead).includes(0);
+    } finally {
+      await handle.close();
+    }
+  }
+
+  /**
+   * The real path of `target`, or of its closest existing ancestor while it does not exist yet. A
+   * dangling symlink is refused: writing through it would create its target, wherever it points.
+   */
+  private static async realpathOfExisting(target: string): Promise<string> {
+    try {
+      return await realpath(target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    const link = await lstat(target).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") {
+        return undefined;
+      }
+
+      throw error;
+    });
+
+    if (link?.isSymbolicLink()) {
+      throw new HangarError(`${path.basename(target)} is a broken symlink`);
+    }
+
+    return HangarStore.realpathOfExisting(path.dirname(target));
   }
 
   /** Whether the compose args ask for detached mode. */

@@ -1,8 +1,11 @@
 import type { PageProps } from "waku/router";
 import { unstable_notFound } from "waku/router/server";
 import { hangar } from "#libs/hangar/server";
-import { updateApp } from "#modules/store/actions/manage-app.ts";
+import { readAppFile, saveAppFile } from "#modules/store/actions/manage-app.ts";
 import { AppEditor } from "#modules/store/components/app-editor.tsx";
+
+/** The file the editor opens on: the one every app has, and the one Hangar reads it from. */
+const DEFAULT_FILE = "compose.yml";
 
 export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">) {
   const app = hangar.store.app(id);
@@ -11,7 +14,10 @@ export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">)
     unstable_notFound();
   }
 
-  const source = await hangar.store.appSource(app.id);
+  const [files, source] = await Promise.all([
+    hangar.store.appFiles(app.id),
+    hangar.store.appFile(app.id, DEFAULT_FILE),
+  ]);
 
   return (
     <main>
@@ -19,11 +25,18 @@ export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">)
       <div>
         <h1 className="text-2xl font-semibold">{app.name}</h1>
         <p className="text-sm text-muted-foreground">
-          Le <code>compose.yml</code> de l’app, validé par <code>docker compose config</code> avant d’être écrit. Une
-          app installée prend les changements à son prochain démarrage.
+          Les fichiers de l’app, chacun vérifié avant d’être écrit : le <code>compose.yml</code> par{" "}
+          <code>docker compose config</code>, les autres <code>.yml</code> et les <code>.env</code> par une lecture de
+          leur syntaxe. Une app installée prend les changements à son prochain démarrage.
         </p>
       </div>
-      <AppEditor id={app.id} source={source} save={updateApp} />
+      <AppEditor
+        id={app.id}
+        files={files}
+        initialFile={{ path: DEFAULT_FILE, source }}
+        readFile={readAppFile}
+        saveFile={saveAppFile}
+      />
     </main>
   );
 }

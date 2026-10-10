@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readlink, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -316,7 +316,7 @@ describe("HangarStore", () => {
     expect(store.app("delta-app")?.installed).toBe(true);
   });
 
-  describe("createApp and updateApp", () => {
+  describe("createApp", () => {
     const COMPOSE = "name: Delta\nservices:\n  delta-app:\n    image: nginx\n";
 
     it("adds a new app once docker compose accepts it", async () => {
@@ -328,7 +328,7 @@ describe("HangarStore", () => {
 
       await store.createApp("delta-app", COMPOSE);
 
-      expect(await store.appSource("delta-app")).toBe(COMPOSE);
+      expect(await store.appFile("delta-app", "compose.yml")).toBe(COMPOSE);
       expect(store.app("delta-app")?.name).toBe("Delta");
       expect(runtime.run).toHaveBeenCalledWith(
         "docker",
@@ -351,22 +351,7 @@ describe("HangarStore", () => {
       await expect(lstat(path.join(store.storePath, "store", "delta-app"))).rejects.toThrow(/ENOENT/);
     });
 
-    it("keeps the current compose when an edit is rejected", async () => {
-      const runtime = createRuntime();
-      const store = await createStore(dataDir, runtime);
-      const folder = path.join(store.storePath, "store", "delta-app");
-
-      await mkdir(folder, { recursive: true });
-      await writeFile(path.join(folder, "compose.yml"), COMPOSE);
-      runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "invalid"));
-
-      await expect(store.updateApp("delta-app", "services: 3\n")).rejects.toThrow();
-
-      expect(await store.appSource("delta-app")).toBe(COMPOSE);
-      await expect(lstat(path.join(folder, ".compose.pending.yml"))).rejects.toThrow(/ENOENT/);
-    });
-
-    it("refuses ids that escape the store, shared files, creating an existing app and editing a missing one", async () => {
+    it("refuses ids that escape the store, shared files and creating an existing app", async () => {
       const store = await createStore(dataDir, createRuntime());
 
       await mkdir(path.join(store.storePath, "store", "delta-app"), { recursive: true });
@@ -374,7 +359,137 @@ describe("HangarStore", () => {
       await expect(store.createApp("../config", COMPOSE)).rejects.toThrow(/Invalid app id/);
       await expect(store.createApp("networks.yml", COMPOSE)).rejects.toThrow(/shared/);
       await expect(store.createApp("delta-app", COMPOSE)).rejects.toThrow(/already exists/);
-      await expect(store.updateApp("other-app", COMPOSE)).rejects.toThrow(/does not exist/);
+    });
+  });
+
+  describe("app files", () => {
+    const COMPOSE = "name: Delta\nservices:\n  delta-app:\n    image: nginx\n";
+
+    /** A store app on disk with a compose file, an env file, a nested config and the files the listing skips. */
+    const withApp = async (runtime = createRuntime()) => {
+      const store = await createStore(dataDir, runtime);
+      const folder = path.join(store.storePath, "store", "delta-app");
+
+      await mkdir(path.join(folder, "config"), { recursive: true });
+      await mkdir(path.join(folder, ".cache"), { recursive: true });
+
+      await Promise.all([
+        writeFile(path.join(folder, "compose.yml"), COMPOSE),
+        writeFile(path.join(folder, "delta.env"), "DELTA_PORT=8080\n"),
+        writeFile(path.join(folder, "config", "settings.yml"), "theme: dark\n"),
+        writeFile(path.join(folder, ".compose.pending.yml"), "services: {}\n"),
+        writeFile(path.join(folder, ".cache", "state.json"), "{}"),
+        writeFile(path.join(folder, "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x1a])),
+      ]);
+
+      return { store, runtime, folder };
+    };
+
+    it("lists the text files of an app, nested ones by their relative path, without hidden or binary files", async () => {
+      const { store, folder } = await withApp();
+
+      await symlink(path.join(folder, "delta.env"), path.join(folder, "linked.env"));
+
+      expect(await store.appFiles("delta-app")).toEqual(["compose.yml", "config/settings.yml", "delta.env"]);
+    });
+
+    it("reads a file of an app", async () => {
+      const { store } = await withApp();
+
+      expect(await store.appFile("delta-app", "config/settings.yml")).toBe("theme: dark\n");
+      await expect(store.appFile("delta-app", "missing.yml")).rejects.toThrow(/has no file/);
+      await expect(store.appFile("delta-app", "logo.png")).rejects.toThrow(/not a text file/);
+    });
+
+    it("writes the root compose.yml only once docker compose accepts it", async () => {
+      const { store, runtime, folder } = await withApp();
+
+      runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "services must be a mapping"));
+
+      await expect(store.writeAppFile("delta-app", "compose.yml", "services: 3\n")).rejects.toThrow(/mapping/);
+      expect(await store.appFile("delta-app", "compose.yml")).toBe(COMPOSE);
+      await expect(lstat(path.join(folder, ".compose.pending.yml"))).rejects.toThrow(/ENOENT/);
+
+      await store.writeAppFile("delta-app", "compose.yml", "name: Renamed\nservices: {}\n");
+
+      expect(await store.appFile("delta-app", "compose.yml")).toBe("name: Renamed\nservices: {}\n");
+      expect(runtime.run).toHaveBeenCalledWith("docker", expect.arrayContaining(["config", "-q"]), { capture: true });
+    });
+
+    it("parses other YAML files instead of running docker compose", async () => {
+      const { store, runtime } = await withApp();
+
+      await expect(store.writeAppFile("delta-app", "config/settings.yml", "theme: [dark\n")).rejects.toThrow(
+        /settings\.yml/,
+      );
+
+      expect(await store.appFile("delta-app", "config/settings.yml")).toBe("theme: dark\n");
+
+      await store.writeAppFile("delta-app", "config/settings.yml", "theme: light\n");
+
+      expect(await store.appFile("delta-app", "config/settings.yml")).toBe("theme: light\n");
+      expect(runtime.run).not.toHaveBeenCalled();
+    });
+
+    it("rejects an env file with a line that declares no variable, quoted multi-line values aside", async () => {
+      const { store } = await withApp();
+
+      await expect(store.writeAppFile("delta-app", "delta.env", "DELTA_PORT=9090\nDELTA HOST\n")).rejects.toThrow(
+        /delta\.env, line 2/,
+      );
+
+      expect(await store.appFile("delta-app", "delta.env")).toBe("DELTA_PORT=8080\n");
+
+      const multiline = '# Ports\nDELTA_PORT=9090\n\nDELTA_KEY="-----BEGIN KEY-----\nabc\n-----END KEY-----"\n';
+
+      await store.writeAppFile("delta-app", "delta.env", multiline);
+
+      expect(await store.appFile("delta-app", "delta.env")).toBe(multiline);
+    });
+
+    it("writes any other file as is, creating it and its folders when missing", async () => {
+      const { store, folder } = await withApp();
+
+      await store.writeAppFile("delta-app", "config/nginx/site.conf", "server { listen 80 }\n");
+      await store.writeAppFile("delta-app", "notes.txt", "");
+
+      expect(await readFile(path.join(folder, "config", "nginx", "site.conf"), "utf8")).toBe("server { listen 80 }\n");
+      expect(await store.appFiles("delta-app")).toContain("notes.txt");
+    });
+
+    it("refuses paths that climb out, are absolute or hidden, and folders taken for files", async () => {
+      const { store } = await withApp();
+
+      await expect(store.appFile("delta-app", "../alpha-app/compose.yml")).rejects.toThrow(/Invalid file path/);
+      await expect(store.writeAppFile("delta-app", "config/../../x.yml", "")).rejects.toThrow(/Invalid file path/);
+      await expect(store.writeAppFile("delta-app", "/etc/passwd", "")).rejects.toThrow(/Invalid file path/);
+      await expect(store.writeAppFile("delta-app", ".compose.pending.yml", "")).rejects.toThrow(/Invalid file path/);
+      await expect(store.writeAppFile("delta-app", "config", "")).rejects.toThrow(/not a file/);
+    });
+
+    it("refuses a symlink that leads out of the app folder, dangling or not", async () => {
+      const { store, folder } = await withApp();
+      const outside = path.join(dataDir, "outside");
+
+      await mkdir(outside);
+      await writeFile(path.join(outside, "secret.env"), "SECRET=1\n");
+      await symlink(outside, path.join(folder, "escape"), "dir");
+      await symlink(path.join(outside, "secret.env"), path.join(folder, "secret.env"));
+      await symlink(path.join(outside, "created.yml"), path.join(folder, "dangling.yml"));
+
+      await expect(store.appFile("delta-app", "escape/secret.env")).rejects.toThrow(/outside the app/);
+      await expect(store.appFile("delta-app", "secret.env")).rejects.toThrow(/outside the app/);
+      await expect(store.writeAppFile("delta-app", "escape/new.yml", "a: 1\n")).rejects.toThrow(/outside the app/);
+      await expect(store.writeAppFile("delta-app", "dangling.yml", "a: 1\n")).rejects.toThrow(/broken symlink/);
+      await expect(lstat(path.join(outside, "new.yml"))).rejects.toThrow(/ENOENT/);
+      await expect(lstat(path.join(outside, "created.yml"))).rejects.toThrow(/ENOENT/);
+    });
+
+    it("refuses the files of a shared file or of a missing app", async () => {
+      const { store } = await withApp();
+
+      await expect(store.appFiles("networks.yml")).rejects.toThrow(/shared/);
+      await expect(store.writeAppFile("other-app", "compose.yml", COMPOSE)).rejects.toThrow(/does not exist/);
     });
   });
 });
