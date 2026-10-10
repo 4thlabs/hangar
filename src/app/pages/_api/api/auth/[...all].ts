@@ -1,4 +1,4 @@
-import { auth } from "#libs/auth";
+import { auth } from "#libs/auth/server";
 
 /** better-auth's session reads and OAuth callbacks. */
 export const GET = (request: Request) => auth.handler(request);

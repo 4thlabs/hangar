@@ -1,7 +1,7 @@
 "use server";
 
 import * as z from "zod";
-import { requireSession } from "#libs/auth";
+import { sessions } from "#libs/auth/server";
 import { HangarEnv } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
@@ -32,7 +32,7 @@ export type EnvPayload = z.infer<typeof payloadSchema>;
  * rendered survives, and only the names in `remove` are dropped.
  */
 export const saveEnv = async (payload: EnvPayload): Promise<ActionResult> => {
-  await requireSession();
+  await sessions.require();
 
   const parsed = payloadSchema.safeParse(payload);
 

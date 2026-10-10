@@ -1,6 +1,6 @@
 "use server";
 
-import { requireSession } from "#libs/auth";
+import { sessions } from "#libs/auth/server";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
@@ -10,7 +10,7 @@ const UNKNOWN_APP = "Cette application n’existe pas dans le store.";
 
 /** The store app behind `appId`, for a signed-in user; logs `rejected` when there is none. */
 async function findApp(appId: string, rejected: string) {
-  await requireSession();
+  await sessions.require();
 
   const app = hangar.store.app(appId);
 

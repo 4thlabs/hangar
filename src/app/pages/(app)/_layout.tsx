@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { requireSession } from "#libs/auth";
+import { sessions } from "#libs/auth/server";
 import { notifications as centre } from "#libs/notifications/server";
 import { MobileTabBar } from "#modules/common/components/navbar-mobile.tsx";
 import { AppNavbar } from "#modules/common/components/navbar.tsx";
@@ -7,7 +7,7 @@ import { AppNavbar } from "#modules/common/components/navbar.tsx";
 type AppLayoutProps = { children: ReactNode };
 
 export default async function AppLayout({ children }: AppLayoutProps) {
-  const { user } = await requireSession();
+  const { user } = await sessions.require();
   const notifications = await centre.list(user.id);
 
   return (

@@ -1,6 +1,6 @@
 "use server";
 
-import { requireSession } from "#libs/auth";
+import { sessions } from "#libs/auth/server";
 import { HangarError } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
@@ -8,7 +8,7 @@ import { ActionResult, SERVER_LOG_HINT } from "#modules/common/actions/action-re
 
 /** Saves hangar.yml. The config validates it first: an invalid file is reported, never written. */
 export const saveConfig = async (source: string): Promise<ActionResult> => {
-  await requireSession();
+  await sessions.require();
 
   try {
     await hangar.store.saveConfig(source);

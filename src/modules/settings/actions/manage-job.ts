@@ -1,7 +1,7 @@
 "use server";
 
 import { Sidequest } from "sidequest";
-import { requireSession } from "#libs/auth";
+import { sessions } from "#libs/auth/server";
 import { logger } from "#libs/logs";
 import { ActionResult, SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
 
@@ -10,7 +10,7 @@ const FORCE_RERUN = true;
 
 /** Runs a job again from the Jobs settings card. */
 export const runJob = async (id: number): Promise<ActionResult> => {
-  await requireSession();
+  await sessions.require();
 
   try {
     await Sidequest.job.run(id, FORCE_RERUN);
@@ -25,7 +25,7 @@ export const runJob = async (id: number): Promise<ActionResult> => {
 
 /** Cancels a waiting or running job from the Jobs settings card. */
 export const cancelJob = async (id: number): Promise<ActionResult> => {
-  await requireSession();
+  await sessions.require();
 
   try {
     await Sidequest.job.cancel(id);

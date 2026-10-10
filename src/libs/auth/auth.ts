@@ -1,16 +1,21 @@
-import "server-only";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { betterAuth } from "better-auth";
-import { db } from "#libs/db/server";
+import type { AnyRelations } from "drizzle-orm";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
 /**
- * Better Auth configuration for the Hangar project.
+ * Better Auth for the Hangar project, on the database it is given.
+ *
+ * No import guard here: `server/server.ts`, which binds it, carries it (AGENTS.md).
  */
-export const auth = betterAuth({
-  database: drizzleAdapter(db, {
-    provider: "sqlite",
-  }),
-  emailAndPassword: {
-    enabled: true,
-  },
-});
+export const createAuth = <TRelations extends AnyRelations>(db: BetterSQLite3Database<TRelations>) =>
+  betterAuth({
+    database: drizzleAdapter(db, {
+      provider: "sqlite",
+    }),
+    emailAndPassword: {
+      enabled: true,
+    },
+  });
+
+export type Auth = ReturnType<typeof createAuth>;

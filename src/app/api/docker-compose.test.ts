@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("#libs/auth", () => ({ getSession: mocks.getSession }));
+vi.mock("#libs/auth/server", () => ({ sessions: { get: mocks.getSession } }));
 vi.mock("#libs/hangar/server", () => ({
   hangar: {
     store: {
