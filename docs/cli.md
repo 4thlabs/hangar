@@ -94,6 +94,10 @@ node bin/cli.js swarm Media rm          # a category, in reverse order
 node bin/cli.js swarm miniflux ps
 ```
 
+`swarm <app> deploy` does not check whether the app also runs with compose: Hangar cannot see the
+containers from the CLI. Take it down first (`store <app> down`), or both copies will share its
+volumes. **Déployer sur le swarm** in the store does it for you.
+
 The stack is always named after the app. `docker stack` has no `--env-file`: the CLI hands it
 `.env.global` as its environment. To do the same by hand:
 

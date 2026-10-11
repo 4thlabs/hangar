@@ -1,13 +1,7 @@
 import type Dockerode from "dockerode";
 import type { Cache, CachePolicy } from "#libs/cache";
 import { SwarmDaemonError, SwarmRefusedError } from "./swarm-errors.ts";
-import {
-  swarmNodeActions,
-  swarmNodeRefusal,
-  SwarmRefreshMs,
-  type SwarmNodeAction,
-  type SwarmNodeState,
-} from "./swarm-rules/index.ts";
+import { SwarmRules, type SwarmNodeAction, type SwarmNodeState } from "./swarm-rules/index.ts";
 
 /** What this node's daemon says of its own place in a swarm, outside a working membership. */
 export type SwarmLocalState = "inactive" | "pending" | "locked" | "error";
@@ -44,7 +38,7 @@ export type SwarmNode = {
   memoryBytes: number;
   engineVersion: string;
   stacks: SwarmStackOnNode[];
-  /** What Hangar can change on this node now; see `swarmNodeRefusal`. */
+  /** What Hangar can change on this node now; see `SwarmRules.nodeRefusal`. */
   actions: SwarmNodeAction[];
 };
 
@@ -57,7 +51,15 @@ export type SwarmManagerView = {
   managers: number;
   /** This node first, then the other managers, then by hostname. */
   nodes: SwarmNode[];
+  /**
+   * The stacks with no task running on any node, so on no card: crash-looping, pending on a constraint
+   * no node meets, or scaled to zero. By name.
+   */
+  idleStacks: SwarmIdleStack[];
 };
+
+/** A stack that runs nowhere, and how far from its desired replicas it is. */
+export type SwarmIdleStack = { name: string; health: SwarmStackHealth };
 
 /**
  * What a node that cannot describe the cluster knows: whether it is in one at all, and as a worker,
@@ -184,7 +186,7 @@ export class DockerSwarm {
    * @param cache Where the daemon's answers are kept; one per process
    * @param ttl How long the loaded cluster is reused; injected so a test can drive it
    */
-  constructor(docker: Dockerode, cache: Cache, ttl = SwarmRefreshMs) {
+  constructor(docker: Dockerode, cache: Cache, ttl = SwarmRules.RefreshMs) {
     this.docker = docker;
     this.cache = cache;
     // Not kept warm: the TTL is shorter than the warming tick, which could only reload it for nobody.
@@ -286,7 +288,7 @@ export class DockerSwarm {
       throw new SwarmRefusedError("unknown-node", action, nodeId);
     }
 
-    const refusal = swarmNodeRefusal(action, DockerSwarm.nodeState(target), DockerSwarm.managerCount(nodes));
+    const refusal = SwarmRules.nodeRefusal(action, DockerSwarm.nodeState(target), DockerSwarm.managerCount(nodes));
 
     if (refusal) {
       throw new SwarmRefusedError(refusal, action, nodeId);
@@ -382,13 +384,15 @@ export class DockerSwarm {
 
     const currentNodeId = swarm.NodeID ?? "";
     const managers = DockerSwarm.managerCount(nodes);
+    const described = DockerSwarm.nodes(nodes, services, tasks, managers);
 
     return {
       state: "manager",
       clusterId: swarm.Cluster?.ID ?? "",
       currentNodeId,
       managers,
-      nodes: DockerSwarm.sortNodes(DockerSwarm.nodes(nodes, services, tasks, managers), currentNodeId),
+      nodes: DockerSwarm.sortNodes(described, currentNodeId),
+      idleStacks: DockerSwarm.idleStacks(described, services),
     };
   };
 
@@ -433,9 +437,19 @@ export class DockerSwarm {
         memoryBytes: resources?.MemoryBytes ?? 0,
         engineVersion: node.Description?.Engine?.EngineVersion ?? "",
         stacks,
-        actions: swarmNodeActions(state, managers),
+        actions: SwarmRules.nodeActions(state, managers),
       };
     });
+  }
+
+  /** The stacks no node lists: none of their tasks runs anywhere. */
+  private static idleStacks(nodes: SwarmNode[], services: Dockerode.Service[]): SwarmIdleStack[] {
+    const shown = new Set(nodes.flatMap(node => node.stacks.map(stack => stack.name)));
+
+    return [...DockerSwarm.stackHealth(services)]
+      .filter(([name]) => !shown.has(name))
+      .map(([name, health]) => ({ name, health }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   /** The fields of a node that decide which actions apply to it. */

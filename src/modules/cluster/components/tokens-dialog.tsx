@@ -3,6 +3,7 @@
 import { CopyIcon, KeyRoundIcon, RefreshCwIcon } from "lucide-react";
 import type { SwarmJoinCommands } from "#libs/docker";
 import { revealJoinCommands, rotateJoinToken } from "#modules/cluster/actions/manage-cluster.ts";
+import { ClusterLabels } from "#modules/cluster/labels.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
 import { useServerRead } from "#modules/common/hooks/use-server-read.ts";
@@ -19,11 +20,6 @@ import {
 import { toast } from "#modules/common/ui/toast.tsx";
 
 type Role = keyof SwarmJoinCommands;
-
-const RoleTitle: Record<Role, string> = {
-  worker: "Ajouter un worker",
-  manager: "Ajouter un manager",
-};
 
 /**
  * The join commands, behind a click: they carry the tokens, so they are only read when asked for,
@@ -77,9 +73,9 @@ export function TokensDialog() {
         )}
 
         {commands ? (
-          (Object.keys(RoleTitle) as Role[]).map(role => (
+          (Object.keys(ClusterLabels.JoinRoleTitle) as Role[]).map(role => (
             <section key={role} className="flex flex-col gap-2">
-              <h3 className="font-medium">{RoleTitle[role]}</h3>
+              <h3 className="font-medium">{ClusterLabels.JoinRoleTitle[role]}</h3>
               <code className="rounded-md bg-muted px-3 py-2 font-mono text-xs break-all">{commands[role]}</code>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant="outline" onClick={() => void copy(commands[role])}>

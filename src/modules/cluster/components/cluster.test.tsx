@@ -82,6 +82,13 @@ describe("ClusterOverview", () => {
     expect(html).not.toContain("Tokens");
   });
 
+  it("lists the stacks no node runs a task of, so their sheet can still be opened", () => {
+    const html = render(managerView({ idleStacks: [{ name: "broken", health: "stopped" }] }));
+
+    expect(html).toContain("Stacks sans tâche active");
+    expect(html).toContain("broken");
+  });
+
   it("offers a retry when the daemon fails", () => {
     const html = renderToStaticMarkup(<ClusterOverview error="Le daemon Docker ne répond pas." />);
 

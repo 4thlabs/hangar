@@ -335,6 +335,9 @@ export class HangarStore {
     await this.installedSwarmFile(app);
     await this.env.ensure(app);
 
+    // Asked before it goes down, so a failed move can bring it back as it was.
+    const wasRunning = !wasListed && (await this.composeRunning(app));
+
     if (!wasListed) {
       await this.composeStack(app, ["down"], options);
       await this.config.addToSwarm(app);
@@ -344,13 +347,35 @@ export class HangarStore {
       await this.stackApp(app, ["deploy", "--quiet"], options);
     } catch (error) {
       if (!wasListed) {
-        await this.config.removeFromSwarm(app);
+        await this.undoSwarmMove(app);
+      }
+
+      // Back as it was: a project that ran before the move runs again.
+      if (wasRunning) {
+        await this.composeStack(app, ["up", "-d"], options);
       }
 
       throw error;
     } finally {
       await this.refresh();
     }
+  }
+
+  /** Puts a failed first move to the swarm back: off the list, and what a partial deploy created removed. */
+  private async undoSwarmMove(app: string) {
+    await this.config.removeFromSwarm(app);
+
+    // There may be nothing to remove: Docker then complains, which changes nothing here.
+    await this.stackApp(app, ["rm"], { capture: true }).catch((error: unknown) =>
+      logger.warn("Could not remove what a failed swarm deploy left", { error, app }),
+    );
+  }
+
+  /** Whether any container of the app's compose project runs. */
+  private async composeRunning(app: string) {
+    const { stdout } = await this.composeStack(app, ["ps", "-q"], { capture: true });
+
+    return stdout.trim() !== "";
   }
 
   /**
@@ -374,11 +399,39 @@ export class HangarStore {
     return Boolean(app?.installed && app.swarmReady);
   }
 
+  /**
+   * Takes a `swarm:` app out of the swarm on uninstall: its stack removed when this node can, and the
+   * app off the list either way. A node that is no longer a manager cannot remove the stack, but the
+   * app must still be able to leave Hangar.
+   * @returns Docker's complaint when the stack is left to remove from a manager, `null` once removed
+   */
+  async releaseFromSwarm(app: string): Promise<string | null> {
+    const leftover = await this.stackApp(app, ["rm"], { capture: true }).then(
+      () => null,
+      (error: unknown) => {
+        if (error instanceof HangarError) {
+          return error.message;
+        }
+
+        throw error;
+      },
+    );
+
+    await this.config.removeFromSwarm(app);
+
+    return leftover;
+  }
+
+  /** Every stack name {@link isStackManageable} accepts. */
+  manageableStacks(): string[] {
+    return [...this.apps].map(app => app.id).filter(id => this.isStackManageable(id));
+  }
+
   /** The installed app's compose.swarm.yml, or a rejection saying why the app cannot run in the swarm. */
   private async installedSwarmFile(app: string) {
     const swarmFile = path.join(this.installedPath, app, AppFiles.SwarmFile);
 
-    if (!(await Runtime.exists(swarmFile))) {
+    if (!(await HangarStore.hasContent(swarmFile))) {
       throw new HangarRuntimeError(
         1,
         `${app} is not a swarm app: it has no ${AppFiles.SwarmFile}, or is not installed`,
@@ -540,7 +593,10 @@ export class HangarStore {
     ], { capture: true, env: await this.env.read() });
   }
 
-  /** Whether a file exists with something in it: a fresh empty compose.swarm.yml is not one yet. */
+  /**
+   * Whether a file exists with something in it: a fresh empty compose.swarm.yml, as the editor creates
+   * it, does not make an app able to run in the swarm yet.
+   */
   private static async hasContent(file: string) {
     const source = await readFile(file, "utf8").catch(() => "");
 
@@ -592,7 +648,7 @@ export class HangarStore {
               name: metadata?.name ?? (yaml?.["name"] as string | undefined) ?? HangarStore.capitalize(app),
               icon: metadata?.icon,
               installed: installed.indexOf(app) !== -1,
-              swarmReady: await Runtime.exists(path.join(this.storePath, "store", app, AppFiles.SwarmFile)),
+              swarmReady: await HangarStore.hasContent(path.join(this.storePath, "store", app, AppFiles.SwarmFile)),
               runsInSwarm: swarm.includes(app),
               containerName: service?.container_name ?? app,
             });

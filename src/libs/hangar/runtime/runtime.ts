@@ -21,15 +21,18 @@ export type RunOptions = {
   env?: Record<string, string>;
 };
 
-/** How much of a failed run's stderr becomes its error message: the end, where the cause is. */
-const FAILURE_STDERR_LINES = 20;
-
 export interface CommandRunner {
   run: (command: string, args: string[], options?: RunOptions) => Promise<RuntimeResult>;
 }
 
 /** Runs child commands, and stops them on Ctrl-C when {@link Runtime.signals} is installed. */
 export class Runtime implements CommandRunner {
+  /** How much of a failed run's stderr becomes its error message: the end, where the cause is. */
+  private static readonly FailureStderrLines = 20;
+
+  /** How much of stderr a run keeps while it goes, enough for {@link FailureStderrLines}: a pull's progress is long. */
+  private static readonly StderrTailChars = 8_000;
+
   private interrupted: boolean = false;
 
   private children: Set<ChildProcess> = new Set();
@@ -99,8 +102,11 @@ export class Runtime implements CommandRunner {
         child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
       }
 
-      // Kept whenever it is not inherited, piped or captured: a failure reports its end.
-      child.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+      // Only its end is kept, whenever it is not inherited: a failure reports it.
+      child.stderr?.on(
+        "data",
+        (chunk: Buffer) => (stderr = (stderr + chunk.toString()).slice(-Runtime.StderrTailChars)),
+      );
 
       this.children.add(child);
 
@@ -124,7 +130,7 @@ export class Runtime implements CommandRunner {
           return resolve({ code, stdout });
         }
 
-        const tail = stderr.trim().split("\n").slice(-FAILURE_STDERR_LINES).join("\n");
+        const tail = stderr.trim().split("\n").slice(-Runtime.FailureStderrLines).join("\n");
 
         return reject(new HangarRuntimeError(code ?? 1, tail || "Process exited."));
       });

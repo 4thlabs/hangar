@@ -4,7 +4,7 @@ import { sessions } from "#libs/auth/server";
 import type { SwarmStackTask } from "#libs/docker";
 import { swarm } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
-import { swarmFailure } from "#modules/cluster/actions/swarm-failure.ts";
+import { SwarmFailure } from "#modules/cluster/actions/swarm-failure.ts";
 import { ActionResult, type ReadResult } from "#modules/common/actions/action-result.ts";
 
 /** The tasks of any stack in the swarm, deployed by Hangar or by hand, current and past. */
@@ -14,7 +14,7 @@ export const readStackTasks = async (name: string): Promise<ReadResult<SwarmStac
   try {
     return { success: true, value: await swarm.stackTasks(name) };
   } catch (error) {
-    const { message } = swarmFailure(error, "Stack tasks read failed", { stack: name });
+    const { message } = SwarmFailure.from(error, "Stack tasks read failed", { stack: name });
 
     return { success: false, message };
   }
@@ -36,7 +36,7 @@ export const redeployStack = async (name: string): Promise<ActionResult> => {
 
     return ActionResult.success(`${name} a été redéployée.`);
   } catch (error) {
-    return swarmFailure(error, "Stack redeploy failed", { stack: name });
+    return SwarmFailure.from(error, "Stack redeploy failed", { stack: name });
   }
 };
 
@@ -53,6 +53,6 @@ export const removeStack = async (name: string): Promise<ActionResult> => {
 
     return ActionResult.success(`${name} a été retirée du swarm.`);
   } catch (error) {
-    return swarmFailure(error, "Stack removal failed", { stack: name });
+    return SwarmFailure.from(error, "Stack removal failed", { stack: name });
   }
 };

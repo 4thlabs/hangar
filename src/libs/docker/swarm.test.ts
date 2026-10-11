@@ -4,7 +4,6 @@ const { dockerMock, fakeDockerode, givenSwarm, swarmNode, swarmService, swarmTas
 const { Cache } = await import("#libs/cache");
 const { DockerSwarm } = await import("./swarm.ts");
 const { SwarmDaemonError, SwarmRefusedError } = await import("./swarm-errors.ts");
-const { faultTolerance } = await import("./swarm-rules/index.ts");
 
 const client = () => new DockerSwarm(fakeDockerode(), new Cache());
 
@@ -205,11 +204,7 @@ describe("DockerSwarm stacks per node", () => {
   });
 });
 
-describe("faultTolerance", () => {
-  it("is how many managers can fail with a majority left", () => {
-    expect([1, 2, 3, 4, 5, 7].map(managers => faultTolerance(managers))).toEqual([0, 0, 1, 1, 2, 3]);
-  });
-
+describe("DockerSwarm managers", () => {
   it("counts the managers of the cluster", async () => {
     givenSwarm({
       nodes: [
@@ -407,5 +402,29 @@ describe("DockerSwarm daemon refusals", () => {
     dockerMock.swarmInit.mockRejectedValueOnce(new Error("connect ENOENT /var/run/docker.sock"));
 
     await expect(client().init()).rejects.toThrow("connect ENOENT");
+  });
+});
+
+describe("DockerSwarm idle stacks", () => {
+  it("lists apart the stacks no node runs a task of, which no card would show", async () => {
+    givenSwarm({
+      nodes: [swarmNode({ id: "nas" })],
+      services: [
+        swarmService({ id: "web", stack: "miniflux", running: 1, desired: 1 }),
+        swarmService({ id: "crash", stack: "broken", running: 0, desired: 2 }),
+        swarmService({ id: "zero", name: "scaled-down", running: 0, desired: 0 }),
+      ],
+      tasks: [
+        swarmTask({ service: "web", node: "nas" }),
+        swarmTask({ service: "crash", node: "nas", state: "failed" }),
+      ],
+    });
+
+    await expect(client().cluster()).resolves.toMatchObject({
+      idleStacks: [
+        { name: "broken", health: "stopped" },
+        { name: "scaled-down", health: "stopped" },
+      ],
+    });
   });
 });

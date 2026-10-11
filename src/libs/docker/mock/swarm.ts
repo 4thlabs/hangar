@@ -167,6 +167,7 @@ export function managerView(overrides: Partial<SwarmManagerView> = {}): SwarmMan
     currentNodeId: "node-1",
     managers: 1,
     nodes: [swarmNodeView()],
+    idleStacks: [],
     ...overrides,
   };
 }

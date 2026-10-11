@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { load } from "js-yaml";
 import { parseDocument } from "yaml";
 import * as z from "zod";
@@ -50,6 +51,9 @@ export class HangarConfig {
 
   /** The widgets the dashboard shows, in declaration order */
   private _widgets: WidgetConfig[] = [...defaultWidgets];
+
+  /** The `swarm:` edits, one after the other: each reads the file the previous one wrote. */
+  private swarmEdits: Promise<unknown> = Promise.resolve();
 
   /** The pause between two registry calls in the image update check, in ms */
   private _registryThrottling = 100;
@@ -120,6 +124,8 @@ export class HangarConfig {
   async write(source: string) {
     const config = this.parse(source);
 
+    // A store may ship no config at all, folder included.
+    await mkdir(path.dirname(this._configFile), { recursive: true });
     await writeFile(this._configFile, source, "utf8");
     this.apply(config);
   }
@@ -140,10 +146,29 @@ export class HangarConfig {
     await this.editSwarm(ids => ids.filter(listed => listed !== id));
   }
 
-  /** Rewrites the `swarm:` list through the YAML document, so comments and layout survive. */
-  private async editSwarm(edit: (ids: string[]) => string[]) {
+  /**
+   * Rewrites the `swarm:` list through the YAML document, so comments and layout survive. The edit
+   * applies to the list on disk, not the one loaded: the file may have been edited by hand since, and
+   * two edits at once are queued, so neither loses the other's.
+   */
+  private editSwarm(edit: (ids: string[]) => string[]) {
+    const run = this.swarmEdits.then(() => this.rewriteSwarm(edit));
+
+    // The queue goes on after a failed edit; the caller still gets the failure.
+    this.swarmEdits = run.catch(() => undefined);
+
+    return run;
+  }
+
+  private async rewriteSwarm(edit: (ids: string[]) => string[]) {
     const document = parseDocument(await this.source());
-    const ids = edit(this._swarm);
+    const onDisk = (document.toJS() as { swarm?: unknown } | null)?.swarm;
+    const ids = edit(Array.isArray(onDisk) ? onDisk.map(String) : []);
+
+    // A store that ships no hangar.yml gets the smallest valid one.
+    if (!document.has("categories")) {
+      document.set("categories", []);
+    }
 
     if (ids.length === 0) {
       document.delete("swarm");

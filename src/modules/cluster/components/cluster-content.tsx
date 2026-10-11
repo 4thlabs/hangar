@@ -5,11 +5,6 @@ import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { ClusterOverview } from "#modules/cluster/components/cluster-overview.tsx";
 
-/** The stacks Hangar can deploy again and remove; see `HangarStore.isStackManageable`. */
-function manageableStacks() {
-  return [...hangar.store.apps].map(app => app.id).filter(id => hangar.store.isStackManageable(id));
-}
-
 /**
  * Docker half of /cluster, a child so a cold read suspends inside the boundary. Returns the cached read rather
  * than awaiting it, as `AppsContent` does. A manager that lost its quorum fails the read: that renders in
@@ -17,7 +12,7 @@ function manageableStacks() {
  */
 export function ClusterContent(): Promise<ReactNode> {
   const overview = map(swarm.cluster(), cluster => (
-    <ClusterOverview cluster={cluster} manageableStacks={manageableStacks()} />
+    <ClusterOverview cluster={cluster} manageableStacks={hangar.store.manageableStacks()} />
   ));
 
   return recover(overview, (error: unknown) => {

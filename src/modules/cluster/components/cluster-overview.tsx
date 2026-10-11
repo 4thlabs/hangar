@@ -2,22 +2,21 @@
 
 import { RefreshCwIcon } from "lucide-react";
 import { useState } from "react";
-import type { SwarmCluster, SwarmManagerView } from "#libs/docker";
-import { faultTolerance, SwarmRefreshMs } from "#libs/docker/swarm-rules";
-import { plural } from "#modules/apps/format.ts";
+import type { SwarmCluster } from "#libs/docker";
+import { SwarmRules } from "#libs/docker/swarm-rules";
 import { ClusterEmpty } from "#modules/cluster/components/cluster-empty.tsx";
 import { NodeCard } from "#modules/cluster/components/node-card.tsx";
+import { StackLine } from "#modules/cluster/components/stack-line.tsx";
 import { StackSheet } from "#modules/cluster/components/stack-sheet.tsx";
 import { SwarmSetup } from "#modules/cluster/components/swarm-setup.tsx";
 import { TokensDialog } from "#modules/cluster/components/tokens-dialog.tsx";
+import { ClusterLabels } from "#modules/cluster/labels.ts";
 import { AutoReload } from "#modules/common/components/auto-reload.tsx";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useRouteRefresh } from "#modules/common/hooks/use-route-refresh.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
-
-/** How many characters of the cluster id the page shows, as the `docker` CLI shortens ids. */
-const SHORT_ID_LENGTH = 12;
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 
 /** The swarm as read, or why it could not be. */
 type ClusterOverviewProps =
@@ -27,17 +26,6 @@ type ClusterOverviewProps =
       manageableStacks: string[];
     }
   | { error: string };
-
-/** The one line under the title: which cluster, how big, how much it can lose. */
-function clusterSummary(cluster: SwarmManagerView) {
-  const tolerance = `tolère ${plural(faultTolerance(cluster.managers), "panne")}`;
-
-  return [
-    cluster.clusterId.slice(0, SHORT_ID_LENGTH),
-    plural(cluster.nodes.length, "nœud"),
-    `${plural(cluster.managers, "manager")} (${tolerance})`,
-  ].join(" · ");
-}
 
 export function ClusterOverview(props: ClusterOverviewProps) {
   const { refresh, isRefreshing } = useRouteRefresh();
@@ -49,12 +37,12 @@ export function ClusterOverview(props: ClusterOverviewProps) {
   return (
     <>
       {/* The pace of the cache: Docker emits no event for a task, so only time moves the task counts. */}
-      <AutoReload seconds={SwarmRefreshMs / 1_000} />
+      <AutoReload seconds={SwarmRules.RefreshMs / 1_000} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Cluster</h1>
           <p className="text-sm text-muted-foreground">
-            {manager ? clusterSummary(manager) : "Le cluster Swarm dont ce serveur fait partie."}
+            {manager ? ClusterLabels.summary(manager) : "Le cluster Swarm dont ce serveur fait partie."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -90,6 +78,27 @@ export function ClusterOverview(props: ClusterOverviewProps) {
             <NodeCard key={node.id} cluster={manager} node={node} onOpenStack={setOpenStack} />
           ))}
         </div>
+      )}
+
+      {manager && manager.idleStacks.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Stacks sans tâche active</CardTitle>
+            <CardDescription>
+              Aucune de leurs tâches ne tourne : elles plantent, attendent un nœud qui convienne, ou sont à zéro
+              réplica. Ouvrez-en une pour voir pourquoi.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="flex flex-col gap-1.5 text-sm">
+              {manager.idleStacks.map(stack => (
+                <li key={stack.name}>
+                  <StackLine name={stack.name} health={stack.health} detail="aucune tâche" onOpen={setOpenStack} />
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       )}
 
       {cluster && cluster.state !== "manager" && <ClusterEmpty cluster={cluster} />}

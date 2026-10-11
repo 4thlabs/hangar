@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useRouter } from "waku";
 import type { SwarmManagerView, SwarmNode, SwarmNodeAction } from "#libs/docker";
 import { changeSwarmNode } from "#modules/cluster/actions/manage-cluster.ts";
-import { nodeActionConfirmation } from "#modules/cluster/confirmations.ts";
-import { nodeActionLabel } from "#modules/cluster/status.ts";
+import { NodeActionConfirmations } from "#modules/cluster/confirmations.ts";
+import { ClusterLabels } from "#modules/cluster/labels.ts";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
@@ -21,14 +21,14 @@ export function NodeActions({ cluster, node }: NodeActionsProps) {
   const { run, isPending } = useServerAction();
   const [confirming, setConfirming] = useState<SwarmNodeAction | null>(null);
   const [running, setRunning] = useState<SwarmNodeAction | null>(null);
-  const confirmation = confirming && nodeActionConfirmation(cluster, node, confirming);
+  const confirmation = confirming && NodeActionConfirmations.of(cluster, node, confirming);
 
   function confirm(action: SwarmNodeAction) {
     setConfirming(null);
     setRunning(action);
     run(
       () => changeSwarmNode(node.id, node.hostname, action),
-      { success: nodeActionLabel[action], error: `${nodeActionLabel[action]} : échec` },
+      { success: ClusterLabels.NodeAction[action], error: `${ClusterLabels.NodeAction[action]} : échec` },
       async () => {
         setRunning(null);
         await router.reload();
@@ -46,11 +46,11 @@ export function NodeActions({ cluster, node }: NodeActionsProps) {
             size="sm"
             variant={action === "remove" ? "destructive" : "outline"}
             pending={running === action}
-            pendingLabel={nodeActionLabel[action]}
+            pendingLabel={ClusterLabels.NodeAction[action]}
             disabled={isPending}
             onClick={() => setConfirming(action)}
           >
-            {nodeActionLabel[action]}
+            {ClusterLabels.NodeAction[action]}
           </PendingButton>
         ))}
       </div>

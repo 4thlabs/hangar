@@ -1,9 +1,9 @@
 "use server";
 
 import { sessions } from "#libs/auth/server";
-import { HangarError } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
+import { ActionFailure } from "#modules/common/actions/action-failure.ts";
 import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
 import { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
 
@@ -65,9 +65,9 @@ export const uninstallApp = async (appId: string): Promise<StoreActionResult> =>
   try {
     // Down before unlinking: once the symlink is gone the compose files are unreachable and whatever
     // runs becomes an orphan Hangar can no longer manage.
-    if (app.runsInSwarm) {
-      await hangar.store.removeFromSwarm(app.id, { capture: true });
-    } else {
+    const stackLeftover = app.runsInSwarm ? await hangar.store.releaseFromSwarm(app.id) : null;
+
+    if (!app.runsInSwarm) {
       await hangar.store.compose(app.id, ["down"]);
     }
 
@@ -76,9 +76,13 @@ export const uninstallApp = async (appId: string): Promise<StoreActionResult> =>
 
     const installed = hangar.store.app(app.id)?.installed ?? false;
 
+    const leftoverNote = stackLeftover
+      ? ` Sa stack n’a pas pu être supprimée (${stackLeftover}) : supprimez-la depuis un manager.`
+      : "";
+
     return installed
       ? StoreActionResult.failure(`La désinstallation de ${app.name} n’a pas pu être confirmée.`, true)
-      : StoreActionResult.success(`${app.name} a été désinstallée.`, false);
+      : StoreActionResult.success(`${app.name} a été désinstallée.${leftoverNote}`, false);
   } catch (error) {
     logger.error("App uninstallation failed", { error, appId: app.id });
 
@@ -105,13 +109,11 @@ export const deployToSwarm = async (appId: string): Promise<StoreActionResult> =
 
     return StoreActionResult.success(`${app.name} est déployée sur le swarm.`);
   } catch (error) {
-    // Docker's own complaint (not a manager, a bad file) says what to fix.
-    if (error instanceof HangarError) {
-      return StoreActionResult.failure(`Le déploiement de ${app.name} a échoué : ${error.message}`, true);
-    }
+    // Docker's own complaint (not a manager, a bad file) is shown as is: it says what to fix.
+    const failure = ActionFailure.from(error, "Swarm deployment failed", `Le déploiement de ${app.name} a échoué.`, {
+      appId: app.id,
+    });
 
-    logger.error("Swarm deployment failed", { error, appId: app.id });
-
-    return StoreActionResult.failure(`Le déploiement de ${app.name} a échoué. ${SERVER_LOG_HINT}`, true);
+    return { ...failure, installed: true };
   }
 };

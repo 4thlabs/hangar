@@ -333,21 +333,23 @@ comes with `HangarStore.stack` in step 3.
 **`DockerSwarm` (`src/libs/docker/swarm.ts`).** Built like `Docker`: `new DockerSwarm(dockerode, cache, ttl)`,
 no `server-only` guard. One public read, `cluster()`, a union on `state`:
 
-| `state`    | When (`info.Swarm`)                     | Carries                                                     |
-| ---------- | --------------------------------------- | ----------------------------------------------------------- |
-| `inactive` | `LocalNodeState` is `inactive`          | Nothing; the page shows `docker swarm init`                 |
-| `pending`  | `LocalNodeState` is `pending` (joining) | Nothing                                                     |
-| `locked`   | `LocalNodeState` is `locked` (autolock) | Nothing; the page shows `docker swarm unlock`               |
-| `error`    | `LocalNodeState` is `error`             | `info.Swarm.Error`                                          |
-| `worker`   | `active`, `ControlAvailable` false      | `RemoteManagers`' addresses; a worker knows no cluster id   |
-| `manager`  | `active`, `ControlAvailable` true       | Cluster id, current node id, fault tolerance, `SwarmNode[]` |
+| `state`    | When (`info.Swarm`)                     | Carries                                                           |
+| ---------- | --------------------------------------- | ----------------------------------------------------------------- |
+| `inactive` | `LocalNodeState` is `inactive`          | Nothing; the page shows `docker swarm init`                       |
+| `pending`  | `LocalNodeState` is `pending` (joining) | Nothing                                                           |
+| `locked`   | `LocalNodeState` is `locked` (autolock) | Nothing; the page shows `docker swarm unlock`                     |
+| `error`    | `LocalNodeState` is `error`             | `info.Swarm.Error`                                                |
+| `worker`   | `active`, `ControlAvailable` false      | `RemoteManagers`' addresses; a worker knows no cluster id         |
+| `manager`  | `active`, `ControlAvailable` true       | Cluster id, current node id, managers, `SwarmNode[]`, idle stacks |
 
 - `info()` comes first; `listNodes`, `listServices({ status: true })` and
   `listTasks({ filters: { "desired-state": ["running"] } })` are only called on a manager, so a worker never
   meets their `503`.
 - A stack is `com.docker.stack.namespace`, or the service name outside a stack. Its health (● ◐ ○) comes from
   `ServiceStatus.RunningTasks` / `DesiredTasks` summed over its services, which also covers `global` services.
-  A node lists the stacks with at least one `running` task on it, and how many.
+  A node lists the stacks with at least one `running` task on it, and how many. A stack with none anywhere
+  (crash-looping, pending on a constraint, scaled to zero) is listed apart, as `idleStacks`, so its sheet can
+  still be opened.
 - Fault tolerance is `floor((managers - 1) / 2)`.
 - One cache key, `docker:swarm:cluster`, with a 10 s TTL: Docker emits no task events.
 - `SwarmNode`: id, hostname, role, leader, status, availability, CPUs, memory, engine version, and its stacks
@@ -390,7 +392,7 @@ hostname.
 
 Branch `feat/swarm-node-actions`, on top of step 1.
 
-**Rules (`src/libs/docker/swarm-node-actions.ts`).** One function, `swarmNodeRefusal(action, node, managers)`,
+**Rules (`#libs/docker/swarm-rules`).** One method, `SwarmRules.nodeRefusal(action, node, managers)`,
 says why an action does not apply: `already-done`, `last-manager`, `manager-not-removable` (the daemon only
 removes a manager once demoted), `node-not-down`. It fills `SwarmNode.actions`, which decides the buttons, and
 guards `DockerSwarm.changeNode` against a stale page.
@@ -406,7 +408,7 @@ guards `DockerSwarm.changeNode` against a stale page.
 | `rotateToken(role)`       | `POST /swarm/update?version=&rotate…Token=true` with the spec unchanged                                          |
 
 Each node write ends with `settle()`, which reloads `docker:swarm`. The rules the page shares with the
-library, `swarmNodeRefusal` and `faultTolerance(managers)`, sit in a client-safe entry point,
+library, `SwarmRules.nodeRefusal` and `SwarmRules.faultTolerance(managers)`, sit in a client-safe entry point,
 `#libs/docker/swarm-rules`, so the confirmation computes the tolerance after an action itself. A daemon's
 refusal reaches the module as a `SwarmDaemonError` carrying its message, next to Hangar's own
 `SwarmRefusedError`.

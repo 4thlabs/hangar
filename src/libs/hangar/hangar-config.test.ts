@@ -159,4 +159,33 @@ categories:
     expect(await readFile(file, "utf8")).not.toContain("swarm");
     expect((await new HangarConfig(file).load()).categories()).toHaveLength(1);
   });
+
+  it("keeps both of two swarm edits made at once", async () => {
+    const file = await configFile("categories: []\n");
+    const config = await new HangarConfig(file).load();
+
+    await Promise.all([config.addToSwarm("a"), config.addToSwarm("b")]);
+
+    expect(config.swarm()).toEqual(["a", "b"]);
+  });
+
+  it("edits the swarm list as it is on disk, not as it was loaded", async () => {
+    const file = await configFile("categories: []\n");
+    const config = await new HangarConfig(file).load();
+
+    await writeFile(file, "categories: []\nswarm: [by-hand]\n");
+    await config.addToSwarm("miniflux");
+
+    expect(config.swarm()).toEqual(["by-hand", "miniflux"]);
+  });
+
+  it("lists a swarm app in a store that ships no hangar.yml, writing the smallest valid one", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "hangar-config-"));
+    const config = await new HangarConfig(path.join(dir, "config", "hangar.yml")).load();
+
+    await config.addToSwarm("miniflux");
+
+    expect(config.swarm()).toEqual(["miniflux"]);
+    expect(config.categories()).toEqual([]);
+  });
 });

@@ -72,6 +72,19 @@ describe("Runtime", () => {
     });
   });
 
+  it("keeps only the end of a long stderr, where the cause is", async () => {
+    const runtime = new Runtime();
+
+    // `exitCode`, not `exit()`: exiting at once would cut the piped stderr short.
+    const script =
+      "for (let i = 0; i < 5000; i++) console.error('progress ' + i); console.error('disk full'); process.exitCode = 1";
+
+    const failure = await runtime.run("node", ["-e", script], { capture: true }).catch((error: Error) => error);
+
+    expect(failure).toMatchObject({ message: expect.stringMatching(/progress 4999\ndisk full$/) });
+    expect((failure as Error).message.split("\n")).toHaveLength(20);
+  });
+
   it("sets the given variables over its own environment", async () => {
     const runtime = new Runtime();
     const script = "console.log(process.env.HANGAR_TEST_VAR, Boolean(process.env.PATH))";

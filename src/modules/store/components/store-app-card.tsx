@@ -14,11 +14,6 @@ type StoreAppCardProps = {
   uninstallApp: (appId: string) => Promise<StoreActionResult>;
 };
 
-/** What the Swarm badge says on hover: the app can run in the swarm, or does. */
-function swarmBadgeTitle(app: HangarApp) {
-  return app.runsInSwarm ? "Tourne dans le swarm" : "Peut tourner dans le swarm (compose.swarm.yml)";
-}
-
 /** Server component: only the buttons below are interactive. */
 export function StoreAppCard({ app, installApp, uninstallApp }: StoreAppCardProps) {
   return (
@@ -42,7 +37,10 @@ export function StoreAppCard({ app, installApp, uninstallApp }: StoreAppCardProp
         )}
         <CardTitle className="line-clamp-2 text-base leading-tight">{app.name}</CardTitle>
         {app.swarmReady && (
-          <Badge variant={app.runsInSwarm ? "default" : "outline"} title={swarmBadgeTitle(app)}>
+          <Badge
+            variant={app.runsInSwarm ? "default" : "outline"}
+            title={app.runsInSwarm ? "Tourne dans le swarm" : "Peut tourner dans le swarm (compose.swarm.yml)"}
+          >
             Swarm
           </Badge>
         )}

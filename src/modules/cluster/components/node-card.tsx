@@ -1,16 +1,8 @@
 import type { SwarmManagerView, SwarmNode } from "#libs/docker";
 import { formatBytes, plural } from "#modules/apps/format.ts";
 import { NodeActions } from "#modules/cluster/components/node-actions.tsx";
-import {
-  availabilityLabel,
-  availabilityVariant,
-  healthClass,
-  healthLabel,
-  healthSymbol,
-  nodeStatusLabel,
-  nodeStatusVariant,
-  roleLabel,
-} from "#modules/cluster/status.ts";
+import { StackLine } from "#modules/cluster/components/stack-line.tsx";
+import { ClusterLabels } from "#modules/cluster/labels.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 
@@ -33,9 +25,11 @@ export function NodeCard({ cluster, node, onOpenStack }: NodeCardProps) {
           {isCurrent && <span className="text-xs font-normal text-muted-foreground">★ ce nœud</span>}
         </CardTitle>
         <div className="flex flex-wrap gap-1.5">
-          <Badge variant={node.role === "worker" ? "outline" : "default"}>{roleLabel[node.role]}</Badge>
-          <Badge variant={nodeStatusVariant(node.status)}>{nodeStatusLabel[node.status]}</Badge>
-          <Badge variant={availabilityVariant(node.availability)}>{availabilityLabel[node.availability]}</Badge>
+          <Badge variant={node.role === "worker" ? "outline" : "default"}>{ClusterLabels.Role[node.role]}</Badge>
+          <Badge variant={ClusterLabels.nodeStatusVariant(node.status)}>{ClusterLabels.NodeStatus[node.status]}</Badge>
+          <Badge variant={ClusterLabels.availabilityVariant(node.availability)}>
+            {ClusterLabels.Availability[node.availability]}
+          </Badge>
         </div>
         <CardDescription>
           {node.cpus} CPU · {formatBytes(node.memoryBytes)} · Docker {node.engineVersion}
@@ -48,18 +42,12 @@ export function NodeCard({ cluster, node, onOpenStack }: NodeCardProps) {
           <ul className="flex flex-col gap-1.5 text-sm">
             {node.stacks.map(stack => (
               <li key={stack.name}>
-                <button
-                  type="button"
-                  className="-mx-1.5 flex w-[calc(100%+--spacing(3))] items-center gap-2 rounded-md px-1.5 py-0.5 text-left hover:bg-muted"
-                  onClick={() => onOpenStack(stack.name)}
-                >
-                  <span className={healthClass[stack.health]} title={healthLabel[stack.health]} aria-hidden>
-                    {healthSymbol[stack.health]}
-                  </span>
-                  <span className="sr-only">{healthLabel[stack.health]}</span>
-                  <span className="min-w-0 flex-1 truncate font-medium">{stack.name}</span>
-                  <span className="text-muted-foreground">{plural(stack.tasks, "tâche")}</span>
-                </button>
+                <StackLine
+                  name={stack.name}
+                  health={stack.health}
+                  detail={plural(stack.tasks, "tâche")}
+                  onOpen={onOpenStack}
+                />
               </li>
             ))}
           </ul>

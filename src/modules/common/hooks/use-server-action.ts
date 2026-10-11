@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import type { ActionResult } from "#modules/common/actions/action-result.ts";
-import { createActionToast, createTransportErrorToast } from "#modules/common/components/action-toast.ts";
+import { ActionToast } from "#modules/common/components/action-toast.ts";
 import { toast } from "#modules/common/ui/toast.tsx";
 
 type ActionToastTitles = {
@@ -30,11 +30,11 @@ export function useServerAction() {
 
       try {
         result = await action();
-        toast.add(createActionToast(result, titles));
+        toast.add(ActionToast.of(result, titles));
       } catch (error) {
         // The toast only says the request failed; the cause is for whoever opens the console.
         console.error("Server action failed", error);
-        toast.add(createTransportErrorToast(titles.error, titles.transport));
+        toast.add(ActionToast.transportError(titles.error, titles.transport));
       }
 
       await onSettled?.(result);

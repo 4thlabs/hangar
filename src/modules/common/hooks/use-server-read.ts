@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { ReadResult } from "#modules/common/actions/action-result.ts";
-import { TRANSPORT_ERROR_MESSAGE } from "#modules/common/components/action-toast.ts";
+import { ActionToast } from "#modules/common/components/action-toast.ts";
 
 /**
  * Reads a value through a server action on demand, into local state, for a panel that shows it inline
@@ -23,7 +23,7 @@ export function useServerRead<T>() {
       } catch (cause) {
         // The panel only says the request failed; the cause is for whoever opens the console.
         console.error("Server action failed", cause);
-        setError(TRANSPORT_ERROR_MESSAGE);
+        setError(ActionToast.TransportErrorMessage);
       }
     });
 

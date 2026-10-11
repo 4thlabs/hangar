@@ -61,7 +61,7 @@ describe("deployToSwarm", () => {
     const result = await deployToSwarm("whoami");
 
     expect(result).toMatchObject({ success: true, message: "Who Am I est déployée sur le swarm." });
-    expect(dockerCalls()).toEqual(["compose down", "stack deploy"]);
+    expect(dockerCalls()).toEqual(["compose -q", "compose down", "stack deploy"]);
     expect(hangar.store.app("whoami")).toMatchObject({ installed: true, runsInSwarm: true });
     expect(await readFile(path.join(hangar.store.storePath, "config", "hangar.yml"), "utf8")).toContain("# The store");
   });
@@ -97,6 +97,17 @@ describe("deployToSwarm", () => {
 
     expect(result).toMatchObject({ success: true, installed: false });
     expect(dockerCalls()).toEqual(["stack rm"]);
+    expect(hangar.store.config.swarm()).toEqual([]);
+  });
+
+  it("uninstalls a swarm app on a node that can no longer remove its stack, saying what is left", async () => {
+    await deployToSwarm("whoami");
+    vi.mocked(hangar.runtime.run).mockRejectedValue(new HangarRuntimeError(1, "this node is not a swarm manager"));
+
+    const result = await uninstallApp("whoami");
+
+    expect(result).toMatchObject({ success: true, installed: false });
+    expect(result.message).toContain("supprimez-la depuis un manager");
     expect(hangar.store.config.swarm()).toEqual([]);
   });
 });
