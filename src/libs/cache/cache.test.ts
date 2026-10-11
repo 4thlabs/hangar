@@ -171,6 +171,18 @@ describe("Cache.keepWarm", () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 
+  it("leaves a value its policy keeps out of warming to its readers", async () => {
+    const cache = new Cache();
+    const load = vi.fn().mockResolvedValue("value");
+    const stop = cache.keepWarm(30_000);
+
+    await cache.get("k", { ...POLICY, warm: false }, load);
+    await vi.advanceTimersByTimeAsync(90_000);
+
+    expect(load).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
   it("leaves a value alone while it stays fresh past the next tick", async () => {
     const cache = new Cache();
     const load = vi.fn().mockResolvedValue("value");

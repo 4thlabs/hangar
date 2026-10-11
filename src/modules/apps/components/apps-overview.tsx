@@ -10,8 +10,6 @@ import {
   RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
-import { useState } from "react";
-import { useRouter } from "waku";
 import { useSetSearch_UNSTABLE } from "waku/router/client";
 import type { ComposeProjectsSnapshot } from "#libs/docker";
 import { AppsCategoryFilter } from "#modules/apps/components/apps-category-filter.tsx";
@@ -25,6 +23,7 @@ import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import type { AppSortColumn, AppsSearch } from "#modules/apps/search-codec.ts";
 import { AutoReload } from "#modules/common/components/auto-reload.tsx";
 import { countBy } from "#modules/common/count-by.ts";
+import { useRouteRefresh } from "#modules/common/hooks/use-route-refresh.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#modules/common/ui/empty.tsx";
@@ -59,8 +58,7 @@ function LiveTotals({ containerIds }: { containerIds: readonly string[] }) {
 }
 
 export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
-  const router = useRouter();
-  const [isRefreshing, setRefreshing] = useState(false);
+  const { refresh, isRefreshing } = useRouteRefresh();
   const setSearch = useSetSearch_UNSTABLE({ from: "/apps" });
   const onSort = (column: AppSortColumn) => void setSearch({ sort: nextSort(search.sort, column) });
   const projects = snapshot?.projects ?? [];
@@ -77,15 +75,6 @@ export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
     }),
     { services: 0, running: 0, stopped: 0 },
   );
-
-  async function refresh() {
-    setRefreshing(true);
-    try {
-      await router.reload();
-    } finally {
-      setRefreshing(false);
-    }
-  }
 
   return (
     <>

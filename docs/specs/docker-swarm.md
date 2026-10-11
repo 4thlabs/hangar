@@ -27,11 +27,13 @@ cluster:
 | `GET /swarm`           | The join tokens                                                    |
 | `GET /swarm/unlockkey` | The unlock key, when autolock is on                                |
 
-A worker gets `503` on all of them except `info`: the page then only says "this node is a worker of cluster
-X" and shows the command to run on a manager.
+A worker gets `503` on all of them except `info`, whose `Cluster` field is empty too: the page then only says
+"this node is a worker", with the managers' addresses (`info.Swarm.RemoteManagers`) and the command to run
+on one of them.
 
-**Compose and Swarm stay apart.** Compose apps run on Hangar's node and live in `/apps`, unchanged. An app
-that should run on another machine is deployed to the swarm from its `compose.swarm.yml` (see below). `/cluster` shows only what runs in the swarm: the Swarm tasks from `GET /tasks`, with their
+**Compose and Swarm are independent.** Compose apps run on Hangar's node and live in `/apps`, unchanged. An
+app can also be deployed to the swarm from its `compose.swarm.yml` (see below), with or without its compose
+copy running. `/cluster` shows only what runs in the swarm: the Swarm tasks from `GET /tasks`, with their
 node. It never lists compose containers, even on Hangar's node, and `/apps` never lists Swarm tasks.
 
 Swarm tasks are grouped into one app per stack (`com.docker.stack.namespace`), or per service when the
@@ -133,11 +135,12 @@ What this rests on, checked with `docker stack config` on Docker 29.1.3:
 -c compose.swarm.yml` with the same environment, which works on any node, swarm or not. Saving the
   `compose.yml` of an app that has a `compose.swarm.yml` runs the same check too, since an edit there (a
   top-level `name`, a `depends_on` condition) can break the stack.
-- **Compose or Swarm, never both:** an app listed under `swarm:` in `hangar.yml` runs in the swarm; any other
-  installed app runs with compose. `HangarStore.compose` skips the `swarm:` apps, so `store up` never starts
-  a second copy, and `HangarStore.stack` only addresses them. See [the open question](#open-questions).
+- **Compose and Swarm, independently:** an app may run with compose, in the swarm, or both; neither
+  command touches the other. An app with a `compose.swarm.yml` is available for the swarm: nothing in
+  `hangar.yml` marks it (see step 3).
 - **Where it shows:** the store card of an app with a `compose.swarm.yml` gets a "Swarm" badge, and
-  "Déployer sur le swarm" next to "Installer". A deployed stack appears on `/cluster`, never on `/apps`.
+  "Déployer sur le swarm" next to "Installer". A deployed stack appears on `/cluster`; the app's compose
+  project, if any, stays on `/apps`.
 - **Volumes:** a bind mount such as `${APP_DATA_DIR}/miniflux/db` must exist on whichever node runs the task.
   Hangar does not copy data between nodes. Three ways, all in `compose.swarm.yml`; see below.
 
@@ -191,7 +194,7 @@ compose helper, and both the UI's server actions and the CLI go through it:
 | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `HangarStore.compose(name, args, options)`                                             | `HangarStore.stack(name, args, options)`                                                                   |
 | `composeStack(app, args)`: `docker compose --env-file … -p <app> -f compose.yml …args` | `stackApp(app, args)`: builds the `docker stack` call below, with `.env.global` as the child's environment |
-| `name`: a global command, a category or an app                                         | Same resolution, keeping only the `swarm:` apps                                                            |
+| `name`: a global command, a category or an app                                         | Same resolution, keeping only the apps with a `compose.swarm.yml`                                          |
 | `HangarStore.CommandOrder`: `up` forwards, `down` backwards                            | `deploy` forwards, `rm` backwards, the rest in parallel                                                    |
 
 `stackApp` maps a short verb to the full `docker stack` call, so the files and the stack name are never
@@ -218,7 +221,7 @@ written by the caller:
 `src/cli/commands/swarm.ts`, the twin of `store.ts`, documented in `docs/cli.md`:
 
 ```bash
-node bin/cli.js swarm deploy             # every `swarm:` app of hangar.yml, in category order
+node bin/cli.js swarm deploy             # every app with a compose.swarm.yml, in category order
 node bin/cli.js swarm miniflux deploy    # one app; extra args go to docker stack deploy
 node bin/cli.js swarm Media rm           # a category, in reverse order
 node bin/cli.js swarm miniflux ps        # docker stack ps miniflux
@@ -231,36 +234,46 @@ New entry "Cluster" in the navbar, next to "Apps". One grid of node cards, one c
 node first. Same tree on mobile, one column.
 
 ```
-┌ Cluster ────────────────────────────────────────────────────────────────────────┐
-│ homelab · 3 nœuds · 2 managers (tolère 0 panne)       [Tokens]  [Sauvegarder]   │
-├─────────────────────────────────────────────────────────────────────────────────┤
+┌ Cluster ──────────────────────────────────────────────────────────────────────────┐
+│ nhyx6n1b8b0a · 3 nœuds · 2 managers (tolère 0 panne)    [Tokens]  [Sauvegarder]   │
+├───────────────────────────────────────────────────────────────────────────────────┤
 │ ┌ nas  ★ ce nœud ──────────────┐ ┌ pi-01 ───────────────────┐ ┌ pi-02 ──────────┐ │
 │ │ Leader · Prêt · Actif        │ │ Manager · Prêt · Actif   │ │ Worker · Injoi- │ │
 │ │ 8 CPU · 32 Go · Docker 29.1  │ │ 4 CPU · 8 Go · 29.1      │ │ gnable · Drainé │ │
-│ │──────────────────────────────│ │──────────────────────────│ │─────────────────│ │
-│ │ ● miniflux     2 tâches      │ │ ● traefik      1 tâche   │ │ Aucune app      │ │
-│ │ ◐ uptime-kuma  1 tâche       │ │ ● miniflux     1 tâche   │ │                 │ │
-│ │──────────────────────────────│ │──────────────────────────│ │─────────────────│ │
+│ │ 3 tâches                     │ │ 2 tâches                 │ │ Aucune tâche    │ │
 │ │ [Drainer]                    │ │ [Rétrograder] [Drainer]  │ │ [Réactiver]     │ │
 │ │                              │ │                          │ │ [Retirer]       │ │
 │ └──────────────────────────────┘ └──────────────────────────┘ └─────────────────┘ │
-│                                                                                   │
+│ ┌ Stacks ───────────────────────────────────────────────────────────────────────┐ │
+│ │ ● miniflux  Hangar   3/3 réplicas   nas 2 · pi-01 1                         › │ │
+│ │ ● traefik            1/1 réplica    pi-01 1                                 › │ │
+│ │ ◐ uptime-kuma        1/2 réplicas   nas 1                                   › │ │
+│ │ ○ broken             0/1 réplica    aucune tâche                            › │ │
+│ └───────────────────────────────────────────────────────────────────────────────┘ │
 │ Dernière sauvegarde des clés : aujourd'hui 03:37 · [Télécharger]                  │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Card header:** hostname, badges for role (Leader / Manager / Worker), status (Prêt / Injoignable) and
-  availability (Actif / Drainé), then CPU, RAM and engine version from `GET /nodes`.
-- **App list:** one line per stack (or lone service) with tasks on that node, and how many run there. A
-  stack spread over several nodes shows on each of them (`miniflux` above). The dot is the stack's health
-  across the cluster, with the `/apps` symbols: ● every desired replica runs, ◐ some, ○ none. Swarm only: the
-  compose apps of Hangar's node are not repeated here.
+- **Page header:** the cluster id's first 12 characters, as the `docker` CLI shortens ids: Swarm has no
+  name of its own (`Spec.Name` is always `default`). Then the node and manager counts, and the fault
+  tolerance.
+- **Node cards:** hostname, badges for role (Leader / Manager / Worker), status (Prêt / Injoignable) and
+  availability (Actif / Drainé), CPU, RAM and engine version from `GET /nodes`, how many tasks run there,
+  and the node actions.
+- **Stack table:** every stack (or lone service) once, below the cards, as on /apps: its health across the
+  cluster (● every desired replica runs, ◐ some, ○ none), its running replicas out of the desired ones, from
+  the daemon's per-service counts, and the nodes its tasks run on. A stack running nowhere stays listed, so
+  its sheet can tell why. "Hangar" marks the stacks Hangar can redeploy. The navbar search, filters by
+  health, node and origin (Hangar or other), and sortable columns live in the URL (`ClusterSearch.Codec`).
+  Swarm only: the compose apps of Hangar's node are not repeated here.
 - **Stack sheet:** clicking a stack opens a side sheet with its services and tasks per node
   (`HangarStore.stack(app, ["ps"])`), and, for a stack Hangar deployed, "Mettre à jour" (deploy again) and
   "Supprimer" (`rm`).
 - **Actions:** promote / demote, drain / activate, remove (only once the node is down). Demoting the last
   manager is refused. Each action asks for a confirmation that states the fault tolerance after it.
 - **Not in a swarm:** an empty state with "Créer le cluster" (`swarm init`) and "Rejoindre" (token + address).
+- **Locked:** a manager restarted with autolock on stays `locked` until `docker swarm unlock`. The page says so
+  and shows the command; Hangar never asks for the unlock key.
 - **Tokens:** a dialog that shows the worker and manager join commands on click, with a "Régénérer" button.
 - Live data comes from the existing Docker events stream: a `node` or `service` event refreshes the page.
   Docker emits no event per task, so task counts also follow a short cache TTL.
@@ -288,10 +301,9 @@ node first. Same tree on mobile, one column.
 | `src/libs/docker/swarm.ts`                      | `DockerSwarm` class: state, nodes, tasks per node, node updates, tokens                      |
 | `src/libs/docker/swarm-backup.ts`               | `SwarmBackup` class: build, encrypt, write, prune                                            |
 | `src/libs/jobs/jobs/back-up-swarm.ts`           | Nightly job                                                                                  |
-| `src/libs/hangar/hangar-store.ts`               | `stack()` and `stackApp()` next to `compose()`, which skips `swarm:` apps; `x-hangar.name`   |
+| `src/libs/hangar/hangar-store.ts`               | `stack()` and `stackApp()` next to `compose()`; `x-hangar.name`                              |
 | `src/libs/hangar/runtime/runtime.ts`            | `RunOptions.env`                                                                             |
 | `src/cli/commands/swarm.ts`                     | The `swarm` CLI command                                                                      |
-| `src/libs/hangar/hangar-config.ts`              | The `swarm:` list in `hangar.yml`                                                            |
 | `src/modules/cluster/`                          | Page components (`node-card.tsx`, `stack-sheet.tsx`, `tokens-dialog.tsx`) and server actions |
 | `docs/cli.md`, `docs/store.md`, `docs/swarm.md` | The `swarm` CLI, `compose.swarm.yml` and `x-hangar.name`, the restore procedure              |
 | `src/app/pages/(app)/cluster.tsx`               | Thin page shell                                                                              |
@@ -303,8 +315,8 @@ No database change. Reads go through `#libs/cache` under `docker:swarm:`, like t
 - `DockerSwarm` against the existing Docker mock: grouping tasks per node, the worker and not-in-a-swarm
   states, refusing to demote the last manager.
 - `HangarStore.stack` with a fake `CommandRunner`, as `compose` is tested: the exact `docker stack` argv per
-  verb, `.env.global` in `env`, deploy order forwards and `rm` backwards, compose apps refused, and
-  `compose()` skipping the `swarm:` apps.
+  verb, `.env.global` in `env`, deploy order forwards and `rm` backwards, and a group covering only the apps
+  with a `compose.swarm.yml`.
 - `HangarStore` display name: `x-hangar.name`, then `name`, then the folder name.
 - `SwarmBackup` with a fake archive: the file decrypts with the test identity, pruning keeps 14.
 - One manual drill before releasing step 5: back up a test cluster, restore it on a fresh VM.
@@ -313,15 +325,147 @@ No database change. Reads go through `#libs/cache` under `docker:swarm:`, like t
 
 1. Read-only page: nodes and their apps.
 2. Node actions, init / join, tokens.
-3. Store: `compose.swarm.yml`, `HangarStore.stack` with the `swarm` CLI, and
-   "Déployer sur le swarm".
+3. Store: `compose.swarm.yml`, `HangarStore.stack` with the `swarm` CLI, "Déployer sur le swarm", and the
+   stack sheet.
 4. Key backup: tokens and unlock key, encryption, nightly job, download.
 5. Raft directory in the backup, the restore doc, and the restore drill.
 
+### Step 1: the read-only page
+
+Branch `feat/swarm-cluster-page`. Nothing here writes to the daemon; the actions, `swarm init` and the
+tokens come in step 2. A stack line is not clickable yet: the stack sheet reads `docker stack ps`, which
+comes with `HangarStore.stack` in step 3.
+
+**`DockerSwarm` (`src/libs/docker/swarm.ts`).** Built like `Docker`: `new DockerSwarm(dockerode, cache, ttl)`,
+no `server-only` guard. One public read, `cluster()`, a union on `state`:
+
+| `state`    | When (`info.Swarm`)                     | Carries                                                              |
+| ---------- | --------------------------------------- | -------------------------------------------------------------------- |
+| `inactive` | `LocalNodeState` is `inactive`          | Nothing; the page shows `docker swarm init`                          |
+| `pending`  | `LocalNodeState` is `pending` (joining) | Nothing                                                              |
+| `locked`   | `LocalNodeState` is `locked` (autolock) | Nothing; the page shows `docker swarm unlock`                        |
+| `error`    | `LocalNodeState` is `error`             | `info.Swarm.Error`                                                   |
+| `worker`   | `active`, `ControlAvailable` false      | `RemoteManagers`' addresses; a worker knows no cluster id            |
+| `manager`  | `active`, `ControlAvailable` true       | Cluster id, current node id, managers, `SwarmNode[]`, `SwarmStack[]` |
+
+- `info()` comes first; `listNodes`, `listServices({ status: true })` and
+  `listTasks({ filters: { "desired-state": ["running"] } })` are only called on a manager, so a worker never
+  meets their `503`.
+- A stack is `com.docker.stack.namespace`, or the service name outside a stack. Its health (● ◐ ○) comes from
+  `ServiceStatus.RunningTasks` / `DesiredTasks` summed over its services, which also covers `global` services.
+  The manager view lists every stack once, with its replicas and its placement (the nodes its running tasks
+  are on, in node order), and gives each node its count of running tasks.
+- Fault tolerance is `floor((managers - 1) / 2)`.
+- One cache key, `docker:swarm:cluster`, with a 10 s TTL: Docker emits no task events.
+- `SwarmNode`: id, hostname, role, leader, status, availability, CPUs, memory, engine version, and its stacks
+  (name, health, tasks running on that node).
+
+**Events (`src/libs/docker/events.ts`).** `DockerChange` gains `"swarm"`. The filters add the `node` and
+`service` types with `create`, `update` and `remove`, and a container event carrying
+`com.docker.swarm.task.id` also counts as `"swarm"`. `cache.refresh` matches by prefix, so the existing
+`docker:${change}` reload reaches `docker:swarm:cluster` with no other change.
+
+**Composition root (`src/libs/docker/server/server.ts`).** One `Dockerode` client, shared by `docker` and a new
+`swarm` export.
+
+**Page (`src/modules/cluster/`).**
+
+| File                                | What                                                                               |
+| ----------------------------------- | ---------------------------------------------------------------------------------- |
+| `components/cluster-content.tsx`    | Server half, `map` / `recover` around `swarm.cluster()`, as `AppsContent` does     |
+| `components/cluster-overview.tsx`   | Header (nodes, managers, fault tolerance), the grid, `<AutoReload seconds={10} />` |
+| `components/node-card.tsx`          | Role, status and availability badges; CPU, RAM, engine version; the stack list     |
+| `components/cluster-empty.tsx`      | The `inactive`, `locked` and `worker` states, each with the command to copy        |
+| `status.ts`                         | Labels and symbols, with the `/apps` conventions                                   |
+| `src/app/pages/(app)/cluster.tsx`   | Thin shell, like `apps.tsx`                                                        |
+| `src/modules/common/navigations.ts` | "Cluster" after "Apps", shown in every state                                       |
+
+One grid, `grid-cols-1 md:grid-cols-2 xl:grid-cols-3`: the current node first, then the managers, then by
+hostname.
+
+**Tests.**
+
+- `swarm.test.ts`: the mock gains `listNodes`, `listServices` and `listTasks`, with `swarmNode()`,
+  `swarmService()` and `swarmTask()` helpers. The four states, a stack over two nodes, a service outside a
+  stack, a global service, partial health, fault tolerance, and no manager call on a worker.
+- `events.test.ts`: node, service and task-container events report `"swarm"`.
+- A component test rendering each state.
+- By hand: a one-node swarm (`docker swarm init`) locally, then two or three `docker:dind` containers for a
+  multi-node cluster.
+
+### Step 2: node actions, init / join, tokens
+
+Branch `feat/swarm-node-actions`, on top of step 1.
+
+**Rules (`#libs/docker/swarm-rules`).** One method, `SwarmRules.nodeRefusal(action, node, managers)`,
+says why an action does not apply: `already-done`, `last-manager`, `manager-not-removable` (the daemon only
+removes a manager once demoted), `node-not-down`. It fills `SwarmNode.actions`, which decides the buttons, and
+guards `DockerSwarm.changeNode` against a stale page.
+
+**Writes (`DockerSwarm`).**
+
+| Method                    | Engine API                                                                                                       |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `changeNode(id, action)`  | `GET /nodes` for the check, then `POST /nodes/{id}/update?version=` with the whole spec, or `DELETE /nodes/{id}` |
+| `init(advertiseAddress?)` | `POST /swarm/init`, listening on `0.0.0.0:2377`                                                                  |
+| `join(request)`           | `POST /swarm/join`                                                                                               |
+| `joinCommands()`          | `GET /swarm` for the tokens, `info.Swarm.RemoteManagers` for this manager's address                              |
+| `rotateToken(role)`       | `POST /swarm/update?version=&rotate…Token=true` with the spec unchanged                                          |
+
+Each node write ends with `settle()`, which reloads `docker:swarm`. The rules the page shares with the
+library, `SwarmRules.nodeRefusal` and `SwarmRules.faultTolerance(managers)`, sit in a client-safe entry point,
+`#libs/docker/swarm-rules`, so the confirmation computes the tolerance after an action itself. A daemon's
+refusal reaches the module as a `SwarmDaemonError` carrying its message, next to Hangar's own
+`SwarmRefusedError`.
+
+**Page.**
+
+- `node-actions.tsx`: the card's buttons, each behind an `AlertDialog` whose wording comes from
+  `confirmations.ts`: what the action does, the fault tolerance after it, and, when demoting the node Hangar
+  runs on, that Hangar will no longer see the cluster.
+- `tokens-dialog.tsx`: "Tokens" in the header, on a manager. The commands are read by a server action on
+  click, never sent with the page, and forgotten when the dialog closes; "Régénérer" per role.
+- `swarm-setup.tsx`: in the `inactive` state, "Créer le cluster" and "Rejoindre un cluster" forms. Both take
+  an optional advertise address: the daemon refuses to pick one on a host with several.
+- A refusal from the daemon (`4xx`/`5xx` with a message) reaches the toast in its own words, since it says
+  what to fix; anything else is logged and the toast points at the logs. A join token is never logged.
+
+**Checked on two `docker:dind` daemons (29.x).** Rotating a token makes the old one fail with the daemon's
+message. Demoting a node right after promoting it fails for about two seconds (`can't find manager in raft
+memberlist`) while it joins the Raft group; the toast shows that message and a retry works. A stopped worker
+reads `down` after about 15 s, and is then removable. Stopping one of two managers costs the quorum: the page
+then shows its error state, which is the "tolère 0 panne" the header announced.
+
+### Step 3: Swarm apps from the store
+
+Branch `feat/swarm-stacks`, on top of step 2.
+
+**Decided (was open question 1):** compose and Swarm are independent, and an app may run both ways. Nothing
+in `hangar.yml` marks an app for the swarm: one with a `compose.swarm.yml` is available for it, and
+`swarm deploy` / `swarm rm` (whole store or category) cover those apps, as `store up` covers the apps of the
+categories. The UI never edits `hangar.yml`, which is the store's configuration. Going through Hangar is
+never required either: a stack deployed by hand, with
+`docker stack deploy` or `swarm <app> deploy`, shows on `/cluster` and can be redeployed or removed from its
+sheet as soon as it is named after an installed store app with a `compose.swarm.yml`.
+
+| Where                           | What                                                                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `HangarApp`                     | `swarmReady` (ships a non-empty `compose.swarm.yml`); `name` reads `x-hangar.name` first                                                   |
+| `HangarStore.stack(name, args)` | Same resolution and ordering as `compose`; a group covers its apps with a `compose.swarm.yml`                                              |
+| `HangarStore.deployToSwarm`     | Link, then deploy; the app's compose project is left alone                                                                                 |
+| `HangarStore.isStackManageable` | Installed, with a `compose.swarm.yml`: what the stack sheet's buttons and their actions both check                                         |
+| Uninstall                       | `compose down`, then `docker stack rm` when the swarm runs a stack of it                                                                   |
+| `AppFiles` / `HangarStore`      | Saving `compose.swarm.yml`, or `compose.yml` next to a non-empty one, runs `docker stack config` with `.env.global` first                  |
+| `Runtime`                       | `RunOptions.env`, the child's extra variables; any non-zero exit fails, with the end of stderr as message                                  |
+| `src/cli/commands/swarm.ts`     | `swarm <target> <verb>`, `swarm ls`                                                                                                        |
+| Store card                      | "Swarm" badge and "Déployer sur le swarm" for any app with a `compose.swarm.yml`                                                           |
+| `/cluster` stack sheet          | Any stack: its tasks from `DockerSwarm.stackTasks` (`GET /tasks`), failed attempts included. For a store app: "Mettre à jour", "Supprimer" |
+
+**Checked on a `docker:dind` swarm (29.x).** `docker stack config` rejects a `depends_on` condition and a
+top-level `name` with the messages above, and interpolates `.env.global`. `docker stack deploy --quiet`
+still prints its progress on stdout: `Runtime` used to accept a captured run that printed something whatever
+its exit code, and now fails every non-zero exit, with the end of stderr as the error.
+
 ## Open questions
 
-1. **How an app is marked as running in the swarm.** Having a `compose.swarm.yml` only says it _can_.
-   Recommended: a `swarm:` list of app ids in `hangar.yml`, next to `categories` (which still give the order).
-   "Déployer sur le swarm" adds the app there, in the local clone, then deploys; "Supprimer" removes it.
-   Alternative: the presence of `compose.swarm.yml` alone means Swarm, which forbids keeping a compose
-   fallback for the same app.
+None left.

@@ -63,6 +63,11 @@ descriptor reaches its components only through `import()`.
 A library's unit of work is a class taking its dependencies as constructor arguments — that is
 what lets a test pass an in-memory database instead of mocking a module.
 
+Helpers and constants are static members of a class, in libraries and modules alike: no free
+function or module-level `const`. The exceptions are React components and hooks, Waku page exports
+(`getConfig`), `"use server"` action exports, test fixtures under `mock/`, and the commander
+definitions in `src/cli`.
+
 ## Responsive layouts
 
 One tree, never one per breakpoint: a subtree hidden with `md:hidden` is still mounted, and every
@@ -76,6 +81,8 @@ Write code for the next human reader. Clarity beats cleverness and brevity.
 
 - Follow the project first: match existing conventions, naming, structure and tooling; run the formatter and linter before finishing.
 - Names: say what and why (`elapsedDays`, `isEligibleForRefund`). No `data`, `tmp`, `util`, `manager`, invented abbreviations, or misleading names. One word per concept.
+  On a class member, the class carries the context and the method the action: `ActionToast.create`, not
+  `ActionToast.of`.
 - Functions: small, one job, one level of abstraction; ≤ 3–4 parameters; no boolean flags that switch behavior.
 - Control flow: early returns, nesting ≤ 3, complex conditions extracted into named variables. No nested ternaries or clever one-liners. Every `if`, `else` and loop body is a braced block on its own lines, even a lone `return`.
 - Blank lines: one after a multi-line statement, after a group of declarations, and before a `return` that is not alone in its block. `npm run lint:fix` applies them; Prettier sorts the imports.

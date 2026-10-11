@@ -42,14 +42,23 @@ describe("Runtime", () => {
     expect(result.stdout).not.toContain("noise");
   });
 
-  it("keeps the output of a captured run that exited non-zero", async () => {
+  it("fails a captured run on a non-zero exit, even one that printed something", async () => {
     const runtime = new Runtime();
-    // What `docker inspect` does when one id of several is gone: usable output, failing code.
-    const script = "console.log('partial'); process.exit(1)";
+    const script = "console.log('Creating service web'); console.error('network conflict'); process.exit(1)";
 
-    await expect(runtime.run("node", ["-e", script], { capture: true })).resolves.toMatchObject({
+    await expect(runtime.run("node", ["-e", script], { capture: true })).rejects.toMatchObject({
       code: 1,
-      stdout: "partial\n",
+      message: "network conflict",
+    });
+  });
+
+  it("reports the end of stderr when a piped run fails", async () => {
+    const runtime = new Runtime();
+    const output = new PassThrough();
+    const script = "console.log('Creating service web'); console.error('this node is not a manager'); process.exit(1)";
+
+    await expect(runtime.run("node", ["-e", script], { pipe: output })).rejects.toMatchObject({
+      message: "this node is not a manager",
     });
   });
 
@@ -61,6 +70,28 @@ describe("Runtime", () => {
       code: 1,
       message: "daemon down",
     });
+  });
+
+  it("keeps only the end of a long stderr, where the cause is", async () => {
+    const runtime = new Runtime();
+
+    // `exitCode`, not `exit()`: exiting at once would cut the piped stderr short.
+    const script =
+      "for (let i = 0; i < 5000; i++) console.error('progress ' + i); console.error('disk full'); process.exitCode = 1";
+
+    const failure = await runtime.run("node", ["-e", script], { capture: true }).catch((error: Error) => error);
+
+    expect(failure).toMatchObject({ message: expect.stringMatching(/progress 4999\ndisk full$/) });
+    expect((failure as Error).message.split("\n")).toHaveLength(20);
+  });
+
+  it("sets the given variables over its own environment", async () => {
+    const runtime = new Runtime();
+    const script = "console.log(process.env.HANGAR_TEST_VAR, Boolean(process.env.PATH))";
+
+    const { stdout } = await runtime.run("node", ["-e", script], { capture: true, env: { HANGAR_TEST_VAR: "set" } });
+
+    expect(stdout.trim()).toBe("set true");
   });
 
   it("kills the child when the signal is aborted", async () => {

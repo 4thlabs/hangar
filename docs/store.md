@@ -31,8 +31,8 @@ its folder name: lowercase letters, digits, `.`, `_` and `-`, starting with a le
 Any valid Compose file works. Hangar reads three things from it:
 
 ```yaml
-name: Jellyfin # the display name; defaults to the capitalized folder name
 x-hangar:
+  name: Jellyfin # the display name; defaults to the top-level `name`, then the capitalized folder name
   icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/jellyfin.webp
 services:
   jellyfin: # the main service: the one named after the app, else the first one
@@ -45,8 +45,9 @@ services:
       - traefik.enable=true # served at https://jellyfin.<DOMAIN>
 ```
 
-- **`name`** is only a label. The Compose project is always the app id (`-p <app>`), so the
-  containers keep matching the installed app whatever the display name says.
+- **`x-hangar.name`** is only a label. The Compose project is always the app id (`-p <app>`), so the
+  containers keep matching the installed app whatever the display name says. A top-level `name` still
+  works, but Swarm rejects it: an app with a `compose.swarm.yml` must use `x-hangar.name`.
 - **`x-hangar.icon`** is the image shown in the store and on the Apps page.
   [selfh.st/icons](https://selfh.st/icons) has one for most self-hosted software.
 - **`container_name`** of the main service is what Hangar links to (`https://<container>.<DOMAIN>`)
@@ -58,6 +59,54 @@ defined there.
 You can also create and edit apps from the browser: **Store → Nouvelle app** starts from a template,
 and each app has an edit page. A file is written only once `docker compose config` accepts it.
 Edits land in your local clone; commit and push them from there if you want them in the remote.
+
+## An app's `compose.swarm.yml`
+
+An app that can also run in a Docker Swarm ships a `compose.swarm.yml` next to its `compose.yml`. It
+only holds what Swarm adds or changes; Swarm merges it over `compose.yml` itself:
+
+```bash
+docker stack deploy -c compose.yml -c compose.swarm.yml miniflux
+```
+
+```yaml
+# store/miniflux/compose.swarm.yml
+services:
+  miniflux:
+    deploy:
+      replicas: 2
+      labels: # Traefik's Swarm provider reads these, not the container labels
+        - traefik.enable=true
+        - traefik.http.routers.miniflux.rule=Host(`miniflux.${DOMAIN}`)
+        - traefik.http.services.miniflux.loadbalancer.server.port=8080
+  db:
+    deploy:
+      placement:
+        constraints: [node.hostname == nas] # its data lives on the nas
+networks:
+  proxy:
+    name: hangar-proxy-overlay # an overlay network instead of compose's bridge
+    external: true
+```
+
+What Swarm accepts in the `compose.yml` it merges over:
+
+- **No top-level `name`**: move the display name to `x-hangar.name`.
+- **`depends_on` as a list** (`depends_on: [db]`): the long form with `condition: service_healthy` is
+  rejected. Swarm ignores the order anyway, so the app must retry its connection.
+- `container_name` and `restart` are ignored; leave them for compose.
+- A bind mount (`${APP_DATA_DIR}/miniflux/db`) must exist on whichever node runs the task: pin the
+  service with a placement constraint, mount the same share on every node, or use an `nfs` volume.
+
+The store card of such an app shows a **Swarm** badge and a **Déployer sur le swarm** button, which
+links the app and deploys its stack. Compose and Swarm are independent: the app can run with compose
+on Hangar's node and in the swarm at the same time, and deploying one never touches the other. Mind
+the volumes both copies would share. Uninstalling the app takes both down. Deploying by hand works as well, from the CLI (`swarm miniflux deploy`) or with
+`docker stack deploy`; the stack then shows on the Cluster page all the same. Hangar names the stack
+after the app.
+
+Saving either file in the editor runs `docker stack config -c compose.yml -c compose.swarm.yml` with
+`.env.global` first, which works on any node, in a swarm or not.
 
 ## The global environment
 

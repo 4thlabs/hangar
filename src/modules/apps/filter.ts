@@ -7,6 +7,7 @@ import {
   type AppUpdate,
 } from "#modules/apps/search-codec.ts";
 import { searchByName } from "#modules/common/search.ts";
+import { TableSort } from "#modules/common/table-sort.ts";
 
 /** What each sortable column compares on. Status sorts by severity, i.e. `APP_STATUSES` order. */
 const sortValue: Record<AppSortColumn, (project: ComposeProjectSummary) => number | string> = {
@@ -18,21 +19,6 @@ const sortValue: Record<AppSortColumn, (project: ComposeProjectSummary) => numbe
   containers: project => project.containerIds.length,
   unhealthy: project => project.unhealthyCount,
 };
-
-/**
- * Orders by the chosen column, always breaking ties on the name: without a tie-break, apps
- * with equal counts could swap places on every reload.
- */
-function sortProjects(projects: ComposeProjectSummary[], { column, descending }: NonNullable<AppsSort>) {
-  const value = sortValue[column];
-
-  return [...projects].sort((left, right) => {
-    const [a, b] = [value(left), value(right)];
-    const order = typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b));
-
-    return (descending ? -order : order) || left.name.localeCompare(right.name);
-  });
-}
 
 /** Which side of the update filter a project falls on; not checked yet counts as up to date, like the row badge. */
 export const updateState = (project: ComposeProjectSummary): AppUpdate =>
@@ -58,14 +44,10 @@ export function filterProjects(
   const found = searchByName(q, fresh);
 
   // An explicit column wins over relevance: the user asked for that order.
-  return sort ? sortProjects(found, sort) : found;
+  return sort ? TableSort.apply(found, sort, sortValue[sort.column]) : found;
 }
 
-/** The sort a header click moves to: ascending, descending, then back to unsorted (relevance while searching). */
+/** The sort a header click moves to; see `TableSort.next`. */
 export function nextSort(current: AppsSort, column: AppSortColumn): AppsSort {
-  if (current?.column !== column) {
-    return { column, descending: false };
-  }
-
-  return current.descending ? null : { column, descending: true };
+  return TableSort.next(current, column);
 }

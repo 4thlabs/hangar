@@ -19,6 +19,15 @@ export const dockerMock = {
   info: vi.fn(),
   df: vi.fn(),
   getEvents: vi.fn(),
+  listNodes: vi.fn(),
+  listServices: vi.fn(),
+  listTasks: vi.fn(),
+  updateNode: vi.fn(),
+  removeNode: vi.fn(),
+  swarmInit: vi.fn(),
+  swarmJoin: vi.fn(),
+  swarmInspect: vi.fn(),
+  swarmUpdate: vi.fn(),
 };
 
 /**
@@ -40,6 +49,17 @@ export const fakeDockerode = () =>
     info: dockerMock.info,
     df: dockerMock.df,
     getEvents: dockerMock.getEvents,
+    listNodes: dockerMock.listNodes,
+    listServices: dockerMock.listServices,
+    listTasks: dockerMock.listTasks,
+    getNode: (id: string) => ({
+      update: (options: unknown) => dockerMock.updateNode(id, options),
+      remove: (options: unknown) => dockerMock.removeNode(id, options),
+    }),
+    swarmInit: dockerMock.swarmInit,
+    swarmJoin: dockerMock.swarmJoin,
+    swarmInspect: dockerMock.swarmInspect,
+    swarmUpdate: dockerMock.swarmUpdate,
     modem: { demuxStream: dockerMock.demuxStream },
   }) as unknown as Dockerode;
 

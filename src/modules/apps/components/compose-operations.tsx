@@ -4,16 +4,7 @@ import { ArrowUpFromLineIcon, PowerIcon, RefreshCwIcon, Trash2Icon } from "lucid
 import { actionLabel, type AppOperation } from "#modules/apps/actions/app-operation.ts";
 import { ComposeOutputSheet } from "#modules/apps/components/compose-output-sheet.tsx";
 import type { useComposeRun } from "#modules/apps/hooks/use-compose-run.ts";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "#modules/common/ui/alert-dialog.tsx";
+import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 
@@ -97,23 +88,14 @@ export function ComposeConfirmDialog({
   onCancel,
 }: ComposeConfirmDialogProps) {
   return (
-    <AlertDialog open={operation !== null} onOpenChange={open => !open && onCancel()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Annuler</AlertDialogCancel>
-          <AlertDialogAction
-            variant={operation === "down" ? "destructive" : "default"}
-            onClick={() => operation && onConfirm(operation)}
-          >
-            Confirmer
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      open={operation !== null}
+      title={title}
+      description={description}
+      destructive={operation === "down"}
+      onConfirm={() => operation && onConfirm(operation)}
+      onCancel={onCancel}
+    />
   );
 }
 

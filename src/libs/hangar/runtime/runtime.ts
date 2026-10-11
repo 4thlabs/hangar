@@ -13,13 +13,12 @@ type RuntimeResult = {
 export type RunOptions = {
   /** When set, the child's stdout and stderr are piped here instead of being inherited. */
   pipe?: Writable;
-  /**
-   * Buffers stdout (without stderr, so it stays parseable) onto the result. A captured run resolves
-   * on a non-zero exit as long as it printed something: a partial failure can still be usable.
-   */
+  /** Buffers stdout (without stderr, so it stays parseable) onto the result. */
   capture?: boolean;
   /** Kills the child when aborted. The run then rejects, like any other killed child. */
   signal?: AbortSignal;
+  /** Variables set for the child on top of this process's own, which it otherwise inherits as they are. */
+  env?: Record<string, string>;
 };
 
 export interface CommandRunner {
@@ -28,6 +27,12 @@ export interface CommandRunner {
 
 /** Runs child commands, and stops them on Ctrl-C when {@link Runtime.signals} is installed. */
 export class Runtime implements CommandRunner {
+  /** How much of a failed run's stderr becomes its error message: the end, where the cause is. */
+  private static readonly FailureStderrLines = 20;
+
+  /** How much of stderr a run keeps while it goes, enough for {@link FailureStderrLines}: a pull's progress is long. */
+  private static readonly StderrTailChars = 8_000;
+
   private interrupted: boolean = false;
 
   private children: Set<ChildProcess> = new Set();
@@ -75,11 +80,12 @@ export class Runtime implements CommandRunner {
         return reject(new HangarRuntimeError(130, "Process interrupted."));
       }
 
-      const { pipe, capture, signal } = options;
+      const { pipe, capture, signal, env } = options;
 
       const child = spawn(command, args, {
         stdio: pipe || capture ? ["ignore", "pipe", "pipe"] : ["inherit", "inherit", "inherit"],
         signal,
+        env: env && { ...process.env, ...env },
       });
 
       // `end: false`: several children can share one stream (a multi-stack compose),
@@ -94,8 +100,13 @@ export class Runtime implements CommandRunner {
 
       if (capture) {
         child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
-        child.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
       }
+
+      // Only its end is kept, whenever it is not inherited: a failure reports it.
+      child.stderr?.on(
+        "data",
+        (chunk: Buffer) => (stderr = (stderr + chunk.toString()).slice(-Runtime.StderrTailChars)),
+      );
 
       this.children.add(child);
 
@@ -113,17 +124,15 @@ export class Runtime implements CommandRunner {
           return reject(new HangarRuntimeError(130, "Process interrupted."));
         }
 
-        // stderr only surfaces when a captured run printed nothing.
-        const succeeded = code === 0;
-        const capturedOutput = capture && stdout.trim() !== "";
-
-        if (succeeded || capturedOutput) {
-          return resolve({ code: code ?? 0, stdout });
+        // Any non-zero exit fails, whatever was printed: `docker stack deploy` prints its progress
+        // before a failure, which must not pass for a success.
+        if (code === 0) {
+          return resolve({ code, stdout });
         }
 
-        const message = (capture && stderr.trim()) || "Process exited.";
+        const tail = stderr.trim().split("\n").slice(-Runtime.FailureStderrLines).join("\n");
 
-        return reject(new HangarRuntimeError(code ?? 1, message));
+        return reject(new HangarRuntimeError(code ?? 1, tail || "Process exited."));
       });
     });
   }

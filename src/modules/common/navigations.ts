@@ -1,6 +1,6 @@
-import { BoxesIcon, LayoutDashboardIcon, SettingsIcon, StoreIcon, type LucideIcon } from "lucide-react";
+import { BoxesIcon, LayoutDashboardIcon, NetworkIcon, SettingsIcon, StoreIcon, type LucideIcon } from "lucide-react";
 
-type NavigationPath = "/" | "/apps" | "/store" | "/settings";
+type NavigationPath = "/" | "/apps" | "/cluster" | "/store" | "/settings";
 
 type NavigationItem = {
   label: string;
@@ -20,6 +20,7 @@ export const navigations: readonly NavigationCategory[] = [
     items: [
       { label: "Dashboard", href: "/", icon: LayoutDashboardIcon },
       { label: "Apps", href: "/apps", icon: BoxesIcon },
+      { label: "Cluster", href: "/cluster", icon: NetworkIcon },
       { label: "Store", href: "/store", icon: StoreIcon },
     ],
   },

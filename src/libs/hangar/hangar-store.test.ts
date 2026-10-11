@@ -202,8 +202,22 @@ describe("HangarStore", () => {
 
     expect([...store.apps]).toEqual(
       expect.arrayContaining([
-        { id: "alpha-app", name: "Alpha App", icon: "alpha.svg", installed: true, containerName: "alpha-app" },
-        { id: "beta-app", name: "Beta-app", icon: "beta.svg", installed: false, containerName: "beta-app" },
+        {
+          id: "alpha-app",
+          name: "Alpha App",
+          icon: "alpha.svg",
+          installed: true,
+          swarmReady: false,
+          containerName: "alpha-app",
+        },
+        {
+          id: "beta-app",
+          name: "Beta-app",
+          icon: "beta.svg",
+          installed: false,
+          swarmReady: false,
+          containerName: "beta-app",
+        },
       ]),
     );
 
@@ -263,12 +277,20 @@ describe("HangarStore", () => {
 
     expect([...store.apps]).toEqual(
       expect.arrayContaining([
-        { id: "good-app", name: "Good", icon: "good.svg", installed: false, containerName: "good-app" },
+        {
+          id: "good-app",
+          name: "Good",
+          icon: "good.svg",
+          installed: false,
+          swarmReady: false,
+          containerName: "good-app",
+        },
         {
           id: "no-metadata-app",
           name: "No Metadata",
           icon: undefined,
           installed: false,
+          swarmReady: false,
           containerName: "no-metadata-app",
         },
       ]),
@@ -280,18 +302,79 @@ describe("HangarStore", () => {
   it("clears stale app metadata when the store is absent", async () => {
     const store = await createStore(dataDir, createRuntime());
 
-    store.apps.add({ id: "old", name: "Old", icon: "old.svg", installed: true, containerName: "old" });
+    store.apps.add({
+      id: "old",
+      name: "Old",
+      icon: "old.svg",
+      installed: true,
+      swarmReady: false,
+      containerName: "old",
+    });
 
     await store.refresh();
 
     expect(store.apps).toHaveLength(0);
   });
 
+  it("names an app after x-hangar.name, then its top-level name, then its folder", async () => {
+    const store = await createStore(dataDir, createRuntime());
+    const app = (id: string) => path.join(store.storePath, "store", id);
+
+    await mkdir(path.join(store.storePath, ".git"), { recursive: true });
+    await mkdir(store.installedPath, { recursive: true });
+    await Promise.all(["both-app", "top-app", "plain-app"].map(id => mkdir(app(id), { recursive: true })));
+    await Promise.all([
+      writeFile(path.join(app("both-app"), "compose.yml"), "name: Top\nx-hangar:\n  name: Both\nservices: {}\n"),
+      writeFile(path.join(app("top-app"), "compose.yml"), "name: Top\nservices: {}\n"),
+      writeFile(path.join(app("plain-app"), "compose.yml"), "services: {}\n"),
+    ]);
+
+    await store.refresh();
+
+    expect(store.app("both-app")?.name).toBe("Both");
+    expect(store.app("top-app")?.name).toBe("Top");
+    expect(store.app("plain-app")?.name).toBe("Plain-app");
+  });
+
+  it("tells which apps can run in the swarm, and which do", async () => {
+    const store = await createStore(dataDir, createRuntime());
+    const app = (id: string) => path.join(store.storePath, "store", id);
+
+    await mkdir(path.join(store.storePath, ".git"), { recursive: true });
+    await mkdir(store.installedPath, { recursive: true });
+    await Promise.all(["alpha-app", "beta-app"].map(id => mkdir(app(id), { recursive: true })));
+    await Promise.all([
+      writeFile(path.join(app("alpha-app"), "compose.yml"), "services: {}\n"),
+      writeFile(path.join(app("alpha-app"), "compose.swarm.yml"), "services: {}\n"),
+      writeFile(path.join(app("beta-app"), "compose.yml"), "services: {}\n"),
+    ]);
+
+    await store.refresh();
+
+    expect(store.app("alpha-app")).toMatchObject({ swarmReady: true });
+    expect(store.app("beta-app")).toMatchObject({ swarmReady: false });
+  });
+
   it("returns only installed app ids", async () => {
     const store = await createStore(dataDir, createRuntime());
 
-    store.apps.add({ id: "a", name: "A", icon: undefined, installed: true, containerName: "a" });
-    store.apps.add({ id: "b", name: "B", icon: undefined, installed: false, containerName: "b" });
+    store.apps.add({
+      id: "a",
+      name: "A",
+      icon: undefined,
+      installed: true,
+      swarmReady: false,
+      containerName: "a",
+    });
+
+    store.apps.add({
+      id: "b",
+      name: "B",
+      icon: undefined,
+      installed: false,
+      swarmReady: false,
+      containerName: "b",
+    });
 
     expect(store.installedProjectIds()).toEqual(new Set(["a"]));
   });
@@ -299,7 +382,14 @@ describe("HangarStore", () => {
   it("looks up a store app by id", async () => {
     const store = await createStore(dataDir, createRuntime());
 
-    store.apps.add({ id: "a", name: "A", icon: undefined, installed: true, containerName: "a" });
+    store.apps.add({
+      id: "a",
+      name: "A",
+      icon: undefined,
+      installed: true,
+      swarmReady: false,
+      containerName: "a",
+    });
 
     expect(store.app("a")).toMatchObject({ id: "a" });
     expect(store.app("missing")).toBeUndefined();
@@ -432,6 +522,49 @@ describe("HangarStore", () => {
       expect([first, second]).toContain(await files.read("compose.yml"));
       expect(await pendingFiles(folder)).toEqual([LEFTOVER_PENDING]);
       expect(await files.list()).toEqual(["compose.yml"]);
+    });
+
+    it("writes compose.swarm.yml once docker stack config accepts it merged over compose.yml", async () => {
+      const { store, runtime, folder } = await withApp();
+      const files = await store.files("delta-app");
+
+      runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "services.db.depends_on must be a list"));
+
+      await expect(files.write("compose.swarm.yml", "services: {db: {}}\n")).rejects.toThrow(/must be a list/);
+      await expect(files.read("compose.swarm.yml")).rejects.toThrow(/no file/);
+
+      await files.write("compose.swarm.yml", "services: {}\n");
+
+      expect(await files.read("compose.swarm.yml")).toBe("services: {}\n");
+      expect(runtime.run).toHaveBeenLastCalledWith(
+        "docker",
+        ["stack", "config", "-c", path.join(folder, "compose.yml"), "-c", expect.stringMatching(/\.pending\.yml$/)],
+        { capture: true, env: {} },
+      );
+
+      expect(store.app("delta-app")).toBeUndefined();
+    });
+
+    it("checks the stack again when compose.yml changes under a compose.swarm.yml", async () => {
+      const { store, runtime, folder } = await withApp();
+      const files = await store.files("delta-app");
+
+      await writeFile(path.join(folder, "compose.swarm.yml"), "services: {}\n");
+      runtime.run.mockResolvedValueOnce({ code: 0, stdout: "" });
+      runtime.run.mockRejectedValueOnce(new HangarRuntimeError(1, "Additional property name is not allowed"));
+
+      await expect(files.write("compose.yml", "name: Delta\nservices: {}\n")).rejects.toThrow(/name is not allowed/);
+      expect(await files.read("compose.yml")).toBe(COMPOSE);
+    });
+
+    it("does not check the stack while compose.swarm.yml is still empty", async () => {
+      const { store, runtime, folder } = await withApp();
+      const files = await store.files("delta-app");
+
+      await writeFile(path.join(folder, "compose.swarm.yml"), "");
+      await files.write("compose.yml", "services: {}\n");
+
+      expect(runtime.run).toHaveBeenCalledTimes(1);
     });
 
     it("refuses the files of a shared file or of a missing app", async () => {
@@ -577,5 +710,166 @@ describe("HangarStore.compose", () => {
     failing.mockClear();
     await expect(store.compose("essentials", ["logs"])).rejects.toMatchObject({ code: 2 });
     expect(failing).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("HangarStore in the swarm", () => {
+  let dataDir: string;
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(path.join(tmpdir(), "hangar-stack-"));
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  /** Installed apps; the swarm-ready ones get a compose.swarm.yml. */
+  const withApps = async ({ ready }: { ready: string[] }) => {
+    const runtime = createRuntime();
+    const store = await createStore(dataDir, runtime);
+
+    await writeFile(path.join(store.storePath, "config", "hangar.yml"), CATEGORIES);
+    await writeFile(path.join(store.dataPath, ".env.global"), "DOMAIN=home.lan\n");
+    await store.config.load();
+    await Promise.all(
+      ["alpha-app", "beta-app", "gamma-app", "solo-app"].map(async app => {
+        await mkdir(path.join(store.installedPath, app), { recursive: true });
+        await writeFile(path.join(store.installedPath, app, "compose.yml"), "services: {}\n");
+
+        if (ready.includes(app)) {
+          await writeFile(path.join(store.installedPath, app, "compose.swarm.yml"), "services: {}\n");
+        }
+      }),
+    );
+
+    return { store, runtime };
+  };
+
+  /** The `-p` project each `docker compose` call targeted. */
+  const projects = (runtime: ReturnType<typeof createRuntime>) =>
+    runtime.run.mock.calls.map(([, args]) => args[args.indexOf("-p") + 1]);
+
+  it("runs a swarm-ready app with compose too: an app may run both ways", async () => {
+    const { store, runtime } = await withApps({ ready: ["beta-app"] });
+
+    await store.compose("essentials", ["up", "-d"]);
+    await store.compose("beta-app", ["restart"]);
+
+    expect(projects(runtime)).toEqual(["alpha-app", "beta-app", "beta-app"]);
+  });
+
+  /** The `docker` calls made, as `compose down` or `stack deploy`. */
+  const dockerCalls = (runtime: ReturnType<typeof createRuntime>) =>
+    runtime.run.mock.calls.map(([, args]) => (args[0] === "stack" ? `stack ${args[1]}` : `compose ${args.at(-1)}`));
+
+  it("deploys an app's stack, leaving its compose project and hangar.yml alone", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"] });
+    const config = path.join(store.storePath, "config", "hangar.yml");
+    const before = await readFile(config, "utf8");
+
+    await store.deployToSwarm("alpha-app");
+
+    expect(dockerCalls(runtime)).toEqual(["stack deploy"]);
+    expect(await readFile(config, "utf8")).toBe(before);
+  });
+
+  it("takes an empty compose.swarm.yml for none: the app cannot run in the swarm yet", async () => {
+    const { store, runtime } = await withApps({ ready: [] });
+
+    await writeFile(path.join(store.installedPath, "alpha-app", "compose.swarm.yml"), "");
+
+    await expect(store.deployToSwarm("alpha-app")).rejects.toThrow("alpha-app is not a swarm app");
+    expect(runtime.run).not.toHaveBeenCalled();
+  });
+
+  it("removes a stack on uninstall when it can, and says what is left when it cannot", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"] });
+
+    await expect(store.removeStackIfPossible("alpha-app")).resolves.toBeNull();
+
+    runtime.run.mockRejectedValue(new HangarRuntimeError(1, "this node is not a swarm manager"));
+
+    await expect(store.removeStackIfPossible("alpha-app")).resolves.toBe("this node is not a swarm manager");
+  });
+
+  /** The stack each call named: its last argument, which `deploy`, `rm` and `ps` end with. */
+  const stacks = (runtime: ReturnType<typeof createRuntime>) => runtime.run.mock.calls.map(([, args]) => args.at(-1));
+
+  it("deploys an app from its two files, with .env.global in the environment", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"] });
+    const folder = path.join(store.installedPath, "alpha-app");
+
+    await store.stack("alpha-app", ["deploy", "--prune"]);
+
+    expect(runtime.run).toHaveBeenCalledWith(
+      "docker",
+      [
+        "stack",
+        "deploy",
+        "-c",
+        path.join(folder, "compose.yml"),
+        "-c",
+        path.join(folder, "compose.swarm.yml"),
+        "--prune",
+        "alpha-app",
+      ],
+      { env: { DOMAIN: "home.lan" } },
+    );
+  });
+
+  it("maps each verb to its docker stack call", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"] });
+    const folder = path.join(store.installedPath, "alpha-app");
+    const files = ["-c", path.join(folder, "compose.yml"), "-c", path.join(folder, "compose.swarm.yml")];
+
+    for (const verb of [["config"], ["rm"], ["ps", "--no-trunc"], ["services"]]) {
+      await store.stack("alpha-app", verb);
+    }
+
+    expect(runtime.run.mock.calls.map(([, args]) => args)).toEqual([
+      ["stack", "config", ...files],
+      ["stack", "rm", "alpha-app"],
+      ["stack", "ps", "--no-trunc", "alpha-app"],
+      ["stack", "services", "alpha-app"],
+    ]);
+  });
+
+  it("deploys the category apps that have a compose.swarm.yml, in order, and removes them backwards", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app", "gamma-app", "solo-app"] });
+
+    await store.stack("deploy", []);
+
+    // `solo-app` is in no category: like `store up`, the whole store means its categories.
+    expect(stacks(runtime)).toEqual(["alpha-app", "gamma-app"]);
+
+    runtime.run.mockClear();
+    await store.stack("rm", []);
+
+    expect(stacks(runtime)).toEqual(["gamma-app", "alpha-app"]);
+  });
+
+  it("restricts a category to its apps that have a compose.swarm.yml", async () => {
+    const { store, runtime } = await withApps({ ready: ["beta-app"] });
+
+    await store.stack("essentials", ["deploy"]);
+
+    expect(stacks(runtime)).toEqual(["beta-app"]);
+  });
+
+  it("manages an app named directly, as a stack deployed by hand", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"] });
+
+    await store.stack("alpha-app", ["rm"]);
+
+    expect(stacks(runtime)).toEqual(["alpha-app"]);
+  });
+
+  it("refuses an app without compose.swarm.yml, and an unknown verb", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"] });
+
+    await expect(store.stack("beta-app", ["deploy"])).rejects.toThrow("beta-app is not a swarm app");
+    await expect(store.stack("alpha-app", ["scale"])).rejects.toThrow("Unknown swarm command: scale");
+    expect(runtime.run).not.toHaveBeenCalled();
   });
 });

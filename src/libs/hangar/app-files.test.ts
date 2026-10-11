@@ -16,12 +16,14 @@ describe("AppFiles", () => {
 
   /** Stands in for `docker compose config`: writes what it is given, as an accepted save does. */
   const writeCompose = vi.fn<ComposeWriter>(async (_folder, target, source) => writeFile(target, source));
+  const writeSwarm = vi.fn<ComposeWriter>(async (_folder, target, source) => writeFile(target, source));
 
   /** An app folder with a compose file, an env file, a nested config and the files the listing skips. */
   beforeEach(async () => {
     dataDir = await mkdtemp(path.join(tmpdir(), "hangar-app-files-"));
     folder = path.join(dataDir, "delta-app");
     writeCompose.mockClear();
+    writeSwarm.mockClear();
 
     await mkdir(path.join(folder, "config"), { recursive: true });
     await mkdir(path.join(folder, ".cache"), { recursive: true });
@@ -40,7 +42,17 @@ describe("AppFiles", () => {
     await rm(dataDir, { recursive: true, force: true });
   });
 
-  const createFiles = () => new AppFiles("delta-app", folder, writeCompose);
+  const createFiles = () => new AppFiles("delta-app", folder, { compose: writeCompose, swarm: writeSwarm });
+
+  it("hands compose.swarm.yml to its own writer, whatever its case", async () => {
+    const result = await createFiles().write("Compose.Swarm.yml", "services: {}\n");
+
+    expect(result).toEqual({ composeChanged: true });
+    const realFolder = await realpath(folder);
+
+    expect(writeSwarm).toHaveBeenCalledWith(realFolder, path.join(realFolder, "Compose.Swarm.yml"), "services: {}\n");
+    expect(writeCompose).not.toHaveBeenCalled();
+  });
 
   it("lists the text files of an app, nested ones by their relative path, without hidden or binary files", async () => {
     await symlink(path.join(folder, "delta.env"), path.join(folder, "linked.env"));

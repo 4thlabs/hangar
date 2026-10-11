@@ -5,13 +5,13 @@ import { logger } from "#libs/logs";
 import { ComposeProjects } from "./compose.ts";
 
 /**
- * What a daemon event can make stale: the Compose containers, the local image list, or the
- * host-wide overview. Internal to the library: callers ask `Docker.settle` instead.
+ * What a daemon event can make stale: the Compose containers, the local image list, the
+ * host-wide overview, or the swarm. Internal to the library: callers ask `Docker.settle` instead.
  */
-export type DockerChange = "containers" | "images" | "overview";
+export type DockerChange = "containers" | "images" | "overview" | "swarm";
 
 /** Every {@link DockerChange}, for a (re)connection that cannot tell which one happened. */
-const DockerChanges: readonly DockerChange[] = ["containers", "images", "overview"];
+const DockerChanges: readonly DockerChange[] = ["containers", "images", "overview", "swarm"];
 
 /** The fields of a daemon event this class reads; the client hands them back untyped. */
 type DockerEvent = {
@@ -34,7 +34,7 @@ export class DockerEvents {
    * `health_status` is matched by prefix on the daemon's side, so it covers `health_status: healthy`.
    */
   private static readonly Filters = {
-    type: ["container" as const, "image" as const, "volume" as const],
+    type: ["container" as const, "image" as const, "volume" as const, "node" as const, "service" as const],
     event: [
       // Containers
       "create",
@@ -58,6 +58,8 @@ export class DockerEvents {
       "load",
       // Containers, images and volumes
       "prune",
+      // Nodes and services; `create` and `update` are listed with the containers
+      "remove",
     ],
   };
 
@@ -69,7 +71,11 @@ export class DockerEvents {
     containers: 250,
     images: 250,
     overview: 2_000,
+    swarm: 250,
   };
+
+  /** The label the daemon puts on the container of a Swarm task. */
+  private static readonly SwarmTaskLabel = "com.docker.swarm.task.id";
 
   /** The first pause before reconnecting, doubled on every failure up to {@link MaxRetryDelayMs}. */
   private static readonly FirstRetryDelayMs = 1_000;
@@ -101,15 +107,20 @@ export class DockerEvents {
    * What one event made stale.
    *
    * Every container counts for the overview, which reports the whole host; only a Compose one
-   * counts for the containers, which never hold the others.
+   * counts for the containers, which never hold the others. A Swarm task's container counts for the
+   * swarm: Docker emits no event for the task itself, so this is the only sign of one on this node.
    */
   static changes(event: DockerEvent): DockerChange[] {
     switch (event.Type) {
       case "container": {
-        const isComposeContainer = Boolean(event.Actor?.Attributes?.[ComposeProjects.Label.project]);
+        const attributes = event.Actor?.Attributes ?? {};
 
-        if (isComposeContainer) {
+        if (attributes[ComposeProjects.Label.project]) {
           return ["containers", "overview"];
+        }
+
+        if (attributes[DockerEvents.SwarmTaskLabel]) {
+          return ["swarm", "overview"];
         }
 
         return ["overview"];
@@ -119,6 +130,9 @@ export class DockerEvents {
         return ["images", "overview"];
       case "volume":
         return ["overview"];
+      case "node":
+      case "service":
+        return ["swarm"];
       default:
         return [];
     }

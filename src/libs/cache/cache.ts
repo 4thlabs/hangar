@@ -10,6 +10,11 @@ export type CachePolicy = {
    * wait for the reload. This is how long a broken source stays hidden. Defaults to 0.
    */
   maxStale?: number | undefined;
+  /**
+   * Whether {@link Cache.keepWarm} reloads the value ahead of its TTL. Defaults to true; off for a value
+   * whose TTL is shorter than the warming tick, which could only reload it for nobody.
+   */
+  warm?: boolean | undefined;
 };
 
 /** One cached value. */
@@ -104,7 +109,9 @@ export class Cache {
 
       for (const [key, entry] of this.entries) {
         const goesStaleBeforeNextTick =
-          entry.loadedAt !== undefined && now + intervalMs >= entry.loadedAt + entry.policy.ttl;
+          entry.policy.warm !== false &&
+          entry.loadedAt !== undefined &&
+          now + intervalMs >= entry.loadedAt + entry.policy.ttl;
 
         if (goesStaleBeforeNextTick) {
           void this.reload(key, entry).catch(ignore);
