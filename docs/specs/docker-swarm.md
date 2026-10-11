@@ -110,7 +110,7 @@ services:
 
 networks:
   proxy:
-    name: hangar-proxy-overlay # Traefik's overlay network in the swarm
+    name: hangar-overlay-net # Traefik's overlay network in the swarm
     external: true
 ```
 
