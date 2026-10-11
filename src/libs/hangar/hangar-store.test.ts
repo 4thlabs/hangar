@@ -811,11 +811,21 @@ describe("HangarStore in the swarm", () => {
         path.join(folder, "compose.yml"),
         "-c",
         path.join(folder, "compose.swarm.yml"),
+        "--detach=false",
         "--prune",
         "alpha-app",
       ],
       { env: { DOMAIN: "home.lan" } },
     );
+  });
+
+  it("waits for the services on deploy, unless the caller detaches", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"] });
+
+    await store.stack("alpha-app", ["deploy", "--detach=true"]);
+
+    // docker takes the last occurrence of a flag: the caller's comes after Hangar's.
+    expect(runtime.run.mock.calls[0]?.[1].slice(-3)).toEqual(["--detach=false", "--detach=true", "alpha-app"]);
   });
 
   it("maps each verb to its docker stack call", async () => {

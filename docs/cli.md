@@ -70,13 +70,13 @@ project is always named after the stack, as the web app expects.
 The Swarm counterpart of `store`, for the apps that ship a `compose.swarm.yml` (see
 [the store](store.md#an-apps-composeswarmyml)). Run it against a manager. The verbs:
 
-| Verb            | Runs                                                                                    |
-| --------------- | --------------------------------------------------------------------------------------- |
-| `deploy [args]` | `docker stack deploy -c <app>/compose.yml -c <app>/compose.swarm.yml …args <app>`       |
-| `config`        | `docker stack config -c <app>/compose.yml -c <app>/compose.swarm.yml`, nothing deployed |
-| `rm`            | `docker stack rm <app>`                                                                 |
-| `ps [args]`     | `docker stack ps …args <app>`                                                           |
-| `services`      | `docker stack services <app>`                                                           |
+| Verb            | Runs                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| `deploy [args]` | `docker stack deploy -c <app>/compose.yml -c <app>/compose.swarm.yml --detach=false …args <app>` |
+| `config`        | `docker stack config -c <app>/compose.yml -c <app>/compose.swarm.yml`, nothing deployed          |
+| `rm`            | `docker stack rm <app>`                                                                          |
+| `ps [args]`     | `docker stack ps …args <app>`                                                                    |
+| `services`      | `docker stack services <app>`                                                                    |
 
 The target is one of:
 

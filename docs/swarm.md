@@ -229,6 +229,10 @@ Three ways, all naming the stack after the app id:
   app that has a `compose.swarm.yml`, in category order. See [the CLI](cli.md#swarm-target-verb-args).
 - **By hand**, with `docker stack deploy` and the commands above.
 
+Hangar's deploy waits for the services to run (`--detach=false`): it ends once every replica is up, so
+pulls on every node make it take a while. From the CLI, `swarm miniflux deploy --detach=true` returns as
+soon as the services are updated.
+
 The stack then shows on the Cluster page. Uninstalling the app from the store takes down both its
 compose project and its stack.
 
