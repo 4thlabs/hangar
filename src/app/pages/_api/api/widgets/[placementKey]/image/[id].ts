@@ -11,7 +11,7 @@ export const GET = apiRoute<ApiContext<"/api/widgets/[placementKey]/image/[id]">
   async (_request, { params }) => {
     const image = await widgetImages.fetch(params.placementKey, params.id);
 
-    // No such placement, a widget that relays nothing, or an id no service would issue.
+    // No such placement, a widget that relays nothing, an id no service would issue, or an image the service lacks.
     if (!image) {
       return apiError("Aucune image à relayer pour ce widget.", 404);
     }

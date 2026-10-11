@@ -44,18 +44,19 @@ to 15 minutes.
 
 ## Available widgets
 
-| Type                                            | Shows                                           | Extra options                |
-| ----------------------------------------------- | ----------------------------------------------- | ---------------------------- |
-| [`clock`](#clock)                               | Date and time                                   | —                            |
-| [`docker-general-stats`](#docker-general-stats) | Containers, images, volumes and apps to update  | —                            |
-| [`arcane-general-stats`](#arcane-general-stats) | Arcane's view of the Docker host                | `url`, `link`, `ttl`         |
-| [`backrest-summary`](#backrest-summary)         | Backrest repositories and their last backups    | `url`, `link`, `ttl`         |
-| [`beszel-server-stats`](#beszel-server-stats)   | CPU, memory and disk of every Beszel system     | `url`, `link`, `ttl`         |
-| [`frigate-events`](#frigate-events)             | Latest camera events with thumbnails            | `url`, `link`, `ttl`         |
-| [`gluetun-vpn-status`](#gluetun-vpn-status)     | Whether the VPN tunnel is up and where it exits | `url`, `link`, `ttl`         |
-| [`jellyfin-latest`](#jellyfin-latest)           | Recently added movies, episodes and albums      | `user`, `url`, `link`, `ttl` |
-| [`miniflux-entries`](#miniflux-entries)         | Newest feed entries and the unread count        | `url`, `link`, `ttl`         |
-| [`github-releases`](#github-releases)           | Latest release of each repository               | `repositories`, `ttl`        |
+| Type                                            | Shows                                           | Extra options                         |
+| ----------------------------------------------- | ----------------------------------------------- | ------------------------------------- |
+| [`clock`](#clock)                               | Date and time                                   | —                                     |
+| [`docker-general-stats`](#docker-general-stats) | Containers, images, volumes and apps to update  | —                                     |
+| [`arcane-general-stats`](#arcane-general-stats) | Arcane's view of the Docker host                | `url`, `link`, `ttl`                  |
+| [`backrest-summary`](#backrest-summary)         | Backrest repositories and their last backups    | `url`, `link`, `ttl`                  |
+| [`beszel-server-stats`](#beszel-server-stats)   | CPU, memory and disk of every Beszel system     | `url`, `link`, `ttl`                  |
+| [`frigate-events`](#frigate-events)             | Latest camera events with thumbnails            | `url`, `link`, `ttl`                  |
+| [`gluetun-vpn-status`](#gluetun-vpn-status)     | Whether the VPN tunnel is up and where it exits | `url`, `link`, `ttl`                  |
+| [`jellyfin-latest`](#jellyfin-latest)           | Recently added movies, episodes and albums      | `user`, `url`, `link`, `ttl`          |
+| [`miniflux-entries`](#miniflux-entries)         | Newest feed entries and the unread count        | `url`, `link`, `ttl`                  |
+| [`tcg-collector-cards`](#tcg-collector-cards)   | Trading card prices and their recent curves     | `cards`, `days`, `url`, `link`, `ttl` |
+| [`github-releases`](#github-releases)           | Latest release of each repository               | `repositories`, `ttl`                 |
 
 ### `clock`
 
@@ -110,6 +111,35 @@ Key: a Jellyfin API key in `JELLYFIN_API_KEY`, sent as `Authorization: MediaBrow
 
 The eight newest [Miniflux](https://miniflux.app) entries, unread ones marked, and the unread count.
 Key: a Miniflux API token in `MINIFLUX_API_KEY`, sent as `X-Auth-Token`.
+
+### `tcg-collector-cards`
+
+Trading cards tracked by [tcg-collector](https://github.com/4thlabs/tcg-collector), one row each
+in the order they are listed: the card's image, its name and version (V.1, V.2…), its expansion,
+its current Cardmarket prices (trend, low, foil trend when it has one) and a curve of the trend
+over the last `days`, or of the low price for a card Cardmarket gives no trend. The name opens the
+card's sheet on the tcg-collector page. One list can mix games.
+
+```yaml
+- type: tcg-collector-cards
+  column: 2
+  url: http://tcg-collector-web:8080 # the web page's container, on Hangar's network
+  link: https://cards.example.com # the tcg-collector page, which the rows link to
+  days: 30 # optional, the period of the curves, 1 to 3650; default 30
+  cards:
+    - { game: 1, product: 910771 } # game: Cardmarket game id, 1 = Magic, 21 = Star Wars Unlimited
+    - { game: 21, product: 755143 } # product: the version followed, its Cardmarket idProduct
+```
+
+`cards` is **required**: one to twenty, each with its `game` and its `product`. Every version of
+a card has its own product id. To find it, open the card in the tcg-collector page: the id shows
+in its sheet, and in the address as `card=`. A product tcg-collector does not know gets a row
+saying so; the other cards still show.
+
+The widget reads the `tcg-collector` app, whose main container is the collector, which serves no
+HTTP: the page runs in the `tcg-collector-web` container. Set both `url` and `link`, or the card
+calls an address nothing answers. Images are relayed by Hangar.
+Key: none, tcg-collector's API takes no authentication.
 
 ### `github-releases`
 

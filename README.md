@@ -42,7 +42,7 @@ Compose files in a git repository you own — and adds what is tedious to do by 
 - **One global environment.** Hangar scans the installed stacks for the `${VARIABLES}` they
   reference and lists the ones still to fill in `.env.global`, which you edit from the UI.
 - **A dashboard.** Widgets for Docker, Arcane, Backrest, Beszel, Frigate, Gluetun, Jellyfin,
-  Miniflux and GitHub releases, laid out from the store's `hangar.yml`.
+  Miniflux, tcg-collector and GitHub releases, laid out from the store's `hangar.yml`.
 - **Notifications.** Available updates and the result of the nightly auto-update land in the
   notification menu.
 - **Edit in place.** The `compose.yml` of each app and the store's `hangar.yml` can be edited
