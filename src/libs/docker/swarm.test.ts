@@ -1,9 +1,11 @@
+import { PassThrough } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { dockerMock, fakeDockerode, givenSwarm, swarmNode, swarmService, swarmTask } = await import("./mock/index.ts");
 const { Cache } = await import("#libs/cache");
 const { DockerSwarm } = await import("./swarm.ts");
 const { SwarmDaemonError, SwarmRefusedError } = await import("./swarm-errors.ts");
+const { DockerNotFoundError } = await import("./compose.ts");
 
 const client = () => new DockerSwarm(fakeDockerode(), new Cache());
 
@@ -379,6 +381,7 @@ describe("DockerSwarm.stackTasks", () => {
       {
         id: "new",
         name: "miniflux_web.1",
+        service: "miniflux_web",
         node: "nas",
         desiredState: "running",
         state: "running",
@@ -388,6 +391,7 @@ describe("DockerSwarm.stackTasks", () => {
       {
         id: "old",
         name: "miniflux_web.1",
+        service: "miniflux_web",
         node: "pi-01",
         desiredState: "shutdown",
         state: "failed",
@@ -404,6 +408,105 @@ describe("DockerSwarm.stackTasks", () => {
     await client().stackTasks("whoami");
 
     expect(dockerMock.listTasks).toHaveBeenCalledWith({ filters: { service: ["lone"] } });
+  });
+});
+
+describe("DockerSwarm.openServiceLogs", () => {
+  const signal = new AbortController().signal;
+
+  /** A stack with one service, `miniflux_web`, its two replicas on two nodes. */
+  const givenStack = (tty = false) =>
+    givenSwarm({
+      nodes: [swarmNode({ id: "nas", hostname: "nas" }), swarmNode({ id: "pi", hostname: "pi-01", role: "worker" })],
+      services: [
+        swarmService({ id: "web", name: "miniflux_web", stack: "miniflux", tty }),
+        swarmService({ id: "other", name: "whoami_web", stack: "whoami" }),
+      ],
+      tasks: [
+        swarmTask({ id: "t1", service: "web", node: "nas" }),
+        swarmTask({ id: "t2", service: "web", node: "pi", slot: 2 }),
+      ],
+    });
+
+  /** A line as the daemon sends it with `details` and `timestamps`. */
+  const daemonLine = (task: string, message: string) =>
+    `2026-10-11T10:00:00.000Z com.docker.swarm.node.id=nas,com.docker.swarm.service.id=web,com.docker.swarm.task.id=${task} ${message}\n`;
+
+  /** Everything the stream gives until it ends. */
+  const readAll = async (stream: NodeJS.ReadableStream) => {
+    let text = "";
+
+    for await (const chunk of stream) {
+      text += chunk.toString();
+    }
+
+    return text;
+  };
+
+  beforeEach(() => {
+    dockerMock.serviceLogs.mockImplementation(() => Promise.resolve(new PassThrough()));
+    // Demuxing is the daemon's framing, not this module's logic: pass the bytes straight through.
+    dockerMock.demuxStream.mockImplementation((source: PassThrough, out: PassThrough) => source.pipe(out));
+  });
+
+  it("refuses a service of another stack, or one the stack does not have, without reading logs", async () => {
+    givenStack();
+
+    await expect(client().openServiceLogs("miniflux", "whoami_web", signal)).rejects.toBeInstanceOf(
+      DockerNotFoundError,
+    );
+
+    await expect(client().openServiceLogs("miniflux", "miniflux_db", signal)).rejects.toBeInstanceOf(
+      DockerNotFoundError,
+    );
+
+    expect(dockerMock.serviceLogs).not.toHaveBeenCalled();
+  });
+
+  it("follows the service from the tail, each line naming its task and node", async () => {
+    givenStack();
+    const source = new PassThrough();
+
+    dockerMock.serviceLogs.mockResolvedValue(source);
+
+    const stream = await client().openServiceLogs("miniflux", "miniflux_web", signal);
+
+    source.end(daemonLine("t1", "ready") + daemonLine("t2", "listening on :8080"));
+
+    await expect(readAll(stream)).resolves.toBe(
+      "2026-10-11T10:00:00.000Z miniflux_web.1@nas | ready\n" +
+        "2026-10-11T10:00:00.000Z miniflux_web.2@pi-01 | listening on :8080\n",
+    );
+
+    expect(dockerMock.serviceLogs).toHaveBeenCalledWith(
+      "web",
+      expect.objectContaining({ follow: true, stdout: true, stderr: true, tail: 200, timestamps: true, details: true }),
+    );
+  });
+
+  it("demuxes a service without a TTY and pipes a TTY one straight through", async () => {
+    givenStack();
+    await client().openServiceLogs("miniflux", "miniflux_web", signal);
+    expect(dockerMock.demuxStream).toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    givenStack(true);
+
+    await client().openServiceLogs("miniflux", "miniflux_web", signal);
+    expect(dockerMock.demuxStream).not.toHaveBeenCalled();
+  });
+
+  it("tears the log stream down when the request is aborted", async () => {
+    givenStack();
+    const source = new PassThrough();
+    const controller = new AbortController();
+
+    dockerMock.serviceLogs.mockResolvedValue(source);
+
+    await client().openServiceLogs("miniflux", "miniflux_web", controller.signal);
+    controller.abort();
+
+    expect(source.destroyed).toBe(true);
   });
 });
 

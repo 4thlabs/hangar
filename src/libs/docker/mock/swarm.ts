@@ -39,6 +39,8 @@ type ServiceOverrides = {
   stack?: string;
   running?: number;
   desired?: number;
+  /** Whether its containers run with a TTY, which leaves their logs unframed. */
+  tty?: boolean;
 };
 
 /** One service as `GET /services?status=true` lists it; `stack` sets the label `docker stack deploy` adds. */
@@ -48,10 +50,15 @@ export function swarmService({
   stack,
   running = 1,
   desired = 1,
+  tty = false,
 }: ServiceOverrides = {}) {
   return {
     ID: id,
-    Spec: { Name: name, Labels: stack ? { "com.docker.stack.namespace": stack } : {} },
+    Spec: {
+      Name: name,
+      Labels: stack ? { "com.docker.stack.namespace": stack } : {},
+      TaskTemplate: { ContainerSpec: { TTY: tty } },
+    },
     ServiceStatus: { RunningTasks: running, DesiredTasks: desired, CompletedTasks: 0 },
   };
 }

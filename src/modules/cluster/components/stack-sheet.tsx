@@ -7,6 +7,7 @@ import type { SwarmStackTask } from "#libs/docker";
 import { RelativeTime } from "#libs/format";
 import { readStackTasks, redeployStack, removeStack } from "#modules/cluster/actions/manage-stacks.ts";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
+import { LogsSheet } from "#modules/common/components/logs-sheet.tsx";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
 import { useServerRead } from "#modules/common/hooks/use-server-read.ts";
@@ -119,6 +120,8 @@ export function StackSheet({ stack, manageable, onClose }: StackSheetProps) {
             </Alert>
           )}
 
+          {stack && tasks.value && <ServiceLogs stack={stack} tasks={tasks.value} />}
+
           {tasks.value && <TaskTable tasks={tasks.value} />}
         </div>
       </SheetContent>
@@ -133,6 +136,30 @@ export function StackSheet({ stack, manageable, onClose }: StackSheetProps) {
         onCancel={() => setConfirmingRemoval(false)}
       />
     </Sheet>
+  );
+}
+
+/** One logs button per service of the stack, each following every task of it, on every node. */
+function ServiceLogs({ stack, tasks }: { stack: string; tasks: SwarmStackTask[] }) {
+  const services = [...new Set(tasks.map(task => task.service))].sort();
+
+  if (services.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-sm text-muted-foreground">Logs</span>
+      {services.map(service => (
+        <LogsSheet
+          key={service}
+          endpoint={`/api/docker/swarm/stacks/${encodeURIComponent(stack)}/services/${encodeURIComponent(service)}/logs`}
+          name={service}
+          context={`${stack} · toutes ses tâches, sur chaque nœud`}
+          label={service}
+        />
+      ))}
+    </div>
   );
 }
 

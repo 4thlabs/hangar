@@ -254,13 +254,14 @@ export class HangarStore {
    * the stack name, which is the app id. `.env.global` goes into the child's environment: unlike
    * compose, `docker stack` has no `--env-file`, and interpolates from its own.
    *
-   * | Verb            | Runs                                                                                 |
-   * | --------------- | ------------------------------------------------------------------------------------ |
-   * | `deploy [args]` | `docker stack deploy -c compose.yml -c compose.swarm.yml --detach=false …args <app>` |
-   * | `config`        | `docker stack config -c compose.yml -c compose.swarm.yml`                            |
-   * | `rm`            | `docker stack rm <app>`                                                              |
-   * | `ps [args]`     | `docker stack ps …args <app>`                                                        |
-   * | `services`      | `docker stack services <app>`                                                        |
+   * | Verb                    | Runs                                                                                 |
+   * | ----------------------- | ------------------------------------------------------------------------------------ |
+   * | `deploy [args]`         | `docker stack deploy -c compose.yml -c compose.swarm.yml --detach=false …args <app>` |
+   * | `config`                | `docker stack config -c compose.yml -c compose.swarm.yml`                            |
+   * | `rm`                    | `docker stack rm <app>`                                                              |
+   * | `ps [args]`             | `docker stack ps …args <app>`                                                        |
+   * | `services`              | `docker stack services <app>`                                                        |
+   * | `logs <service> [args]` | `docker service logs …args <app>_<service>`: `docker stack` has no logs              |
    *
    * Any installed app with a `compose.swarm.yml` will do.
    * @param app The app id
@@ -271,24 +272,30 @@ export class HangarStore {
     const swarmFile = await this.installedSwarmFile(app);
     const files = ["-c", path.join(this.installedPath, app, AppFiles.ComposeFile), "-c", swarmFile];
     const [verb = "", ...rest] = args;
+    const [service = "", ...logArgs] = rest;
 
-    const stackArgs: Record<string, string[]> = {
-      // Waits for the replicas to run instead of returning once the services are updated, ahead of
-      // docker's coming default; before `rest`, so a caller's own `--detach` wins.
-      deploy: ["deploy", ...files, "--detach=false", ...rest, app],
-      config: ["config", ...files, ...rest],
-      rm: ["rm", ...rest, app],
-      ps: ["ps", ...rest, app],
-      services: ["services", ...rest, app],
-    };
-
-    const call = stackArgs[verb];
-
-    if (!call) {
-      throw new HangarRuntimeError(1, `Unknown swarm command: ${verb} (${Object.keys(stackArgs).join(", ")})`);
+    if (verb === "logs" && !service) {
+      throw new HangarRuntimeError(1, `Name a service of ${app}: swarm ${app} logs <service>`);
     }
 
-    return this.runtime.run("docker", ["stack", ...call], { ...options, env: await this.env.read() });
+    const dockerArgs: Record<string, string[]> = {
+      // Waits for the replicas to run instead of returning once the services are updated, ahead of
+      // docker's coming default; before `rest`, so a caller's own `--detach` wins.
+      deploy: ["stack", "deploy", ...files, "--detach=false", ...rest, app],
+      config: ["stack", "config", ...files, ...rest],
+      rm: ["stack", "rm", ...rest, app],
+      ps: ["stack", "ps", ...rest, app],
+      services: ["stack", "services", ...rest, app],
+      logs: ["service", "logs", ...logArgs, HangarStore.serviceName(app, service)],
+    };
+
+    const call = dockerArgs[verb];
+
+    if (!call) {
+      throw new HangarRuntimeError(1, `Unknown swarm command: ${verb} (${Object.keys(dockerArgs).join(", ")})`);
+    }
+
+    return this.runtime.run("docker", call, { ...options, env: await this.env.read() });
   }
 
   /**
@@ -589,6 +596,18 @@ export class HangarStore {
         }),
       );
     }
+  }
+
+  /**
+   * A service's full name, `<app>_<service>` as `docker stack deploy` names it; a name already carrying
+   * the prefix, as `docker stack services` lists it, is kept.
+   */
+  private static serviceName(app: string, service: string) {
+    if (service.startsWith(`${app}_`)) {
+      return service;
+    }
+
+    return `${app}_${service}`;
   }
 
   /** Whether the compose args ask for detached mode. */

@@ -1,5 +1,9 @@
+import { PassThrough, type Readable } from "node:stream";
 import type Dockerode from "dockerode";
 import type { Cache, CachePolicy } from "#libs/cache";
+import { logger } from "#libs/logs";
+import { DockerNotFoundError } from "./compose.ts";
+import { ServiceLogLines } from "./service-log-lines.ts";
 import { SwarmDaemonError, SwarmRefusedError } from "./swarm-errors.ts";
 import { SwarmRules, type SwarmNodeAction, type SwarmNodeState } from "./swarm-rules/index.ts";
 
@@ -76,6 +80,8 @@ export type SwarmStackTask = {
   id: string;
   /** `<service>.<slot>`, or `<service>.<node id>` for a global service. */
   name: string;
+  /** The service it runs, by name: `<stack>_<service>` for a stack. */
+  service: string;
   /** The hostname of the node it was placed on, empty while unassigned. */
   node: string;
   desiredState: string;
@@ -332,13 +338,14 @@ export class DockerSwarm {
       ]),
     );
 
-    const serviceNames = new Map(services.map(service => [service.ID, service.Spec?.Name ?? service.ID]));
-    const hostnames = new Map(nodes.map(node => [node.ID, node.Description?.Hostname ?? node.ID]));
+    const serviceNames = new Map(services.map(service => [service.ID, DockerSwarm.serviceName(service)]));
+    const hostnames = DockerSwarm.hostnames(nodes);
 
     return tasks
       .map(task => ({
         id: task.ID,
-        name: `${serviceNames.get(task.ServiceID)}.${task.Slot ?? task.NodeID}`,
+        name: DockerSwarm.taskName(serviceNames.get(task.ServiceID) ?? task.ServiceID, task),
+        service: serviceNames.get(task.ServiceID) ?? task.ServiceID,
         node: task.NodeID ? (hostnames.get(task.NodeID) ?? task.NodeID) : "",
         desiredState: task.DesiredState ?? "",
         state: task.Status?.State ?? "",
@@ -346,6 +353,75 @@ export class DockerSwarm {
         error: task.Status?.Err ?? "",
       }))
       .sort((a, b) => a.name.localeCompare(b.name) || b.since.localeCompare(a.since));
+  }
+
+  /**
+   * Follows the logs of one service of a stack, every task on every node, from the last 200 lines. Each
+   * line names its task and node, as `docker service logs` does.
+   * @param stack The stack name, as {@link SwarmStack} gives it
+   * @param service The service's full name, `<stack>_<service>`, as {@link SwarmStackTask.service} gives it
+   * @param signal Aborted when the client disconnects; tears the log stream down
+   * @throws {DockerNotFoundError} if the stack has no such service: no reading another stack's logs
+   */
+  async openServiceLogs(stack: string, service: string, signal: AbortSignal): Promise<Readable> {
+    const target = (await DockerSwarm.daemon(this.docker.listServices())).find(
+      candidate => DockerSwarm.stackName(candidate) === stack && DockerSwarm.serviceName(candidate) === service,
+    );
+
+    if (!target) {
+      throw new DockerNotFoundError(`service ${service} in stack ${stack}`);
+    }
+
+    const [tasks, nodes] = await DockerSwarm.daemon(
+      Promise.all([
+        this.docker.listTasks({ filters: { service: [target.ID] } }) as Promise<TaskInfo[]>,
+        this.docker.listNodes() as Promise<NodeInfo[]>,
+      ]),
+    );
+
+    const hostnames = DockerSwarm.hostnames(nodes);
+
+    const taskLabels = new Map(
+      tasks.map(task => [task.ID, `${DockerSwarm.taskName(service, task)}@${hostnames.get(task.NodeID ?? "") ?? ""}`]),
+    );
+
+    // `details` brings the swarm context the lines are labelled from. Typed as a bare readable because
+    // `follow` is only known to produce a stream at runtime.
+    const logs = (await DockerSwarm.daemon(
+      this.docker.getService(target.ID).logs({
+        follow: true,
+        stdout: true,
+        stderr: true,
+        tail: 200,
+        timestamps: true,
+        details: true,
+      }),
+    )) as unknown as Readable;
+
+    const output = new ServiceLogLines(taskLabels);
+
+    const template = target.Spec?.TaskTemplate;
+    const hasTty = template !== undefined && "ContainerSpec" in template && Boolean(template.ContainerSpec?.TTY);
+
+    // Without a TTY the daemon multiplexes stdout and stderr into one framed stream, as for a container.
+    if (hasTty) {
+      logs.pipe(output);
+    } else {
+      const demuxed = new PassThrough();
+
+      this.docker.modem.demuxStream(logs, demuxed, demuxed);
+      logs.on("end", () => demuxed.end());
+      demuxed.pipe(output);
+    }
+
+    logs.on("error", error => {
+      logger.warn("A service log stream failed", { error, service });
+      output.end();
+    });
+
+    signal.addEventListener("abort", () => logs.destroy());
+
+    return output;
   }
 
   /** Awaits an Engine API call, turning the daemon's own refusal into a {@link SwarmDaemonError}. */
@@ -480,9 +556,23 @@ export class DockerSwarm {
     return "worker";
   }
 
+  /** A task's name: `<service>.<slot>`, or `<service>.<node id>` for a global service, which has no slot. */
+  private static taskName(service: string, task: TaskInfo) {
+    return `${service}.${task.Slot ?? task.NodeID}`;
+  }
+
+  private static serviceName(service: Dockerode.Service) {
+    return service.Spec?.Name ?? service.ID;
+  }
+
+  /** Each node's hostname, by node id. */
+  private static hostnames(nodes: NodeInfo[]) {
+    return new Map(nodes.map(node => [node.ID, node.Description?.Hostname ?? node.ID]));
+  }
+
   /** The stack a service belongs to, or the service itself outside a stack. */
   private static stackName(service: Dockerode.Service) {
-    return service.Spec?.Labels?.[DockerSwarm.StackLabel] ?? service.Spec?.Name ?? service.ID;
+    return service.Spec?.Labels?.[DockerSwarm.StackLabel] ?? DockerSwarm.serviceName(service);
   }
 
   private static health(running: number, desired: number): SwarmStackHealth {

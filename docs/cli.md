@@ -70,13 +70,14 @@ project is always named after the stack, as the web app expects.
 The Swarm counterpart of `store`, for the apps that ship a `compose.swarm.yml` (see
 [the store](store.md#an-apps-composeswarmyml)). Run it against a manager. The verbs:
 
-| Verb            | Runs                                                                                             |
-| --------------- | ------------------------------------------------------------------------------------------------ |
-| `deploy [args]` | `docker stack deploy -c <app>/compose.yml -c <app>/compose.swarm.yml --detach=false …args <app>` |
-| `config`        | `docker stack config -c <app>/compose.yml -c <app>/compose.swarm.yml`, nothing deployed          |
-| `rm`            | `docker stack rm <app>`                                                                          |
-| `ps [args]`     | `docker stack ps …args <app>`                                                                    |
-| `services`      | `docker stack services <app>`                                                                    |
+| Verb                    | Runs                                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| `deploy [args]`         | `docker stack deploy -c <app>/compose.yml -c <app>/compose.swarm.yml --detach=false …args <app>` |
+| `config`                | `docker stack config -c <app>/compose.yml -c <app>/compose.swarm.yml`, nothing deployed          |
+| `rm`                    | `docker stack rm <app>`                                                                          |
+| `ps [args]`             | `docker stack ps …args <app>`                                                                    |
+| `services`              | `docker stack services <app>`                                                                    |
+| `logs <service> [args]` | `docker service logs …args <app>_<service>`: `docker stack` has no logs                          |
 
 The target is one of:
 
@@ -90,6 +91,7 @@ node bin/cli.js swarm deploy            # every app with a compose.swarm.yml, in
 node bin/cli.js swarm miniflux deploy   # one app; extra args go to docker stack deploy
 node bin/cli.js swarm Media rm          # a category, in reverse order
 node bin/cli.js swarm miniflux ps
+node bin/cli.js swarm miniflux logs db -f --tail 50   # the miniflux_db service, every task
 ```
 
 `swarm` and `store` are independent: an app can run with compose and in the swarm at the same time,

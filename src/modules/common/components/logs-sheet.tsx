@@ -15,21 +15,22 @@ import {
 } from "#modules/common/ui/sheet.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 
-type ContainerLogsSheetProps = {
-  project: string;
-  containerId: string;
-  containerName: string;
+type LogsSheetProps = {
+  /** The route streaming the logs, opened only while the sheet is. */
+  endpoint: string;
+  /** What the logs come from, a container or a service, in the trigger's label and the title. */
+  name: string;
+  /** Where it runs, before the reminder of what the stream shows. */
+  context: string;
+  /** The trigger's text; `Logs` by default. */
+  label?: string;
 };
 
-export function ContainerLogsSheet({ project, containerId, containerName }: ContainerLogsSheetProps) {
+/** A button opening the live logs of a container or a service: the last 200 lines, then followed. */
+export function LogsSheet({ endpoint, name, context, label = "Logs" }: LogsSheetProps) {
   const [open, setOpen] = useState(false);
   const [following, setFollowing] = useState(true);
-
-  const endpoint = open
-    ? `/api/docker/apps/${encodeURIComponent(project)}/containers/${encodeURIComponent(containerId)}/logs`
-    : null;
-
-  const { text: logs, status, error, clear, reconnect } = useStreamText(endpoint);
+  const { text: logs, status, error, clear, reconnect } = useStreamText(open ? endpoint : null);
 
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
@@ -44,21 +45,21 @@ export function ContainerLogsSheet({ project, containerId, containerName }: Cont
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetTrigger
         render={
-          <Button variant="outline" size="xs" aria-label={`Voir les logs de ${containerName}`}>
+          <Button variant="outline" size="xs" aria-label={`Voir les logs de ${name}`}>
             <FileTextIcon data-icon="inline-start" />
-            Logs
+            {label}
           </Button>
         }
       />
-      <SheetContent className="sm:max-w-3xl">
+      {/* The full screen on a phone, most of it above: log lines are long. The `data-[side=right]` prefix
+          is the sheet's own, which a bare `sm:max-w-*` would not override. */}
+      <SheetContent className="data-[side=right]:w-full data-[side=right]:sm:w-[90vw] data-[side=right]:sm:max-w-7xl">
         <SheetHeader>
           <div className="flex flex-wrap items-center gap-2 pr-8">
-            <SheetTitle>Logs de {containerName}</SheetTitle>
+            <SheetTitle>Logs de {name}</SheetTitle>
             <StreamStatusBadge status={status} />
           </div>
-          <SheetDescription>
-            {project} · {containerId.slice(0, 12)} · 200 dernières lignes puis suivi en direct
-          </SheetDescription>
+          <SheetDescription>{context} · 200 dernières lignes puis suivi en direct</SheetDescription>
         </SheetHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4">

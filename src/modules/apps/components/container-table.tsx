@@ -1,7 +1,7 @@
 import type { ComposeContainer, ContainerHealth } from "#libs/docker";
-import { ContainerLogsSheet } from "#modules/apps/components/container-logs-sheet.tsx";
 import { formatBytes, formatPercent } from "#modules/apps/format.ts";
 import { EMPTY_METRICS, type ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
+import { LogsSheet } from "#modules/common/components/logs-sheet.tsx";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Progress } from "#modules/common/ui/progress.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
@@ -90,7 +90,11 @@ export function ContainerTable({ project, containers, stats }: ContainerTablePro
               </TableCell>
               <TableCell className="text-center tabular-nums">{container.restartCount ?? "—"}</TableCell>
               <TableCell>
-                <ContainerLogsSheet project={project} containerId={container.id} containerName={container.name} />
+                <LogsSheet
+                  endpoint={`/api/docker/apps/${encodeURIComponent(project)}/containers/${encodeURIComponent(container.id)}/logs`}
+                  name={container.name}
+                  context={`${project} · ${container.id.slice(0, 12)}`}
+                />
               </TableCell>
             </TableRow>
           );
