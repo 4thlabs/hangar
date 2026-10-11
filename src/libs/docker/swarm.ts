@@ -1,5 +1,6 @@
 import type Dockerode from "dockerode";
 import type { Cache, CachePolicy } from "#libs/cache";
+import { swarmNodeActions, swarmNodeRefusal, SwarmRefusedError, type SwarmNodeAction } from "./swarm-node-actions.ts";
 
 /** What this node's daemon says of its own place in a swarm, outside a working membership. */
 export type SwarmLocalState = "inactive" | "pending" | "locked" | "error";
@@ -36,6 +37,8 @@ export type SwarmNode = {
   memoryBytes: number;
   engineVersion: string;
   stacks: SwarmStackOnNode[];
+  /** What Hangar can change on this node now; see `swarmNodeRefusal`. */
+  actions: SwarmNodeAction[];
 };
 
 /**
@@ -52,9 +55,24 @@ export type SwarmCluster =
       managers: number;
       /** How many managers can fail before the cluster loses its quorum. */
       faultTolerance: number;
+      /** The fault tolerance once one node is promoted or demoted, for the confirmation to state. */
+      faultToleranceAfter: { promote: number; demote: number };
       /** This node first, then the other managers, then by hostname. */
       nodes: SwarmNode[];
     };
+
+/** The commands that add a node to the swarm, one per role it joins as. Secret: they carry the tokens. */
+export type SwarmJoinCommands = { worker: string; manager: string };
+
+/** What it takes to join an existing swarm. */
+export type SwarmJoinRequest = {
+  /** A manager's `host:port`, usually on port 2377. */
+  managerAddress: string;
+  /** The worker or manager token, which decides the role this node joins as. */
+  token: string;
+  /** The address other nodes reach this one at; the daemon picks one when there is a single choice. */
+  advertiseAddress?: string | undefined;
+};
 
 /** The `info.Swarm` fields {@link DockerSwarm} reads; the client hands them back untyped. */
 type SwarmInfo = {
@@ -62,15 +80,24 @@ type SwarmInfo = {
     LocalNodeState?: string;
     ControlAvailable?: boolean;
     NodeID?: string;
+    NodeAddr?: string;
     Error?: string;
-    RemoteManagers?: { Addr: string }[] | null;
+    RemoteManagers?: { NodeID: string; Addr: string }[] | null;
     Cluster?: { ID: string };
   };
+};
+
+/** The `GET /swarm` fields {@link DockerSwarm} reads; the client hands them back untyped. */
+type SwarmInspect = {
+  Version: { Index: number };
+  Spec: object;
+  JoinTokens: { Worker: string; Manager: string };
 };
 
 /** The `GET /nodes` fields {@link DockerSwarm} reads; the client hands them back untyped. */
 type NodeInfo = {
   ID: string;
+  Version?: { Index: number };
   Spec?: { Role?: string; Availability?: SwarmNodeAvailability };
   Description?: {
     Hostname?: string;
@@ -89,17 +116,28 @@ type TaskInfo = {
 };
 
 /**
- * The swarm this Hangar's daemon belongs to, read through the Engine API: nodes, and the stacks each
- * one runs. Read-only; compose containers are never part of it.
+ * The swarm this Hangar's daemon belongs to, through the Engine API: its nodes and the stacks each
+ * one runs, the few changes a homelab makes to them, and creating or joining one. Compose containers
+ * are never part of it.
  *
  * No `server-only` guard: see AGENTS.md § server-only.
  */
 export class DockerSwarm {
-  /**
-   * Under `docker:swarm`, the prefix the daemon's `node` and `service` events refresh (see
-   * `DockerEvents`).
-   */
-  private static readonly Key = "docker:swarm:cluster";
+  /** The prefix the daemon's `node` and `service` events refresh (see `DockerEvents`). */
+  private static readonly Prefix = "docker:swarm";
+
+  private static readonly Key = `${DockerSwarm.Prefix}:cluster`;
+
+  /** Where this node listens for the other nodes, as `docker swarm init` and `join` default it. */
+  private static readonly ListenAddress = "0.0.0.0:2377";
+
+  /** Changes to a node's spec, per action; `remove` deletes the node instead. */
+  private static readonly SpecChanges: Record<Exclude<SwarmNodeAction, "remove">, object> = {
+    promote: { Role: "manager" },
+    demote: { Role: "worker" },
+    drain: { Availability: "drain" },
+    activate: { Availability: "active" },
+  };
 
   /** Short, because Docker emits no event for a task: only the TTL moves the task counts. */
   private static readonly Ttl = 10_000;
@@ -131,6 +169,109 @@ export class DockerSwarm {
   /** The swarm as this node sees it; see {@link SwarmCluster}. */
   cluster(): Promise<SwarmCluster> {
     return this.cache.get(DockerSwarm.Key, this.policy, this.loadCluster);
+  }
+
+  /**
+   * Reloads the cluster after a change this process made, for a caller about to read the new state.
+   * The events would get there too, a moment later.
+   */
+  settle(): Promise<void> {
+    return this.cache.refresh(DockerSwarm.Prefix);
+  }
+
+  /**
+   * Makes this node the first manager of a new swarm.
+   * @param advertiseAddress The address other nodes will reach it at; needed when the host has several
+   * @returns Rejects with the daemon's error, e.g. when it cannot choose an address on its own
+   */
+  async init(advertiseAddress?: string): Promise<void> {
+    await this.docker.swarmInit({ ListenAddr: DockerSwarm.ListenAddress, AdvertiseAddr: advertiseAddress });
+    await this.settle();
+  }
+
+  /**
+   * Joins an existing swarm, as a worker or a manager depending on the token.
+   * @returns Rejects with the daemon's error, e.g. an unreachable manager or a rotated token
+   */
+  async join({ managerAddress, token, advertiseAddress }: SwarmJoinRequest): Promise<void> {
+    await this.docker.swarmJoin({
+      ListenAddr: DockerSwarm.ListenAddress,
+      AdvertiseAddr: advertiseAddress,
+      RemoteAddrs: [managerAddress],
+      JoinToken: token,
+    });
+
+    await this.settle();
+  }
+
+  /**
+   * The `docker swarm join` commands for a new node, pointing at this manager. Never cached: they
+   * carry the tokens, read only when someone asks to see them.
+   */
+  async joinCommands(): Promise<SwarmJoinCommands> {
+    const [info, swarm] = await Promise.all([
+      this.docker.info() as Promise<SwarmInfo>,
+      this.docker.swarmInspect() as Promise<SwarmInspect>,
+    ]);
+
+    const self = info.Swarm?.RemoteManagers?.find(manager => manager.NodeID === info.Swarm?.NodeID);
+    const address = self?.Addr ?? `${info.Swarm?.NodeAddr}:2377`;
+    const command = (token: string) => `docker swarm join --token ${token} ${address}`;
+
+    return { worker: command(swarm.JoinTokens.Worker), manager: command(swarm.JoinTokens.Manager) };
+  }
+
+  /**
+   * Replaces a join token, so a leaked one stops working. Nodes already in the swarm are not affected.
+   * @param role Which token to replace
+   */
+  async rotateToken(role: keyof SwarmJoinCommands): Promise<void> {
+    const swarm = (await this.docker.swarmInspect()) as SwarmInspect;
+
+    // The update replaces the whole spec, so the current one goes back unchanged, at its version.
+    await this.docker.swarmUpdate({
+      _query: {
+        version: swarm.Version.Index,
+        rotateWorkerToken: role === "worker",
+        rotateManagerToken: role === "manager",
+      },
+      _body: swarm.Spec,
+    });
+  }
+
+  /**
+   * Promotes, demotes, drains, reactivates or removes a node, after the same check the page's buttons
+   * follow, made against the daemon's current list rather than the cached one.
+   * @param nodeId The node's id, from {@link cluster}
+   * @returns Rejects with a {@link SwarmRefusedError} when the action does not apply, or with the
+   * daemon's error, e.g. when a demotion would cost the cluster its quorum
+   */
+  async changeNode(nodeId: string, action: SwarmNodeAction): Promise<void> {
+    const nodes = (await this.docker.listNodes()) as NodeInfo[];
+    const target = nodes.find(node => node.ID === nodeId);
+
+    if (!target) {
+      throw new SwarmRefusedError("unknown-node", action, nodeId);
+    }
+
+    const managers = nodes.filter(node => node.Spec?.Role === "manager").length;
+    const refusal = swarmNodeRefusal(action, DockerSwarm.node(target, []), managers);
+
+    if (refusal) {
+      throw new SwarmRefusedError(refusal, action, nodeId);
+    }
+
+    if (action === "remove") {
+      await this.docker.getNode(nodeId).remove({});
+    } else {
+      // The update replaces the whole spec, so the change is merged over the current one, at its version.
+      await this.docker.getNode(nodeId).update({
+        _query: { version: target.Version?.Index },
+        _body: { ...target.Spec, ...DockerSwarm.SpecChanges[action] },
+      });
+    }
+
+    await this.settle();
   }
 
   /**
@@ -172,7 +313,11 @@ export class DockerSwarm {
       currentNodeId,
       managers,
       faultTolerance: DockerSwarm.faultTolerance(managers),
-      nodes: DockerSwarm.sortNodes(DockerSwarm.nodes(nodes, services, tasks), currentNodeId),
+      faultToleranceAfter: {
+        promote: DockerSwarm.faultTolerance(managers + 1),
+        demote: DockerSwarm.faultTolerance(managers - 1),
+      },
+      nodes: DockerSwarm.sortNodes(DockerSwarm.nodes(nodes, services, tasks, managers), currentNodeId),
     };
   };
 
@@ -180,7 +325,12 @@ export class DockerSwarm {
    * Every node with the stacks it runs. A stack spread over several nodes shows on each of them; its
    * health is the same everywhere, since it counts the whole cluster.
    */
-  private static nodes(nodes: NodeInfo[], services: Dockerode.Service[], tasks: TaskInfo[]): SwarmNode[] {
+  private static nodes(
+    nodes: NodeInfo[],
+    services: Dockerode.Service[],
+    tasks: TaskInfo[],
+    managers: number,
+  ): SwarmNode[] {
     const stackByService = new Map(services.map(service => [service.ID, DockerSwarm.stackName(service)]));
     const health = DockerSwarm.stackHealth(services);
 
@@ -201,11 +351,13 @@ export class DockerSwarm {
         .map(([name, count]) => ({ name, health: health.get(name) ?? "stopped", tasks: count }))
         .sort((a, b) => a.name.localeCompare(b.name));
 
-      return DockerSwarm.node(node, stacks);
+      const described = DockerSwarm.node(node, stacks);
+
+      return { ...described, actions: swarmNodeActions(described, managers) };
     });
   }
 
-  /** One node's own fields, from `GET /nodes`. */
+  /** One node's own fields, from `GET /nodes`; its actions are left for the caller to fill. */
   private static node(node: NodeInfo, stacks: SwarmStackOnNode[]): SwarmNode {
     const resources = node.Description?.Resources;
 
@@ -219,6 +371,7 @@ export class DockerSwarm {
       memoryBytes: resources?.MemoryBytes ?? 0,
       engineVersion: node.Description?.Engine?.EngineVersion ?? "",
       stacks,
+      actions: [],
     };
   }
 

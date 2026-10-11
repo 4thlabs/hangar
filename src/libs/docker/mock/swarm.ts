@@ -20,7 +20,8 @@ export function swarmNode({
 }: NodeOverrides = {}) {
   return {
     ID: id,
-    Spec: { Role: role, Availability: availability },
+    Version: { Index: 42 },
+    Spec: { Role: role, Availability: availability, Labels: { zone: "home" } },
     Description: {
       Hostname: hostname,
       Resources: { NanoCPUs: 4_000_000_000, MemoryBytes: 8 * 1024 ** 3 },
@@ -95,6 +96,7 @@ export function givenSwarm({
       ControlAvailable: manager,
       NodeID: nodeId,
       Error: error,
+      NodeAddr: "192.168.1.10",
       RemoteManagers: [{ NodeID: "node-1", Addr: "192.168.1.10:2377" }],
       ...(manager ? { Cluster: { ID: "nhyx6n1b8b0a0zqlwjr4bx7xd" } } : {}),
     },
@@ -106,4 +108,11 @@ export function givenSwarm({
   dockerMock.listNodes.mockImplementation(() => answer(nodes));
   dockerMock.listServices.mockImplementation(() => answer(services));
   dockerMock.listTasks.mockImplementation(() => answer(tasks));
+  dockerMock.swarmInspect.mockImplementation(() =>
+    answer({
+      Version: { Index: 7 },
+      Spec: { Name: "default", Orchestration: {} },
+      JoinTokens: { Worker: "SWMTKN-1-worker", Manager: "SWMTKN-1-manager" },
+    }),
+  );
 }

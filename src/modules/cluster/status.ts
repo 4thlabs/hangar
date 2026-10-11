@@ -1,4 +1,10 @@
-import type { SwarmNodeAvailability, SwarmNodeRole, SwarmNodeStatus, SwarmStackHealth } from "#libs/docker";
+import type {
+  SwarmNodeAction,
+  SwarmNodeAvailability,
+  SwarmNodeRole,
+  SwarmNodeStatus,
+  SwarmStackHealth,
+} from "#libs/docker";
 
 export const roleLabel: Record<SwarmNodeRole, string> = {
   leader: "Leader",
@@ -44,3 +50,11 @@ export const nodeStatusVariant = (status: SwarmNodeStatus) => (status === "ready
 /** A drained or paused node takes no new task, which deserves to stand out. */
 export const availabilityVariant = (availability: SwarmNodeAvailability) =>
   availability === "active" ? "secondary" : "outline";
+
+export const nodeActionLabel: Record<SwarmNodeAction, string> = {
+  promote: "Promouvoir",
+  demote: "Rétrograder",
+  drain: "Drainer",
+  activate: "Réactiver",
+  remove: "Retirer",
+};

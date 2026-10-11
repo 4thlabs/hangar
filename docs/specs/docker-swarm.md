@@ -386,6 +386,47 @@ hostname.
 - By hand: a one-node swarm (`docker swarm init`) locally, then two or three `docker:dind` containers for a
   multi-node cluster.
 
+### Step 2: node actions, init / join, tokens
+
+Branch `feat/swarm-node-actions`, on top of step 1.
+
+**Rules (`src/libs/docker/swarm-node-actions.ts`).** One function, `swarmNodeRefusal(action, node, managers)`,
+says why an action does not apply: `already-done`, `last-manager`, `manager-not-removable` (the daemon only
+removes a manager once demoted), `node-not-down`. It fills `SwarmNode.actions`, which decides the buttons, and
+guards `DockerSwarm.changeNode` against a stale page.
+
+**Writes (`DockerSwarm`).**
+
+| Method                    | Engine API                                                                                                       |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `changeNode(id, action)`  | `GET /nodes` for the check, then `POST /nodes/{id}/update?version=` with the whole spec, or `DELETE /nodes/{id}` |
+| `init(advertiseAddress?)` | `POST /swarm/init`, listening on `0.0.0.0:2377`                                                                  |
+| `join(request)`           | `POST /swarm/join`                                                                                               |
+| `joinCommands()`          | `GET /swarm` for the tokens, `info.Swarm.RemoteManagers` for this manager's address                              |
+| `rotateToken(role)`       | `POST /swarm/update?version=&rotate…Token=true` with the spec unchanged                                          |
+
+Each write ends with `settle()`, which reloads `docker:swarm`. `SwarmCluster` (manager) gains
+`faultToleranceAfter.{promote,demote}`, so the confirmation states the tolerance without the rule leaving the
+library.
+
+**Page.**
+
+- `node-actions.tsx`: the card's buttons, each behind an `AlertDialog` whose wording comes from
+  `confirmations.ts`: what the action does, the fault tolerance after it, and, when demoting the node Hangar
+  runs on, that Hangar will no longer see the cluster.
+- `tokens-dialog.tsx`: "Tokens" in the header, on a manager. The commands are read by a server action on
+  click, never sent with the page, and forgotten when the dialog closes; "Régénérer" per role.
+- `swarm-setup.tsx`: in the `inactive` state, "Créer le cluster" and "Rejoindre un cluster" forms. Both take
+  an optional advertise address: the daemon refuses to pick one on a host with several.
+- A refusal from the daemon (`4xx`/`5xx` with a message) reaches the toast in its own words, since it says
+  what to fix; anything else is logged and the toast points at the logs. A join token is never logged.
+
+**Checked on two `docker:dind` daemons (29.x).** Rotating a token makes the old one fail with the daemon's
+message. Demoting a node right after promoting it fails for about two seconds (`can't find manager in raft
+memberlist`) while it joins the Raft group; the toast shows that message and a retry works. A stopped worker
+reads `down` after about 15 s, and is then removable. Stopping one of two managers costs the quorum: the page
+then shows its error state, which is the "tolère 0 panne" the header announced.
+
 ## Open questions
 
 1. **How an app is marked as running in the swarm.** Having a `compose.swarm.yml` only says it _can_.

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { dockerMock, fakeDockerode, givenSwarm, swarmNode, swarmService, swarmTask } = await import("./mock/index.ts");
 const { Cache } = await import("#libs/cache");
 const { DockerSwarm } = await import("./swarm.ts");
+const { SwarmRefusedError } = await import("./swarm-node-actions.ts");
 
 const client = () => new DockerSwarm(fakeDockerode(), new Cache());
 
@@ -59,6 +60,7 @@ describe("DockerSwarm.cluster", () => {
         memoryBytes: 8 * 1024 ** 3,
         engineVersion: "29.1.3",
         stacks: [],
+        actions: ["drain"],
       },
     ]);
   });
@@ -218,5 +220,119 @@ describe("DockerSwarm.faultTolerance", () => {
     });
 
     await expect(client().cluster()).resolves.toMatchObject({ managers: 3, faultTolerance: 1 });
+  });
+});
+
+describe("DockerSwarm.changeNode", () => {
+  const cluster = () => [
+    swarmNode({ id: "nas", hostname: "nas", leader: true }),
+    swarmNode({ id: "pi", hostname: "pi-01", role: "worker" }),
+    swarmNode({ id: "old", hostname: "old", role: "worker", state: "down" }),
+  ];
+
+  it("merges the change over the node's whole spec, at its version", async () => {
+    givenSwarm({ nodes: cluster() });
+
+    await client().changeNode("pi", "promote");
+
+    expect(dockerMock.updateNode).toHaveBeenCalledWith("pi", {
+      _query: { version: 42 },
+      _body: { Role: "manager", Availability: "active", Labels: { zone: "home" } },
+    });
+  });
+
+  it("drains and reactivates through the availability", async () => {
+    givenSwarm({ nodes: cluster() });
+
+    await client().changeNode("nas", "drain");
+
+    expect(dockerMock.updateNode).toHaveBeenCalledWith(
+      "nas",
+      expect.objectContaining({ _body: expect.objectContaining({ Availability: "drain" }) }),
+    );
+  });
+
+  it("removes a worker that is down", async () => {
+    givenSwarm({ nodes: cluster() });
+
+    await client().changeNode("old", "remove");
+
+    expect(dockerMock.removeNode).toHaveBeenCalledWith("old", {});
+    expect(dockerMock.updateNode).not.toHaveBeenCalled();
+  });
+
+  it("refuses to demote the last manager, without calling the daemon", async () => {
+    givenSwarm({ nodes: cluster() });
+
+    const demotion = client().changeNode("nas", "demote");
+
+    await expect(demotion).rejects.toBeInstanceOf(SwarmRefusedError);
+    await expect(demotion).rejects.toMatchObject({ refusal: "last-manager" });
+    expect(dockerMock.updateNode).not.toHaveBeenCalled();
+  });
+
+  it("refuses to remove a node that is still up, or one it does not know", async () => {
+    givenSwarm({ nodes: cluster() });
+
+    await expect(client().changeNode("pi", "remove")).rejects.toMatchObject({ refusal: "node-not-down" });
+    await expect(client().changeNode("ghost", "drain")).rejects.toMatchObject({ refusal: "unknown-node" });
+    expect(dockerMock.removeNode).not.toHaveBeenCalled();
+  });
+
+  it("lists, for each node, the actions that apply to it", async () => {
+    givenSwarm({ nodeId: "nas", nodes: cluster() });
+
+    const state = await client().cluster();
+
+    expect(state.state === "manager" && state.nodes.map(node => [node.hostname, node.actions])).toEqual([
+      ["nas", ["drain"]],
+      ["old", ["promote", "drain", "remove"]],
+      ["pi-01", ["promote", "drain"]],
+    ]);
+
+    expect(state).toMatchObject({ faultToleranceAfter: { promote: 0, demote: 0 } });
+  });
+});
+
+describe("DockerSwarm membership", () => {
+  it("creates a swarm listening on the default port, with the address given", async () => {
+    givenSwarm({ localState: "inactive", manager: false });
+
+    await client().init("192.168.1.10");
+
+    expect(dockerMock.swarmInit).toHaveBeenCalledWith({ ListenAddr: "0.0.0.0:2377", AdvertiseAddr: "192.168.1.10" });
+  });
+
+  it("joins through the given manager, with the token", async () => {
+    givenSwarm({ localState: "inactive", manager: false });
+
+    await client().join({ managerAddress: "192.168.1.10:2377", token: "SWMTKN-1-worker" });
+
+    expect(dockerMock.swarmJoin).toHaveBeenCalledWith({
+      ListenAddr: "0.0.0.0:2377",
+      AdvertiseAddr: undefined,
+      RemoteAddrs: ["192.168.1.10:2377"],
+      JoinToken: "SWMTKN-1-worker",
+    });
+  });
+
+  it("gives the join commands pointing at this manager", async () => {
+    givenSwarm();
+
+    await expect(client().joinCommands()).resolves.toEqual({
+      worker: "docker swarm join --token SWMTKN-1-worker 192.168.1.10:2377",
+      manager: "docker swarm join --token SWMTKN-1-manager 192.168.1.10:2377",
+    });
+  });
+
+  it("rotates one token, sending the spec back unchanged at its version", async () => {
+    givenSwarm();
+
+    await client().rotateToken("manager");
+
+    expect(dockerMock.swarmUpdate).toHaveBeenCalledWith({
+      _query: { version: 7, rotateWorkerToken: false, rotateManagerToken: true },
+      _body: { Name: "default", Orchestration: {} },
+    });
   });
 });

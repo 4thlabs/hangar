@@ -7,6 +7,8 @@ import type { SwarmCluster } from "#libs/docker";
 import { plural } from "#modules/apps/format.ts";
 import { ClusterEmpty } from "#modules/cluster/components/cluster-empty.tsx";
 import { NodeCard } from "#modules/cluster/components/node-card.tsx";
+import { SwarmSetup } from "#modules/cluster/components/swarm-setup.tsx";
+import { TokensDialog } from "#modules/cluster/components/tokens-dialog.tsx";
 import { AutoReload } from "#modules/common/components/auto-reload.tsx";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -60,10 +62,13 @@ export function ClusterOverview({ cluster, error }: ClusterOverviewProps) {
             {cluster?.state === "manager" ? clusterSummary(cluster) : "Le cluster Swarm dont ce serveur fait partie."}
           </p>
         </div>
-        <Button type="button" variant="outline" disabled={isRefreshing} onClick={() => void refresh()}>
-          {isRefreshing ? <Spinner /> : <RefreshCwIcon data-icon="inline-start" />}
-          Actualiser
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {cluster?.state === "manager" && <TokensDialog />}
+          <Button type="button" variant="outline" disabled={isRefreshing} onClick={() => void refresh()}>
+            {isRefreshing ? <Spinner /> : <RefreshCwIcon data-icon="inline-start" />}
+            Actualiser
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -81,12 +86,13 @@ export function ClusterOverview({ cluster, error }: ClusterOverviewProps) {
       {cluster?.state === "manager" && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {cluster.nodes.map(node => (
-            <NodeCard key={node.id} node={node} isCurrent={node.id === cluster.currentNodeId} />
+            <NodeCard key={node.id} cluster={cluster} node={node} />
           ))}
         </div>
       )}
 
       {cluster && cluster.state !== "manager" && <ClusterEmpty cluster={cluster} />}
+      {cluster?.state === "inactive" && <SwarmSetup />}
     </>
   );
 }

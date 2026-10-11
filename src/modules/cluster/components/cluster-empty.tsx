@@ -26,8 +26,7 @@ function emptyText(cluster: ClusterEmptyState): EmptyText {
       return {
         icon: NetworkIcon,
         title: "Aucun swarm",
-        description: "Ce nœud ne fait partie d'aucun cluster Swarm. Créez-en un depuis le serveur :",
-        command: "docker swarm init",
+        description: "Ce nœud ne fait partie d'aucun cluster Swarm : créez-en un, ou rejoignez-en un existant.",
       };
     case "pending":
       return {

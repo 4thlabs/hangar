@@ -1,5 +1,6 @@
-import type { SwarmNode } from "#libs/docker";
+import type { SwarmCluster, SwarmNode } from "#libs/docker";
 import { formatBytes, plural } from "#modules/apps/format.ts";
+import { NodeActions } from "#modules/cluster/components/node-actions.tsx";
 import {
   availabilityLabel,
   availabilityVariant,
@@ -11,15 +12,17 @@ import {
   roleLabel,
 } from "#modules/cluster/status.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 
 type NodeCardProps = {
+  cluster: Extract<SwarmCluster, { state: "manager" }>;
   node: SwarmNode;
-  isCurrent: boolean;
 };
 
-/** One node of the swarm: what it is, and the stacks with tasks running on it. */
-export function NodeCard({ node, isCurrent }: NodeCardProps) {
+/** One node of the swarm: what it is, the stacks with tasks running on it, and what can be changed on it. */
+export function NodeCard({ cluster, node }: NodeCardProps) {
+  const isCurrent = node.id === cluster.currentNodeId;
+
   return (
     <Card>
       <CardHeader>
@@ -54,6 +57,11 @@ export function NodeCard({ node, isCurrent }: NodeCardProps) {
           </ul>
         )}
       </CardContent>
+      {node.actions.length > 0 && (
+        <CardFooter className="mt-auto">
+          <NodeActions cluster={cluster} node={node} />
+        </CardFooter>
+      )}
     </Card>
   );
 }

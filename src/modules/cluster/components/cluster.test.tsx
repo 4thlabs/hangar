@@ -6,6 +6,9 @@ vi.mock("waku", () => ({
   useRouter: () => ({ reload: async () => {} }),
 }));
 
+// Server actions are a module boundary the render never crosses.
+vi.mock("#modules/cluster/actions/manage-cluster.ts", () => ({}));
+
 const { ClusterOverview } = await import("./cluster-overview.tsx");
 
 const render = (cluster: SwarmCluster | null, error: string | null = null) =>
@@ -21,6 +24,7 @@ const node = (overrides: Partial<SwarmNode>): SwarmNode => ({
   memoryBytes: 32 * 1024 ** 3,
   engineVersion: "29.1.3",
   stacks: [],
+  actions: [],
   ...overrides,
 });
 
@@ -30,9 +34,17 @@ const manager: SwarmCluster = {
   currentNodeId: "node-1",
   managers: 2,
   faultTolerance: 0,
+  faultToleranceAfter: { promote: 1, demote: 0 },
   nodes: [
     node({ stacks: [{ name: "miniflux", health: "partial", tasks: 2 }] }),
-    node({ id: "node-2", hostname: "pi-02", role: "worker", status: "down", availability: "drain" }),
+    node({
+      id: "node-2",
+      hostname: "pi-02",
+      role: "worker",
+      status: "down",
+      availability: "drain",
+      actions: ["promote", "activate", "remove"],
+    }),
   ],
 };
 
@@ -61,7 +73,7 @@ describe("ClusterOverview", () => {
   });
 
   const emptyStates: [SwarmCluster, string][] = [
-    [{ state: "inactive", error: "" }, "docker swarm init"],
+    [{ state: "inactive", error: "" }, "Créer le cluster"],
     [{ state: "locked", error: "" }, "docker swarm unlock"],
     [{ state: "worker", managers: ["192.168.1.10:2377"] }, "192.168.1.10:2377"],
     [{ state: "error", error: "manager unreachable" }, "manager unreachable"],
@@ -69,6 +81,22 @@ describe("ClusterOverview", () => {
 
   it.each(emptyStates)("explains the %o state", (cluster, expected) => {
     expect(render(cluster)).toContain(expected);
+  });
+
+  it("offers on each card the actions that apply to its node, and the tokens on a manager", () => {
+    const html = render(manager);
+
+    expect(html).toContain("Réactiver");
+    expect(html).toContain("Retirer");
+    expect(html).toContain("Tokens");
+  });
+
+  it("offers a node in no swarm to create one or to join one", () => {
+    const html = render({ state: "inactive", error: "" });
+
+    expect(html).toContain("Créer le cluster");
+    expect(html).toContain("Rejoindre un cluster");
+    expect(html).not.toContain("Tokens");
   });
 
   it("offers a retry when the daemon fails", () => {
