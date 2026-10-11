@@ -62,20 +62,33 @@ const render = (followed: FollowedCardPrices[], days = 30) =>
   );
 
 describe("PriceCurve", () => {
-  it("follows the trend, and reads it out from the first known price to the last", () => {
-    const series = PriceCurve.series([aDay("2026-10-10", { trend: null }), ...history]);
+  it("places each day by its date in the window, so a short history fills only its last days", () => {
+    const series = PriceCurve.series(history, { days: 5, lastDay: "2026-10-11" });
 
-    expect(series).toEqual({ label: "Trend", prices: [null, 1.2, 1.3, 1.45] });
-    expect(PriceCurve.describe(series)).toBe("Trend over 4 days: from €1.20 to €1.45");
+    expect(series).toEqual({ label: "Trend", prices: [null, null, 1.2, 1.3, 1.45] });
+  });
+
+  it("leaves the days after a card's last price empty when another card has more recent ones", () => {
+    expect(PriceCurve.series(history, { days: 5, lastDay: "2026-10-13" }).prices).toEqual([1.2, 1.3, 1.45, null, null]);
+  });
+
+  it("drops the days before the window, such as the extra day tcg-collector's period may start with", () => {
+    expect(PriceCurve.series(history, { days: 2, lastDay: "2026-10-11" }).prices).toEqual([1.3, 1.45]);
   });
 
   it("falls back to the lowest offer for a card Cardmarket gives no trend", () => {
-    const series = PriceCurve.series([
-      aDay("2026-10-10", { trend: null, low: 3 }),
-      aDay("2026-10-11", { trend: null }),
-    ]);
+    const series = PriceCurve.series(
+      [aDay("2026-10-10", { trend: null, low: 3 }), aDay("2026-10-11", { trend: null })],
+      { days: 2, lastDay: "2026-10-11" },
+    );
 
     expect(series).toEqual({ label: "Low", prices: [3, 0.9] });
+  });
+
+  it("reads the curve out over the whole window, from the first known price to the last", () => {
+    const series = PriceCurve.series(history, { days: 30, lastDay: "2026-10-11" });
+
+    expect(PriceCurve.describe(series)).toBe("Trend over 30 days: from €1.20 to €1.45");
   });
 
   it("describes a single day by its one price", () => {
@@ -102,6 +115,19 @@ describe("TcgCollectorCardsCard", () => {
     expect(html).toContain('src="/api/widgets/tcg-collector-cards-k1/image/1-910771"');
   });
 
+  it("links to the card's sheet even when `link` ends with a slash", () => {
+    const html = renderToStaticMarkup(
+      <TcgCollectorCardsCard
+        followed={[solRing]}
+        days={30}
+        serviceUrl="https://cards.test.local/"
+        placementKey="tcg-collector-cards-k1"
+      />,
+    );
+
+    expect(html).toContain('href="https://cards.test.local/?game=1&amp;card=910771"');
+  });
+
   it("puts the trend first and the low price after it, and no foil price for a card with no foil", () => {
     const html = render([solRing]);
 
@@ -118,12 +144,22 @@ describe("TcgCollectorCardsCard", () => {
     expect(html).not.toContain("V.");
   });
 
-  it("draws the curve in the text color, with what it shows as its label", () => {
+  it("draws the curve in the text color over the declared period, with what it shows as its label", () => {
     const html = render([solRing]);
 
-    expect(html).toContain('<polyline points="0,24 50,14.4 100,0"');
+    // Three days of a 30-day period: the last tenth of the width, not all of it.
+    expect(html).toContain('<polyline points="93.1,24 96.55,14.4 100,0"');
     expect(html).toContain('stroke="currentColor"');
-    expect(html).toContain('aria-label="Trend over 3 days: from €1.20 to €1.45"');
+    expect(html).toContain('aria-label="Trend over 30 days: from €1.20 to €1.45"');
+  });
+
+  it("draws every row on the same days, ending on the most recent priced day of any card", () => {
+    const stale = { ...solRing, history: [aDay("2026-10-08", { trend: 1 }), aDay("2026-10-09", { trend: 2 })] };
+    const html = render([solRing, stale], 5);
+
+    expect(html).toContain('<polyline points="50,24 75,14.4 100,0"');
+    // Its last two days are empty: the curve stops where its prices do, not at the right edge.
+    expect(html).toContain('<polyline points="25,24 50,0"');
   });
 
   it("draws no curve for a card with no price history yet", () => {
