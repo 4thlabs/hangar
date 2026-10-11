@@ -11,7 +11,7 @@ export class ActionToast {
   static readonly TransportErrorMessage = "Impossible de contacter le serveur. Réessayez.";
 
   /** The outcome of an action that returned, successful or not. */
-  static of(result: ActionResult, titles: ActionToastTitles) {
+  static create(result: ActionResult, titles: ActionToastTitles) {
     return {
       title: result.success ? titles.success : titles.error,
       description: result.message,

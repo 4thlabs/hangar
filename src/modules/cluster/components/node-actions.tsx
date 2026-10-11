@@ -21,7 +21,7 @@ export function NodeActions({ cluster, node }: NodeActionsProps) {
   const { run, isPending } = useServerAction();
   const [confirming, setConfirming] = useState<SwarmNodeAction | null>(null);
   const [running, setRunning] = useState<SwarmNodeAction | null>(null);
-  const confirmation = confirming && NodeActionConfirmations.of(cluster, node, confirming);
+  const confirmation = confirming && NodeActionConfirmations.create(cluster, node, confirming);
 
   function confirm(action: SwarmNodeAction) {
     setConfirming(null);

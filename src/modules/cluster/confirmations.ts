@@ -21,7 +21,7 @@ export class NodeActionConfirmations {
    * The confirmation for a node action: what it does, and how many manager failures the cluster
    * tolerates afterwards. Demoting the node Hangar runs on also costs Hangar its view of the cluster.
    */
-  static of(cluster: SwarmManagerView, node: SwarmNode, action: SwarmNodeAction): NodeActionConfirmation {
+  static create(cluster: SwarmManagerView, node: SwarmNode, action: SwarmNodeAction): NodeActionConfirmation {
     const toleranceAfter = SwarmRules.faultTolerance(cluster.managers + NodeActionConfirmations.ManagerDelta[action]);
     const tolerance = `Le cluster tolérera ensuite ${plural(toleranceAfter, "panne")} de manager.`;
 
