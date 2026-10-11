@@ -22,7 +22,7 @@ export class WidgetImages {
 
   /**
    * One image, fetched from the service of the placement `placementKey` names. `undefined` (a 404) for an unplaced key, a
-   * widget that relays nothing, or an id no service would issue.
+   * widget that relays nothing, an id no service would issue, or an image the widget's service does not have.
    */
   async fetch(placementKey: string, id: string): Promise<Response | undefined> {
     if (!WidgetImages.Id.test(id)) {

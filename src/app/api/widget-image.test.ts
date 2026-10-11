@@ -5,11 +5,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   logger: { error: vi.fn() },
-  // A clock, and two Jellyfin servers: one type placed twice, each on its own container.
+  // A clock, two Jellyfin servers (one type placed twice, each on its own container), and a list of trading cards.
   widgets: [
     { type: "clock", column: 1 },
     { type: "jellyfin-latest", column: 2, url: "http://jellyfin:8096", user: "thomas" },
     { type: "jellyfin-latest", column: 2, url: "http://jellyfin-kids:8096", user: "kids" },
+    {
+      type: "tcg-collector-cards",
+      column: 3,
+      url: "http://tcg-collector-web:8080",
+      days: 30,
+      cards: [{ game: 21, product: 755143 }],
+    },
   ] as const,
 }));
 
@@ -31,7 +38,7 @@ vi.mock("#libs/hangar/server", () => ({
 const { GET } = await import("#app/pages/_api/api/widgets/[placementKey]/image/[id].ts");
 const { WidgetKey } = await import("#modules/widgets/config/widgets.ts");
 
-const [clock, jellyfin, kids] = WidgetKey.all(mocks.widgets) as [string, string, string];
+const [clock, jellyfin, kids, cards] = WidgetKey.all(mocks.widgets) as [string, string, string, string];
 
 const get = (placementKey: string, id: string) =>
   GET(new Request("http://hangar.test/"), { params: { placementKey, id } } as never);
@@ -76,6 +83,30 @@ describe("GET a relayed widget image", () => {
     expect(called.map(request => request.url)).toEqual(["http://jellyfin-kids:8096/Items/m-1/Images/Primary"]);
   });
 
+  it("asks for a card's image in the game its id names, and answers 404 for a card with no image", async () => {
+    const called: Request[] = [];
+
+    vi.stubGlobal("fetch", (request: Request) => {
+      called.push(request);
+
+      return Promise.resolve(
+        request.url.includes("product=755143")
+          ? new Response("png-bytes", { headers: { "content-type": "image/png" } })
+          : Response.json({ error: "No image" }, { status: 404 }),
+      );
+    });
+
+    const response = await get(cards, "21-755143");
+
+    expect(called.map(request => request.url)).toEqual([
+      "http://tcg-collector-web:8080/api/image?game=21&product=755143&size=small",
+    ]);
+
+    expect(response.headers.get("content-type")).toBe("image/png");
+    expect((await get(cards, "1-910771")).status).toBe(404);
+    expect(mocks.logger.error).not.toHaveBeenCalled();
+  });
+
   it("turns an anonymous request away before asking the service anything", async () => {
     mocks.getSession.mockResolvedValue(null);
     vi.stubGlobal("fetch", vi.fn());
@@ -92,6 +123,8 @@ describe("GET a relayed widget image", () => {
     expect((await get("jellyfin-latest", "m-1")).status).toBe(404);
     expect((await get("frigate-events", "1699999880.0-person")).status).toBe(404);
     expect((await get(jellyfin, "../../System/Info")).status).toBe(404);
+    // Past the shared check, but not an id the card widget issues.
+    expect((await get(cards, "755143")).status).toBe(404);
     expect(fetch).not.toHaveBeenCalled();
   });
 });

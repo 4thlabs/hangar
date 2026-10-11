@@ -105,8 +105,11 @@ export type WidgetDescriptor<
    * @param service The service the declaration points at, resolved when called; a widget that reads none never calls it
    */
   create(module: Module, config: z.infer<Schema>, service: () => WidgetService): WidgetBody;
-  /** Fetches one image the widget shows but a browser cannot fetch itself. Absent for a widget that relays none. */
-  relay?(service: WidgetService, id: string): Promise<Response>;
+  /**
+   * Fetches one image the widget shows but a browser cannot fetch itself. Absent for a widget that relays none.
+   * @returns `undefined` (a 404) for an id the widget never issues, or an image its service does not have
+   */
+  relay?(service: WidgetService, id: string): Promise<Response | undefined>;
 };
 
 /** Types `create` against the descriptor's own schema and module. */

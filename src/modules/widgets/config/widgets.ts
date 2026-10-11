@@ -9,6 +9,7 @@ import { githubReleasesDescriptor } from "../github/descriptor.ts";
 import { gluetunVpnStatusDescriptor } from "../gluetun/descriptor.ts";
 import { jellyfinLatestDescriptor } from "../jellyfin/descriptor.ts";
 import { minifluxEntriesDescriptor } from "../miniflux/descriptor.ts";
+import { tcgCollectorCardsDescriptor } from "../tcg-collector/descriptor.ts";
 import type { WidgetDescriptor } from "./config.ts";
 
 // The `widgets:` section of `hangar.yml`, derived from the descriptors. No JSX: the CLI imports this. Adding a widget
@@ -25,6 +26,7 @@ const descriptors = [
   gluetunVpnStatusDescriptor,
   minifluxEntriesDescriptor,
   jellyfinLatestDescriptor,
+  tcgCollectorCardsDescriptor,
   githubReleasesDescriptor,
 ] as const;
 
