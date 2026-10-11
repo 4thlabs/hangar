@@ -806,50 +806,54 @@ describe("HangarStore in the swarm", () => {
   const dockerCalls = (runtime: ReturnType<typeof createRuntime>) =>
     runtime.run.mock.calls.map(([, args]) => (args[0] === "stack" ? `stack ${args[1]}` : `compose ${args.at(-1)}`));
 
-  it("moves an app to the swarm: its compose project down, listed, then its stack deployed", async () => {
-    const { store, runtime } = await withApps({ ready: ["alpha-app"], listed: [] });
-
-    await store.deployToSwarm("alpha-app");
-
-    expect(dockerCalls(runtime)).toEqual(["compose -q", "compose down", "stack deploy"]);
-    expect(store.config.swarm()).toEqual(["alpha-app"]);
-  });
-
-  it("takes a freshly listed app back off swarm: when its deploy fails, but keeps one already listed", async () => {
-    const { store, runtime } = await withApps({ ready: ["alpha-app", "beta-app"], listed: ["beta-app"] });
-
+  /** A runtime whose `compose ps -q` says the project runs, and whose deploy fails when told to. */
+  const composeUpRuntime = (runtime: ReturnType<typeof createRuntime>, deployFails = false) =>
     runtime.run.mockImplementation(async (_command, args) => {
-      if (args[1] === "deploy") {
-        throw new HangarRuntimeError(1, "this node is not a swarm manager");
-      }
-
-      return { code: 0, stdout: "" };
-    });
-
-    await expect(store.deployToSwarm("alpha-app")).rejects.toThrow("not a swarm manager");
-    await expect(store.deployToSwarm("beta-app")).rejects.toThrow("not a swarm manager");
-    expect(store.config.swarm()).toEqual(["beta-app"]);
-  });
-
-  it("puts a failed first move back: what a partial deploy left removed, a running compose project up again", async () => {
-    const { store, runtime } = await withApps({ ready: ["alpha-app"], listed: [] });
-
-    runtime.run.mockImplementation(async (_command, args) => {
-      if (args[1] === "deploy") {
+      if (deployFails && args[1] === "deploy") {
         throw new HangarRuntimeError(1, "network conflict");
       }
 
-      // `compose ps -q`: the project runs.
       return { code: 0, stdout: args.at(-1) === "-q" ? "abc123\n" : "" };
     });
 
-    await expect(store.deployToSwarm("alpha-app")).rejects.toThrow("network conflict");
-    expect(dockerCalls(runtime)).toEqual(["compose -q", "compose down", "stack deploy", "stack rm", "compose -d"]);
-    expect(store.config.swarm()).toEqual([]);
+  it("deploys a listed app, taking its compose project down first when it runs, and never edits hangar.yml", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"], listed: ["alpha-app"] });
+    const config = path.join(store.storePath, "config", "hangar.yml");
+    const before = await readFile(config, "utf8");
+
+    composeUpRuntime(runtime);
+    await store.deployToSwarm("alpha-app");
+
+    expect(dockerCalls(runtime)).toEqual(["compose -q", "compose down", "stack deploy"]);
+    expect(await readFile(config, "utf8")).toBe(before);
   });
 
-  it("leaves a compose project that was not running down after a failed first move", async () => {
+  it("only deploys when no compose project of the app runs", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"], listed: ["alpha-app"] });
+
+    await store.deployToSwarm("alpha-app");
+
+    expect(dockerCalls(runtime)).toEqual(["compose -q", "stack deploy"]);
+  });
+
+  it("refuses an app not listed under swarm:, before running anything", async () => {
     const { store, runtime } = await withApps({ ready: ["alpha-app"], listed: [] });
+
+    await expect(store.deployToSwarm("alpha-app")).rejects.toThrow("alpha-app is not listed under swarm:");
+    expect(runtime.run).not.toHaveBeenCalled();
+  });
+
+  it("puts a failed move from compose back: what the partial deploy left removed, the project up again", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"], listed: ["alpha-app"] });
+
+    composeUpRuntime(runtime, true);
+
+    await expect(store.deployToSwarm("alpha-app")).rejects.toThrow("network conflict");
+    expect(dockerCalls(runtime)).toEqual(["compose -q", "compose down", "stack deploy", "stack rm", "compose -d"]);
+  });
+
+  it("leaves a failed redeploy alone when no compose project ran before", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"], listed: ["alpha-app"] });
 
     runtime.run.mockImplementation(async (_command, args) => {
       if (args[1] === "deploy") {
@@ -860,11 +864,11 @@ describe("HangarStore in the swarm", () => {
     });
 
     await expect(store.deployToSwarm("alpha-app")).rejects.toThrow("network conflict");
-    expect(dockerCalls(runtime)).not.toContain("compose -d");
+    expect(dockerCalls(runtime)).toEqual(["compose -q", "stack deploy"]);
   });
 
   it("takes an empty compose.swarm.yml for none: the app cannot run in the swarm yet", async () => {
-    const { store, runtime } = await withApps({ ready: [], listed: [] });
+    const { store, runtime } = await withApps({ ready: [], listed: ["alpha-app"] });
 
     await writeFile(path.join(store.installedPath, "alpha-app", "compose.swarm.yml"), "");
 
@@ -872,29 +876,14 @@ describe("HangarStore in the swarm", () => {
     expect(runtime.run).not.toHaveBeenCalled();
   });
 
-  it("releases an app from the swarm on a node that can no longer remove its stack", async () => {
+  it("removes a stack on uninstall when it can, and says what is left when it cannot", async () => {
     const { store, runtime } = await withApps({ ready: ["alpha-app"], listed: ["alpha-app"] });
+
+    await expect(store.removeStackIfPossible("alpha-app")).resolves.toBeNull();
 
     runtime.run.mockRejectedValue(new HangarRuntimeError(1, "this node is not a swarm manager"));
 
-    await expect(store.releaseFromSwarm("alpha-app")).resolves.toBe("this node is not a swarm manager");
-    expect(store.config.swarm()).toEqual([]);
-  });
-
-  it("refuses to move an app without compose.swarm.yml, before taking anything down", async () => {
-    const { store, runtime } = await withApps({ ready: [], listed: [] });
-
-    await expect(store.deployToSwarm("alpha-app")).rejects.toThrow("alpha-app is not a swarm app");
-    expect(runtime.run).not.toHaveBeenCalled();
-  });
-
-  it("removes an app's stack and takes it off swarm:", async () => {
-    const { store, runtime } = await withApps({ ready: ["alpha-app"], listed: ["alpha-app"] });
-
-    await store.removeFromSwarm("alpha-app");
-
-    expect(dockerCalls(runtime)).toEqual(["stack rm"]);
-    expect(store.config.swarm()).toEqual([]);
+    await expect(store.removeStackIfPossible("alpha-app")).resolves.toBe("this node is not a swarm manager");
   });
 
   /** The stack each call named: its last argument, which `deploy`, `rm` and `ps` end with. */

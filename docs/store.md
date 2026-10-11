@@ -98,10 +98,12 @@ What Swarm accepts in the `compose.yml` it merges over:
 - A bind mount (`${APP_DATA_DIR}/miniflux/db`) must exist on whichever node runs the task: pin the
   service with a placement constraint, mount the same share on every node, or use an `nfs` volume.
 
-The store card of such an app shows a **Swarm** badge and a **Déployer sur le swarm** button, which
-links the app, lists it under [`swarm:`](#swarm) and deploys it. Deploying by hand works as well,
-from the CLI (`swarm miniflux deploy`) or with `docker stack deploy`; the stack then shows on the
-Cluster page all the same. Hangar names the stack after the app.
+The store card of such an app shows a **Swarm** badge. Once you list the app under
+[`swarm:`](#swarm) in `hangar.yml`, the card also offers **Déployer sur le swarm**, which links the
+app, takes down its compose containers if they run, and deploys its stack. Hangar never edits
+`hangar.yml` itself. Deploying by hand works as well, from the CLI (`swarm miniflux deploy`) or with
+`docker stack deploy`; the stack then shows on the Cluster page all the same. Hangar names the stack
+after the app.
 
 Saving either file in the editor runs `docker stack config -c compose.yml -c compose.swarm.yml` with
 `.env.global` first, which works on any node, in a swarm or not.
@@ -183,8 +185,9 @@ relative path from an app's `compose.yml` keeps resolving.
 Default `[]`. The apps that run in the swarm instead of with compose. Each needs a
 [`compose.swarm.yml`](#an-apps-composeswarmyml). They are left out of the Apps page and of `store up`,
 `store down` and category commands, so compose never starts a second copy; `swarm deploy` and
-`swarm rm` cover them, in category order. **Déployer sur le swarm** adds an app here, and uninstalling
-it removes it, keeping the rest of the file and its comments.
+`swarm rm` cover them, in category order, and the store offers **Déployer sur le swarm** for them.
+You write this list by hand, like the categories: uninstalling an app leaves it here, so take it off
+yourself.
 
 Listing an app is only needed for these grouped commands: one deployed by hand, or with
 `swarm <app> deploy`, runs in the swarm all the same.

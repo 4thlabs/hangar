@@ -322,37 +322,34 @@ export class HangarStore {
   }
 
   /**
-   * Moves an app to the swarm: links it, takes its compose project down so it never runs twice, lists
-   * it under `swarm:`, then deploys its stack. A failed deploy takes a freshly listed app back off the
-   * list, where nothing would deploy it; an app already listed is only deployed again.
-   * @param app The app id; it must ship a `compose.swarm.yml`
+   * Deploys a `swarm:` app from the store: links it, takes down its compose project if it still runs
+   * (the app was listed after being installed), then deploys its stack. If that move fails, what the
+   * deploy created is removed and the compose project comes back up. `hangar.yml` is never edited: an
+   * app is listed by hand.
+   * @param app The app id; listed under `swarm:`, with a `compose.swarm.yml`
    * @param options Run options for the compose and stack calls (`capture` to keep their output)
    */
   async deployToSwarm(app: string, options?: RunOptions) {
-    const wasListed = this.config.swarm().includes(app);
+    if (!this.config.swarm().includes(app)) {
+      throw new HangarRuntimeError(1, `${app} is not listed under swarm: in hangar.yml`);
+    }
 
     await this.link(app);
     await this.installedSwarmFile(app);
     await this.env.ensure(app);
 
     // Asked before it goes down, so a failed move can bring it back as it was.
-    const wasRunning = !wasListed && (await this.composeRunning(app));
+    const wasRunning = await this.composeRunning(app);
 
-    if (!wasListed) {
+    if (wasRunning) {
       await this.composeStack(app, ["down"], options);
-      await this.config.addToSwarm(app);
     }
 
     try {
       await this.stackApp(app, ["deploy", "--quiet"], options);
     } catch (error) {
-      if (!wasListed) {
-        await this.undoSwarmMove(app);
-      }
-
-      // Back as it was: a project that ran before the move runs again.
       if (wasRunning) {
-        await this.composeStack(app, ["up", "-d"], options);
+        await this.backToCompose(app, options);
       }
 
       throw error;
@@ -361,14 +358,14 @@ export class HangarStore {
     }
   }
 
-  /** Puts a failed first move to the swarm back: off the list, and what a partial deploy created removed. */
-  private async undoSwarmMove(app: string) {
-    await this.config.removeFromSwarm(app);
-
+  /** Undoes a failed move from compose: what the partial deploy created removed, the project up again. */
+  private async backToCompose(app: string, options?: RunOptions) {
     // There may be nothing to remove: Docker then complains, which changes nothing here.
     await this.stackApp(app, ["rm"], { capture: true }).catch((error: unknown) =>
       logger.warn("Could not remove what a failed swarm deploy left", { error, app }),
     );
+
+    await this.composeStack(app, ["up", "-d"], options);
   }
 
   /** Whether any container of the app's compose project runs. */
@@ -376,17 +373,6 @@ export class HangarStore {
     const { stdout } = await this.composeStack(app, ["ps", "-q"], { capture: true });
 
     return stdout.trim() !== "";
-  }
-
-  /**
-   * Removes an app's stack from the swarm and takes it off `swarm:`, so `swarm deploy` does not bring
-   * it back. The app stays installed, running nowhere until deployed again.
-   * @param options Run options for the stack call (`capture` to keep its output)
-   */
-  async removeFromSwarm(app: string, options?: RunOptions) {
-    await this.stackApp(app, ["rm"], options);
-    await this.config.removeFromSwarm(app);
-    await this.refresh();
   }
 
   /**
@@ -400,13 +386,12 @@ export class HangarStore {
   }
 
   /**
-   * Takes a `swarm:` app out of the swarm on uninstall: its stack removed when this node can, and the
-   * app off the list either way. A node that is no longer a manager cannot remove the stack, but the
-   * app must still be able to leave Hangar.
+   * Removes an app's stack on uninstall, when this node can: one that is no longer a manager cannot,
+   * but the app must still be able to leave Hangar.
    * @returns Docker's complaint when the stack is left to remove from a manager, `null` once removed
    */
-  async releaseFromSwarm(app: string): Promise<string | null> {
-    const leftover = await this.stackApp(app, ["rm"], { capture: true }).then(
+  async removeStackIfPossible(app: string): Promise<string | null> {
+    return this.stackApp(app, ["rm"], { capture: true }).then(
       () => null,
       (error: unknown) => {
         if (error instanceof HangarError) {
@@ -416,10 +401,6 @@ export class HangarStore {
         throw error;
       },
     );
-
-    await this.config.removeFromSwarm(app);
-
-    return leftover;
   }
 
   /** Every stack name {@link isStackManageable} accepts. */

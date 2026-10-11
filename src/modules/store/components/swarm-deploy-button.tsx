@@ -23,7 +23,7 @@ export function SwarmDeployButton({ appId, appName, installed }: SwarmDeployButt
   const [confirming, setConfirming] = useState(false);
 
   const composeNote = installed
-    ? " Ses conteneurs compose sont d’abord arrêtés, pour qu’elle ne tourne pas deux fois."
+    ? " Si elle tourne avec compose, ses conteneurs sont d’abord arrêtés, pour qu’elle ne tourne pas deux fois."
     : "";
 
   function deploy() {
@@ -52,7 +52,7 @@ export function SwarmDeployButton({ appId, appName, installed }: SwarmDeployButt
       <ConfirmDialog
         open={confirming}
         title={`Déployer ${appName} sur le swarm ?`}
-        description={`L’app est ajoutée à la liste swarm de hangar.yml, puis déployée avec compose.yml et compose.swarm.yml. Elle apparaîtra sur la page Cluster, plus sur Apps.${composeNote}`}
+        description={`Elle est déployée avec compose.yml et compose.swarm.yml, et apparaîtra sur la page Cluster.${composeNote}`}
         confirmLabel="Déployer"
         onConfirm={deploy}
         onCancel={() => setConfirming(false)}

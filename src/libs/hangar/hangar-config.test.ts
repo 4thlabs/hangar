@@ -135,57 +135,9 @@ categories:
     expect(await readFile(file, "utf8")).toBe("categories: []\n");
   });
 
-  it("lists and unlists swarm apps, keeping the rest of the file and its comments", async () => {
-    const file = await configFile(`# The categories come first
-categories:
-  - name: infra # the base
-    color: blue
-    stacks: [traefik, miniflux]
-`);
+  it("loads the apps that run in the swarm", async () => {
+    const file = await configFile("categories: []\nswarm: [miniflux]\n");
 
-    const config = await new HangarConfig(file).load();
-
-    await config.addToSwarm("miniflux");
-    await config.addToSwarm("miniflux");
-
-    expect(config.swarm()).toEqual(["miniflux"]);
-    expect(await readFile(file, "utf8")).toContain("# The categories come first");
-    expect(await readFile(file, "utf8")).toContain("- name: infra # the base");
-    expect(await readFile(file, "utf8")).toContain("stacks: [traefik, miniflux]");
-
-    await config.removeFromSwarm("miniflux");
-
-    expect(config.swarm()).toEqual([]);
-    expect(await readFile(file, "utf8")).not.toContain("swarm");
-    expect((await new HangarConfig(file).load()).categories()).toHaveLength(1);
-  });
-
-  it("keeps both of two swarm edits made at once", async () => {
-    const file = await configFile("categories: []\n");
-    const config = await new HangarConfig(file).load();
-
-    await Promise.all([config.addToSwarm("a"), config.addToSwarm("b")]);
-
-    expect(config.swarm()).toEqual(["a", "b"]);
-  });
-
-  it("edits the swarm list as it is on disk, not as it was loaded", async () => {
-    const file = await configFile("categories: []\n");
-    const config = await new HangarConfig(file).load();
-
-    await writeFile(file, "categories: []\nswarm: [by-hand]\n");
-    await config.addToSwarm("miniflux");
-
-    expect(config.swarm()).toEqual(["by-hand", "miniflux"]);
-  });
-
-  it("lists a swarm app in a store that ships no hangar.yml, writing the smallest valid one", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "hangar-config-"));
-    const config = await new HangarConfig(path.join(dir, "config", "hangar.yml")).load();
-
-    await config.addToSwarm("miniflux");
-
-    expect(config.swarm()).toEqual(["miniflux"]);
-    expect(config.categories()).toEqual([]);
+    expect((await new HangarConfig(file).load()).swarm()).toEqual(["miniflux"]);
   });
 });

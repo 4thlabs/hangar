@@ -65,7 +65,7 @@ export const uninstallApp = async (appId: string): Promise<StoreActionResult> =>
   try {
     // Down before unlinking: once the symlink is gone the compose files are unreachable and whatever
     // runs becomes an orphan Hangar can no longer manage.
-    const stackLeftover = app.runsInSwarm ? await hangar.store.releaseFromSwarm(app.id) : null;
+    const stackLeftover = app.runsInSwarm ? await hangar.store.removeStackIfPossible(app.id) : null;
 
     if (!app.runsInSwarm) {
       await hangar.store.compose(app.id, ["down"]);
@@ -80,9 +80,12 @@ export const uninstallApp = async (appId: string): Promise<StoreActionResult> =>
       ? ` Sa stack n’a pas pu être supprimée (${stackLeftover}) : supprimez-la depuis un manager.`
       : "";
 
+    // Hangar never edits hangar.yml: an app left under `swarm:` would fail the next `swarm deploy`.
+    const listNote = app.runsInSwarm ? ` Retirez-la aussi de la liste swarm: de hangar.yml.` : "";
+
     return installed
       ? StoreActionResult.failure(`La désinstallation de ${app.name} n’a pas pu être confirmée.`, true)
-      : StoreActionResult.success(`${app.name} a été désinstallée.${leftoverNote}`, false);
+      : StoreActionResult.success(`${app.name} a été désinstallée.${leftoverNote}${listNote}`, false);
   } catch (error) {
     logger.error("App uninstallation failed", { error, appId: app.id });
 
@@ -90,7 +93,7 @@ export const uninstallApp = async (appId: string): Promise<StoreActionResult> =>
   }
 };
 
-/** Moves an app to the swarm; see `HangarStore.deployToSwarm`. */
+/** Deploys a `swarm:` app to the swarm; see `HangarStore.deployToSwarm`. */
 export const deployToSwarm = async (appId: string): Promise<StoreActionResult> => {
   const app = await findApp(appId, "Swarm deployment rejected: unknown app");
 
@@ -102,6 +105,10 @@ export const deployToSwarm = async (appId: string): Promise<StoreActionResult> =
     return StoreActionResult.failure(
       `${app.name} n’a pas de compose.swarm.yml : elle ne peut pas tourner dans le swarm.`,
     );
+  }
+
+  if (!app.runsInSwarm) {
+    return StoreActionResult.failure(`Ajoutez ${app.id} à la liste swarm: de hangar.yml pour la déployer.`);
   }
 
   try {

@@ -126,7 +126,7 @@ export function StackSheet({ stack, manageable, onClose }: StackSheetProps) {
       <ConfirmDialog
         open={confirmingRemoval}
         title={`Supprimer ${stack} du swarm ?`}
-        description="Ses services sont arrêtés sur tous les nœuds et l’app est retirée de la liste swarm de hangar.yml. Elle reste installée et ses volumes sont conservés."
+        description="Ses services sont arrêtés sur tous les nœuds. L’app reste installée, ses volumes sont conservés, et si elle est listée sous swarm: dans hangar.yml, le prochain swarm deploy la relancera."
         confirmLabel="Supprimer"
         destructive
         onConfirm={() => stack && remove(stack)}

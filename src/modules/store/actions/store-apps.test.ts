@@ -24,7 +24,8 @@ vi.mock("#libs/hangar/server", async () => {
 const { hangar } = await import("#libs/hangar/server");
 const { deployToSwarm, uninstallApp } = await import("#modules/store/actions/store-apps.ts");
 
-const CONFIG = "# The store\ncategories:\n  - name: Web\n    color: blue\n    stacks: [whoami, plain]\n";
+const CONFIG =
+  "# The store\ncategories:\n  - name: Web\n    color: blue\n    stacks: [whoami, plain, ready]\nswarm: [whoami]\n";
 
 /** The `docker` calls made so far, as `compose down` or `stack deploy` style strings. */
 const dockerCalls = () =>
@@ -44,10 +45,13 @@ describe("deployToSwarm", () => {
     await mkdir(hangar.store.installedPath, { recursive: true });
     await mkdir(app("whoami"), { recursive: true });
     await mkdir(app("plain"), { recursive: true });
+    await mkdir(app("ready"), { recursive: true });
     await writeFile(path.join(hangar.store.storePath, "config", "hangar.yml"), CONFIG);
     await writeFile(path.join(app("whoami"), "compose.yml"), "x-hangar:\n  name: Who Am I\nservices: {}\n");
     await writeFile(path.join(app("whoami"), "compose.swarm.yml"), "services: {}\n");
     await writeFile(path.join(app("plain"), "compose.yml"), "services: {}\n");
+    await writeFile(path.join(app("ready"), "compose.yml"), "services: {}\n");
+    await writeFile(path.join(app("ready"), "compose.swarm.yml"), "services: {}\n");
     await hangar.store.refresh();
 
     vi.spyOn(hangar.runtime, "run").mockReset().mockResolvedValue({ code: 0, stdout: "" });
@@ -57,16 +61,25 @@ describe("deployToSwarm", () => {
     await rm(mocks.dataDir, { recursive: true, force: true });
   });
 
-  it("takes the compose app down, lists it under swarm:, then deploys its stack", async () => {
+  it("deploys a swarm: app, leaving hangar.yml as it was", async () => {
+    const config = path.join(hangar.store.storePath, "config", "hangar.yml");
     const result = await deployToSwarm("whoami");
 
     expect(result).toMatchObject({ success: true, message: "Who Am I est déployée sur le swarm." });
-    expect(dockerCalls()).toEqual(["compose -q", "compose down", "stack deploy"]);
+    expect(dockerCalls()).toEqual(["compose -q", "stack deploy"]);
     expect(hangar.store.app("whoami")).toMatchObject({ installed: true, runsInSwarm: true });
-    expect(await readFile(path.join(hangar.store.storePath, "config", "hangar.yml"), "utf8")).toContain("# The store");
+    expect(await readFile(config, "utf8")).toBe(CONFIG);
   });
 
-  it("takes a freshly listed app back off swarm: when its deploy fails, with Docker's reason", async () => {
+  it("refuses an app not listed under swarm:, saying where to list it", async () => {
+    const result = await deployToSwarm("ready");
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("hangar.yml");
+    expect(hangar.runtime.run).not.toHaveBeenCalled();
+  });
+
+  it("passes on Docker's reason when the deploy fails", async () => {
     vi.mocked(hangar.runtime.run).mockImplementation(async (_command, args) => {
       if (args[1] === "deploy") {
         throw new HangarRuntimeError(1, "this node is not a swarm manager");
@@ -79,7 +92,6 @@ describe("deployToSwarm", () => {
 
     expect(result.success).toBe(false);
     expect(result.message).toContain("this node is not a swarm manager");
-    expect(hangar.store.config.swarm()).toEqual([]);
   });
 
   it("refuses an app without compose.swarm.yml, running nothing", async () => {
@@ -89,15 +101,15 @@ describe("deployToSwarm", () => {
     expect(hangar.runtime.run).not.toHaveBeenCalled();
   });
 
-  it("removes a swarm app's stack on uninstall, never running compose down, and unlists it", async () => {
+  it("removes a swarm app's stack on uninstall, never running compose down, and asks to unlist it", async () => {
     await deployToSwarm("whoami");
     vi.mocked(hangar.runtime.run).mockClear();
 
     const result = await uninstallApp("whoami");
 
     expect(result).toMatchObject({ success: true, installed: false });
+    expect(result.message).toContain("Retirez-la aussi de la liste swarm:");
     expect(dockerCalls()).toEqual(["stack rm"]);
-    expect(hangar.store.config.swarm()).toEqual([]);
   });
 
   it("uninstalls a swarm app on a node that can no longer remove its stack, saying what is left", async () => {
@@ -108,6 +120,5 @@ describe("deployToSwarm", () => {
 
     expect(result).toMatchObject({ success: true, installed: false });
     expect(result.message).toContain("supprimez-la depuis un manager");
-    expect(hangar.store.config.swarm()).toEqual([]);
   });
 });
