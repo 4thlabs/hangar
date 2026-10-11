@@ -27,8 +27,9 @@ cluster:
 | `GET /swarm`           | The join tokens                                                    |
 | `GET /swarm/unlockkey` | The unlock key, when autolock is on                                |
 
-A worker gets `503` on all of them except `info`: the page then only says "this node is a worker of cluster
-X" and shows the command to run on a manager.
+A worker gets `503` on all of them except `info`, whose `Cluster` field is empty too: the page then only says
+"this node is a worker", with the managers' addresses (`info.Swarm.RemoteManagers`) and the command to run
+on one of them.
 
 **Compose and Swarm stay apart.** Compose apps run on Hangar's node and live in `/apps`, unchanged. An app
 that should run on another machine is deployed to the swarm from its `compose.swarm.yml` (see below). `/cluster` shows only what runs in the swarm: the Swarm tasks from `GET /tasks`, with their
@@ -334,9 +335,11 @@ no `server-only` guard. One public read, `cluster()`, a union on `state`:
 
 | `state`    | When (`info.Swarm`)                     | Carries                                                     |
 | ---------- | --------------------------------------- | ----------------------------------------------------------- |
-| `inactive` | `LocalNodeState` is `inactive`          | Nothing                                                     |
+| `inactive` | `LocalNodeState` is `inactive`          | Nothing; the page shows `docker swarm init`                 |
+| `pending`  | `LocalNodeState` is `pending` (joining) | Nothing                                                     |
 | `locked`   | `LocalNodeState` is `locked` (autolock) | Nothing; the page shows `docker swarm unlock`               |
-| `worker`   | `active`, `ControlAvailable` false      | Cluster id, `RemoteManagers` for the command to run there   |
+| `error`    | `LocalNodeState` is `error`             | `info.Swarm.Error`                                          |
+| `worker`   | `active`, `ControlAvailable` false      | `RemoteManagers`' addresses; a worker knows no cluster id   |
 | `manager`  | `active`, `ControlAvailable` true       | Cluster id, current node id, fault tolerance, `SwarmNode[]` |
 
 - `info()` comes first; `listNodes`, `listServices({ status: true })` and

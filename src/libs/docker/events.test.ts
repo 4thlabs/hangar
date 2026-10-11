@@ -56,6 +56,14 @@ describe("DockerEvents.changes", () => {
     expect(DockerEvents.changes({ Type: "volume" })).toEqual(["overview"]);
     expect(DockerEvents.changes({ Type: "network" })).toEqual([]);
   });
+
+  it("refreshes the swarm for a node, a service, or the container of a Swarm task", () => {
+    const taskContainer = { Type: "container", Actor: { Attributes: { "com.docker.swarm.task.id": "task-1" } } };
+
+    expect(DockerEvents.changes({ Type: "node" })).toEqual(["swarm"]);
+    expect(DockerEvents.changes({ Type: "service" })).toEqual(["swarm"]);
+    expect(DockerEvents.changes(taskContainer)).toEqual(["swarm", "overview"]);
+  });
 });
 
 describe("DockerEvents", () => {
@@ -65,7 +73,7 @@ describe("DockerEvents", () => {
     events.start();
     await vi.advanceTimersByTimeAsync(2_000);
 
-    expect(changes.sort()).toEqual(["containers", "images", "overview"]);
+    expect(changes.sort()).toEqual(["containers", "images", "overview", "swarm"]);
   });
 
   it("asks the daemon only for the actions that move a cached read", async () => {
@@ -73,7 +81,7 @@ describe("DockerEvents", () => {
 
     const [options] = dockerMock.getEvents.mock.calls[0] as [{ filters: { type: string[]; event: string[] } }];
 
-    expect(options.filters.type).toEqual(["container", "image", "volume"]);
+    expect(options.filters.type).toEqual(["container", "image", "volume", "node", "service"]);
     expect(options.filters.event).toContain("health_status");
     expect(options.filters.event).not.toContain("exec_start");
   });
@@ -135,7 +143,7 @@ describe("DockerEvents", () => {
     await vi.advanceTimersByTimeAsync(2_000);
 
     expect(dockerMock.getEvents).toHaveBeenCalledTimes(2);
-    expect(changes.sort()).toEqual(["containers", "images", "overview"]);
+    expect(changes.sort()).toEqual(["containers", "images", "overview", "swarm"]);
   });
 
   it("keeps trying while the daemon is unreachable", async () => {
@@ -145,7 +153,7 @@ describe("DockerEvents", () => {
     await vi.advanceTimersByTimeAsync(2_000);
 
     expect(dockerMock.getEvents).toHaveBeenCalledTimes(2);
-    expect(changes.sort()).toEqual(["containers", "images", "overview"]);
+    expect(changes.sort()).toEqual(["containers", "images", "overview", "swarm"]);
   });
 
   it("tears the stream down and reports nothing more once stopped", async () => {

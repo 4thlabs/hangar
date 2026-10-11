@@ -19,6 +19,9 @@ export const dockerMock = {
   info: vi.fn(),
   df: vi.fn(),
   getEvents: vi.fn(),
+  listNodes: vi.fn(),
+  listServices: vi.fn(),
+  listTasks: vi.fn(),
 };
 
 /**
@@ -40,6 +43,9 @@ export const fakeDockerode = () =>
     info: dockerMock.info,
     df: dockerMock.df,
     getEvents: dockerMock.getEvents,
+    listNodes: dockerMock.listNodes,
+    listServices: dockerMock.listServices,
+    listTasks: dockerMock.listTasks,
     modem: { demuxStream: dockerMock.demuxStream },
   }) as unknown as Dockerode;
 

@@ -1,0 +1,80 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+import type { SwarmCluster, SwarmNode } from "#libs/docker";
+
+vi.mock("waku", () => ({
+  useRouter: () => ({ reload: async () => {} }),
+}));
+
+const { ClusterOverview } = await import("./cluster-overview.tsx");
+
+const render = (cluster: SwarmCluster | null, error: string | null = null) =>
+  renderToStaticMarkup(<ClusterOverview cluster={cluster} error={error} />);
+
+const node = (overrides: Partial<SwarmNode>): SwarmNode => ({
+  id: "node-1",
+  hostname: "nas",
+  role: "leader",
+  status: "ready",
+  availability: "active",
+  cpus: 8,
+  memoryBytes: 32 * 1024 ** 3,
+  engineVersion: "29.1.3",
+  stacks: [],
+  ...overrides,
+});
+
+const manager: SwarmCluster = {
+  state: "manager",
+  clusterId: "nhyx6n1b8b0a0zqlwjr4bx7xd",
+  currentNodeId: "node-1",
+  managers: 2,
+  faultTolerance: 0,
+  nodes: [
+    node({ stacks: [{ name: "miniflux", health: "partial", tasks: 2 }] }),
+    node({ id: "node-2", hostname: "pi-02", role: "worker", status: "down", availability: "drain" }),
+  ],
+};
+
+describe("ClusterOverview", () => {
+  it("sums the cluster up under the title, with the short id", () => {
+    expect(render(manager)).toContain("nhyx6n1b8b0a · 2 nœuds · 2 managers (tolère 0 panne)");
+  });
+
+  it("draws one card per node, marking this one, with the stacks running on it", () => {
+    const html = render(manager);
+
+    expect(html).toContain("★ ce nœud");
+    expect(html.match(/★ ce nœud/g)).toHaveLength(1);
+    expect(html).toContain("8 CPU · 32 GiB · Docker 29.1.3");
+    expect(html).toContain("miniflux");
+    expect(html).toContain("◐");
+    expect(html).toContain("2 tâches");
+  });
+
+  it("shows an unreachable, drained worker for what it is", () => {
+    const html = render(manager);
+
+    expect(html).toContain("Injoignable");
+    expect(html).toContain("Drainé");
+    expect(html).toContain("Aucune app");
+  });
+
+  const emptyStates: [SwarmCluster, string][] = [
+    [{ state: "inactive", error: "" }, "docker swarm init"],
+    [{ state: "locked", error: "" }, "docker swarm unlock"],
+    [{ state: "worker", managers: ["192.168.1.10:2377"] }, "192.168.1.10:2377"],
+    [{ state: "error", error: "manager unreachable" }, "manager unreachable"],
+  ];
+
+  it.each(emptyStates)("explains the %o state", (cluster, expected) => {
+    expect(render(cluster)).toContain(expected);
+  });
+
+  it("offers a retry when the daemon fails", () => {
+    const html = render(null, "Le daemon Docker ne répond pas.");
+
+    expect(html).toContain("Swarm indisponible");
+    expect(html).toContain("Réessayer");
+  });
+});
