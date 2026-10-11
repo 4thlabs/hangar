@@ -1,10 +1,11 @@
 "use client";
 
 import { CopyIcon, KeyRoundIcon, RefreshCwIcon } from "lucide-react";
-import { useState, useTransition } from "react";
 import type { SwarmJoinCommands } from "#libs/docker";
 import { revealJoinCommands, rotateJoinToken } from "#modules/cluster/actions/manage-cluster.ts";
+import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
+import { useServerRead } from "#modules/common/hooks/use-server-read.ts";
 import { Alert, AlertDescription } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
@@ -15,7 +16,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "#modules/common/ui/dialog.tsx";
-import { Spinner } from "#modules/common/ui/spinner.tsx";
 import { toast } from "#modules/common/ui/toast.tsx";
 
 type Role = keyof SwarmJoinCommands;
@@ -30,24 +30,10 @@ const RoleTitle: Record<Role, string> = {
  * and forgotten when the dialog closes.
  */
 export function TokensDialog() {
-  const [commands, setCommands] = useState<SwarmJoinCommands | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isRevealing, startRevealing] = useTransition();
+  const joinCommands = useServerRead<SwarmJoinCommands>();
   const rotation = useServerAction();
-
-  function reveal() {
-    startRevealing(async () => {
-      try {
-        const result = await revealJoinCommands();
-
-        setCommands(result.commands ?? null);
-        setError(result.success ? null : result.message);
-      } catch (cause) {
-        console.error("Server action failed", cause);
-        setError("Impossible de contacter le serveur.");
-      }
-    });
-  }
+  const commands = joinCommands.value;
+  const reveal = () => joinCommands.load(revealJoinCommands);
 
   function rotate(role: Role) {
     rotation.run(() => rotateJoinToken(role), { success: "Token régénéré", error: "Régénération : échec" }, reveal);
@@ -55,8 +41,7 @@ export function TokensDialog() {
 
   function forget(open: boolean) {
     if (!open) {
-      setCommands(null);
-      setError(null);
+      joinCommands.reset();
     }
   }
 
@@ -85,9 +70,9 @@ export function TokensDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        {error && (
+        {joinCommands.error && (
           <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{joinCommands.error}</AlertDescription>
           </Alert>
         )}
 
@@ -105,7 +90,7 @@ export function TokensDialog() {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  disabled={rotation.isPending || isRevealing}
+                  disabled={rotation.isPending || joinCommands.isLoading}
                   onClick={() => rotate(role)}
                 >
                   <RefreshCwIcon data-icon="inline-start" />
@@ -115,10 +100,15 @@ export function TokensDialog() {
             </section>
           ))
         ) : (
-          <Button type="button" disabled={isRevealing} onClick={reveal}>
-            {isRevealing ? <Spinner data-icon="inline-start" /> : <KeyRoundIcon data-icon="inline-start" />}
+          <PendingButton
+            type="button"
+            pending={joinCommands.isLoading}
+            pendingLabel="Afficher les commandes"
+            icon={<KeyRoundIcon data-icon="inline-start" />}
+            onClick={reveal}
+          >
             Afficher les commandes
-          </Button>
+          </PendingButton>
         )}
       </DialogContent>
     </Dialog>

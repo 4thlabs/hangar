@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { swarmNodeActions, swarmNodeRefusal } from "./swarm-node-actions.ts";
+import { swarmNodeActions, swarmNodeRefusal } from "./node-actions.ts";
 
 const worker = { role: "worker", status: "ready", availability: "active" } as const;
 const manager = { role: "manager", status: "ready", availability: "active" } as const;

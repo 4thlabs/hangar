@@ -32,7 +32,7 @@ export class HangarStore {
   static readonly GlobalCommand = ["up", "down", "pull"];
 
   /** Run order per stack verb, as {@link CommandOrder}: deploy forwards, remove backwards */
-  static readonly StackCommandOrder: Record<string, number> = { deploy: 1, rm: -1 };
+  private static readonly StackCommandOrder: Record<string, number> = { deploy: 1, rm: -1 };
 
   /** Stack verbs that address every `swarm:` app instead of a single one */
   static readonly GlobalStackCommand = ["deploy", "rm"];
@@ -233,11 +233,18 @@ export class HangarStore {
       throw new HangarRuntimeError(1, "Non detached mode only authorised on a single stack");
     }
 
-    const order = HangarStore.CommandOrder[command] ?? 0;
+    await HangarStore.runInOrder(stacks, HangarStore.CommandOrder[command] ?? 0, stack =>
+      this.composeStack(stack, args, options),
+    );
+  }
 
-    // Unordered: let every stack run, then surface the first failure.
+  /**
+   * Runs `runOne` on every target: in parallel when `order` is 0, then surfacing the first failure;
+   * otherwise one at a time, forwards (1) or backwards (-1), stopping at the first failure.
+   */
+  private static async runInOrder(targets: string[], order: number, runOne: (target: string) => Promise<unknown>) {
     if (order === 0) {
-      const results = await Promise.allSettled(stacks.map(stack => this.composeStack(stack, args, options)));
+      const results = await Promise.allSettled(targets.map(runOne));
       const failure = results.find(result => result.status === "rejected");
 
       if (failure) {
@@ -247,9 +254,8 @@ export class HangarStore {
       return;
     }
 
-    // Ordered: stop at the first failure, up/start forwards, down/stop backwards.
-    for (const stack of order === 1 ? stacks : [...stacks].reverse()) {
-      await this.composeStack(stack, args, options);
+    for (const target of order === 1 ? targets : [...targets].reverse()) {
+      await runOne(target);
     }
   }
 
@@ -272,16 +278,8 @@ export class HangarStore {
    * @param options Run options, forwarded to the runtime
    */
   private async stackApp(app: string, args: string[], options: RunOptions = {}) {
-    const folder = path.join(this.installedPath, app);
-    const files = ["-c", path.join(folder, AppFiles.ComposeFile), "-c", path.join(folder, AppFiles.SwarmFile)];
-
-    if (!(await Runtime.exists(path.join(folder, AppFiles.SwarmFile)))) {
-      throw new HangarRuntimeError(
-        1,
-        `${app} is not a swarm app: it has no ${AppFiles.SwarmFile}, or is not installed`,
-      );
-    }
-
+    const swarmFile = await this.installedSwarmFile(app);
+    const files = ["-c", path.join(this.installedPath, app, AppFiles.ComposeFile), "-c", swarmFile];
     const [verb = "", ...rest] = args;
 
     const stackArgs: Record<string, string[]> = {
@@ -317,22 +315,77 @@ export class HangarStore {
     }
 
     const apps = this.isGroup(name) ? this.swarmApps(name) : [name];
-    const order = HangarStore.StackCommandOrder[args[0] ?? ""] ?? 0;
 
-    if (order === 0) {
-      const results = await Promise.allSettled(apps.map(app => this.stackApp(app, args, options)));
-      const failure = results.find(result => result.status === "rejected");
+    await HangarStore.runInOrder(apps, HangarStore.StackCommandOrder[args[0] ?? ""] ?? 0, app =>
+      this.stackApp(app, args, options),
+    );
+  }
 
-      if (failure) {
-        throw failure.reason;
+  /**
+   * Moves an app to the swarm: links it, takes its compose project down so it never runs twice, lists
+   * it under `swarm:`, then deploys its stack. A failed deploy takes a freshly listed app back off the
+   * list, where nothing would deploy it; an app already listed is only deployed again.
+   * @param app The app id; it must ship a `compose.swarm.yml`
+   * @param options Run options for the compose and stack calls (`capture` to keep their output)
+   */
+  async deployToSwarm(app: string, options?: RunOptions) {
+    const wasListed = this.config.swarm().includes(app);
+
+    await this.link(app);
+    await this.installedSwarmFile(app);
+    await this.env.ensure(app);
+
+    if (!wasListed) {
+      await this.composeStack(app, ["down"], options);
+      await this.config.addToSwarm(app);
+    }
+
+    try {
+      await this.stackApp(app, ["deploy", "--quiet"], options);
+    } catch (error) {
+      if (!wasListed) {
+        await this.config.removeFromSwarm(app);
       }
 
-      return;
+      throw error;
+    } finally {
+      await this.refresh();
+    }
+  }
+
+  /**
+   * Removes an app's stack from the swarm and takes it off `swarm:`, so `swarm deploy` does not bring
+   * it back. The app stays installed, running nowhere until deployed again.
+   * @param options Run options for the stack call (`capture` to keep its output)
+   */
+  async removeFromSwarm(app: string, options?: RunOptions) {
+    await this.stackApp(app, ["rm"], options);
+    await this.config.removeFromSwarm(app);
+    await this.refresh();
+  }
+
+  /**
+   * Whether Hangar can deploy this stack again and remove it: it is named after an installed app that
+   * ships a `compose.swarm.yml`, whoever deployed it.
+   */
+  isStackManageable(name: string) {
+    const app = this.app(name);
+
+    return Boolean(app?.installed && app.swarmReady);
+  }
+
+  /** The installed app's compose.swarm.yml, or a rejection saying why the app cannot run in the swarm. */
+  private async installedSwarmFile(app: string) {
+    const swarmFile = path.join(this.installedPath, app, AppFiles.SwarmFile);
+
+    if (!(await Runtime.exists(swarmFile))) {
+      throw new HangarRuntimeError(
+        1,
+        `${app} is not a swarm app: it has no ${AppFiles.SwarmFile}, or is not installed`,
+      );
     }
 
-    for (const app of order === 1 ? apps : [...apps].reverse()) {
-      await this.stackApp(app, args, options);
-    }
+    return swarmFile;
   }
 
   /**
@@ -414,22 +467,15 @@ export class HangarStore {
 
   /**
    * Writes `source` to `target`, the compose file of the app in `folder`, if `docker compose config`
-   * accepts it, then reloads the apps. On a rejection only the pending copy is removed.
-   *
-   * Unlike the other files, compose.yml is replaced rather than rewritten in place: it must stay
-   * untouched until validated, and compose reads it anew on every command, so no container holds it.
+   * accepts it, and `docker stack config` too when the app has a compose.swarm.yml: an edit here can
+   * break the stack (a top-level `name`, a `depends_on` condition).
    */
   private async writeValidatedCompose(folder: string, target: string, source: string) {
-    // Next to the real file, so the paths it references resolve the same way; hidden, so the
-    // listing leaves it out; named once per save, so two saves at once never remove each other's.
-    const pending = path.join(folder, `.compose.${randomUUID()}.pending.yml`);
+    const swarmFile = path.join(folder, AppFiles.SwarmFile);
 
-    // No `-p`: compose rejects some folder names as project names (`llama.cpp`), and a
-    // validation does not need one.
-    try {
-      // `wx`: a path already taken, a planted symlink included, fails instead of being written through.
-      await writeFile(pending, source, { encoding: "utf8", flag: "wx" });
-
+    await this.writeThroughPending(folder, target, source, async pending => {
+      // No `-p`: compose rejects some folder names as project names (`llama.cpp`), and a
+      // validation does not need one.
       // prettier-ignore
       await this.runtime.run("docker", [
         "compose",
@@ -438,34 +484,43 @@ export class HangarStore {
         "config", "-q",
       ], { capture: true });
 
-      // An edit here can break the stack too: a top-level `name`, a `depends_on` condition.
-      const swarmFile = path.join(folder, AppFiles.SwarmFile);
-
       if (await HangarStore.hasContent(swarmFile)) {
         await this.checkStack(pending, swarmFile);
       }
-
-      await rename(pending, target);
-    } catch (error) {
-      await rm(pending, { force: true });
-      throw error;
-    }
-
-    await this.refresh();
+    });
   }
 
   /**
    * Writes `source` to `target`, the compose.swarm.yml of the app in `folder`, if `docker stack config`
-   * accepts it merged over the app's compose.yml, then reloads the apps. Works on any node, in a swarm
-   * or not.
+   * accepts it merged over the app's compose.yml. Works on any node, in a swarm or not.
    */
   private async writeValidatedSwarm(folder: string, target: string, source: string) {
-    // Same pending copy as `writeValidatedCompose`, and for the same reasons.
-    const pending = path.join(folder, `.compose.swarm.${randomUUID()}.pending.yml`);
+    const composeFile = path.join(folder, AppFiles.ComposeFile);
+
+    await this.writeThroughPending(folder, target, source, pending => this.checkStack(composeFile, pending));
+  }
+
+  /**
+   * Writes `source` to a pending copy, has `validate` check it, then moves it onto `target` and reloads
+   * the apps. On a rejection only the pending copy is removed.
+   *
+   * Unlike the other files, the compose files are replaced rather than rewritten in place: they must
+   * stay untouched until validated, and Docker reads them anew on every command, so nothing holds them.
+   */
+  private async writeThroughPending(
+    folder: string,
+    target: string,
+    source: string,
+    validate: (pending: string) => Promise<void>,
+  ) {
+    // Next to the real file, so the paths it references resolve the same way; hidden, so the
+    // listing leaves it out; named once per save, so two saves at once never remove each other's.
+    const pending = path.join(folder, `.compose.${randomUUID()}.pending.yml`);
 
     try {
+      // `wx`: a path already taken, a planted symlink included, fails instead of being written through.
       await writeFile(pending, source, { encoding: "utf8", flag: "wx" });
-      await this.checkStack(path.join(folder, AppFiles.ComposeFile), pending);
+      await validate(pending);
       await rename(pending, target);
     } catch (error) {
       await rm(pending, { force: true });
@@ -502,7 +557,7 @@ export class HangarStore {
   }
 
   /** The ids of the installed apps that run with compose: the `swarm:` apps are on /cluster, not /apps. */
-  installedProjectIds(): Set<string> {
+  composeProjectIds(): Set<string> {
     return new Set([...this.apps].flatMap(app => (app.installed && !app.runsInSwarm ? [app.id] : [])));
   }
 

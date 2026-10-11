@@ -2,8 +2,8 @@
 
 import { RefreshCwIcon } from "lucide-react";
 import { useState } from "react";
-import { useRouter } from "waku";
-import type { SwarmCluster } from "#libs/docker";
+import type { SwarmCluster, SwarmManagerView } from "#libs/docker";
+import { faultTolerance, SwarmRefreshMs } from "#libs/docker/swarm-rules";
 import { plural } from "#modules/apps/format.ts";
 import { ClusterEmpty } from "#modules/cluster/components/cluster-empty.tsx";
 import { NodeCard } from "#modules/cluster/components/node-card.tsx";
@@ -11,29 +11,26 @@ import { StackSheet } from "#modules/cluster/components/stack-sheet.tsx";
 import { SwarmSetup } from "#modules/cluster/components/swarm-setup.tsx";
 import { TokensDialog } from "#modules/cluster/components/tokens-dialog.tsx";
 import { AutoReload } from "#modules/common/components/auto-reload.tsx";
+import { PendingButton } from "#modules/common/components/pending-button.tsx";
+import { useRouteRefresh } from "#modules/common/hooks/use-route-refresh.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
-import { Spinner } from "#modules/common/ui/spinner.tsx";
 
 /** How many characters of the cluster id the page shows, as the `docker` CLI shortens ids. */
 const SHORT_ID_LENGTH = 12;
 
-/**
- * Tighter than /apps: Docker emits no event for a task, so only a reload moves the task counts. Matches the
- * cache's TTL for the cluster.
- */
-const RELOAD_SECONDS = 10;
-
-type ClusterOverviewProps = {
-  cluster: SwarmCluster | null;
-  error: string | null;
-  /** The stacks named after an installed store app with a compose.swarm.yml: Hangar can redeploy them. */
-  manageableStacks: string[];
-};
+/** The swarm as read, or why it could not be. */
+type ClusterOverviewProps =
+  | {
+      cluster: SwarmCluster;
+      /** The stacks named after an installed store app with a compose.swarm.yml: Hangar can redeploy them. */
+      manageableStacks: string[];
+    }
+  | { error: string };
 
 /** The one line under the title: which cluster, how big, how much it can lose. */
-function clusterSummary(cluster: Extract<SwarmCluster, { state: "manager" }>) {
-  const tolerance = `tolère ${plural(cluster.faultTolerance, "panne")}`;
+function clusterSummary(cluster: SwarmManagerView) {
+  const tolerance = `tolère ${plural(faultTolerance(cluster.managers), "panne")}`;
 
   return [
     cluster.clusterId.slice(0, SHORT_ID_LENGTH),
@@ -42,43 +39,43 @@ function clusterSummary(cluster: Extract<SwarmCluster, { state: "manager" }>) {
   ].join(" · ");
 }
 
-export function ClusterOverview({ cluster, error, manageableStacks }: ClusterOverviewProps) {
-  const router = useRouter();
-  const [isRefreshing, setRefreshing] = useState(false);
+export function ClusterOverview(props: ClusterOverviewProps) {
+  const { refresh, isRefreshing } = useRouteRefresh();
   const [openStack, setOpenStack] = useState<string | null>(null);
-
-  async function refresh() {
-    setRefreshing(true);
-    try {
-      await router.reload();
-    } finally {
-      setRefreshing(false);
-    }
-  }
+  const cluster = "cluster" in props ? props.cluster : null;
+  const manager = cluster?.state === "manager" ? cluster : null;
+  const manageableStacks = "manageableStacks" in props ? props.manageableStacks : [];
 
   return (
     <>
-      <AutoReload seconds={RELOAD_SECONDS} />
+      {/* The pace of the cache: Docker emits no event for a task, so only time moves the task counts. */}
+      <AutoReload seconds={SwarmRefreshMs / 1_000} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Cluster</h1>
           <p className="text-sm text-muted-foreground">
-            {cluster?.state === "manager" ? clusterSummary(cluster) : "Le cluster Swarm dont ce serveur fait partie."}
+            {manager ? clusterSummary(manager) : "Le cluster Swarm dont ce serveur fait partie."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {cluster?.state === "manager" && <TokensDialog />}
-          <Button type="button" variant="outline" disabled={isRefreshing} onClick={() => void refresh()}>
-            {isRefreshing ? <Spinner /> : <RefreshCwIcon data-icon="inline-start" />}
+          {manager && <TokensDialog />}
+          <PendingButton
+            type="button"
+            variant="outline"
+            pending={isRefreshing}
+            pendingLabel="Actualiser"
+            icon={<RefreshCwIcon data-icon="inline-start" />}
+            onClick={() => void refresh()}
+          >
             Actualiser
-          </Button>
+          </PendingButton>
         </div>
       </div>
 
-      {error && (
+      {"error" in props && (
         <Alert variant="destructive">
           <AlertTitle>Swarm indisponible</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{props.error}</AlertDescription>
           <AlertAction>
             <Button type="button" variant="outline" size="sm" onClick={() => void refresh()}>
               Réessayer
@@ -87,10 +84,10 @@ export function ClusterOverview({ cluster, error, manageableStacks }: ClusterOve
         </Alert>
       )}
 
-      {cluster?.state === "manager" && (
+      {manager && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {cluster.nodes.map(node => (
-            <NodeCard key={node.id} cluster={cluster} node={node} onOpenStack={setOpenStack} />
+          {manager.nodes.map(node => (
+            <NodeCard key={node.id} cluster={manager} node={node} onOpenStack={setOpenStack} />
           ))}
         </div>
       )}

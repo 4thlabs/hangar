@@ -1,5 +1,5 @@
 import { LockIcon, NetworkIcon, ServerIcon, TriangleAlertIcon, type LucideIcon } from "lucide-react";
-import type { SwarmCluster } from "#libs/docker";
+import type { SwarmLimitedView } from "#libs/docker";
 import {
   Empty,
   EmptyContent,
@@ -9,9 +9,6 @@ import {
   EmptyTitle,
 } from "#modules/common/ui/empty.tsx";
 
-/** Every state where this node cannot list the cluster. */
-export type ClusterEmptyState = Exclude<SwarmCluster, { state: "manager" }>;
-
 type EmptyText = {
   icon: LucideIcon;
   title: string;
@@ -20,7 +17,7 @@ type EmptyText = {
   command?: string;
 };
 
-function emptyText(cluster: ClusterEmptyState): EmptyText {
+function emptyText(cluster: SwarmLimitedView): EmptyText {
   switch (cluster.state) {
     case "inactive":
       return {
@@ -59,7 +56,7 @@ function emptyText(cluster: ClusterEmptyState): EmptyText {
 }
 
 /** What /cluster shows when this node cannot describe the cluster, with the command that moves it on. */
-export function ClusterEmpty({ cluster }: { cluster: ClusterEmptyState }) {
+export function ClusterEmpty({ cluster }: { cluster: SwarmLimitedView }) {
   const text = emptyText(cluster);
 
   return (

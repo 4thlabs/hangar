@@ -1,3 +1,4 @@
+import type { SwarmManagerView, SwarmNode } from "../swarm.ts";
 import { dockerMock } from "./mock.ts";
 
 type NodeOverrides = {
@@ -56,14 +57,33 @@ export function swarmService({
 }
 
 type TaskOverrides = {
+  id?: string;
   service?: string;
   node?: string;
+  slot?: number;
   state?: string;
+  since?: string;
+  error?: string;
 };
 
 /** One task as `GET /tasks` lists it. */
-export function swarmTask({ service = "service-1", node = "node-1", state = "running" }: TaskOverrides = {}) {
-  return { ServiceID: service, NodeID: node, Status: { State: state } };
+export function swarmTask({
+  id = "task-1",
+  service = "service-1",
+  node = "node-1",
+  slot = 1,
+  state = "running",
+  since = "2026-10-11T10:00:00Z",
+  error,
+}: TaskOverrides = {}) {
+  return {
+    ID: id,
+    ServiceID: service,
+    NodeID: node,
+    Slot: slot,
+    DesiredState: state === "running" ? "running" : "shutdown",
+    Status: { State: state, Timestamp: since, ...(error ? { Err: error } : {}) },
+  };
 }
 
 type SwarmOverrides = {
@@ -102,7 +122,12 @@ export function givenSwarm({
     },
   });
 
-  const workerRefusal = Object.assign(new Error("This node is not a swarm manager."), { statusCode: 503 });
+  // The shape dockerode gives a daemon's refusal: the status, and the daemon's message as JSON.
+  const workerRefusal = Object.assign(new Error("(HTTP code 503) unexpected"), {
+    statusCode: 503,
+    json: { message: "This node is not a swarm manager." },
+  });
+
   const answer = <T>(value: T) => (manager ? Promise.resolve(value) : Promise.reject(workerRefusal));
 
   dockerMock.listNodes.mockImplementation(() => answer(nodes));
@@ -115,4 +140,33 @@ export function givenSwarm({
       JoinTokens: { Worker: "SWMTKN-1-worker", Manager: "SWMTKN-1-manager" },
     }),
   );
+}
+
+/** One node as `DockerSwarm.cluster` describes it, the page's input: a lone ready leader by default. */
+export function swarmNodeView(overrides: Partial<SwarmNode> = {}): SwarmNode {
+  return {
+    id: "node-1",
+    hostname: "nas",
+    role: "leader",
+    status: "ready",
+    availability: "active",
+    cpus: 8,
+    memoryBytes: 32 * 1024 ** 3,
+    engineVersion: "29.1.3",
+    stacks: [],
+    actions: [],
+    ...overrides,
+  };
+}
+
+/** The cluster as a manager describes it: one manager, {@link swarmNodeView}, unless told otherwise. */
+export function managerView(overrides: Partial<SwarmManagerView> = {}): SwarmManagerView {
+  return {
+    state: "manager",
+    clusterId: "nhyx6n1b8b0a0zqlwjr4bx7xd",
+    currentNodeId: "node-1",
+    managers: 1,
+    nodes: [swarmNodeView()],
+    ...overrides,
+  };
 }

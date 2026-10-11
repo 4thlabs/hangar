@@ -23,7 +23,8 @@ export function refuseAppOperation(project: string): AppOperationRefusal | null 
     return { reason: "invalid", message: "La commande Docker Compose est invalide." };
   }
 
-  if (!hangar.store.app(project)?.installed) {
+  // The same apps /apps lists: installed, and run with compose rather than in the swarm.
+  if (!hangar.store.composeProjectIds().has(project)) {
     return { reason: "unmanaged", message: "Cette application n’est pas installée et gérée par Hangar." };
   }
 

@@ -1,20 +1,13 @@
-import type { SwarmCluster, SwarmNode, SwarmNodeAction } from "#libs/docker";
+import type { SwarmManagerView, SwarmNode, SwarmNodeAction } from "#libs/docker";
+import { faultTolerance } from "#libs/docker/swarm-rules";
 import { plural } from "#modules/apps/format.ts";
 import { nodeActionLabel } from "#modules/cluster/status.ts";
-
-type ManagerCluster = Extract<SwarmCluster, { state: "manager" }>;
 
 /** What the confirmation of a node action says, before anything is sent to the daemon. */
 export type NodeActionConfirmation = { title: string; description: string; destructive: boolean };
 
-/** The fault tolerance once `action` is done: only a promotion or a demotion moves it. */
-function toleranceAfter(cluster: ManagerCluster, action: SwarmNodeAction) {
-  if (action === "promote" || action === "demote") {
-    return cluster.faultToleranceAfter[action];
-  }
-
-  return cluster.faultTolerance;
-}
+/** How each action moves the number of managers, which the fault tolerance follows. */
+const ManagerDelta: Record<SwarmNodeAction, number> = { promote: 1, demote: -1, drain: 0, activate: 0, remove: 0 };
 
 /** Where a drained node's tasks go, French agreeing in number. */
 function drainedTasks(tasks: number, hostname: string) {
@@ -52,11 +45,12 @@ function consequence(node: SwarmNode, action: SwarmNodeAction) {
  * tolerates afterwards. Demoting the node Hangar runs on also costs Hangar its view of the cluster.
  */
 export function nodeActionConfirmation(
-  cluster: ManagerCluster,
+  cluster: SwarmManagerView,
   node: SwarmNode,
   action: SwarmNodeAction,
 ): NodeActionConfirmation {
-  const tolerance = `Le cluster tolérera ensuite ${plural(toleranceAfter(cluster, action), "panne")} de manager.`;
+  const toleranceAfter = faultTolerance(cluster.managers + ManagerDelta[action]);
+  const tolerance = `Le cluster tolérera ensuite ${plural(toleranceAfter, "panne")} de manager.`;
 
   const losesView =
     action === "demote" && node.id === cluster.currentNodeId

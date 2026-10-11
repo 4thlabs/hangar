@@ -95,16 +95,17 @@ export class AppFiles {
   async write(relativePath: string, source: string): Promise<{ composeChanged: boolean }> {
     const location = await this.locate(relativePath);
 
-    if (await AppFiles.isRootFile(location, AppFiles.ComposeFile)) {
-      await this.writers.compose(location.folder, location.file, source);
+    const composeFiles = [
+      [AppFiles.ComposeFile, this.writers.compose],
+      [AppFiles.SwarmFile, this.writers.swarm],
+    ] as const;
 
-      return { composeChanged: true };
-    }
+    for (const [name, write] of composeFiles) {
+      if (await AppFiles.isRootFile(location, name)) {
+        await write(location.folder, location.file, source);
 
-    if (await AppFiles.isRootFile(location, AppFiles.SwarmFile)) {
-      await this.writers.swarm(location.folder, location.file, source);
-
-      return { composeChanged: true };
+        return { composeChanged: true };
+      }
     }
 
     AppFileSyntax.check(relativePath, source);

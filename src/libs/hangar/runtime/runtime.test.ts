@@ -1,6 +1,6 @@
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { collectingOutput, Runtime } from "./runtime.ts";
+import { Runtime } from "./runtime.ts";
 
 const collect = (stream: PassThrough) => {
   let text = "";
@@ -42,14 +42,23 @@ describe("Runtime", () => {
     expect(result.stdout).not.toContain("noise");
   });
 
-  it("keeps the output of a captured run that exited non-zero", async () => {
+  it("fails a captured run on a non-zero exit, even one that printed something", async () => {
     const runtime = new Runtime();
-    // What `docker inspect` does when one id of several is gone: usable output, failing code.
-    const script = "console.log('partial'); process.exit(1)";
+    const script = "console.log('Creating service web'); console.error('network conflict'); process.exit(1)";
 
-    await expect(runtime.run("node", ["-e", script], { capture: true })).resolves.toMatchObject({
+    await expect(runtime.run("node", ["-e", script], { capture: true })).rejects.toMatchObject({
       code: 1,
-      stdout: "partial\n",
+      message: "network conflict",
+    });
+  });
+
+  it("reports the end of stderr when a piped run fails", async () => {
+    const runtime = new Runtime();
+    const output = new PassThrough();
+    const script = "console.log('Creating service web'); console.error('this node is not a manager'); process.exit(1)";
+
+    await expect(runtime.run("node", ["-e", script], { pipe: output })).rejects.toMatchObject({
+      message: "this node is not a manager",
     });
   });
 
@@ -70,15 +79,6 @@ describe("Runtime", () => {
     const { stdout } = await runtime.run("node", ["-e", script], { capture: true, env: { HANGAR_TEST_VAR: "set" } });
 
     expect(stdout.trim()).toBe("set true");
-  });
-
-  it("fails a collected run on a non-zero exit, with the end of its output as the message", async () => {
-    const runtime = new Runtime();
-    const script = "console.log('Creating service web'); console.error('network conflict'); process.exit(1)";
-
-    const run = collectingOutput(pipe => runtime.run("node", ["-e", script], { pipe }));
-
-    await expect(run).rejects.toMatchObject({ code: 1, message: expect.stringContaining("network conflict") });
   });
 
   it("kills the child when the signal is aborted", async () => {

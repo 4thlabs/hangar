@@ -405,9 +405,11 @@ guards `DockerSwarm.changeNode` against a stale page.
 | `joinCommands()`          | `GET /swarm` for the tokens, `info.Swarm.RemoteManagers` for this manager's address                              |
 | `rotateToken(role)`       | `POST /swarm/update?version=&rotate…Token=true` with the spec unchanged                                          |
 
-Each write ends with `settle()`, which reloads `docker:swarm`. `SwarmCluster` (manager) gains
-`faultToleranceAfter.{promote,demote}`, so the confirmation states the tolerance without the rule leaving the
-library.
+Each node write ends with `settle()`, which reloads `docker:swarm`. The rules the page shares with the
+library, `swarmNodeRefusal` and `faultTolerance(managers)`, sit in a client-safe entry point,
+`#libs/docker/swarm-rules`, so the confirmation computes the tolerance after an action itself. A daemon's
+refusal reaches the module as a `SwarmDaemonError` carrying its message, next to Hangar's own
+`SwarmRefusedError`.
 
 **Page.**
 
@@ -438,22 +440,24 @@ named after an installed store app with a `compose.swarm.yml`. The list only dri
 `swarm deploy` / `swarm rm` and categories cover the listed apps, and `store up`, `store down` and categories
 skip them, so compose never starts a second copy. `store <app>` refuses a listed app by name.
 
-| Where                                | What                                                                                                                                            |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `HangarConfig`                       | `swarm()`, and `addToSwarm` / `removeFromSwarm`, which edit the file through the `yaml` package so its comments and layout survive              |
-| `HangarApp`                          | `swarmReady` (ships a `compose.swarm.yml`), `runsInSwarm` (listed); `name` reads `x-hangar.name` first                                          |
-| `HangarStore.stack(name, args)`      | Same resolution as `compose`; a group covers its listed apps, one app only needs its `compose.swarm.yml`                                        |
-| `HangarStore.installedProjectIds`    | Leaves the listed apps out, so `/apps` and the image update check skip them                                                                     |
-| `AppFiles` / `HangarStore`           | Saving `compose.swarm.yml`, or `compose.yml` next to a non-empty one, runs `docker stack config` with `.env.global` first                       |
-| `RunOptions.env`, `collectingOutput` | The child's extra variables; a run that fails on any non-zero exit with the end of its output as message                                        |
-| `src/cli/commands/swarm.ts`          | `swarm <target> <verb>`, `swarm ls`                                                                                                             |
-| Store card                           | "Swarm" badge, "Déployer sur le swarm": link, `compose down`, list, deploy; a failed deploy unlists a freshly listed app. Uninstall runs `rm`   |
-| `/cluster` stack sheet               | Any stack: its tasks from `docker stack ps --format json`, failed attempts included. For a store app: "Mettre à jour", "Supprimer" (unlists it) |
+| Where                                           | What                                                                                                                                       |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `HangarConfig`                                  | `swarm()`, and `addToSwarm` / `removeFromSwarm`, which edit the file through the `yaml` package so its comments and layout survive         |
+| `HangarApp`                                     | `swarmReady` (ships a `compose.swarm.yml`), `runsInSwarm` (listed); `name` reads `x-hangar.name` first                                     |
+| `HangarStore.stack(name, args)`                 | Same resolution and ordering as `compose`; a group covers its listed apps, one app only needs its `compose.swarm.yml`                      |
+| `HangarStore.deployToSwarm` / `removeFromSwarm` | Link, `compose down`, list, deploy, unlisting a freshly listed app on failure; `rm` then unlist. The store and `/cluster` call them        |
+| `HangarStore.isStackManageable`                 | Installed, with a `compose.swarm.yml`: what the stack sheet's buttons and their actions both check                                         |
+| `HangarStore.composeProjectIds`                 | Leaves the listed apps out, so `/apps`, its operations and the image update check skip them                                                |
+| `AppFiles` / `HangarStore`                      | Saving `compose.swarm.yml`, or `compose.yml` next to a non-empty one, runs `docker stack config` with `.env.global` first                  |
+| `Runtime`                                       | `RunOptions.env`, the child's extra variables; any non-zero exit fails, with the end of stderr as message                                  |
+| `src/cli/commands/swarm.ts`                     | `swarm <target> <verb>`, `swarm ls`                                                                                                        |
+| Store card                                      | "Swarm" badge and "Déployer sur le swarm"; uninstalling a listed app removes its stack                                                     |
+| `/cluster` stack sheet                          | Any stack: its tasks from `DockerSwarm.stackTasks` (`GET /tasks`), failed attempts included. For a store app: "Mettre à jour", "Supprimer" |
 
 **Checked on a `docker:dind` swarm (29.x).** `docker stack config` rejects a `depends_on` condition and a
 top-level `name` with the messages above, and interpolates `.env.global`. `docker stack deploy --quiet`
-still prints its progress on stdout, so a captured run cannot tell a failure from partial output: deploy and
-`rm` go through `collectingOutput` instead.
+still prints its progress on stdout: `Runtime` used to accept a captured run that printed something whatever
+its exit code, and now fails every non-zero exit, with the end of stderr as the error.
 
 ## Open questions
 

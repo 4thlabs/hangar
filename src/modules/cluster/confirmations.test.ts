@@ -1,30 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { SwarmCluster, SwarmNode } from "#libs/docker";
+import { managerView, swarmNodeView } from "#libs/docker/mock";
 import { nodeActionConfirmation } from "./confirmations.ts";
 
-const node = (overrides: Partial<SwarmNode> = {}): SwarmNode => ({
-  id: "nas",
-  hostname: "nas",
-  role: "manager",
-  status: "ready",
-  availability: "active",
-  cpus: 4,
-  memoryBytes: 0,
-  engineVersion: "29.1.3",
-  stacks: [{ name: "miniflux", health: "running", tasks: 2 }],
-  actions: [],
-  ...overrides,
-});
+const node = (overrides: Parameters<typeof swarmNodeView>[0] = {}) =>
+  swarmNodeView({
+    id: "nas",
+    role: "manager",
+    stacks: [{ name: "miniflux", health: "running", tasks: 2 }],
+    ...overrides,
+  });
 
-const cluster: Extract<SwarmCluster, { state: "manager" }> = {
-  state: "manager",
-  clusterId: "nhyx6n1b8b0a0zqlwjr4bx7xd",
-  currentNodeId: "nas",
-  managers: 3,
-  faultTolerance: 1,
-  faultToleranceAfter: { promote: 1, demote: 0 },
-  nodes: [],
-};
+const cluster = managerView({ currentNodeId: "nas", managers: 3 });
 
 describe("nodeActionConfirmation", () => {
   it("states the fault tolerance after a demotion", () => {

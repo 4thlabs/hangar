@@ -1,4 +1,4 @@
-import type { SwarmCluster, SwarmNode } from "#libs/docker";
+import type { SwarmManagerView, SwarmNode } from "#libs/docker";
 import { formatBytes, plural } from "#modules/apps/format.ts";
 import { NodeActions } from "#modules/cluster/components/node-actions.tsx";
 import {
@@ -15,7 +15,7 @@ import { Badge } from "#modules/common/ui/badge.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 
 type NodeCardProps = {
-  cluster: Extract<SwarmCluster, { state: "manager" }>;
+  cluster: SwarmManagerView;
   node: SwarmNode;
   /** Opens the sheet of a stack, from its line. */
   onOpenStack: (stack: string) => void;

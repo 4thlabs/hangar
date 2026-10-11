@@ -1,24 +1,18 @@
 "use client";
 
 import { RefreshCwIcon, Trash2Icon, UploadIcon } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "waku";
-import { readStackTasks, redeployStack, removeStack, type StackTask } from "#modules/cluster/actions/manage-stacks.ts";
+import type { SwarmStackTask } from "#libs/docker";
+import { RelativeTime } from "#libs/format";
+import { readStackTasks, redeployStack, removeStack } from "#modules/cluster/actions/manage-stacks.ts";
+import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
+import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "#modules/common/ui/alert-dialog.tsx";
+import { useServerRead } from "#modules/common/hooks/use-server-read.ts";
 import { Alert, AlertDescription } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "#modules/common/ui/sheet.tsx";
-import { Spinner } from "#modules/common/ui/spinner.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
 
 type StackSheetProps = {
@@ -32,32 +26,18 @@ type StackSheetProps = {
 /** The tasks of one stack, per node, with the deploy and removal Hangar can do on its own apps. */
 export function StackSheet({ stack, manageable, onClose }: StackSheetProps) {
   const router = useRouter();
-  const [tasks, setTasks] = useState<StackTask[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, startLoading] = useTransition();
-  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
+  const tasks = useServerRead<SwarmStackTask[]>();
   const operation = useServerAction();
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
+  const { load, reset } = tasks;
 
-  function load(name: string) {
-    startLoading(async () => {
-      try {
-        const result = await readStackTasks(name);
-
-        setTasks(result.tasks ?? null);
-        setError(result.success ? null : result.message);
-      } catch (cause) {
-        console.error("Server action failed", cause);
-        setError("Impossible de contacter le serveur.");
-      }
-    });
-  }
-
+  // Read afresh each time a stack opens, and forgotten when the sheet closes. Only `stack` drives it:
+  // `load` and `reset` are new functions on every render.
   useEffect(() => {
-    setTasks(null);
-    setError(null);
+    reset();
 
     if (stack) {
-      load(stack);
+      load(() => readStackTasks(stack));
     }
   }, [stack]);
 
@@ -66,7 +46,7 @@ export function StackSheet({ stack, manageable, onClose }: StackSheetProps) {
       () => redeployStack(name),
       { success: "Stack redéployée", error: "Échec du déploiement" },
       async () => {
-        load(name);
+        load(() => readStackTasks(name));
         await router.reload();
       },
     );
@@ -94,22 +74,30 @@ export function StackSheet({ stack, manageable, onClose }: StackSheetProps) {
 
         <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-4">
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" disabled={isLoading} onClick={() => stack && load(stack)}>
-              {isLoading ? <Spinner data-icon="inline-start" /> : <RefreshCwIcon data-icon="inline-start" />}
+            <PendingButton
+              type="button"
+              size="sm"
+              variant="outline"
+              pending={tasks.isLoading}
+              pendingLabel="Actualiser"
+              icon={<RefreshCwIcon data-icon="inline-start" />}
+              onClick={() => stack && load(() => readStackTasks(stack))}
+            >
               Actualiser
-            </Button>
+            </PendingButton>
             {manageable && (
               <>
-                <Button
+                <PendingButton
                   type="button"
                   size="sm"
-                  disabled={operation.isPending}
+                  pending={operation.isPending}
+                  pendingLabel="Mettre à jour"
+                  icon={<UploadIcon data-icon="inline-start" />}
                   onClick={() => stack && redeploy(stack)}
                   title="docker stack deploy"
                 >
-                  {operation.isPending ? <Spinner data-icon="inline-start" /> : <UploadIcon data-icon="inline-start" />}
                   Mettre à jour
-                </Button>
+                </PendingButton>
                 <Button
                   type="button"
                   size="sm"
@@ -125,39 +113,31 @@ export function StackSheet({ stack, manageable, onClose }: StackSheetProps) {
             )}
           </div>
 
-          {error && (
+          {tasks.error && (
             <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{tasks.error}</AlertDescription>
             </Alert>
           )}
 
-          {tasks && <TaskTable tasks={tasks} />}
+          {tasks.value && <TaskTable tasks={tasks.value} />}
         </div>
       </SheetContent>
 
-      <AlertDialog open={confirmingRemoval} onOpenChange={setConfirmingRemoval}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer {stack} du swarm ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Ses services sont arrêtés sur tous les nœuds et l’app est retirée de la liste swarm de hangar.yml. Elle
-              reste installée et ses volumes sont conservés.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => stack && remove(stack)}>
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirmingRemoval}
+        title={`Supprimer ${stack} du swarm ?`}
+        description="Ses services sont arrêtés sur tous les nœuds et l’app est retirée de la liste swarm de hangar.yml. Elle reste installée et ses volumes sont conservés."
+        confirmLabel="Supprimer"
+        destructive
+        onConfirm={() => stack && remove(stack)}
+        onCancel={() => setConfirmingRemoval(false)}
+      />
     </Sheet>
   );
 }
 
 /** One row per task, the failed ones with Docker's reason. */
-function TaskTable({ tasks }: { tasks: StackTask[] }) {
+function TaskTable({ tasks }: { tasks: SwarmStackTask[] }) {
   if (tasks.length === 0) {
     return <p className="text-sm text-muted-foreground">Aucune tâche.</p>;
   }
@@ -174,11 +154,19 @@ function TaskTable({ tasks }: { tasks: StackTask[] }) {
       </TableHeader>
       <TableBody>
         {tasks.map(task => (
-          <TableRow key={task.ID}>
-            <TableCell className="font-medium">{task.Name}</TableCell>
-            <TableCell>{task.Node}</TableCell>
-            <TableCell>{task.CurrentState}</TableCell>
-            <TableCell className="max-w-64 whitespace-normal text-destructive">{task.Error}</TableCell>
+          <TableRow key={task.id}>
+            <TableCell className="font-medium">{task.name}</TableCell>
+            <TableCell>{task.node}</TableCell>
+            <TableCell>
+              {task.state}
+              {task.since && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {RelativeTime.format(Date.parse(task.since), Date.now(), "fr")}
+                </span>
+              )}
+            </TableCell>
+            <TableCell className="max-w-64 whitespace-normal text-destructive">{task.error}</TableCell>
           </TableRow>
         ))}
       </TableBody>

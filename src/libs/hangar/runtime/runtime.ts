@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
-import { Writable } from "node:stream";
+import { type Writable } from "node:stream";
 import { logger } from "#libs/logs";
 import { HangarRuntimeError } from "../hangar-error.ts";
 
@@ -13,10 +13,7 @@ type RuntimeResult = {
 export type RunOptions = {
   /** When set, the child's stdout and stderr are piped here instead of being inherited. */
   pipe?: Writable;
-  /**
-   * Buffers stdout (without stderr, so it stays parseable) onto the result. A captured run resolves
-   * on a non-zero exit as long as it printed something: a partial failure can still be usable.
-   */
+  /** Buffers stdout (without stderr, so it stays parseable) onto the result. */
   capture?: boolean;
   /** Kills the child when aborted. The run then rejects, like any other killed child. */
   signal?: AbortSignal;
@@ -24,37 +21,8 @@ export type RunOptions = {
   env?: Record<string, string>;
 };
 
-/** How much of a failed run's output becomes its error message: the end, where the cause is. */
-const FAILURE_OUTPUT_LINES = 20;
-
-/**
- * Runs `body` with a stream that collects the merged output of the commands it pipes there. Unlike
- * `capture`, a non-zero exit always fails, whatever was printed; the error then carries the last lines
- * of that output, Docker's complaint among them, instead of "Process exited.".
- * @param body Runs the commands, passing the stream as their `pipe`
- */
-export async function collectingOutput<T>(body: (pipe: Writable) => Promise<T>): Promise<T> {
-  let output = "";
-
-  const pipe = new Writable({
-    write(chunk: Buffer, _encoding, done) {
-      output += chunk.toString();
-      done();
-    },
-  });
-
-  try {
-    return await body(pipe);
-  } catch (error) {
-    const tail = output.trim().split("\n").slice(-FAILURE_OUTPUT_LINES).join("\n");
-
-    if (error instanceof HangarRuntimeError && tail) {
-      throw new HangarRuntimeError(error.code, tail);
-    }
-
-    throw error;
-  }
-}
+/** How much of a failed run's stderr becomes its error message: the end, where the cause is. */
+const FAILURE_STDERR_LINES = 20;
 
 export interface CommandRunner {
   run: (command: string, args: string[], options?: RunOptions) => Promise<RuntimeResult>;
@@ -129,8 +97,10 @@ export class Runtime implements CommandRunner {
 
       if (capture) {
         child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
-        child.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
       }
+
+      // Kept whenever it is not inherited, piped or captured: a failure reports its end.
+      child.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
 
       this.children.add(child);
 
@@ -148,17 +118,15 @@ export class Runtime implements CommandRunner {
           return reject(new HangarRuntimeError(130, "Process interrupted."));
         }
 
-        // stderr only surfaces when a captured run printed nothing.
-        const succeeded = code === 0;
-        const capturedOutput = capture && stdout.trim() !== "";
-
-        if (succeeded || capturedOutput) {
-          return resolve({ code: code ?? 0, stdout });
+        // Any non-zero exit fails, whatever was printed: `docker stack deploy` prints its progress
+        // before a failure, which must not pass for a success.
+        if (code === 0) {
+          return resolve({ code, stdout });
         }
 
-        const message = (capture && stderr.trim()) || "Process exited.";
+        const tail = stderr.trim().split("\n").slice(-FAILURE_STDERR_LINES).join("\n");
 
-        return reject(new HangarRuntimeError(code ?? 1, message));
+        return reject(new HangarRuntimeError(code ?? 1, tail || "Process exited."));
       });
     });
   }

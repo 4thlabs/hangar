@@ -3,17 +3,8 @@
 import { NetworkIcon } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "waku";
+import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "#modules/common/ui/alert-dialog.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 import { deployToSwarm } from "#modules/store/actions/store-apps.ts";
@@ -58,20 +49,14 @@ export function SwarmDeployButton({ appId, appName, installed }: SwarmDeployButt
       >
         {isPending ? <Spinner /> : <NetworkIcon />}
       </Button>
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Déployer {appName} sur le swarm ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {`L’app est ajoutée à la liste swarm de hangar.yml, puis déployée avec compose.yml et compose.swarm.yml. Elle apparaîtra sur la page Cluster, plus sur Apps.${composeNote}`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={deploy}>Déployer</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirming}
+        title={`Déployer ${appName} sur le swarm ?`}
+        description={`L’app est ajoutée à la liste swarm de hangar.yml, puis déployée avec compose.yml et compose.swarm.yml. Elle apparaîtra sur la page Cluster, plus sur Apps.${composeNote}`}
+        confirmLabel="Déployer"
+        onConfirm={deploy}
+        onCancel={() => setConfirming(false)}
+      />
     </>
   );
 }

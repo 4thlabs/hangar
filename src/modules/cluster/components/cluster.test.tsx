@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { SwarmCluster, SwarmNode } from "#libs/docker";
+import type { SwarmCluster } from "#libs/docker";
 
 vi.mock("waku", () => ({
   useRouter: () => ({ reload: async () => {} }),
@@ -10,32 +10,14 @@ vi.mock("waku", () => ({
 vi.mock("#modules/cluster/actions/manage-cluster.ts", () => ({}));
 vi.mock("#modules/cluster/actions/manage-stacks.ts", () => ({}));
 
+const { managerView, swarmNodeView: node } = await import("#libs/docker/mock");
 const { ClusterOverview } = await import("./cluster-overview.tsx");
 
-const render = (cluster: SwarmCluster | null, error: string | null = null) =>
-  renderToStaticMarkup(<ClusterOverview cluster={cluster} error={error} manageableStacks={[]} />);
+const render = (cluster: SwarmCluster) =>
+  renderToStaticMarkup(<ClusterOverview cluster={cluster} manageableStacks={[]} />);
 
-const node = (overrides: Partial<SwarmNode>): SwarmNode => ({
-  id: "node-1",
-  hostname: "nas",
-  role: "leader",
-  status: "ready",
-  availability: "active",
-  cpus: 8,
-  memoryBytes: 32 * 1024 ** 3,
-  engineVersion: "29.1.3",
-  stacks: [],
-  actions: [],
-  ...overrides,
-});
-
-const manager: SwarmCluster = {
-  state: "manager",
-  clusterId: "nhyx6n1b8b0a0zqlwjr4bx7xd",
-  currentNodeId: "node-1",
+const manager = managerView({
   managers: 2,
-  faultTolerance: 0,
-  faultToleranceAfter: { promote: 1, demote: 0 },
   nodes: [
     node({ stacks: [{ name: "miniflux", health: "partial", tasks: 2 }] }),
     node({
@@ -47,7 +29,7 @@ const manager: SwarmCluster = {
       actions: ["promote", "activate", "remove"],
     }),
   ],
-};
+});
 
 describe("ClusterOverview", () => {
   it("sums the cluster up under the title, with the short id", () => {
@@ -101,7 +83,7 @@ describe("ClusterOverview", () => {
   });
 
   it("offers a retry when the daemon fails", () => {
-    const html = render(null, "Le daemon Docker ne répond pas.");
+    const html = renderToStaticMarkup(<ClusterOverview error="Le daemon Docker ne répond pas." />);
 
     expect(html).toContain("Swarm indisponible");
     expect(html).toContain("Réessayer");

@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { dockerMock, fakeDockerode, givenSwarm, swarmNode, swarmService, swarmTask } = await import("./mock/index.ts");
 const { Cache } = await import("#libs/cache");
 const { DockerSwarm } = await import("./swarm.ts");
-const { SwarmRefusedError } = await import("./swarm-node-actions.ts");
+const { SwarmDaemonError, SwarmRefusedError } = await import("./swarm-errors.ts");
+const { faultTolerance } = await import("./swarm-rules/index.ts");
 
 const client = () => new DockerSwarm(fakeDockerode(), new Cache());
 
@@ -204,9 +205,9 @@ describe("DockerSwarm stacks per node", () => {
   });
 });
 
-describe("DockerSwarm.faultTolerance", () => {
+describe("faultTolerance", () => {
   it("is how many managers can fail with a majority left", () => {
-    expect([1, 2, 3, 4, 5, 7].map(managers => DockerSwarm.faultTolerance(managers))).toEqual([0, 0, 1, 1, 2, 3]);
+    expect([1, 2, 3, 4, 5, 7].map(managers => faultTolerance(managers))).toEqual([0, 0, 1, 1, 2, 3]);
   });
 
   it("counts the managers of the cluster", async () => {
@@ -219,7 +220,7 @@ describe("DockerSwarm.faultTolerance", () => {
       ],
     });
 
-    await expect(client().cluster()).resolves.toMatchObject({ managers: 3, faultTolerance: 1 });
+    await expect(client().cluster()).resolves.toMatchObject({ managers: 3 });
   });
 });
 
@@ -289,8 +290,6 @@ describe("DockerSwarm.changeNode", () => {
       ["old", ["promote", "drain", "remove"]],
       ["pi-01", ["promote", "drain"]],
     ]);
-
-    expect(state).toMatchObject({ faultToleranceAfter: { promote: 0, demote: 0 } });
   });
 });
 
@@ -334,5 +333,79 @@ describe("DockerSwarm membership", () => {
       _query: { version: 7, rotateWorkerToken: false, rotateManagerToken: true },
       _body: { Name: "default", Orchestration: {} },
     });
+  });
+});
+
+describe("DockerSwarm.stackTasks", () => {
+  it("lists every task of a stack, current and past, by name then newest first, with hostnames", async () => {
+    givenSwarm({
+      nodes: [swarmNode({ id: "nas", hostname: "nas" }), swarmNode({ id: "pi", hostname: "pi-01", role: "worker" })],
+      services: [
+        swarmService({ id: "web", name: "miniflux_web", stack: "miniflux" }),
+        swarmService({ id: "other", name: "whoami" }),
+      ],
+      tasks: [
+        swarmTask({
+          id: "old",
+          service: "web",
+          node: "pi",
+          state: "failed",
+          since: "2026-10-11T09:00:00Z",
+          error: "task: non-zero exit (1)",
+        }),
+        swarmTask({ id: "new", service: "web", node: "nas", since: "2026-10-11T10:00:00Z" }),
+      ],
+    });
+
+    const tasks = await client().stackTasks("miniflux");
+
+    expect(dockerMock.listTasks).toHaveBeenCalledWith({ filters: { service: ["web"] } });
+    expect(tasks).toEqual([
+      {
+        id: "new",
+        name: "miniflux_web.1",
+        node: "nas",
+        desiredState: "running",
+        state: "running",
+        since: "2026-10-11T10:00:00Z",
+        error: "",
+      },
+      {
+        id: "old",
+        name: "miniflux_web.1",
+        node: "pi-01",
+        desiredState: "shutdown",
+        state: "failed",
+        since: "2026-10-11T09:00:00Z",
+        error: "task: non-zero exit (1)",
+      },
+    ]);
+  });
+
+  it("finds a lone service by its name, and nothing for an unknown stack", async () => {
+    givenSwarm({ nodes: [swarmNode()], services: [swarmService({ id: "lone", name: "whoami" })] });
+
+    await expect(client().stackTasks("nope")).resolves.toEqual([]);
+    await client().stackTasks("whoami");
+
+    expect(dockerMock.listTasks).toHaveBeenCalledWith({ filters: { service: ["lone"] } });
+  });
+});
+
+describe("DockerSwarm daemon refusals", () => {
+  it("passes on the daemon's own message as a SwarmDaemonError", async () => {
+    givenSwarm({ manager: false });
+
+    const read = client().stackTasks("miniflux");
+
+    await expect(read).rejects.toBeInstanceOf(SwarmDaemonError);
+    await expect(read).rejects.toMatchObject({ statusCode: 503, message: "This node is not a swarm manager." });
+  });
+
+  it("leaves an error without a daemon message as it is", async () => {
+    givenSwarm({ localState: "inactive", manager: false });
+    dockerMock.swarmInit.mockRejectedValueOnce(new Error("connect ENOENT /var/run/docker.sock"));
+
+    await expect(client().init()).rejects.toThrow("connect ENOENT");
   });
 });

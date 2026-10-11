@@ -23,8 +23,8 @@ export const docker = globalForDocker.docker ?? new Docker(client, hangar.store,
 globalForDocker.docker = docker;
 
 /**
- * The swarm this host belongs to, read-only. Kept current by the events `docker` follows: they
- * refresh everything under `docker:swarm`.
+ * The swarm this host belongs to: its nodes and stacks, and the changes Hangar makes to them. Kept
+ * current by the events `docker` follows: they refresh everything under `docker:swarm`.
  */
 export const swarm = globalForDocker.swarm ?? new DockerSwarm(client, cache);
 

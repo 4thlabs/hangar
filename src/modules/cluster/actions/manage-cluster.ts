@@ -1,34 +1,16 @@
 "use server";
 
 import { sessions } from "#libs/auth/server";
-import {
-  SwarmNodeActions,
-  SwarmRefusedError,
-  type SwarmJoinCommands,
-  type SwarmNodeAction,
-  type SwarmRefusal,
-} from "#libs/docker";
+import { SwarmNodeActions, type SwarmJoinCommands, type SwarmNodeAction } from "#libs/docker";
 import { swarm } from "#libs/docker/server";
-import { logger } from "#libs/logs";
-import { ActionResult, SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
-
-/** A Swarm node id: 25 lowercase base-36 characters, but any plain word is passed on for the daemon to judge. */
-const NodeId = /^[a-z0-9]{1,64}$/;
+import { swarmFailure } from "#modules/cluster/actions/swarm-failure.ts";
+import { ActionResult, type ReadResult } from "#modules/common/actions/action-result.ts";
 
 /** A `host`, `host:port`, `[ipv6]:port` or an interface name such as `eth0`. */
 const Address = /^[\w.:[\]-]{1,255}$/;
 
 /** A join token, as `docker swarm join-token` prints it. */
 const JoinToken = /^SWMTKN-1-[\w-]{1,255}$/;
-
-/** Why Hangar turned an action down, as the toast words it. */
-const RefusalMessage: Record<SwarmRefusal, string> = {
-  "already-done": "Ce nœud est déjà dans cet état.",
-  "last-manager": "C'est le dernier manager du cluster : le rétrograder le laisserait sans manager.",
-  "manager-not-removable": "Un manager ne peut pas être retiré : rétrogradez-le d'abord.",
-  "node-not-down": "Seul un nœud injoignable peut être retiré : arrêtez-le, ou faites-lui quitter le swarm.",
-  "unknown-node": "Ce nœud ne fait plus partie du cluster.",
-};
 
 /** What each action did, for the success toast. */
 const SuccessMessage: Record<SwarmNodeAction, (hostname: string) => string> = {
@@ -39,53 +21,26 @@ const SuccessMessage: Record<SwarmNodeAction, (hostname: string) => string> = {
   remove: hostname => `${hostname} a été retiré du cluster.`,
 };
 
-/** The join commands, only on success: they carry the tokens. */
-export type JoinCommandsResult = ActionResult & { commands?: SwarmJoinCommands };
+const isNodeAction = (action: string): action is SwarmNodeAction =>
+  (SwarmNodeActions as readonly string[]).includes(action);
 
 /**
- * The daemon's own words when it refused the request, which say what to fix (an address to choose,
- * a quorum to keep); `null` for a failure that is not a refusal.
+ * Promotes, demotes, drains, reactivates or removes a node from its card on /cluster. An unknown node
+ * id is the library's to refuse: it looks the id up in the daemon's own list.
  */
-function daemonRefusal(error: unknown): string | null {
-  const { statusCode, json } = error as { statusCode?: number; json?: { message?: string } };
-  const isRefusal = statusCode !== undefined && statusCode >= 400 && statusCode < 600 && Boolean(json?.message);
-
-  return isRefusal ? `Docker a refusé : ${json?.message}` : null;
-}
-
-/** A failed call as the toast words it, logged unless it was a refusal the user can act on. */
-function failure(error: unknown, operation: string, context: Record<string, unknown> = {}): ActionResult {
-  if (error instanceof SwarmRefusedError) {
-    return ActionResult.failure(RefusalMessage[error.refusal]);
-  }
-
-  const refusal = daemonRefusal(error);
-
-  if (refusal) {
-    return ActionResult.failure(refusal);
-  }
-
-  logger.error(`Swarm ${operation} failed`, { error, ...context });
-
-  return ActionResult.failure(`L'opération a échoué. ${SERVER_LOG_HINT}`);
-}
-
-/** Promotes, demotes, drains, reactivates or removes a node from its card on /cluster. */
 export const changeSwarmNode = async (nodeId: string, hostname: string, action: string): Promise<ActionResult> => {
   await sessions.require();
 
-  const isKnownAction = SwarmNodeActions.includes(action as SwarmNodeAction);
-
-  if (!NodeId.test(nodeId) || !isKnownAction) {
+  if (!isNodeAction(action)) {
     return ActionResult.failure("Action inconnue.");
   }
 
   try {
-    await swarm.changeNode(nodeId, action as SwarmNodeAction);
+    await swarm.changeNode(nodeId, action);
 
-    return ActionResult.success(SuccessMessage[action as SwarmNodeAction](hostname));
+    return ActionResult.success(SuccessMessage[action](hostname));
   } catch (error) {
-    return failure(error, action, { nodeId });
+    return swarmFailure(error, `Swarm ${action} failed`, { nodeId });
   }
 };
 
@@ -104,7 +59,7 @@ export const initSwarm = async (advertiseAddress: string): Promise<ActionResult>
 
     return ActionResult.success("Le cluster est créé : ce nœud en est le premier manager.");
   } catch (error) {
-    return failure(error, "init");
+    return swarmFailure(error, "Swarm init failed");
   }
 };
 
@@ -116,35 +71,41 @@ export const joinSwarm = async (
 ): Promise<ActionResult> => {
   await sessions.require();
 
-  const request = { managerAddress: managerAddress.trim(), token: token.trim(), advertise: advertiseAddress.trim() };
-  const isAdvertiseValid = !request.advertise || Address.test(request.advertise);
+  const request = {
+    managerAddress: managerAddress.trim(),
+    token: token.trim(),
+    advertiseAddress: advertiseAddress.trim() || undefined,
+  };
 
-  if (!Address.test(request.managerAddress) || !JoinToken.test(request.token) || !isAdvertiseValid) {
+  const isValid =
+    Address.test(request.managerAddress) &&
+    JoinToken.test(request.token) &&
+    (request.advertiseAddress === undefined || Address.test(request.advertiseAddress));
+
+  if (!isValid) {
     return ActionResult.failure("Adresse ou token invalide : le token commence par SWMTKN-1-.");
   }
 
   try {
-    await swarm.join({
-      managerAddress: request.managerAddress,
-      token: request.token,
-      advertiseAddress: request.advertise || undefined,
-    });
+    await swarm.join(request);
 
     return ActionResult.success("Ce nœud a rejoint le cluster.");
   } catch (error) {
     // Never the token in the log: it is a credential.
-    return failure(error, "join", { managerAddress: request.managerAddress });
+    return swarmFailure(error, "Swarm join failed", { managerAddress: request.managerAddress });
   }
 };
 
 /** The join commands, read only when someone asks to see them. */
-export const revealJoinCommands = async (): Promise<JoinCommandsResult> => {
+export const revealJoinCommands = async (): Promise<ReadResult<SwarmJoinCommands>> => {
   await sessions.require();
 
   try {
-    return { ...ActionResult.success("Commandes de jonction chargées."), commands: await swarm.joinCommands() };
+    return { success: true, value: await swarm.joinCommands() };
   } catch (error) {
-    return failure(error, "join-token read");
+    const { message } = swarmFailure(error, "Swarm join-token read failed");
+
+    return { success: false, message };
   }
 };
 
@@ -161,6 +122,6 @@ export const rotateJoinToken = async (role: string): Promise<ActionResult> => {
 
     return ActionResult.success(`Le token ${role} a été régénéré : l'ancien ne fonctionne plus.`);
   } catch (error) {
-    return failure(error, "token rotation", { role });
+    return swarmFailure(error, "Swarm token rotation failed", { role });
   }
 };

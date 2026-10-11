@@ -67,10 +67,9 @@ describe("deployToSwarm", () => {
   });
 
   it("takes a freshly listed app back off swarm: when its deploy fails, with Docker's reason", async () => {
-    vi.mocked(hangar.runtime.run).mockImplementation(async (_command, args, options) => {
+    vi.mocked(hangar.runtime.run).mockImplementation(async (_command, args) => {
       if (args[1] === "deploy") {
-        options?.pipe?.write("this node is not a swarm manager\n");
-        throw new HangarRuntimeError(1, "Process exited.");
+        throw new HangarRuntimeError(1, "this node is not a swarm manager");
       }
 
       return { code: 0, stdout: "" };

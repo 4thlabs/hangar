@@ -2,26 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "waku";
-import type { SwarmCluster, SwarmNode, SwarmNodeAction } from "#libs/docker";
+import type { SwarmManagerView, SwarmNode, SwarmNodeAction } from "#libs/docker";
 import { changeSwarmNode } from "#modules/cluster/actions/manage-cluster.ts";
 import { nodeActionConfirmation } from "#modules/cluster/confirmations.ts";
 import { nodeActionLabel } from "#modules/cluster/status.ts";
+import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
+import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "#modules/common/ui/alert-dialog.tsx";
-import { Button } from "#modules/common/ui/button.tsx";
-import { Spinner } from "#modules/common/ui/spinner.tsx";
 
 type NodeActionsProps = {
-  cluster: Extract<SwarmCluster, { state: "manager" }>;
+  cluster: SwarmManagerView;
   node: SwarmNode;
 };
 
@@ -50,37 +40,29 @@ export function NodeActions({ cluster, node }: NodeActionsProps) {
     <>
       <div className="flex flex-wrap gap-2">
         {node.actions.map(action => (
-          <Button
+          <PendingButton
             key={action}
             type="button"
             size="sm"
             variant={action === "remove" ? "destructive" : "outline"}
+            pending={running === action}
+            pendingLabel={nodeActionLabel[action]}
             disabled={isPending}
             onClick={() => setConfirming(action)}
           >
-            {running === action && <Spinner data-icon="inline-start" />}
             {nodeActionLabel[action]}
-          </Button>
+          </PendingButton>
         ))}
       </div>
 
-      <AlertDialog open={confirming !== null} onOpenChange={open => !open && setConfirming(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{confirmation?.title}</AlertDialogTitle>
-            <AlertDialogDescription>{confirmation?.description}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction
-              variant={confirmation?.destructive ? "destructive" : "default"}
-              onClick={() => confirming && confirm(confirming)}
-            >
-              Confirmer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirmation !== null}
+        title={confirmation?.title ?? ""}
+        description={confirmation?.description ?? ""}
+        destructive={confirmation?.destructive ?? false}
+        onConfirm={() => confirming && confirm(confirming)}
+        onCancel={() => setConfirming(null)}
+      />
     </>
   );
 }
