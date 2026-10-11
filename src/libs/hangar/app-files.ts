@@ -5,10 +5,18 @@ import { EditableFile } from "./editable-file.ts";
 import { HangarError, NotFoundError } from "./hangar-error.ts";
 
 /**
- * Writes `source` to `target`, the compose file of the app in `folder`, once `docker compose config`
- * accepts it. A rejected source leaves the file untouched.
+ * Writes `source` to `target`, a compose file of the app in `folder`, once Docker accepts it. A rejected
+ * source leaves the file untouched.
  */
 export type ComposeWriter = (folder: string, target: string, source: string) => Promise<void>;
+
+/** How each of the app's compose files is written: both need the runtime to be validated. */
+export type ComposeWriters = {
+  /** `compose.yml`, checked by `docker compose config` */
+  compose: ComposeWriter;
+  /** `compose.swarm.yml`, checked by `docker stack config` merged over `compose.yml` */
+  swarm: ComposeWriter;
+};
 
 /** A file of a store app, with symlinks resolved. */
 type AppFileLocation = {
@@ -26,21 +34,24 @@ export class AppFiles {
   /** The file that makes a folder under `store/` an app, validated by `docker compose config` */
   static readonly ComposeFile = "compose.yml";
 
+  /** What Swarm adds to {@link ComposeFile}; its presence says the app can run in the swarm */
+  static readonly SwarmFile = "compose.swarm.yml";
+
   private readonly id: string;
 
   private readonly folder: string;
 
-  private readonly writeCompose: ComposeWriter;
+  private readonly writers: ComposeWriters;
 
   /**
    * @param id The app id, named in the errors
    * @param folder The app folder, which must exist
-   * @param writeCompose How the app's compose file is written: it needs the runtime to be validated
+   * @param writers How the app's compose files are written: they need the runtime to be validated
    */
-  constructor(id: string, folder: string, writeCompose: ComposeWriter) {
+  constructor(id: string, folder: string, writers: ComposeWriters) {
     this.id = id;
     this.folder = folder;
-    this.writeCompose = writeCompose;
+    this.writers = writers;
   }
 
   /**
@@ -73,17 +84,25 @@ export class AppFiles {
 
   /**
    * Writes one file of the app, creating it and its folders when missing, once its syntax checks out:
-   * `docker compose config` for the app's compose.yml, whatever path leads to it, a parse for YAML and
-   * env files, nothing for the others. A rejected source leaves the file untouched.
+   * `docker compose config` for the app's compose.yml and `docker stack config` for its
+   * compose.swarm.yml, whatever path leads to them, a parse for YAML and env files, nothing for the
+   * others. A rejected source leaves the file untouched.
    * @param relativePath The file's path inside the app folder (`config/settings.yml`)
    * @param source The file's new content
-   * @returns Whether the app's compose file was written, which may rename the app or change its icon
+   * @returns Whether one of the app's compose files was written, which may rename the app, change its
+   * icon, or make it able to run in the swarm
    */
   async write(relativePath: string, source: string): Promise<{ composeChanged: boolean }> {
     const location = await this.locate(relativePath);
 
-    if (await AppFiles.isComposeFile(location)) {
-      await this.writeCompose(location.folder, location.file, source);
+    if (await AppFiles.isRootFile(location, AppFiles.ComposeFile)) {
+      await this.writers.compose(location.folder, location.file, source);
+
+      return { composeChanged: true };
+    }
+
+    if (await AppFiles.isRootFile(location, AppFiles.SwarmFile)) {
+      await this.writers.swarm(location.folder, location.file, source);
 
       return { composeChanged: true };
     }
@@ -143,15 +162,15 @@ export class AppFiles {
   }
 
   /**
-   * Whether a located file is the app's compose file, which `docker compose config` must accept:
-   * reached through a symlink (`alias.yml`), or spelled in another case (`Compose.yml`), which a
+   * Whether a located file is the app's `name` (a compose file, which Docker must accept): reached
+   * through a symlink (`alias.yml`), or spelled in another case (`Compose.yml`), which a
    * case-insensitive file system takes for the same file.
    */
-  private static async isComposeFile({ folder, file }: AppFileLocation) {
-    const compose = await AppFiles.realpathOfExisting(path.join(folder, AppFiles.ComposeFile));
+  private static async isRootFile({ folder, file }: AppFileLocation, name: string) {
+    const rootFile = await AppFiles.realpathOfExisting(path.join(folder, name));
     const isAtRoot = path.dirname(file) === folder;
 
-    return file === compose || (isAtRoot && path.basename(file).toLowerCase() === AppFiles.ComposeFile);
+    return file === rootFile || (isAtRoot && path.basename(file).toLowerCase() === name);
   }
 
   /** Whether `target` is `folder` or under it, both with symlinks resolved. */

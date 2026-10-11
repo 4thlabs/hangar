@@ -7,6 +7,7 @@ import type { SwarmCluster } from "#libs/docker";
 import { plural } from "#modules/apps/format.ts";
 import { ClusterEmpty } from "#modules/cluster/components/cluster-empty.tsx";
 import { NodeCard } from "#modules/cluster/components/node-card.tsx";
+import { StackSheet } from "#modules/cluster/components/stack-sheet.tsx";
 import { SwarmSetup } from "#modules/cluster/components/swarm-setup.tsx";
 import { TokensDialog } from "#modules/cluster/components/tokens-dialog.tsx";
 import { AutoReload } from "#modules/common/components/auto-reload.tsx";
@@ -26,6 +27,8 @@ const RELOAD_SECONDS = 10;
 type ClusterOverviewProps = {
   cluster: SwarmCluster | null;
   error: string | null;
+  /** The stacks named after an installed store app with a compose.swarm.yml: Hangar can redeploy them. */
+  manageableStacks: string[];
 };
 
 /** The one line under the title: which cluster, how big, how much it can lose. */
@@ -39,9 +42,10 @@ function clusterSummary(cluster: Extract<SwarmCluster, { state: "manager" }>) {
   ].join(" · ");
 }
 
-export function ClusterOverview({ cluster, error }: ClusterOverviewProps) {
+export function ClusterOverview({ cluster, error, manageableStacks }: ClusterOverviewProps) {
   const router = useRouter();
   const [isRefreshing, setRefreshing] = useState(false);
+  const [openStack, setOpenStack] = useState<string | null>(null);
 
   async function refresh() {
     setRefreshing(true);
@@ -86,13 +90,18 @@ export function ClusterOverview({ cluster, error }: ClusterOverviewProps) {
       {cluster?.state === "manager" && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {cluster.nodes.map(node => (
-            <NodeCard key={node.id} cluster={cluster} node={node} />
+            <NodeCard key={node.id} cluster={cluster} node={node} onOpenStack={setOpenStack} />
           ))}
         </div>
       )}
 
       {cluster && cluster.state !== "manager" && <ClusterEmpty cluster={cluster} />}
       {cluster?.state === "inactive" && <SwarmSetup />}
+      <StackSheet
+        stack={openStack}
+        manageable={openStack !== null && manageableStacks.includes(openStack)}
+        onClose={() => setOpenStack(null)}
+      />
     </>
   );
 }

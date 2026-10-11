@@ -17,10 +17,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 type NodeCardProps = {
   cluster: Extract<SwarmCluster, { state: "manager" }>;
   node: SwarmNode;
+  /** Opens the sheet of a stack, from its line. */
+  onOpenStack: (stack: string) => void;
 };
 
 /** One node of the swarm: what it is, the stacks with tasks running on it, and what can be changed on it. */
-export function NodeCard({ cluster, node }: NodeCardProps) {
+export function NodeCard({ cluster, node, onOpenStack }: NodeCardProps) {
   const isCurrent = node.id === cluster.currentNodeId;
 
   return (
@@ -45,13 +47,19 @@ export function NodeCard({ cluster, node }: NodeCardProps) {
         ) : (
           <ul className="flex flex-col gap-1.5 text-sm">
             {node.stacks.map(stack => (
-              <li key={stack.name} className="flex items-center gap-2">
-                <span className={healthClass[stack.health]} title={healthLabel[stack.health]} aria-hidden>
-                  {healthSymbol[stack.health]}
-                </span>
-                <span className="sr-only">{healthLabel[stack.health]}</span>
-                <span className="min-w-0 flex-1 truncate font-medium">{stack.name}</span>
-                <span className="text-muted-foreground">{plural(stack.tasks, "tâche")}</span>
+              <li key={stack.name}>
+                <button
+                  type="button"
+                  className="-mx-1.5 flex w-[calc(100%+--spacing(3))] items-center gap-2 rounded-md px-1.5 py-0.5 text-left hover:bg-muted"
+                  onClick={() => onOpenStack(stack.name)}
+                >
+                  <span className={healthClass[stack.health]} title={healthLabel[stack.health]} aria-hidden>
+                    {healthSymbol[stack.health]}
+                  </span>
+                  <span className="sr-only">{healthLabel[stack.health]}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">{stack.name}</span>
+                  <span className="text-muted-foreground">{plural(stack.tasks, "tâche")}</span>
+                </button>
               </li>
             ))}
           </ul>

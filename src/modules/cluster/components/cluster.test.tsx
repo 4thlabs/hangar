@@ -8,11 +8,12 @@ vi.mock("waku", () => ({
 
 // Server actions are a module boundary the render never crosses.
 vi.mock("#modules/cluster/actions/manage-cluster.ts", () => ({}));
+vi.mock("#modules/cluster/actions/manage-stacks.ts", () => ({}));
 
 const { ClusterOverview } = await import("./cluster-overview.tsx");
 
 const render = (cluster: SwarmCluster | null, error: string | null = null) =>
-  renderToStaticMarkup(<ClusterOverview cluster={cluster} error={error} />);
+  renderToStaticMarkup(<ClusterOverview cluster={cluster} error={error} manageableStacks={[]} />);
 
 const node = (overrides: Partial<SwarmNode>): SwarmNode => ({
   id: "node-1",

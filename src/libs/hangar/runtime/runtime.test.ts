@@ -1,6 +1,6 @@
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { Runtime } from "./runtime.ts";
+import { collectingOutput, Runtime } from "./runtime.ts";
 
 const collect = (stream: PassThrough) => {
   let text = "";
@@ -61,6 +61,24 @@ describe("Runtime", () => {
       code: 1,
       message: "daemon down",
     });
+  });
+
+  it("sets the given variables over its own environment", async () => {
+    const runtime = new Runtime();
+    const script = "console.log(process.env.HANGAR_TEST_VAR, Boolean(process.env.PATH))";
+
+    const { stdout } = await runtime.run("node", ["-e", script], { capture: true, env: { HANGAR_TEST_VAR: "set" } });
+
+    expect(stdout.trim()).toBe("set true");
+  });
+
+  it("fails a collected run on a non-zero exit, with the end of its output as the message", async () => {
+    const runtime = new Runtime();
+    const script = "console.log('Creating service web'); console.error('network conflict'); process.exit(1)";
+
+    const run = collectingOutput(pipe => runtime.run("node", ["-e", script], { pipe }));
+
+    await expect(run).rejects.toMatchObject({ code: 1, message: expect.stringContaining("network conflict") });
   });
 
   it("kills the child when the signal is aborted", async () => {

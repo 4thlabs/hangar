@@ -4,4 +4,4 @@ export type { HangarApp } from "./hangar-store.ts";
 export * from "./hangar-env.ts";
 export * from "./hangar-error.ts";
 export * from "./hangar.ts";
-export type { CommandRunner, RunOptions } from "./runtime/runtime.ts";
+export { collectingOutput, type CommandRunner, type RunOptions } from "./runtime/runtime.ts";

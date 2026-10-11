@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { load } from "js-yaml";
+import { parseDocument } from "yaml";
 import * as z from "zod";
 import { logger } from "#libs/logs";
 import { defaultWidgets, widgetConfigSchema, type WidgetConfig } from "#modules/widgets/config/widgets.ts";
@@ -16,6 +17,11 @@ const configSchema = z.object({
   categories: z.array(categorySchema),
   /** Files the store ships next to its stacks and every stack may reference (networks, common env) */
   shared: z.array(z.string().min(1)).default([]),
+  /**
+   * The apps that run in the swarm rather than with compose: `swarm deploy` deploys them, `store up` skips
+   * them. Each needs a `compose.swarm.yml`. An app deployed by hand works without being listed.
+   */
+  swarm: z.array(z.string().min(1)).default([]),
   /** The dashboard: which widgets are shown, in which column */
   widgets: z.array(widgetConfigSchema).default([...defaultWidgets]),
   /** Pause between two registry calls in the image update check, in ms: Hub and ghcr rate-limit a burst */
@@ -39,6 +45,9 @@ export class HangarConfig {
   /** The files shared by every stack, linked next to them at install */
   private _shared: string[] = [];
 
+  /** The apps that run in the swarm */
+  private _swarm: string[] = [];
+
   /** The widgets the dashboard shows, in declaration order */
   private _widgets: WidgetConfig[] = [...defaultWidgets];
 
@@ -50,6 +59,9 @@ export class HangarConfig {
 
   /** Returns the shared files */
   public shared = () => this._shared;
+
+  /** Returns the apps that run in the swarm */
+  public swarm = () => this._swarm;
 
   /** Returns the dashboard widgets */
   public widgets = () => this._widgets;
@@ -113,6 +125,37 @@ export class HangarConfig {
   }
 
   /**
+   * Lists an app under `swarm:`, keeping the rest of the file as written, comments included.
+   * @param id The app id; listing it twice does nothing
+   */
+  async addToSwarm(id: string) {
+    await this.editSwarm(ids => (ids.includes(id) ? ids : [...ids, id]));
+  }
+
+  /**
+   * Takes an app off `swarm:`, keeping the rest of the file as written, comments included.
+   * @param id The app id; an app not listed is left alone
+   */
+  async removeFromSwarm(id: string) {
+    await this.editSwarm(ids => ids.filter(listed => listed !== id));
+  }
+
+  /** Rewrites the `swarm:` list through the YAML document, so comments and layout survive. */
+  private async editSwarm(edit: (ids: string[]) => string[]) {
+    const document = parseDocument(await this.source());
+    const ids = edit(this._swarm);
+
+    if (ids.length === 0) {
+      document.delete("swarm");
+    } else {
+      document.set("swarm", ids);
+    }
+
+    // No padding inside `[a, b]`: the library's default would rewrite every flow list of the file.
+    await this.write(document.toString({ flowCollectionPadding: false }));
+  }
+
+  /**
    * Parses and validates a configuration.
    * hangar.yml is user-authored: validate here, or a missing `categories`
    * surfaces much later as a crash inside HangarStore.resolve().
@@ -138,6 +181,7 @@ export class HangarConfig {
   private apply(config: Config) {
     this._categories = config.categories;
     this._shared = config.shared;
+    this._swarm = config.swarm;
     this._widgets = config.widgets;
     this._registryThrottling = config.registryThrottling;
   }

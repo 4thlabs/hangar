@@ -134,4 +134,29 @@ categories:
     await expect(config.write("widgets: []\n")).rejects.toThrow(/categories/);
     expect(await readFile(file, "utf8")).toBe("categories: []\n");
   });
+
+  it("lists and unlists swarm apps, keeping the rest of the file and its comments", async () => {
+    const file = await configFile(`# The categories come first
+categories:
+  - name: infra # the base
+    color: blue
+    stacks: [traefik, miniflux]
+`);
+
+    const config = await new HangarConfig(file).load();
+
+    await config.addToSwarm("miniflux");
+    await config.addToSwarm("miniflux");
+
+    expect(config.swarm()).toEqual(["miniflux"]);
+    expect(await readFile(file, "utf8")).toContain("# The categories come first");
+    expect(await readFile(file, "utf8")).toContain("- name: infra # the base");
+    expect(await readFile(file, "utf8")).toContain("stacks: [traefik, miniflux]");
+
+    await config.removeFromSwarm("miniflux");
+
+    expect(config.swarm()).toEqual([]);
+    expect(await readFile(file, "utf8")).not.toContain("swarm");
+    expect((await new HangarConfig(file).load()).categories()).toHaveLength(1);
+  });
 });

@@ -11,9 +11,14 @@ import { Runtime, type CommandRunner, type RunOptions } from "./runtime/runtime.
 
 export type HangarApp = {
   id: string;
+  /** `x-hangar.name`, else the compose file's top-level `name`, else the capitalized id. */
   name: string;
   icon: string | undefined;
   installed: boolean;
+  /** Whether the app ships a `compose.swarm.yml`, so it can run in the swarm. */
+  swarmReady: boolean;
+  /** Whether `hangar.yml` lists it under `swarm:`: it runs in the swarm, never with compose. */
+  runsInSwarm: boolean;
   /** The container the app's own service declares, which Traefik routes `<container>.<DOMAIN>` to. */
   containerName: string;
 };
@@ -25,6 +30,12 @@ export class HangarStore {
 
   /** Commands that address the whole store instead of a single stack */
   static readonly GlobalCommand = ["up", "down", "pull"];
+
+  /** Run order per stack verb, as {@link CommandOrder}: deploy forwards, remove backwards */
+  static readonly StackCommandOrder: Record<string, number> = { deploy: 1, rm: -1 };
+
+  /** Stack verbs that address every `swarm:` app instead of a single one */
+  static readonly GlobalStackCommand = ["deploy", "rm"];
 
   /** A stack id is a folder name under `store/` (`llama.cpp`): no separator, no leading dot, nothing to climb out with */
   private static readonly StackId = /^[a-z0-9][a-z0-9._-]*$/;
@@ -80,6 +91,14 @@ export class HangarStore {
     )];
 
     return stacks.length > 0 ? stacks : [name];
+  }
+
+  /**
+   * Whether `name` addresses several apps at once: the whole store (empty) or a category.
+   * @param name A category or an app id
+   */
+  private isGroup(name: string) {
+    return name === "" || this.config.categories().some(category => category.name === name);
   }
 
   /**
@@ -187,7 +206,9 @@ export class HangarStore {
   }
 
   /**
-   * Runs docker compose against every stack, a category or a single stack.
+   * Runs docker compose against every stack, a category or a single stack. The `swarm:` apps are left
+   * out of a store or category command, and refused by name: running them with compose too would
+   * start a second copy.
    * @param name A global command, a category or a stack name
    * @param args Arguments passed through to docker compose
    * @param options Run options, forwarded to the runtime (`pipe` to capture the output)
@@ -199,8 +220,14 @@ export class HangarStore {
       name = "";
     }
 
+    const swarmApps = this.config.swarm();
+
+    if (!this.isGroup(name) && swarmApps.includes(name)) {
+      throw new HangarRuntimeError(1, `${name} runs in the swarm (hangar.yml): use \`swarm ${name}\` instead`);
+    }
+
     const command = args[0] ?? "";
-    const stacks = this.resolve(name);
+    const stacks = this.resolve(name).filter(stack => !swarmApps.includes(stack));
 
     if (command === "up" && !HangarStore.detached(args) && stacks.length > 1) {
       throw new HangarRuntimeError(1, "Non detached mode only authorised on a single stack");
@@ -224,6 +251,103 @@ export class HangarStore {
     for (const stack of order === 1 ? stacks : [...stacks].reverse()) {
       await this.composeStack(stack, args, options);
     }
+  }
+
+  /**
+   * The `docker stack` call for one app, from a short verb, so the caller never writes the files or
+   * the stack name, which is the app id. `.env.global` goes into the child's environment: unlike
+   * compose, `docker stack` has no `--env-file`, and interpolates from its own.
+   *
+   * | Verb            | Runs                                                                  |
+   * | --------------- | --------------------------------------------------------------------- |
+   * | `deploy [args]` | `docker stack deploy -c compose.yml -c compose.swarm.yml …args <app>` |
+   * | `config`        | `docker stack config -c compose.yml -c compose.swarm.yml`             |
+   * | `rm`            | `docker stack rm <app>`                                               |
+   * | `ps [args]`     | `docker stack ps …args <app>`                                         |
+   * | `services`      | `docker stack services <app>`                                         |
+   *
+   * Any app with a `compose.swarm.yml` will do, listed under `swarm:` or not.
+   * @param app The app id
+   * @param args The verb, then arguments passed through to it
+   * @param options Run options, forwarded to the runtime
+   */
+  private async stackApp(app: string, args: string[], options: RunOptions = {}) {
+    const folder = path.join(this.installedPath, app);
+    const files = ["-c", path.join(folder, AppFiles.ComposeFile), "-c", path.join(folder, AppFiles.SwarmFile)];
+
+    if (!(await Runtime.exists(path.join(folder, AppFiles.SwarmFile)))) {
+      throw new HangarRuntimeError(
+        1,
+        `${app} is not a swarm app: it has no ${AppFiles.SwarmFile}, or is not installed`,
+      );
+    }
+
+    const [verb = "", ...rest] = args;
+
+    const stackArgs: Record<string, string[]> = {
+      deploy: ["deploy", ...files, ...rest, app],
+      config: ["config", ...files, ...rest],
+      rm: ["rm", ...rest, app],
+      ps: ["ps", ...rest, app],
+      services: ["services", ...rest, app],
+    };
+
+    const call = stackArgs[verb];
+
+    if (!call) {
+      throw new HangarRuntimeError(1, `Unknown swarm command: ${verb} (${Object.keys(stackArgs).join(", ")})`);
+    }
+
+    return this.runtime.run("docker", ["stack", ...call], { ...options, env: await this.env.read() });
+  }
+
+  /**
+   * Runs a `docker stack` verb (see {@link stackApp}) against every `swarm:` app, a category, or one app.
+   * The whole store and a category only cover their `swarm:` apps; one app named directly only needs a
+   * `compose.swarm.yml`, so a stack deployed by hand can be managed without listing it.
+   * @param name A global verb (`deploy`, `rm`), a category or an app id
+   * @param args The verb, then arguments passed through to it
+   * @param options Run options, forwarded to the runtime (`pipe` to capture the output)
+   */
+  async stack(name: string, args: string[], options?: RunOptions) {
+    // `swarm deploy` / `swarm rm`: no target, the verb takes its place
+    if (HangarStore.GlobalStackCommand.includes(name)) {
+      args = [name, ...args];
+      name = "";
+    }
+
+    const apps = this.isGroup(name) ? this.swarmApps(name) : [name];
+    const order = HangarStore.StackCommandOrder[args[0] ?? ""] ?? 0;
+
+    if (order === 0) {
+      const results = await Promise.allSettled(apps.map(app => this.stackApp(app, args, options)));
+      const failure = results.find(result => result.status === "rejected");
+
+      if (failure) {
+        throw failure.reason;
+      }
+
+      return;
+    }
+
+    for (const app of order === 1 ? apps : [...apps].reverse()) {
+      await this.stackApp(app, args, options);
+    }
+  }
+
+  /**
+   * The `swarm:` apps a group covers, in category order. The whole store also covers the ones no
+   * category lists, last.
+   */
+  private swarmApps(group: string) {
+    const listed = this.config.swarm();
+    const ordered = this.resolve(group).filter(app => listed.includes(app));
+
+    if (group !== "") {
+      return ordered;
+    }
+
+    return [...ordered, ...listed.filter(app => !ordered.includes(app))];
   }
 
   /** The store app with this id, or `undefined` when the store does not carry it. */
@@ -271,9 +395,10 @@ export class HangarStore {
       throw new HangarError(`The app ${id} does not exist`);
     }
 
-    return new AppFiles(id, folder, (appFolder, target, source) =>
-      this.writeValidatedCompose(appFolder, target, source),
-    );
+    return new AppFiles(id, folder, {
+      compose: (appFolder, target, source) => this.writeValidatedCompose(appFolder, target, source),
+      swarm: (appFolder, target, source) => this.writeValidatedSwarm(appFolder, target, source),
+    });
   }
 
   /** The folder of an app that may be created or edited: not one of the shared files. */
@@ -313,6 +438,13 @@ export class HangarStore {
         "config", "-q",
       ], { capture: true });
 
+      // An edit here can break the stack too: a top-level `name`, a `depends_on` condition.
+      const swarmFile = path.join(folder, AppFiles.SwarmFile);
+
+      if (await HangarStore.hasContent(swarmFile)) {
+        await this.checkStack(pending, swarmFile);
+      }
+
       await rename(pending, target);
     } catch (error) {
       await rm(pending, { force: true });
@@ -320,6 +452,44 @@ export class HangarStore {
     }
 
     await this.refresh();
+  }
+
+  /**
+   * Writes `source` to `target`, the compose.swarm.yml of the app in `folder`, if `docker stack config`
+   * accepts it merged over the app's compose.yml, then reloads the apps. Works on any node, in a swarm
+   * or not.
+   */
+  private async writeValidatedSwarm(folder: string, target: string, source: string) {
+    // Same pending copy as `writeValidatedCompose`, and for the same reasons.
+    const pending = path.join(folder, `.compose.swarm.${randomUUID()}.pending.yml`);
+
+    try {
+      await writeFile(pending, source, { encoding: "utf8", flag: "wx" });
+      await this.checkStack(path.join(folder, AppFiles.ComposeFile), pending);
+      await rename(pending, target);
+    } catch (error) {
+      await rm(pending, { force: true });
+      throw error;
+    }
+
+    await this.refresh();
+  }
+
+  /** Rejects with Docker's complaint unless `docker stack config` accepts the two files merged. */
+  private async checkStack(composeFile: string, swarmFile: string) {
+    // prettier-ignore
+    await this.runtime.run("docker", [
+      "stack", "config",
+      "-c", composeFile,
+      "-c", swarmFile,
+    ], { capture: true, env: await this.env.read() });
+  }
+
+  /** Whether a file exists with something in it: a fresh empty compose.swarm.yml is not one yet. */
+  private static async hasContent(file: string) {
+    const source = await readFile(file, "utf8").catch(() => "");
+
+    return source.trim() !== "";
   }
 
   /** The folder of a store app, once its id is known not to escape `store/`. */
@@ -331,9 +501,9 @@ export class HangarStore {
     return path.join(this.storePath, "store", id);
   }
 
-  /** The ids of the installed apps. */
+  /** The ids of the installed apps that run with compose: the `swarm:` apps are on /cluster, not /apps. */
   installedProjectIds(): Set<string> {
-    return new Set([...this.apps].flatMap(app => (app.installed ? [app.id] : [])));
+    return new Set([...this.apps].flatMap(app => (app.installed && !app.runsInSwarm ? [app.id] : [])));
   }
 
   /** Reloads `hangar.yml` and every app's compose file. */
@@ -344,6 +514,7 @@ export class HangarStore {
       await this.config.load();
 
       const shared = this.config.shared();
+      const swarm = this.config.swarm();
       const entries = await readdir(path.join(this.storePath, "store"), { recursive: false });
       const apps = entries.filter(entry => !shared.includes(entry));
       const installed = await readdir(this.installedPath, { recursive: false });
@@ -354,17 +525,20 @@ export class HangarStore {
           try {
             const source = await readFile(path.join(this.storePath, "store", app, AppFiles.ComposeFile), "utf8");
             const yaml = load(source, { filename: AppFiles.ComposeFile }) as Record<string, unknown> | undefined;
-            const metadata = yaml?.["x-hangar"] as { icon?: string } | undefined;
+            const metadata = yaml?.["x-hangar"] as { name?: string; icon?: string } | undefined;
             const services = (yaml?.["services"] ?? {}) as Record<string, { container_name?: string } | undefined>;
 
             // The main service is the one named after the app, else the first declared.
             const service = services[app] ?? Object.values(services)[0];
 
+            // `x-hangar.name` first: Swarm rejects a top-level `name`, so a swarm-ready app moves it there.
             this.apps.add({
               id: app,
-              name: (yaml?.["name"] as string | undefined) ?? HangarStore.capitalize(app),
+              name: metadata?.name ?? (yaml?.["name"] as string | undefined) ?? HangarStore.capitalize(app),
               icon: metadata?.icon,
               installed: installed.indexOf(app) !== -1,
+              swarmReady: await Runtime.exists(path.join(this.storePath, "store", app, AppFiles.SwarmFile)),
+              runsInSwarm: swarm.includes(app),
               containerName: service?.container_name ?? app,
             });
           } catch (error) {

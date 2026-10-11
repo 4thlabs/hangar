@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
-import { type Writable } from "node:stream";
+import { Writable } from "node:stream";
 import { logger } from "#libs/logs";
 import { HangarRuntimeError } from "../hangar-error.ts";
 
@@ -20,7 +20,41 @@ export type RunOptions = {
   capture?: boolean;
   /** Kills the child when aborted. The run then rejects, like any other killed child. */
   signal?: AbortSignal;
+  /** Variables set for the child on top of this process's own, which it otherwise inherits as they are. */
+  env?: Record<string, string>;
 };
+
+/** How much of a failed run's output becomes its error message: the end, where the cause is. */
+const FAILURE_OUTPUT_LINES = 20;
+
+/**
+ * Runs `body` with a stream that collects the merged output of the commands it pipes there. Unlike
+ * `capture`, a non-zero exit always fails, whatever was printed; the error then carries the last lines
+ * of that output, Docker's complaint among them, instead of "Process exited.".
+ * @param body Runs the commands, passing the stream as their `pipe`
+ */
+export async function collectingOutput<T>(body: (pipe: Writable) => Promise<T>): Promise<T> {
+  let output = "";
+
+  const pipe = new Writable({
+    write(chunk: Buffer, _encoding, done) {
+      output += chunk.toString();
+      done();
+    },
+  });
+
+  try {
+    return await body(pipe);
+  } catch (error) {
+    const tail = output.trim().split("\n").slice(-FAILURE_OUTPUT_LINES).join("\n");
+
+    if (error instanceof HangarRuntimeError && tail) {
+      throw new HangarRuntimeError(error.code, tail);
+    }
+
+    throw error;
+  }
+}
 
 export interface CommandRunner {
   run: (command: string, args: string[], options?: RunOptions) => Promise<RuntimeResult>;
@@ -75,11 +109,12 @@ export class Runtime implements CommandRunner {
         return reject(new HangarRuntimeError(130, "Process interrupted."));
       }
 
-      const { pipe, capture, signal } = options;
+      const { pipe, capture, signal, env } = options;
 
       const child = spawn(command, args, {
         stdio: pipe || capture ? ["ignore", "pipe", "pipe"] : ["inherit", "inherit", "inherit"],
         signal,
+        env: env && { ...process.env, ...env },
       });
 
       // `end: false`: several children can share one stream (a multi-stack compose),

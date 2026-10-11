@@ -1,10 +1,12 @@
 import { PencilIcon } from "lucide-react";
 import { Link } from "waku";
 import { type HangarApp } from "#libs/hangar";
+import { Badge } from "#modules/common/ui/badge.tsx";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardTitle } from "#modules/common/ui/card.tsx";
 import type { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
 import { StoreAppButton } from "#modules/store/components/store-app-button.tsx";
+import { SwarmDeployButton } from "#modules/store/components/swarm-deploy-button.tsx";
 
 type StoreAppCardProps = {
   app: HangarApp;
@@ -12,7 +14,12 @@ type StoreAppCardProps = {
   uninstallApp: (appId: string) => Promise<StoreActionResult>;
 };
 
-/** Server component: only the install button below is interactive. */
+/** What the Swarm badge says on hover: the app can run in the swarm, or does. */
+function swarmBadgeTitle(app: HangarApp) {
+  return app.runsInSwarm ? "Tourne dans le swarm" : "Peut tourner dans le swarm (compose.swarm.yml)";
+}
+
+/** Server component: only the buttons below are interactive. */
 export function StoreAppCard({ app, installApp, uninstallApp }: StoreAppCardProps) {
   return (
     <Card className="relative gap-2 py-3">
@@ -34,7 +41,15 @@ export function StoreAppCard({ app, installApp, uninstallApp }: StoreAppCardProp
           <div className="size-12 rounded-sm bg-muted" aria-hidden="true" />
         )}
         <CardTitle className="line-clamp-2 text-base leading-tight">{app.name}</CardTitle>
+        {app.swarmReady && (
+          <Badge variant={app.runsInSwarm ? "default" : "outline"} title={swarmBadgeTitle(app)}>
+            Swarm
+          </Badge>
+        )}
       </CardContent>
+      {app.swarmReady && !app.runsInSwarm && (
+        <SwarmDeployButton appId={app.id} appName={app.name} installed={app.installed} />
+      )}
       <StoreAppButton
         appId={app.id}
         appName={app.name}
