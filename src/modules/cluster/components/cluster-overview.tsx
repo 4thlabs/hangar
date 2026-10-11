@@ -1,30 +1,36 @@
 "use client";
 
 import { RefreshCwIcon } from "lucide-react";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
+import { useSetSearch_UNSTABLE } from "waku/router/client";
 import type { SwarmCluster } from "#libs/docker";
 import { SwarmRules } from "#libs/docker/swarm-rules";
 import { ClusterEmpty } from "#modules/cluster/components/cluster-empty.tsx";
 import { NodeCard } from "#modules/cluster/components/node-card.tsx";
-import { StackList } from "#modules/cluster/components/stack-list.tsx";
+import { StackFilters } from "#modules/cluster/components/stack-filters.tsx";
 import { StackSheet } from "#modules/cluster/components/stack-sheet.tsx";
+import { StackTable } from "#modules/cluster/components/stack-table.tsx";
 import { SwarmSetup } from "#modules/cluster/components/swarm-setup.tsx";
 import { TokensDialog } from "#modules/cluster/components/tokens-dialog.tsx";
 import { ClusterLabels } from "#modules/cluster/labels.ts";
+import type { ClusterSearchState, StackSortColumn } from "#modules/cluster/search.ts";
+import { StackFilter } from "#modules/cluster/stack-filter.ts";
 import { AutoReload } from "#modules/common/components/auto-reload.tsx";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useRouteRefresh } from "#modules/common/hooks/use-route-refresh.ts";
+import { TableSort } from "#modules/common/table-sort.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 
-/** The swarm as read, or why it could not be. */
-type ClusterOverviewProps =
+/** The swarm as read, or why it could not be, and how the stack table is filtered and sorted. */
+type ClusterOverviewProps = { search: ClusterSearchState } & (
   | {
       cluster: SwarmCluster;
       /** The stacks named after an installed store app with a compose.swarm.yml: Hangar can redeploy them. */
       manageableStacks: string[];
     }
-  | { error: string };
+  | { error: string }
+);
 
 export function ClusterOverview(props: ClusterOverviewProps) {
   const { refresh, isRefreshing } = useRouteRefresh();
@@ -32,6 +38,8 @@ export function ClusterOverview(props: ClusterOverviewProps) {
   const cluster = "cluster" in props ? props.cluster : null;
   const manager = cluster?.state === "manager" ? cluster : null;
   const manageableStacks = "manageableStacks" in props ? props.manageableStacks : [];
+  const setSearch = useSetSearch_UNSTABLE({ from: "/cluster" });
+  const onSort = (column: StackSortColumn) => void setSearch({ sort: TableSort.next(props.search.sort, column) });
 
   return (
     <>
@@ -79,7 +87,24 @@ export function ClusterOverview(props: ClusterOverviewProps) {
         </div>
       )}
 
-      {manager && <StackList stacks={manager.stacks} manageableStacks={manageableStacks} onOpen={setOpenStack} />}
+      {manager && (
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Stacks</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <StackFilters nodes={manager.nodes} counts={StackFilter.counts(manager.stacks, manageableStacks)} />
+            </div>
+          </div>
+          <StackTableOrEmpty
+            stacks={StackFilter.apply(manager.stacks, props.search, manageableStacks)}
+            total={manager.stacks.length}
+            manageableStacks={manageableStacks}
+            sort={props.search.sort}
+            onSort={onSort}
+            onOpen={setOpenStack}
+          />
+        </section>
+      )}
 
       {cluster && cluster.state !== "manager" && <ClusterEmpty cluster={cluster} />}
       {cluster?.state === "inactive" && <SwarmSetup />}
@@ -89,5 +114,18 @@ export function ClusterOverview(props: ClusterOverviewProps) {
         onClose={() => setOpenStack(null)}
       />
     </>
+  );
+}
+
+/** The stack table, or why it has no row: no stack at all, or none the filters keep. */
+function StackTableOrEmpty({ total, ...table }: ComponentProps<typeof StackTable> & { total: number }) {
+  if (table.stacks.length > 0) {
+    return <StackTable {...table} />;
+  }
+
+  return (
+    <p className="text-sm text-muted-foreground">
+      {total === 0 ? "Aucune stack déployée." : "Aucune stack ne correspond à ces filtres."}
+    </p>
   );
 }

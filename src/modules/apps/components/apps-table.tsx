@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
 import { useState } from "react";
 import { Link } from "waku";
 import type { ComposeProjectSummary } from "#libs/docker";
@@ -10,6 +9,7 @@ import { plural, s } from "#modules/apps/format.ts";
 import { useComposeRun } from "#modules/apps/hooks/use-compose-run.ts";
 import type { AppSortColumn, AppsSort } from "#modules/apps/search-codec.ts";
 import { statusLabel, statusVariant } from "#modules/apps/status.ts";
+import { SortableHead } from "#modules/common/components/sortable-head.tsx";
 import { navigationPrefetch } from "#modules/common/navigations.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
@@ -19,45 +19,6 @@ type AppsTableProps = {
   sort?: AppsSort;
   onSort?: (column: AppSortColumn) => void;
 };
-
-type SortableHeadProps = {
-  column: AppSortColumn;
-  label: string;
-  sort: AppsSort;
-  onSort: ((column: AppSortColumn) => void) | undefined;
-  className?: string;
-};
-
-/** How a header shows that the table is sorted on its column, or not. */
-function sortDirection(sort: AppsSort, column: AppSortColumn): "ascending" | "descending" | "none" {
-  if (sort?.column !== column) {
-    return "none";
-  }
-
-  return sort.descending ? "descending" : "ascending";
-}
-
-const SORT_ICONS = { ascending: ArrowUpIcon, descending: ArrowDownIcon, none: ChevronsUpDownIcon };
-
-/** A column header that toggles the table's sort, announcing its state to screen readers. */
-function SortableHead({ column, label, sort, onSort, className }: SortableHeadProps) {
-  const direction = sortDirection(sort, column);
-  const active = direction !== "none";
-  const Icon = SORT_ICONS[direction];
-
-  return (
-    <TableHead className={className} aria-sort={direction}>
-      <button
-        type="button"
-        className="-mx-1 flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 hover:text-foreground/80"
-        onClick={() => onSort?.(column)}
-      >
-        {label}
-        <Icon aria-hidden="true" className={active ? "size-3.5" : "size-3.5 text-muted-foreground"} />
-      </button>
-    </TableHead>
-  );
-}
 
 export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());

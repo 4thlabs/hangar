@@ -7,11 +7,11 @@ import type {
   SwarmNodeAvailability,
   SwarmNodeRole,
   SwarmNodeStatus,
-  SwarmStack,
   SwarmStackHealth,
 } from "#libs/docker";
 import { SwarmRules } from "#libs/docker/swarm-rules";
 import { plural } from "#modules/apps/format.ts";
+import type { StackOrigin } from "#modules/cluster/search.ts";
 
 /** What /cluster shows when this node cannot describe the cluster. */
 export type ClusterEmptyText = {
@@ -47,6 +47,18 @@ export class ClusterLabels {
     running: "Tous les réplicas tournent",
     partial: "Une partie des réplicas tourne",
     stopped: "Aucun réplica ne tourne",
+  };
+
+  /** The health in a word, for the table and its filter. */
+  static readonly HealthShort: Record<SwarmStackHealth, string> = {
+    running: "En cours",
+    partial: "Partielle",
+    stopped: "Arrêtée",
+  };
+
+  static readonly Origin: Record<StackOrigin, string> = {
+    hangar: "Hangar",
+    other: "Autres",
   };
 
   /** The dot before a stack: full, half or empty, as its replicas run. */
@@ -110,11 +122,6 @@ export class ClusterLabels {
       plural(cluster.nodes.length, "nœud"),
       `${plural(cluster.managers, "manager")} (${tolerance})`,
     ].join(" · ");
-  }
-
-  /** How many of a stack's replicas run, out of how many it should: `2/3 réplicas`. */
-  static replicas({ running, desired }: Pick<SwarmStack, "running" | "desired">) {
-    return `${running}/${plural(desired, "réplica")}`;
   }
 
   /** What /cluster says when this node cannot describe the cluster, with the command that moves it on. */

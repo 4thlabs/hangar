@@ -1,5 +1,6 @@
 import type { Unstable_SearchCodec } from "waku/router";
 import type { ComposeProjectStatus } from "#libs/docker";
+import type { SortState } from "#modules/common/table-sort.ts";
 
 /** Every Compose status, in the order the filter menu lists them. */
 export const APP_STATUSES: ComposeProjectStatus[] = ["running", "partial", "stopped", "unhealthy"];
@@ -13,7 +14,7 @@ export const APP_SORT_COLUMNS = ["name", "category", "status", "services", "cont
 export type AppSortColumn = (typeof APP_SORT_COLUMNS)[number];
 
 /** `null` means the default order: search relevance when there is a query, alphabetical otherwise. */
-export type AppsSort = { column: AppSortColumn; descending: boolean } | null;
+export type AppsSort = SortState<AppSortColumn>;
 
 export type AppsSearch = {
   q: string;

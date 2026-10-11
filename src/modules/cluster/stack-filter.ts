@@ -1,0 +1,71 @@
+import type { SwarmStack } from "#libs/docker";
+import {
+  ClusterSearch,
+  type ClusterSearchState,
+  type StackOrigin,
+  type StackSortColumn,
+} from "#modules/cluster/search.ts";
+import { countBy } from "#modules/common/count-by.ts";
+import { searchByName } from "#modules/common/search.ts";
+import { TableSort } from "#modules/common/table-sort.ts";
+
+/** How many stacks each filter option would keep, for the menus. */
+export type StackFilterCounts = {
+  health: Partial<Record<string, number>>;
+  node: Partial<Record<string, number>>;
+  origin: Partial<Record<string, number>>;
+};
+
+/** The /cluster stack table's filters and sort, applied to what the server read. */
+export class StackFilter {
+  /** What each sortable column compares on. Health sorts by severity, the best first. */
+  private static readonly SortValue: Record<StackSortColumn, (stack: SwarmStack) => number | string> = {
+    name: stack => stack.name,
+    health: stack => ClusterSearch.Healths.indexOf(stack.health),
+    replicas: stack => stack.desired,
+    nodes: stack => stack.placement.length,
+  };
+
+  /**
+   * Narrows the stacks to the selected healths, nodes and origins, then to the query, then sorts them.
+   * @param manageable The stacks Hangar can redeploy, which make the `hangar` origin
+   */
+  static apply(stacks: readonly SwarmStack[], search: ClusterSearchState, manageable: readonly string[]) {
+    const kept = stacks.filter(
+      stack =>
+        StackFilter.matches(search.health, stack.health) &&
+        StackFilter.runsOnAny(stack, search.node) &&
+        StackFilter.matches(search.origin, StackFilter.origin(stack, manageable)),
+    );
+
+    const found = searchByName(search.q, kept);
+
+    // An explicit column wins over relevance: the user asked for that order.
+    return search.sort ? TableSort.apply(found, search.sort, StackFilter.SortValue[search.sort.column]) : found;
+  }
+
+  /** How many stacks fall under each option of each filter, over every stack. */
+  static counts(stacks: readonly SwarmStack[], manageable: readonly string[]): StackFilterCounts {
+    return {
+      health: countBy(stacks, stack => stack.health),
+      node: countBy(
+        stacks.flatMap(stack => stack.placement),
+        place => place.hostname,
+      ),
+      origin: countBy(stacks, stack => StackFilter.origin(stack, manageable)),
+    };
+  }
+
+  static origin(stack: SwarmStack, manageable: readonly string[]): StackOrigin {
+    return manageable.includes(stack.name) ? "hangar" : "other";
+  }
+
+  /** An empty selection is no filter. */
+  private static matches<T>(selected: readonly T[], value: T) {
+    return selected.length === 0 || selected.includes(value);
+  }
+
+  private static runsOnAny(stack: SwarmStack, hostnames: readonly string[]) {
+    return hostnames.length === 0 || stack.placement.some(place => hostnames.includes(place.hostname));
+  }
+}

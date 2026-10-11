@@ -258,11 +258,12 @@ node first. Same tree on mobile, one column.
 - **Node cards:** hostname, badges for role (Leader / Manager / Worker), status (Prêt / Injoignable) and
   availability (Actif / Drainé), CPU, RAM and engine version from `GET /nodes`, how many tasks run there,
   and the node actions.
-- **Stack list:** every stack (or lone service) once, below the cards: its health across the cluster (● every
-  desired replica runs, ◐ some, ○ none), its running replicas out of the desired ones, from the daemon's
-  per-service counts, and the nodes its tasks run on. A stack running nowhere stays listed, so its sheet can
-  tell why. "Hangar" marks the stacks Hangar can redeploy. Swarm only: the compose apps of Hangar's node are
-  not repeated here.
+- **Stack table:** every stack (or lone service) once, below the cards, as on /apps: its health across the
+  cluster (● every desired replica runs, ◐ some, ○ none), its running replicas out of the desired ones, from
+  the daemon's per-service counts, and the nodes its tasks run on. A stack running nowhere stays listed, so
+  its sheet can tell why. "Hangar" marks the stacks Hangar can redeploy. The navbar search, filters by
+  health, node and origin (Hangar or other), and sortable columns live in the URL (`ClusterSearch.Codec`).
+  Swarm only: the compose apps of Hangar's node are not repeated here.
 - **Stack sheet:** clicking a stack opens a side sheet with its services and tasks per node
   (`HangarStore.stack(app, ["ps"])`), and, for a stack Hangar deployed, "Mettre à jour" (deploy again) and
   "Supprimer" (`rm`).

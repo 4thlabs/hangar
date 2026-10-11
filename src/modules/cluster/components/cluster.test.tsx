@@ -6,6 +6,14 @@ vi.mock("waku", () => ({
   useRouter: () => ({ reload: async () => {} }),
 }));
 
+vi.mock("waku/router/client", () => ({
+  useSearch_UNSTABLE: () => noSearch,
+  useSetSearch_UNSTABLE: () => () => {},
+}));
+
+/** No filter, no sort: every stack, by name. */
+const noSearch = { q: "", health: [], node: [], origin: [], sort: null };
+
 // Server actions are a module boundary the render never crosses.
 vi.mock("#modules/cluster/actions/manage-cluster.ts", () => ({}));
 vi.mock("#modules/cluster/actions/manage-stacks.ts", () => ({}));
@@ -14,7 +22,7 @@ const { managerView, swarmNodeView: node } = await import("#libs/docker/mock");
 const { ClusterOverview } = await import("./cluster-overview.tsx");
 
 const render = (cluster: SwarmCluster) =>
-  renderToStaticMarkup(<ClusterOverview cluster={cluster} manageableStacks={[]} />);
+  renderToStaticMarkup(<ClusterOverview cluster={cluster} manageableStacks={[]} search={noSearch} />);
 
 const manager = managerView({
   managers: 2,
@@ -55,12 +63,14 @@ describe("ClusterOverview", () => {
   });
 
   it("lists each stack once, with its replicas and where its tasks run, the idle ones included", () => {
-    const html = renderToStaticMarkup(<ClusterOverview cluster={manager} manageableStacks={["miniflux"]} />);
+    const html = renderToStaticMarkup(
+      <ClusterOverview cluster={manager} manageableStacks={["miniflux"]} search={noSearch} />,
+    );
 
     expect(html.match(/>miniflux</g)).toHaveLength(1);
     expect(html).toContain("◐");
-    expect(html).toContain("2/3 réplicas");
-    expect(html).toContain("nas 2");
+    expect(html).toContain("2/3");
+    expect(html).toContain("nas · 2");
     expect(html).toContain("Hangar");
     expect(html).toContain("broken");
     expect(html).toContain("aucune tâche");
@@ -101,8 +111,16 @@ describe("ClusterOverview", () => {
     expect(html).not.toContain("Tokens");
   });
 
+  it("says so when the filters keep no stack", () => {
+    const html = renderToStaticMarkup(
+      <ClusterOverview cluster={manager} manageableStacks={[]} search={{ ...noSearch, health: ["running"] }} />,
+    );
+
+    expect(html).toContain("Aucune stack ne correspond à ces filtres.");
+  });
+
   it("offers a retry when the daemon fails", () => {
-    const html = renderToStaticMarkup(<ClusterOverview error="Le daemon Docker ne répond pas." />);
+    const html = renderToStaticMarkup(<ClusterOverview error="Le daemon Docker ne répond pas." search={noSearch} />);
 
     expect(html).toContain("Swarm indisponible");
     expect(html).toContain("Réessayer");
