@@ -108,6 +108,9 @@ after the app.
 Saving either file in the editor runs `docker stack config -c compose.yml -c compose.swarm.yml` with
 `.env.global` first, which works on any node, in a swarm or not.
 
+[Docker Swarm](swarm.md) covers the rest: a complete example, volumes across nodes, and the Cluster
+page.
+
 ## The global environment
 
 `.env.global`, at the root of the data directory, is the environment every stack is composed
