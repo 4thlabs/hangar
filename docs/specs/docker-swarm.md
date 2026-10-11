@@ -232,7 +232,7 @@ node first. Same tree on mobile, one column.
 
 ```
 ┌ Cluster ────────────────────────────────────────────────────────────────────────┐
-│ homelab · 3 nœuds · 2 managers (tolère 0 panne)       [Tokens]  [Sauvegarder]   │
+│ nhyx6n1b8b0a · 3 nœuds · 2 managers (tolère 0 panne)  [Tokens]  [Sauvegarder]   │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │ ┌ nas  ★ ce nœud ──────────────┐ ┌ pi-01 ───────────────────┐ ┌ pi-02 ──────────┐ │
 │ │ Leader · Prêt · Actif        │ │ Manager · Prêt · Actif   │ │ Worker · Injoi- │ │
@@ -249,6 +249,9 @@ node first. Same tree on mobile, one column.
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+- **Page header:** the cluster id's first 12 characters, as the `docker` CLI shortens ids: Swarm has no
+  name of its own (`Spec.Name` is always `default`). Then the node and manager counts, and the fault
+  tolerance.
 - **Card header:** hostname, badges for role (Leader / Manager / Worker), status (Prêt / Injoignable) and
   availability (Actif / Drainé), then CPU, RAM and engine version from `GET /nodes`.
 - **App list:** one line per stack (or lone service) with tasks on that node, and how many run there. A
@@ -261,6 +264,8 @@ node first. Same tree on mobile, one column.
 - **Actions:** promote / demote, drain / activate, remove (only once the node is down). Demoting the last
   manager is refused. Each action asks for a confirmation that states the fault tolerance after it.
 - **Not in a swarm:** an empty state with "Créer le cluster" (`swarm init`) and "Rejoindre" (token + address).
+- **Locked:** a manager restarted with autolock on stays `locked` until `docker swarm unlock`. The page says so
+  and shows the command; Hangar never asks for the unlock key.
 - **Tokens:** a dialog that shows the worker and manager join commands on click, with a "Régénérer" button.
 - Live data comes from the existing Docker events stream: a `node` or `service` event refreshes the page.
   Docker emits no event per task, so task counts also follow a short cache TTL.
@@ -313,10 +318,70 @@ No database change. Reads go through `#libs/cache` under `docker:swarm:`, like t
 
 1. Read-only page: nodes and their apps.
 2. Node actions, init / join, tokens.
-3. Store: `compose.swarm.yml`, `HangarStore.stack` with the `swarm` CLI, and
-   "Déployer sur le swarm".
+3. Store: `compose.swarm.yml`, `HangarStore.stack` with the `swarm` CLI, "Déployer sur le swarm", and the
+   stack sheet.
 4. Key backup: tokens and unlock key, encryption, nightly job, download.
 5. Raft directory in the backup, the restore doc, and the restore drill.
+
+### Step 1: the read-only page
+
+Branch `feat/swarm-cluster-page`. Nothing here writes to the daemon; the actions, `swarm init` and the
+tokens come in step 2. A stack line is not clickable yet: the stack sheet reads `docker stack ps`, which
+comes with `HangarStore.stack` in step 3.
+
+**`DockerSwarm` (`src/libs/docker/swarm.ts`).** Built like `Docker`: `new DockerSwarm(dockerode, cache, ttl)`,
+no `server-only` guard. One public read, `cluster()`, a union on `state`:
+
+| `state`    | When (`info.Swarm`)                     | Carries                                                     |
+| ---------- | --------------------------------------- | ----------------------------------------------------------- |
+| `inactive` | `LocalNodeState` is `inactive`          | Nothing                                                     |
+| `locked`   | `LocalNodeState` is `locked` (autolock) | Nothing; the page shows `docker swarm unlock`               |
+| `worker`   | `active`, `ControlAvailable` false      | Cluster id, `RemoteManagers` for the command to run there   |
+| `manager`  | `active`, `ControlAvailable` true       | Cluster id, current node id, fault tolerance, `SwarmNode[]` |
+
+- `info()` comes first; `listNodes`, `listServices({ status: true })` and
+  `listTasks({ filters: { "desired-state": ["running"] } })` are only called on a manager, so a worker never
+  meets their `503`.
+- A stack is `com.docker.stack.namespace`, or the service name outside a stack. Its health (● ◐ ○) comes from
+  `ServiceStatus.RunningTasks` / `DesiredTasks` summed over its services, which also covers `global` services.
+  A node lists the stacks with at least one `running` task on it, and how many.
+- Fault tolerance is `floor((managers - 1) / 2)`.
+- One cache key, `docker:swarm:cluster`, with a 10 s TTL: Docker emits no task events.
+- `SwarmNode`: id, hostname, role, leader, status, availability, CPUs, memory, engine version, and its stacks
+  (name, health, tasks running on that node).
+
+**Events (`src/libs/docker/events.ts`).** `DockerChange` gains `"swarm"`. The filters add the `node` and
+`service` types with `create`, `update` and `remove`, and a container event carrying
+`com.docker.swarm.task.id` also counts as `"swarm"`. `cache.refresh` matches by prefix, so the existing
+`docker:${change}` reload reaches `docker:swarm:cluster` with no other change.
+
+**Composition root (`src/libs/docker/server/server.ts`).** One `Dockerode` client, shared by `docker` and a new
+`swarm` export.
+
+**Page (`src/modules/cluster/`).**
+
+| File                                | What                                                                               |
+| ----------------------------------- | ---------------------------------------------------------------------------------- |
+| `components/cluster-content.tsx`    | Server half, `map` / `recover` around `swarm.cluster()`, as `AppsContent` does     |
+| `components/cluster-overview.tsx`   | Header (nodes, managers, fault tolerance), the grid, `<AutoReload seconds={10} />` |
+| `components/node-card.tsx`          | Role, status and availability badges; CPU, RAM, engine version; the stack list     |
+| `components/cluster-empty.tsx`      | The `inactive`, `locked` and `worker` states, each with the command to copy        |
+| `status.ts`                         | Labels and symbols, with the `/apps` conventions                                   |
+| `src/app/pages/(app)/cluster.tsx`   | Thin shell, like `apps.tsx`                                                        |
+| `src/modules/common/navigations.ts` | "Cluster" after "Apps", shown in every state                                       |
+
+One grid, `grid-cols-1 md:grid-cols-2 xl:grid-cols-3`: the current node first, then the managers, then by
+hostname.
+
+**Tests.**
+
+- `swarm.test.ts`: the mock gains `listNodes`, `listServices` and `listTasks`, with `swarmNode()`,
+  `swarmService()` and `swarmTask()` helpers. The four states, a stack over two nodes, a service outside a
+  stack, a global service, partial health, fault tolerance, and no manager call on a worker.
+- `events.test.ts`: node, service and task-container events report `"swarm"`.
+- A component test rendering each state.
+- By hand: a one-node swarm (`docker swarm init`) locally, then two or three `docker:dind` containers for a
+  multi-node cluster.
 
 ## Open questions
 
