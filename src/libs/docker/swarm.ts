@@ -18,16 +18,22 @@ export type SwarmNodeAvailability = "active" | "pause" | "drain";
 /** How much of a stack runs across the cluster: every desired task, some of them, or none. */
 export type SwarmStackHealth = "running" | "partial" | "stopped";
 
-/** One stack, or one service outside a stack, as seen from a node that runs some of its tasks. */
-export type SwarmStackOnNode = {
+/** Where a stack's tasks run: one node, and how many of them. */
+export type SwarmPlacement = { nodeId: string; hostname: string; tasks: number };
+
+/** One stack, or one service outside a stack, across the cluster. */
+export type SwarmStack = {
   name: string;
-  /** Across the whole cluster, not only this node. */
   health: SwarmStackHealth;
-  /** The stack's tasks running on this node. */
-  tasks: number;
+  /** Its running tasks, every service counted, as the daemon keeps them. */
+  running: number;
+  /** The tasks it should run; for a `global` service, one per eligible node. */
+  desired: number;
+  /** The nodes with a task of it running, in the order of {@link SwarmManagerView.nodes}; empty when none. */
+  placement: SwarmPlacement[];
 };
 
-/** One member of the cluster, with the stacks it runs. */
+/** One member of the cluster. */
 export type SwarmNode = {
   id: string;
   hostname: string;
@@ -37,7 +43,8 @@ export type SwarmNode = {
   cpus: number;
   memoryBytes: number;
   engineVersion: string;
-  stacks: SwarmStackOnNode[];
+  /** The tasks running on it, every stack counted. */
+  tasks: number;
   /** What Hangar can change on this node now; see `SwarmRules.nodeRefusal`. */
   actions: SwarmNodeAction[];
 };
@@ -51,15 +58,9 @@ export type SwarmManagerView = {
   managers: number;
   /** This node first, then the other managers, then by hostname. */
   nodes: SwarmNode[];
-  /**
-   * The stacks with no task running on any node, so on no card: crash-looping, pending on a constraint
-   * no node meets, or scaled to zero. By name.
-   */
-  idleStacks: SwarmIdleStack[];
+  /** Every stack, by name, the ones running nowhere included. */
+  stacks: SwarmStack[];
 };
-
-/** A stack that runs nowhere, and how far from its desired replicas it is. */
-export type SwarmIdleStack = { name: string; health: SwarmStackHealth };
 
 /**
  * What a node that cannot describe the cluster knows: whether it is in one at all, and as a worker,
@@ -313,7 +314,7 @@ export class DockerSwarm {
    * Every task of a stack, or of a lone service by its name, current and past: the failed attempts
    * are what explains a partial stack. By name, then newest first. Never cached: the stack sheet asks
    * for it when opened.
-   * @param stack The stack name, as {@link SwarmStackOnNode} gives it
+   * @param stack The stack name, as {@link SwarmStack} gives it
    */
   async stackTasks(stack: string): Promise<SwarmStackTask[]> {
     const services = (await DockerSwarm.daemon(this.docker.listServices())).filter(
@@ -384,48 +385,25 @@ export class DockerSwarm {
 
     const currentNodeId = swarm.NodeID ?? "";
     const managers = DockerSwarm.managerCount(nodes);
-    const described = DockerSwarm.nodes(nodes, services, tasks, managers);
+    const stackByService = new Map(services.map(service => [service.ID, DockerSwarm.stackName(service)]));
+
+    // A task whose service was removed since the list is on its way out: it counts nowhere.
+    const running = tasks.filter(task => task.Status?.State === "running" && stackByService.has(task.ServiceID));
+    const described = DockerSwarm.sortNodes(DockerSwarm.nodes(nodes, running, managers), currentNodeId);
 
     return {
       state: "manager",
       clusterId: swarm.Cluster?.ID ?? "",
       currentNodeId,
       managers,
-      nodes: DockerSwarm.sortNodes(described, currentNodeId),
-      idleStacks: DockerSwarm.idleStacks(described, services),
+      nodes: described,
+      stacks: DockerSwarm.stacks(services, running, stackByService, described),
     };
   };
 
-  /**
-   * Every node with the stacks it runs. A stack spread over several nodes shows on each of them; its
-   * health is the same everywhere, since it counts the whole cluster.
-   */
-  private static nodes(
-    nodes: NodeInfo[],
-    services: Dockerode.Service[],
-    tasks: TaskInfo[],
-    managers: number,
-  ): SwarmNode[] {
-    const stackByService = new Map(services.map(service => [service.ID, DockerSwarm.stackName(service)]));
-    const health = DockerSwarm.stackHealth(services);
-
+  /** Every node, with how many tasks run on it. */
+  private static nodes(nodes: NodeInfo[], running: TaskInfo[], managers: number): SwarmNode[] {
     return nodes.map(node => {
-      const runningHere = tasks.filter(task => task.NodeID === node.ID && task.Status?.State === "running");
-      const tasksPerStack = new Map<string, number>();
-
-      for (const task of runningHere) {
-        const stack = stackByService.get(task.ServiceID);
-
-        // A task whose service was removed since the list: it is on its way out.
-        if (stack !== undefined) {
-          tasksPerStack.set(stack, (tasksPerStack.get(stack) ?? 0) + 1);
-        }
-      }
-
-      const stacks = [...tasksPerStack]
-        .map(([name, count]) => ({ name, health: health.get(name) ?? "stopped", tasks: count }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-
       const state = DockerSwarm.nodeState(node);
       const resources = node.Description?.Resources;
 
@@ -436,19 +414,48 @@ export class DockerSwarm {
         cpus: (resources?.NanoCPUs ?? 0) / 1e9,
         memoryBytes: resources?.MemoryBytes ?? 0,
         engineVersion: node.Description?.Engine?.EngineVersion ?? "",
-        stacks,
+        tasks: running.filter(task => task.NodeID === node.ID).length,
         actions: SwarmRules.nodeActions(state, managers),
       };
     });
   }
 
-  /** The stacks no node lists: none of their tasks runs anywhere. */
-  private static idleStacks(nodes: SwarmNode[], services: Dockerode.Service[]): SwarmIdleStack[] {
-    const shown = new Set(nodes.flatMap(node => node.stacks.map(stack => stack.name)));
+  /**
+   * Every stack, with its health from the counts the daemon keeps per service (they cover a `global`
+   * service too, whose desired count follows the eligible nodes), and the nodes its tasks run on.
+   * @param nodes Already sorted: the placement follows their order
+   */
+  private static stacks(
+    services: Dockerode.Service[],
+    running: TaskInfo[],
+    stackByService: Map<string, string>,
+    nodes: SwarmNode[],
+  ): SwarmStack[] {
+    const counts = new Map<string, { running: number; desired: number }>();
 
-    return [...DockerSwarm.stackHealth(services)]
-      .filter(([name]) => !shown.has(name))
-      .map(([name, health]) => ({ name, health }))
+    for (const service of services) {
+      const stack = DockerSwarm.stackName(service);
+      const count = counts.get(stack) ?? { running: 0, desired: 0 };
+
+      count.running += service.ServiceStatus?.RunningTasks ?? 0;
+      count.desired += service.ServiceStatus?.DesiredTasks ?? 0;
+      counts.set(stack, count);
+    }
+
+    return [...counts]
+      .map(([name, count]) => {
+        const tasksOf = running.filter(task => stackByService.get(task.ServiceID) === name);
+
+        const placement = nodes
+          .map(node => ({
+            nodeId: node.id,
+            hostname: node.hostname,
+            tasks: tasksOf.filter(task => task.NodeID === node.id).length,
+          }))
+          .filter(place => place.tasks > 0);
+
+        return { name, health: DockerSwarm.health(count.running, count.desired), ...count, placement };
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -476,25 +483,6 @@ export class DockerSwarm {
   /** The stack a service belongs to, or the service itself outside a stack. */
   private static stackName(service: Dockerode.Service) {
     return service.Spec?.Labels?.[DockerSwarm.StackLabel] ?? service.Spec?.Name ?? service.ID;
-  }
-
-  /**
-   * Each stack's health, from the counts the daemon keeps per service: they cover a `global` service
-   * too, whose desired count follows the eligible nodes.
-   */
-  private static stackHealth(services: Dockerode.Service[]): Map<string, SwarmStackHealth> {
-    const counts = new Map<string, { running: number; desired: number }>();
-
-    for (const service of services) {
-      const stack = DockerSwarm.stackName(service);
-      const count = counts.get(stack) ?? { running: 0, desired: 0 };
-
-      count.running += service.ServiceStatus?.RunningTasks ?? 0;
-      count.desired += service.ServiceStatus?.DesiredTasks ?? 0;
-      counts.set(stack, count);
-    }
-
-    return new Map([...counts].map(([stack, count]) => [stack, DockerSwarm.health(count.running, count.desired)]));
   }
 
   private static health(running: number, desired: number): SwarmStackHealth {

@@ -59,7 +59,7 @@ describe("DockerSwarm.cluster", () => {
         cpus: 4,
         memoryBytes: 8 * 1024 ** 3,
         engineVersion: "29.1.3",
-        stacks: [],
+        tasks: 0,
         actions: ["drain"],
       },
     ]);
@@ -96,103 +96,120 @@ describe("DockerSwarm.cluster", () => {
   });
 });
 
-describe("DockerSwarm stacks per node", () => {
-  /** Two nodes, `nas` running two `miniflux` replicas and `pi-01` one. */
+describe("DockerSwarm stacks", () => {
+  /** Two nodes, `nas` first as the current one. */
   const twoNodes = [
     swarmNode({ id: "nas", hostname: "nas", leader: true }),
     swarmNode({ id: "pi", hostname: "pi-01" }),
   ];
 
-  const stacksOf = async (hostname: string) => {
+  const manager = async () => {
     const cluster = await client().cluster();
 
     if (cluster.state !== "manager") {
       throw new Error(`expected a manager, got ${cluster.state}`);
     }
 
-    return cluster.nodes.find(node => node.hostname === hostname)?.stacks;
+    return cluster;
   };
 
-  it("shows a stack spread over several nodes on each of them, with the tasks running there", async () => {
+  it("lists a stack once, with its replicas and the nodes its tasks run on, in node order", async () => {
     givenSwarm({
       nodeId: "nas",
-      nodes: twoNodes,
+      nodes: [swarmNode({ id: "pi", hostname: "pi-01" }), swarmNode({ id: "nas", hostname: "nas", leader: true })],
       services: [swarmService({ id: "web", stack: "miniflux", running: 3, desired: 3 })],
       tasks: [
-        swarmTask({ service: "web", node: "nas" }),
-        swarmTask({ service: "web", node: "nas" }),
         swarmTask({ service: "web", node: "pi" }),
+        swarmTask({ service: "web", node: "nas" }),
+        swarmTask({ service: "web", node: "nas" }),
       ],
     });
 
-    expect(await stacksOf("nas")).toEqual([{ name: "miniflux", health: "running", tasks: 2 }]);
-    expect(await stacksOf("pi-01")).toEqual([{ name: "miniflux", health: "running", tasks: 1 }]);
+    const { stacks, nodes } = await manager();
+
+    expect(stacks).toEqual([
+      {
+        name: "miniflux",
+        health: "running",
+        running: 3,
+        desired: 3,
+        placement: [
+          { nodeId: "nas", hostname: "nas", tasks: 2 },
+          { nodeId: "pi", hostname: "pi-01", tasks: 1 },
+        ],
+      },
+    ]);
+
+    expect(nodes.map(node => [node.hostname, node.tasks])).toEqual([
+      ["nas", 2],
+      ["pi-01", 1],
+    ]);
   });
 
-  it("groups the services of a stack into one line, and names a lone service after itself", async () => {
+  it("groups the services of a stack into one, and names a lone service after itself", async () => {
     givenSwarm({
       nodeId: "nas",
       nodes: twoNodes,
       services: [
-        swarmService({ id: "web", name: "miniflux_miniflux", stack: "miniflux" }),
-        swarmService({ id: "db", name: "miniflux_db", stack: "miniflux" }),
+        swarmService({ id: "web", name: "miniflux_miniflux", stack: "miniflux", running: 1, desired: 1 }),
+        swarmService({ id: "db", name: "miniflux_db", stack: "miniflux", running: 1, desired: 1 }),
         swarmService({ id: "lone", name: "whoami" }),
       ],
       tasks: [swarmTask({ service: "web" }), swarmTask({ service: "db" }), swarmTask({ service: "lone" })].map(
-        task => ({
-          ...task,
-          NodeID: "nas",
-        }),
+        task => ({ ...task, NodeID: "nas" }),
       ),
     });
 
-    expect(await stacksOf("nas")).toEqual([
-      { name: "miniflux", health: "running", tasks: 2 },
-      { name: "whoami", health: "running", tasks: 1 },
+    const { stacks } = await manager();
+
+    expect(stacks.map(stack => [stack.name, stack.running, stack.desired, stack.placement[0]?.tasks])).toEqual([
+      ["miniflux", 2, 2, 2],
+      ["whoami", 1, 1, 1],
     ]);
   });
 
-  it("rates a stack across the whole cluster, from the daemon's counts", async () => {
+  it("rates a stack across the whole cluster, from the daemon's counts, a global service included", async () => {
     givenSwarm({
       nodeId: "nas",
       nodes: twoNodes,
       services: [
         swarmService({ id: "web", stack: "miniflux", running: 2, desired: 2 }),
         swarmService({ id: "db", stack: "miniflux", running: 0, desired: 1 }),
+        swarmService({ id: "agent", name: "monitoring_agent", stack: "monitoring", running: 1, desired: 2 }),
       ],
-      tasks: [swarmTask({ service: "web", node: "nas" })],
+      tasks: [swarmTask({ service: "web", node: "nas" }), swarmTask({ service: "agent", node: "nas" })],
     });
 
-    expect(await stacksOf("nas")).toEqual([{ name: "miniflux", health: "partial", tasks: 1 }]);
+    const { stacks } = await manager();
+
+    expect(stacks.map(stack => [stack.name, stack.health])).toEqual([
+      ["miniflux", "partial"],
+      ["monitoring", "partial"],
+    ]);
   });
 
-  it("only counts the tasks that run, and a node with none lists no stack", async () => {
+  it("keeps a stack with no task running anywhere, with an empty placement", async () => {
     givenSwarm({
       nodeId: "nas",
       nodes: twoNodes,
-      services: [swarmService({ id: "web", stack: "miniflux", running: 1, desired: 2 })],
-      tasks: [
-        swarmTask({ service: "web", node: "nas" }),
-        swarmTask({ service: "web", node: "pi", state: "preparing" }),
+      services: [
+        swarmService({ id: "crash", stack: "broken", running: 0, desired: 2 }),
+        swarmService({ id: "zero", name: "scaled-down", running: 0, desired: 0 }),
       ],
+      tasks: [swarmTask({ service: "crash", node: "nas", state: "failed" })],
     });
 
-    expect(await stacksOf("nas")).toEqual([{ name: "miniflux", health: "partial", tasks: 1 }]);
-    expect(await stacksOf("pi-01")).toEqual([]);
+    const { stacks, nodes } = await manager();
+
+    expect(stacks).toEqual([
+      { name: "broken", health: "stopped", running: 0, desired: 2, placement: [] },
+      { name: "scaled-down", health: "stopped", running: 0, desired: 0, placement: [] },
+    ]);
+
+    expect(nodes.every(node => node.tasks === 0)).toBe(true);
   });
 
-  it("covers a global service through its desired count", async () => {
-    givenSwarm({
-      nodeId: "nas",
-      nodes: twoNodes,
-      services: [swarmService({ id: "agent", name: "monitoring_agent", stack: "monitoring", running: 1, desired: 2 })],
-      tasks: [swarmTask({ service: "agent", node: "nas" })],
-    });
-
-    expect(await stacksOf("nas")).toEqual([{ name: "monitoring", health: "partial", tasks: 1 }]);
-  });
-
-  it("skips a task whose service is already gone", async () => {
+  it("counts no task whose service is already gone", async () => {
     givenSwarm({
       nodeId: "nas",
       nodes: twoNodes,
@@ -200,7 +217,10 @@ describe("DockerSwarm stacks per node", () => {
       tasks: [swarmTask({ service: "removed", node: "nas" })],
     });
 
-    expect(await stacksOf("nas")).toEqual([]);
+    const { stacks, nodes } = await manager();
+
+    expect(stacks).toEqual([]);
+    expect(nodes[0]?.tasks).toBe(0);
   });
 });
 
@@ -402,29 +422,5 @@ describe("DockerSwarm daemon refusals", () => {
     dockerMock.swarmInit.mockRejectedValueOnce(new Error("connect ENOENT /var/run/docker.sock"));
 
     await expect(client().init()).rejects.toThrow("connect ENOENT");
-  });
-});
-
-describe("DockerSwarm idle stacks", () => {
-  it("lists apart the stacks no node runs a task of, which no card would show", async () => {
-    givenSwarm({
-      nodes: [swarmNode({ id: "nas" })],
-      services: [
-        swarmService({ id: "web", stack: "miniflux", running: 1, desired: 1 }),
-        swarmService({ id: "crash", stack: "broken", running: 0, desired: 2 }),
-        swarmService({ id: "zero", name: "scaled-down", running: 0, desired: 0 }),
-      ],
-      tasks: [
-        swarmTask({ service: "web", node: "nas" }),
-        swarmTask({ service: "crash", node: "nas", state: "failed" }),
-      ],
-    });
-
-    await expect(client().cluster()).resolves.toMatchObject({
-      idleStacks: [
-        { name: "broken", health: "stopped" },
-        { name: "scaled-down", health: "stopped" },
-      ],
-    });
   });
 });

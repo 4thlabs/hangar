@@ -6,7 +6,7 @@ const node = (overrides: Parameters<typeof swarmNodeView>[0] = {}) =>
   swarmNodeView({
     id: "nas",
     role: "manager",
-    stacks: [{ name: "miniflux", health: "running", tasks: 2 }],
+    tasks: 2,
     ...overrides,
   });
 

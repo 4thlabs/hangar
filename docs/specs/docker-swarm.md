@@ -232,20 +232,22 @@ New entry "Cluster" in the navbar, next to "Apps". One grid of node cards, one c
 node first. Same tree on mobile, one column.
 
 ```
-┌ Cluster ────────────────────────────────────────────────────────────────────────┐
-│ nhyx6n1b8b0a · 3 nœuds · 2 managers (tolère 0 panne)  [Tokens]  [Sauvegarder]   │
-├─────────────────────────────────────────────────────────────────────────────────┤
+┌ Cluster ──────────────────────────────────────────────────────────────────────────┐
+│ nhyx6n1b8b0a · 3 nœuds · 2 managers (tolère 0 panne)    [Tokens]  [Sauvegarder]   │
+├───────────────────────────────────────────────────────────────────────────────────┤
 │ ┌ nas  ★ ce nœud ──────────────┐ ┌ pi-01 ───────────────────┐ ┌ pi-02 ──────────┐ │
 │ │ Leader · Prêt · Actif        │ │ Manager · Prêt · Actif   │ │ Worker · Injoi- │ │
 │ │ 8 CPU · 32 Go · Docker 29.1  │ │ 4 CPU · 8 Go · 29.1      │ │ gnable · Drainé │ │
-│ │──────────────────────────────│ │──────────────────────────│ │─────────────────│ │
-│ │ ● miniflux     2 tâches      │ │ ● traefik      1 tâche   │ │ Aucune app      │ │
-│ │ ◐ uptime-kuma  1 tâche       │ │ ● miniflux     1 tâche   │ │                 │ │
-│ │──────────────────────────────│ │──────────────────────────│ │─────────────────│ │
+│ │ 3 tâches                     │ │ 2 tâches                 │ │ Aucune tâche    │ │
 │ │ [Drainer]                    │ │ [Rétrograder] [Drainer]  │ │ [Réactiver]     │ │
 │ │                              │ │                          │ │ [Retirer]       │ │
 │ └──────────────────────────────┘ └──────────────────────────┘ └─────────────────┘ │
-│                                                                                   │
+│ ┌ Stacks ───────────────────────────────────────────────────────────────────────┐ │
+│ │ ● miniflux  Hangar   3/3 réplicas   nas 2 · pi-01 1                         › │ │
+│ │ ● traefik            1/1 réplica    pi-01 1                                 › │ │
+│ │ ◐ uptime-kuma        1/2 réplicas   nas 1                                   › │ │
+│ │ ○ broken             0/1 réplica    aucune tâche                            › │ │
+│ └───────────────────────────────────────────────────────────────────────────────┘ │
 │ Dernière sauvegarde des clés : aujourd'hui 03:37 · [Télécharger]                  │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -253,12 +255,14 @@ node first. Same tree on mobile, one column.
 - **Page header:** the cluster id's first 12 characters, as the `docker` CLI shortens ids: Swarm has no
   name of its own (`Spec.Name` is always `default`). Then the node and manager counts, and the fault
   tolerance.
-- **Card header:** hostname, badges for role (Leader / Manager / Worker), status (Prêt / Injoignable) and
-  availability (Actif / Drainé), then CPU, RAM and engine version from `GET /nodes`.
-- **App list:** one line per stack (or lone service) with tasks on that node, and how many run there. A
-  stack spread over several nodes shows on each of them (`miniflux` above). The dot is the stack's health
-  across the cluster, with the `/apps` symbols: ● every desired replica runs, ◐ some, ○ none. Swarm only: the
-  compose apps of Hangar's node are not repeated here.
+- **Node cards:** hostname, badges for role (Leader / Manager / Worker), status (Prêt / Injoignable) and
+  availability (Actif / Drainé), CPU, RAM and engine version from `GET /nodes`, how many tasks run there,
+  and the node actions.
+- **Stack list:** every stack (or lone service) once, below the cards: its health across the cluster (● every
+  desired replica runs, ◐ some, ○ none), its running replicas out of the desired ones, from the daemon's
+  per-service counts, and the nodes its tasks run on. A stack running nowhere stays listed, so its sheet can
+  tell why. "Hangar" marks the stacks Hangar can redeploy. Swarm only: the compose apps of Hangar's node are
+  not repeated here.
 - **Stack sheet:** clicking a stack opens a side sheet with its services and tasks per node
   (`HangarStore.stack(app, ["ps"])`), and, for a stack Hangar deployed, "Mettre à jour" (deploy again) and
   "Supprimer" (`rm`).
@@ -333,23 +337,22 @@ comes with `HangarStore.stack` in step 3.
 **`DockerSwarm` (`src/libs/docker/swarm.ts`).** Built like `Docker`: `new DockerSwarm(dockerode, cache, ttl)`,
 no `server-only` guard. One public read, `cluster()`, a union on `state`:
 
-| `state`    | When (`info.Swarm`)                     | Carries                                                           |
-| ---------- | --------------------------------------- | ----------------------------------------------------------------- |
-| `inactive` | `LocalNodeState` is `inactive`          | Nothing; the page shows `docker swarm init`                       |
-| `pending`  | `LocalNodeState` is `pending` (joining) | Nothing                                                           |
-| `locked`   | `LocalNodeState` is `locked` (autolock) | Nothing; the page shows `docker swarm unlock`                     |
-| `error`    | `LocalNodeState` is `error`             | `info.Swarm.Error`                                                |
-| `worker`   | `active`, `ControlAvailable` false      | `RemoteManagers`' addresses; a worker knows no cluster id         |
-| `manager`  | `active`, `ControlAvailable` true       | Cluster id, current node id, managers, `SwarmNode[]`, idle stacks |
+| `state`    | When (`info.Swarm`)                     | Carries                                                              |
+| ---------- | --------------------------------------- | -------------------------------------------------------------------- |
+| `inactive` | `LocalNodeState` is `inactive`          | Nothing; the page shows `docker swarm init`                          |
+| `pending`  | `LocalNodeState` is `pending` (joining) | Nothing                                                              |
+| `locked`   | `LocalNodeState` is `locked` (autolock) | Nothing; the page shows `docker swarm unlock`                        |
+| `error`    | `LocalNodeState` is `error`             | `info.Swarm.Error`                                                   |
+| `worker`   | `active`, `ControlAvailable` false      | `RemoteManagers`' addresses; a worker knows no cluster id            |
+| `manager`  | `active`, `ControlAvailable` true       | Cluster id, current node id, managers, `SwarmNode[]`, `SwarmStack[]` |
 
 - `info()` comes first; `listNodes`, `listServices({ status: true })` and
   `listTasks({ filters: { "desired-state": ["running"] } })` are only called on a manager, so a worker never
   meets their `503`.
 - A stack is `com.docker.stack.namespace`, or the service name outside a stack. Its health (● ◐ ○) comes from
   `ServiceStatus.RunningTasks` / `DesiredTasks` summed over its services, which also covers `global` services.
-  A node lists the stacks with at least one `running` task on it, and how many. A stack with none anywhere
-  (crash-looping, pending on a constraint, scaled to zero) is listed apart, as `idleStacks`, so its sheet can
-  still be opened.
+  The manager view lists every stack once, with its replicas and its placement (the nodes its running tasks
+  are on, in node order), and gives each node its count of running tasks.
 - Fault tolerance is `floor((managers - 1) / 2)`.
 - One cache key, `docker:swarm:cluster`, with a 10 s TTL: Docker emits no task events.
 - `SwarmNode`: id, hostname, role, leader, status, availability, CPUs, memory, engine version, and its stacks

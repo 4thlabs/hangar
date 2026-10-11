@@ -6,7 +6,7 @@ import type { SwarmCluster } from "#libs/docker";
 import { SwarmRules } from "#libs/docker/swarm-rules";
 import { ClusterEmpty } from "#modules/cluster/components/cluster-empty.tsx";
 import { NodeCard } from "#modules/cluster/components/node-card.tsx";
-import { StackLine } from "#modules/cluster/components/stack-line.tsx";
+import { StackList } from "#modules/cluster/components/stack-list.tsx";
 import { StackSheet } from "#modules/cluster/components/stack-sheet.tsx";
 import { SwarmSetup } from "#modules/cluster/components/swarm-setup.tsx";
 import { TokensDialog } from "#modules/cluster/components/tokens-dialog.tsx";
@@ -16,7 +16,6 @@ import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useRouteRefresh } from "#modules/common/hooks/use-route-refresh.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 
 /** The swarm as read, or why it could not be. */
 type ClusterOverviewProps =
@@ -75,31 +74,12 @@ export function ClusterOverview(props: ClusterOverviewProps) {
       {manager && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {manager.nodes.map(node => (
-            <NodeCard key={node.id} cluster={manager} node={node} onOpenStack={setOpenStack} />
+            <NodeCard key={node.id} cluster={manager} node={node} />
           ))}
         </div>
       )}
 
-      {manager && manager.idleStacks.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Stacks sans tâche active</CardTitle>
-            <CardDescription>
-              Aucune de leurs tâches ne tourne : elles plantent, attendent un nœud qui convienne, ou sont à zéro
-              réplica. Ouvrez-en une pour voir pourquoi.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="flex flex-col gap-1.5 text-sm">
-              {manager.idleStacks.map(stack => (
-                <li key={stack.name}>
-                  <StackLine name={stack.name} health={stack.health} detail="aucune tâche" onOpen={setOpenStack} />
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
+      {manager && <StackList stacks={manager.stacks} manageableStacks={manageableStacks} onOpen={setOpenStack} />}
 
       {cluster && cluster.state !== "manager" && <ClusterEmpty cluster={cluster} />}
       {cluster?.state === "inactive" && <SwarmSetup />}

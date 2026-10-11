@@ -18,8 +18,18 @@ const render = (cluster: SwarmCluster) =>
 
 const manager = managerView({
   managers: 2,
+  stacks: [
+    {
+      name: "miniflux",
+      health: "partial",
+      running: 2,
+      desired: 3,
+      placement: [{ nodeId: "node-1", hostname: "nas", tasks: 2 }],
+    },
+    { name: "broken", health: "stopped", running: 0, desired: 1, placement: [] },
+  ],
   nodes: [
-    node({ stacks: [{ name: "miniflux", health: "partial", tasks: 2 }] }),
+    node({ tasks: 2 }),
     node({
       id: "node-2",
       hostname: "pi-02",
@@ -36,15 +46,24 @@ describe("ClusterOverview", () => {
     expect(render(manager)).toContain("nhyx6n1b8b0a · 2 nœuds · 2 managers (tolère 0 panne)");
   });
 
-  it("draws one card per node, marking this one, with the stacks running on it", () => {
+  it("draws one card per node, marking this one, with how many tasks it runs", () => {
     const html = render(manager);
 
-    expect(html).toContain("★ ce nœud");
     expect(html.match(/★ ce nœud/g)).toHaveLength(1);
     expect(html).toContain("8 CPU · 32 GiB · Docker 29.1.3");
-    expect(html).toContain("miniflux");
-    expect(html).toContain("◐");
     expect(html).toContain("2 tâches");
+  });
+
+  it("lists each stack once, with its replicas and where its tasks run, the idle ones included", () => {
+    const html = renderToStaticMarkup(<ClusterOverview cluster={manager} manageableStacks={["miniflux"]} />);
+
+    expect(html.match(/>miniflux</g)).toHaveLength(1);
+    expect(html).toContain("◐");
+    expect(html).toContain("2/3 réplicas");
+    expect(html).toContain("nas 2");
+    expect(html).toContain("Hangar");
+    expect(html).toContain("broken");
+    expect(html).toContain("aucune tâche");
   });
 
   it("shows an unreachable, drained worker for what it is", () => {
@@ -52,7 +71,7 @@ describe("ClusterOverview", () => {
 
     expect(html).toContain("Injoignable");
     expect(html).toContain("Drainé");
-    expect(html).toContain("Aucune app");
+    expect(html).toContain("Aucune tâche");
   });
 
   const emptyStates: [SwarmCluster, string][] = [
@@ -80,13 +99,6 @@ describe("ClusterOverview", () => {
     expect(html).toContain("Créer le cluster");
     expect(html).toContain("Rejoindre un cluster");
     expect(html).not.toContain("Tokens");
-  });
-
-  it("lists the stacks no node runs a task of, so their sheet can still be opened", () => {
-    const html = render(managerView({ idleStacks: [{ name: "broken", health: "stopped" }] }));
-
-    expect(html).toContain("Stacks sans tâche active");
-    expect(html).toContain("broken");
   });
 
   it("offers a retry when the daemon fails", () => {

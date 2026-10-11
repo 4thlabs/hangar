@@ -7,6 +7,7 @@ import type {
   SwarmNodeAvailability,
   SwarmNodeRole,
   SwarmNodeStatus,
+  SwarmStack,
   SwarmStackHealth,
 } from "#libs/docker";
 import { SwarmRules } from "#libs/docker/swarm-rules";
@@ -109,6 +110,11 @@ export class ClusterLabels {
       plural(cluster.nodes.length, "nœud"),
       `${plural(cluster.managers, "manager")} (${tolerance})`,
     ].join(" · ");
+  }
+
+  /** How many of a stack's replicas run, out of how many it should: `2/3 réplicas`. */
+  static replicas({ running, desired }: Pick<SwarmStack, "running" | "desired">) {
+    return `${running}/${plural(desired, "réplica")}`;
   }
 
   /** What /cluster says when this node cannot describe the cluster, with the command that moves it on. */

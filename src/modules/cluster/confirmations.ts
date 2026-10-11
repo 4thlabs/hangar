@@ -55,7 +55,7 @@ export class NodeActionConfirmations {
 
   /** Where a drained node's tasks go, French agreeing in number. */
   private static drainedTasks(node: SwarmNode) {
-    const tasks = node.stacks.reduce((total, stack) => total + stack.tasks, 0);
+    const { tasks } = node;
 
     if (tasks === 0) {
       return `Aucune tâche ne tourne sur ${node.hostname}.`;

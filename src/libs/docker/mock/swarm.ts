@@ -153,7 +153,7 @@ export function swarmNodeView(overrides: Partial<SwarmNode> = {}): SwarmNode {
     cpus: 8,
     memoryBytes: 32 * 1024 ** 3,
     engineVersion: "29.1.3",
-    stacks: [],
+    tasks: 0,
     actions: [],
     ...overrides,
   };
@@ -167,7 +167,7 @@ export function managerView(overrides: Partial<SwarmManagerView> = {}): SwarmMan
     currentNodeId: "node-1",
     managers: 1,
     nodes: [swarmNodeView()],
-    idleStacks: [],
+    stacks: [],
     ...overrides,
   };
 }
