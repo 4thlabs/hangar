@@ -85,7 +85,7 @@ services:
         constraints: [node.hostname == nas] # its data lives on the nas
 networks:
   proxy:
-    name: hangar-proxy-overlay # an overlay network instead of compose's bridge
+    name: hangar-overlay-net # an overlay network instead of compose's bridge, see swarm.md
     external: true
 ```
 
