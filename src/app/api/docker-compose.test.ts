@@ -17,7 +17,6 @@ vi.mock("#libs/hangar/server", () => ({
     store: {
       compose: mocks.compose,
       app: (id: string) => [...mocks.apps].find(app => app.id === id),
-      composeProjectIds: () => new Set([...mocks.apps].filter(app => app.installed).map(app => app.id)),
     },
   },
 }));

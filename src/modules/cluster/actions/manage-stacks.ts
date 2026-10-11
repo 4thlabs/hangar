@@ -40,10 +40,7 @@ export const redeployStack = async (name: string): Promise<ActionResult> => {
   }
 };
 
-/**
- * Removes a stack from the swarm. The app stays installed, and listed under `swarm:` if it was: the next
- * `swarm deploy` brings it back.
- */
+/** Removes a stack from the swarm. The app stays installed, and its compose project, if any, untouched. */
 export const removeStack = async (name: string): Promise<ActionResult> => {
   await sessions.require();
 

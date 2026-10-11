@@ -37,21 +37,12 @@ export function StoreAppCard({ app, installApp, uninstallApp }: StoreAppCardProp
         )}
         <CardTitle className="line-clamp-2 text-base leading-tight">{app.name}</CardTitle>
         {app.swarmReady && (
-          <Badge
-            variant={app.runsInSwarm ? "default" : "outline"}
-            title={
-              app.runsInSwarm
-                ? "Listée sous swarm: dans hangar.yml : elle tourne dans le swarm"
-                : "A un compose.swarm.yml : ajoutez-la à swarm: dans hangar.yml pour la déployer"
-            }
-          >
+          <Badge variant="outline" title="A un compose.swarm.yml : elle peut aussi tourner dans le swarm">
             Swarm
           </Badge>
         )}
       </CardContent>
-      {app.swarmReady && app.runsInSwarm && (
-        <SwarmDeployButton appId={app.id} appName={app.name} installed={app.installed} />
-      )}
+      {app.swarmReady && <SwarmDeployButton appId={app.id} appName={app.name} installed={app.installed} />}
       <StoreAppButton
         appId={app.id}
         appName={app.name}

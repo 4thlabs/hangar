@@ -65,9 +65,6 @@ first failure at the end. A non-detached `up` is only allowed on a single stack.
 Each call is `docker compose --env-file <data>/.env.global -p <stack> -f <compose.yml> …`, so the
 project is always named after the stack, as the web app expects.
 
-The apps `hangar.yml` lists under `swarm:` are left out of `store up`, `store down` and every
-category command, and refused by name: they run in the swarm, see below.
-
 ### `swarm <target> <verb> [args...]`
 
 The Swarm counterpart of `store`, for the apps that ship a `compose.swarm.yml` (see
@@ -83,20 +80,20 @@ The Swarm counterpart of `store`, for the apps that ship a `compose.swarm.yml` (
 
 The target is one of:
 
-- **an app**, by its id: any app with a `compose.swarm.yml`, listed under `swarm:` or not;
-- **a category**, covering its `swarm:` apps;
-- **`deploy`** or **`rm`** alone, covering every `swarm:` app.
+- **an app**, by its id: any installed app with a `compose.swarm.yml`;
+- **a category**, covering its apps that have one;
+- **`deploy`** or **`rm`** alone, covering the apps of every category that have one, as `store up`
+  covers the apps of every category.
 
 ```bash
-node bin/cli.js swarm deploy            # every swarm: app, in category order
+node bin/cli.js swarm deploy            # every app with a compose.swarm.yml, in category order
 node bin/cli.js swarm miniflux deploy   # one app; extra args go to docker stack deploy
 node bin/cli.js swarm Media rm          # a category, in reverse order
 node bin/cli.js swarm miniflux ps
 ```
 
-`swarm <app> deploy` does not check whether the app also runs with compose: Hangar cannot see the
-containers from the CLI. Take it down first (`store <app> down`), or both copies will share its
-volumes. **Déployer sur le swarm** in the store does it for you.
+`swarm` and `store` are independent: an app can run with compose and in the swarm at the same time,
+and neither command touches the other. Mind the volumes both copies would share.
 
 The stack is always named after the app. `docker stack` has no `--env-file`: the CLI hands it
 `.env.global` as its environment. To do the same by hand:

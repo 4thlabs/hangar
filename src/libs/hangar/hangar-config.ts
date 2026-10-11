@@ -16,12 +16,6 @@ const configSchema = z.object({
   categories: z.array(categorySchema),
   /** Files the store ships next to its stacks and every stack may reference (networks, common env) */
   shared: z.array(z.string().min(1)).default([]),
-  /**
-   * The apps that run in the swarm rather than with compose: `swarm deploy` and the store's button deploy
-   * them, `store up` and /apps skip them. Each needs a `compose.swarm.yml`. Written by hand, like the
-   * categories: Hangar never edits this file on its own.
-   */
-  swarm: z.array(z.string().min(1)).default([]),
   /** The dashboard: which widgets are shown, in which column */
   widgets: z.array(widgetConfigSchema).default([...defaultWidgets]),
   /** Pause between two registry calls in the image update check, in ms: Hub and ghcr rate-limit a burst */
@@ -45,9 +39,6 @@ export class HangarConfig {
   /** The files shared by every stack, linked next to them at install */
   private _shared: string[] = [];
 
-  /** The apps that run in the swarm */
-  private _swarm: string[] = [];
-
   /** The widgets the dashboard shows, in declaration order */
   private _widgets: WidgetConfig[] = [...defaultWidgets];
 
@@ -59,9 +50,6 @@ export class HangarConfig {
 
   /** Returns the shared files */
   public shared = () => this._shared;
-
-  /** Returns the apps that run in the swarm */
-  public swarm = () => this._swarm;
 
   /** Returns the dashboard widgets */
   public widgets = () => this._widgets;
@@ -150,7 +138,6 @@ export class HangarConfig {
   private apply(config: Config) {
     this._categories = config.categories;
     this._shared = config.shared;
-    this._swarm = config.swarm;
     this._widgets = config.widgets;
     this._registryThrottling = config.registryThrottling;
   }

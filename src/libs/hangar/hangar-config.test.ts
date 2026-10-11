@@ -134,10 +134,4 @@ categories:
     await expect(config.write("widgets: []\n")).rejects.toThrow(/categories/);
     expect(await readFile(file, "utf8")).toBe("categories: []\n");
   });
-
-  it("loads the apps that run in the swarm", async () => {
-    const file = await configFile("categories: []\nswarm: [miniflux]\n");
-
-    expect((await new HangarConfig(file).load()).swarm()).toEqual(["miniflux"]);
-  });
 });

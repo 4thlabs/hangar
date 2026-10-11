@@ -23,7 +23,7 @@ export function SwarmDeployButton({ appId, appName, installed }: SwarmDeployButt
   const [confirming, setConfirming] = useState(false);
 
   const composeNote = installed
-    ? " Si elle tourne avec compose, ses conteneurs sont d’abord arrêtés, pour qu’elle ne tourne pas deux fois."
+    ? " Ses conteneurs compose, s’ils tournent, ne sont pas touchés : avec les mêmes volumes, attention aux deux copies."
     : "";
 
   function deploy() {

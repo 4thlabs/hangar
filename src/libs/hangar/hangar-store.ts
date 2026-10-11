@@ -17,8 +17,6 @@ export type HangarApp = {
   installed: boolean;
   /** Whether the app ships a `compose.swarm.yml`, so it can run in the swarm. */
   swarmReady: boolean;
-  /** Whether `hangar.yml` lists it under `swarm:`: it runs in the swarm, never with compose. */
-  runsInSwarm: boolean;
   /** The container the app's own service declares, which Traefik routes `<container>.<DOMAIN>` to. */
   containerName: string;
 };
@@ -206,9 +204,7 @@ export class HangarStore {
   }
 
   /**
-   * Runs docker compose against every stack, a category or a single stack. The `swarm:` apps are left
-   * out of a store or category command, and refused by name: running them with compose too would
-   * start a second copy.
+   * Runs docker compose against every stack, a category or a single stack.
    * @param name A global command, a category or a stack name
    * @param args Arguments passed through to docker compose
    * @param options Run options, forwarded to the runtime (`pipe` to capture the output)
@@ -220,14 +216,8 @@ export class HangarStore {
       name = "";
     }
 
-    const swarmApps = this.config.swarm();
-
-    if (!this.isGroup(name) && swarmApps.includes(name)) {
-      throw new HangarRuntimeError(1, `${name} runs in the swarm (hangar.yml): use \`swarm ${name}\` instead`);
-    }
-
     const command = args[0] ?? "";
-    const stacks = this.resolve(name).filter(stack => !swarmApps.includes(stack));
+    const stacks = this.resolve(name);
 
     if (command === "up" && !HangarStore.detached(args) && stacks.length > 1) {
       throw new HangarRuntimeError(1, "Non detached mode only authorised on a single stack");
@@ -272,7 +262,7 @@ export class HangarStore {
    * | `ps [args]`     | `docker stack ps …args <app>`                                         |
    * | `services`      | `docker stack services <app>`                                         |
    *
-   * Any app with a `compose.swarm.yml` will do, listed under `swarm:` or not.
+   * Any installed app with a `compose.swarm.yml` will do.
    * @param app The app id
    * @param args The verb, then arguments passed through to it
    * @param options Run options, forwarded to the runtime
@@ -301,8 +291,8 @@ export class HangarStore {
 
   /**
    * Runs a `docker stack` verb (see {@link stackApp}) against every `swarm:` app, a category, or one app.
-   * The whole store and a category only cover their `swarm:` apps; one app named directly only needs a
-   * `compose.swarm.yml`, so a stack deployed by hand can be managed without listing it.
+   * The whole store and a category cover their apps that have a `compose.swarm.yml`, as `store up` covers
+   * the apps of the categories; one app named directly needs one too.
    * @param name A global verb (`deploy`, `rm`), a category or an app id
    * @param args The verb, then arguments passed through to it
    * @param options Run options, forwarded to the runtime (`pipe` to capture the output)
@@ -314,7 +304,7 @@ export class HangarStore {
       name = "";
     }
 
-    const apps = this.isGroup(name) ? this.swarmApps(name) : [name];
+    const apps = this.isGroup(name) ? await this.swarmApps(name) : [name];
 
     await HangarStore.runInOrder(apps, HangarStore.StackCommandOrder[args[0] ?? ""] ?? 0, app =>
       this.stackApp(app, args, options),
@@ -322,57 +312,21 @@ export class HangarStore {
   }
 
   /**
-   * Deploys a `swarm:` app from the store: links it, takes down its compose project if it still runs
-   * (the app was listed after being installed), then deploys its stack. If that move fails, what the
-   * deploy created is removed and the compose project comes back up. `hangar.yml` is never edited: an
-   * app is listed by hand.
-   * @param app The app id; listed under `swarm:`, with a `compose.swarm.yml`
-   * @param options Run options for the compose and stack calls (`capture` to keep their output)
+   * Deploys an app's stack from the store: links it, then deploys it. Its compose project, if it runs, is
+   * left alone: an app may run with both. `hangar.yml` is never edited.
+   * @param app The app id; it must ship a `compose.swarm.yml`
+   * @param options Run options for the stack call (`capture` to keep its output)
    */
   async deployToSwarm(app: string, options?: RunOptions) {
-    if (!this.config.swarm().includes(app)) {
-      throw new HangarRuntimeError(1, `${app} is not listed under swarm: in hangar.yml`);
-    }
-
     await this.link(app);
     await this.installedSwarmFile(app);
     await this.env.ensure(app);
 
-    // Asked before it goes down, so a failed move can bring it back as it was.
-    const wasRunning = await this.composeRunning(app);
-
-    if (wasRunning) {
-      await this.composeStack(app, ["down"], options);
-    }
-
     try {
       await this.stackApp(app, ["deploy", "--quiet"], options);
-    } catch (error) {
-      if (wasRunning) {
-        await this.backToCompose(app, options);
-      }
-
-      throw error;
     } finally {
       await this.refresh();
     }
-  }
-
-  /** Undoes a failed move from compose: what the partial deploy created removed, the project up again. */
-  private async backToCompose(app: string, options?: RunOptions) {
-    // There may be nothing to remove: Docker then complains, which changes nothing here.
-    await this.stackApp(app, ["rm"], { capture: true }).catch((error: unknown) =>
-      logger.warn("Could not remove what a failed swarm deploy left", { error, app }),
-    );
-
-    await this.composeStack(app, ["up", "-d"], options);
-  }
-
-  /** Whether any container of the app's compose project runs. */
-  private async composeRunning(app: string) {
-    const { stdout } = await this.composeStack(app, ["ps", "-q"], { capture: true });
-
-    return stdout.trim() !== "";
   }
 
   /**
@@ -422,19 +376,15 @@ export class HangarStore {
     return swarmFile;
   }
 
-  /**
-   * The `swarm:` apps a group covers, in category order. The whole store also covers the ones no
-   * category lists, last.
-   */
-  private swarmApps(group: string) {
-    const listed = this.config.swarm();
-    const ordered = this.resolve(group).filter(app => listed.includes(app));
+  /** The apps of a group, in category order, that are installed with a `compose.swarm.yml`. */
+  private async swarmApps(group: string) {
+    const apps = this.resolve(group);
 
-    if (group !== "") {
-      return ordered;
-    }
+    const ready = await Promise.all(
+      apps.map(app => HangarStore.hasContent(path.join(this.installedPath, app, AppFiles.SwarmFile))),
+    );
 
-    return [...ordered, ...listed.filter(app => !ordered.includes(app))];
+    return apps.filter((_app, index) => ready[index]);
   }
 
   /** The store app with this id, or `undefined` when the store does not carry it. */
@@ -593,9 +543,9 @@ export class HangarStore {
     return path.join(this.storePath, "store", id);
   }
 
-  /** The ids of the installed apps that run with compose: the `swarm:` apps are on /cluster, not /apps. */
-  composeProjectIds(): Set<string> {
-    return new Set([...this.apps].flatMap(app => (app.installed && !app.runsInSwarm ? [app.id] : [])));
+  /** The ids of the installed apps. */
+  installedProjectIds(): Set<string> {
+    return new Set([...this.apps].flatMap(app => (app.installed ? [app.id] : [])));
   }
 
   /** Reloads `hangar.yml` and every app's compose file. */
@@ -606,7 +556,6 @@ export class HangarStore {
       await this.config.load();
 
       const shared = this.config.shared();
-      const swarm = this.config.swarm();
       const entries = await readdir(path.join(this.storePath, "store"), { recursive: false });
       const apps = entries.filter(entry => !shared.includes(entry));
       const installed = await readdir(this.installedPath, { recursive: false });
@@ -630,7 +579,6 @@ export class HangarStore {
               icon: metadata?.icon,
               installed: installed.indexOf(app) !== -1,
               swarmReady: await HangarStore.hasContent(path.join(this.storePath, "store", app, AppFiles.SwarmFile)),
-              runsInSwarm: swarm.includes(app),
               containerName: service?.container_name ?? app,
             });
           } catch (error) {

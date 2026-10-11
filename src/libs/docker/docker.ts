@@ -64,8 +64,8 @@ type SystemDiskUsage = {
 };
 
 /** The slice of `HangarStore` this layer needs: which Compose projects a caller may see. */
-export interface ComposeApps {
-  composeProjectIds(): Set<string>;
+export interface InstalledApps {
+  installedProjectIds(): Set<string>;
 }
 
 /**
@@ -90,7 +90,7 @@ export class Docker {
   private readonly docker: Dockerode;
 
   /** Read per call, so a freshly installed app shows up without a restart. */
-  private readonly apps: ComposeApps;
+  private readonly apps: InstalledApps;
 
   /**
    * Default {@link ttl}. The daemon's events keep the containers live (see {@link follow}); this is
@@ -119,7 +119,7 @@ export class Docker {
    * @param cache Where the daemon's answers are kept; one per process
    * @param ttl How long the loaded containers and images are reused; injected so a test can drive it
    */
-  constructor(docker: Dockerode, apps: ComposeApps, cache: Cache, ttl = Docker.Ttl) {
+  constructor(docker: Dockerode, apps: InstalledApps, cache: Cache, ttl = Docker.Ttl) {
     this.docker = docker;
     this.apps = apps;
     this.cache = cache;
@@ -149,7 +149,7 @@ export class Docker {
    */
   projects(): Promise<ComposeProjectsSnapshot> {
     return map(this.containers(), sources => ({
-      projects: new ComposeProjects(sources).summaries(this.apps.composeProjectIds()),
+      projects: new ComposeProjects(sources).summaries(this.apps.installedProjectIds()),
     }));
   }
 
@@ -159,7 +159,7 @@ export class Docker {
    */
   runningImages(): Promise<RunningImage[]> {
     return map(all([this.containers(), this.images()]), ([sources, digests]) => {
-      const installed = this.apps.composeProjectIds();
+      const installed = this.apps.installedProjectIds();
 
       // By the image id the container runs, never by its reference: `compose pull` moves the tag
       // and leaves the containers on the image they were created with, so resolving the tag would
@@ -368,7 +368,7 @@ export class Docker {
    */
   projectDetail(project: string): Promise<ComposeProjectDetail> {
     return map(this.containers(), sources =>
-      new ComposeProjects(sources, project).detail(project, this.apps.composeProjectIds()),
+      new ComposeProjects(sources, project).detail(project, this.apps.installedProjectIds()),
     );
   }
 

@@ -7,12 +7,18 @@ import { HangarRuntimeError } from "#libs/hangar";
 
 const mocks = vi.hoisted(() => ({
   dataDir: "",
+  /** What the swarm says it runs: a manager's view with these stacks. */
+  stacks: [] as { name: string }[],
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("#libs/auth/server", () => ({ sessions: { require: vi.fn(async () => ({ user: { id: "1" } })) } }));
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
+vi.mock("#libs/docker/server", () => ({
+  swarm: { cluster: async () => ({ state: "manager", stacks: mocks.stacks }) },
+}));
+
 vi.mock("#libs/hangar/server", async () => {
   const { Hangar } = await import("#libs/hangar");
 
@@ -24,8 +30,7 @@ vi.mock("#libs/hangar/server", async () => {
 const { hangar } = await import("#libs/hangar/server");
 const { deployToSwarm, uninstallApp } = await import("#modules/store/actions/store-apps.ts");
 
-const CONFIG =
-  "# The store\ncategories:\n  - name: Web\n    color: blue\n    stacks: [whoami, plain, ready]\nswarm: [whoami]\n";
+const CONFIG = "# The store\ncategories:\n  - name: Web\n    color: blue\n    stacks: [whoami, plain, ready]\n";
 
 /** The `docker` calls made so far, as `compose down` or `stack deploy` style strings. */
 const dockerCalls = () =>
@@ -55,38 +60,24 @@ describe("deployToSwarm", () => {
     await hangar.store.refresh();
 
     vi.spyOn(hangar.runtime, "run").mockReset().mockResolvedValue({ code: 0, stdout: "" });
+    mocks.stacks = [];
   });
 
   afterAll(async () => {
     await rm(mocks.dataDir, { recursive: true, force: true });
   });
 
-  it("deploys a swarm: app, leaving hangar.yml as it was", async () => {
+  it("deploys an app's stack, leaving its compose project and hangar.yml as they were", async () => {
     const config = path.join(hangar.store.storePath, "config", "hangar.yml");
     const result = await deployToSwarm("whoami");
 
     expect(result).toMatchObject({ success: true, message: "Who Am I est déployée sur le swarm." });
-    expect(dockerCalls()).toEqual(["compose -q", "stack deploy"]);
-    expect(hangar.store.app("whoami")).toMatchObject({ installed: true, runsInSwarm: true });
+    expect(dockerCalls()).toEqual(["stack deploy"]);
     expect(await readFile(config, "utf8")).toBe(CONFIG);
   });
 
-  it("refuses an app not listed under swarm:, saying where to list it", async () => {
-    const result = await deployToSwarm("ready");
-
-    expect(result.success).toBe(false);
-    expect(result.message).toContain("hangar.yml");
-    expect(hangar.runtime.run).not.toHaveBeenCalled();
-  });
-
   it("passes on Docker's reason when the deploy fails", async () => {
-    vi.mocked(hangar.runtime.run).mockImplementation(async (_command, args) => {
-      if (args[1] === "deploy") {
-        throw new HangarRuntimeError(1, "this node is not a swarm manager");
-      }
-
-      return { code: 0, stdout: "" };
-    });
+    vi.mocked(hangar.runtime.run).mockRejectedValue(new HangarRuntimeError(1, "this node is not a swarm manager"));
 
     const result = await deployToSwarm("whoami");
 
@@ -101,20 +92,39 @@ describe("deployToSwarm", () => {
     expect(hangar.runtime.run).not.toHaveBeenCalled();
   });
 
-  it("removes a swarm app's stack on uninstall, never running compose down, and asks to unlist it", async () => {
-    await deployToSwarm("whoami");
+  it("takes both down on uninstall: the compose project, and the stack the swarm runs", async () => {
+    mocks.stacks = [{ name: "ready" }];
+
+    await deployToSwarm("ready");
     vi.mocked(hangar.runtime.run).mockClear();
 
-    const result = await uninstallApp("whoami");
+    const result = await uninstallApp("ready");
 
     expect(result).toMatchObject({ success: true, installed: false });
-    expect(result.message).toContain("Retirez-la aussi de la liste swarm:");
-    expect(dockerCalls()).toEqual(["stack rm"]);
+    expect(dockerCalls()).toEqual(["compose down", "stack rm"]);
   });
 
-  it("uninstalls a swarm app on a node that can no longer remove its stack, saying what is left", async () => {
+  it("leaves the swarm alone on uninstall when the app has no stack there", async () => {
+    await hangar.store.link("ready");
+    await hangar.store.refresh();
+
+    const result = await uninstallApp("ready");
+
+    expect(result).toMatchObject({ success: true, installed: false });
+    expect(dockerCalls()).toEqual(["compose down"]);
+  });
+
+  it("says what is left when the stack cannot go on uninstall", async () => {
+    mocks.stacks = [{ name: "whoami" }];
+
     await deployToSwarm("whoami");
-    vi.mocked(hangar.runtime.run).mockRejectedValue(new HangarRuntimeError(1, "this node is not a swarm manager"));
+    vi.mocked(hangar.runtime.run).mockImplementation(async (_command, args) => {
+      if (args[0] === "stack") {
+        throw new HangarRuntimeError(1, "this node is not a swarm manager");
+      }
+
+      return { code: 0, stdout: "" };
+    });
 
     const result = await uninstallApp("whoami");
 

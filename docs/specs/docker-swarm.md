@@ -31,8 +31,9 @@ A worker gets `503` on all of them except `info`, whose `Cluster` field is empty
 "this node is a worker", with the managers' addresses (`info.Swarm.RemoteManagers`) and the command to run
 on one of them.
 
-**Compose and Swarm stay apart.** Compose apps run on Hangar's node and live in `/apps`, unchanged. An app
-that should run on another machine is deployed to the swarm from its `compose.swarm.yml` (see below). `/cluster` shows only what runs in the swarm: the Swarm tasks from `GET /tasks`, with their
+**Compose and Swarm are independent.** Compose apps run on Hangar's node and live in `/apps`, unchanged. An
+app can also be deployed to the swarm from its `compose.swarm.yml` (see below), with or without its compose
+copy running. `/cluster` shows only what runs in the swarm: the Swarm tasks from `GET /tasks`, with their
 node. It never lists compose containers, even on Hangar's node, and `/apps` never lists Swarm tasks.
 
 Swarm tasks are grouped into one app per stack (`com.docker.stack.namespace`), or per service when the
@@ -134,13 +135,12 @@ What this rests on, checked with `docker stack config` on Docker 29.1.3:
 -c compose.swarm.yml` with the same environment, which works on any node, swarm or not. Saving the
   `compose.yml` of an app that has a `compose.swarm.yml` runs the same check too, since an edit there (a
   top-level `name`, a `depends_on` condition) can break the stack.
-- **Compose or Swarm, never both:** an app listed under `swarm:` in `hangar.yml` runs in the swarm; any other
-  installed app runs with compose. `HangarStore.compose` skips the `swarm:` apps, so `store up` never starts
-  a second copy, and the grouped `HangarStore.stack` commands only address them. The list is written by
-  hand, like the categories (see step 3).
-- **Where it shows:** the store card of an app with a `compose.swarm.yml` gets a "Swarm" badge, and, once
-  the app is listed under `swarm:`, "Déployer sur le swarm" next to "Installer". A deployed stack appears on
-  `/cluster`, never on `/apps`.
+- **Compose and Swarm, independently:** an app may run with compose, in the swarm, or both; neither
+  command touches the other. An app with a `compose.swarm.yml` is available for the swarm: nothing in
+  `hangar.yml` marks it (see step 3).
+- **Where it shows:** the store card of an app with a `compose.swarm.yml` gets a "Swarm" badge, and
+  "Déployer sur le swarm" next to "Installer". A deployed stack appears on `/cluster`; the app's compose
+  project, if any, stays on `/apps`.
 - **Volumes:** a bind mount such as `${APP_DATA_DIR}/miniflux/db` must exist on whichever node runs the task.
   Hangar does not copy data between nodes. Three ways, all in `compose.swarm.yml`; see below.
 
@@ -194,7 +194,7 @@ compose helper, and both the UI's server actions and the CLI go through it:
 | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `HangarStore.compose(name, args, options)`                                             | `HangarStore.stack(name, args, options)`                                                                   |
 | `composeStack(app, args)`: `docker compose --env-file … -p <app> -f compose.yml …args` | `stackApp(app, args)`: builds the `docker stack` call below, with `.env.global` as the child's environment |
-| `name`: a global command, a category or an app                                         | Same resolution, keeping only the `swarm:` apps                                                            |
+| `name`: a global command, a category or an app                                         | Same resolution, keeping only the apps with a `compose.swarm.yml`                                          |
 | `HangarStore.CommandOrder`: `up` forwards, `down` backwards                            | `deploy` forwards, `rm` backwards, the rest in parallel                                                    |
 
 `stackApp` maps a short verb to the full `docker stack` call, so the files and the stack name are never
@@ -221,7 +221,7 @@ written by the caller:
 `src/cli/commands/swarm.ts`, the twin of `store.ts`, documented in `docs/cli.md`:
 
 ```bash
-node bin/cli.js swarm deploy             # every `swarm:` app of hangar.yml, in category order
+node bin/cli.js swarm deploy             # every app with a compose.swarm.yml, in category order
 node bin/cli.js swarm miniflux deploy    # one app; extra args go to docker stack deploy
 node bin/cli.js swarm Media rm           # a category, in reverse order
 node bin/cli.js swarm miniflux ps        # docker stack ps miniflux
@@ -301,10 +301,9 @@ node first. Same tree on mobile, one column.
 | `src/libs/docker/swarm.ts`                      | `DockerSwarm` class: state, nodes, tasks per node, node updates, tokens                      |
 | `src/libs/docker/swarm-backup.ts`               | `SwarmBackup` class: build, encrypt, write, prune                                            |
 | `src/libs/jobs/jobs/back-up-swarm.ts`           | Nightly job                                                                                  |
-| `src/libs/hangar/hangar-store.ts`               | `stack()` and `stackApp()` next to `compose()`, which skips `swarm:` apps; `x-hangar.name`   |
+| `src/libs/hangar/hangar-store.ts`               | `stack()` and `stackApp()` next to `compose()`; `x-hangar.name`                              |
 | `src/libs/hangar/runtime/runtime.ts`            | `RunOptions.env`                                                                             |
 | `src/cli/commands/swarm.ts`                     | The `swarm` CLI command                                                                      |
-| `src/libs/hangar/hangar-config.ts`              | The `swarm:` list in `hangar.yml`                                                            |
 | `src/modules/cluster/`                          | Page components (`node-card.tsx`, `stack-sheet.tsx`, `tokens-dialog.tsx`) and server actions |
 | `docs/cli.md`, `docs/store.md`, `docs/swarm.md` | The `swarm` CLI, `compose.swarm.yml` and `x-hangar.name`, the restore procedure              |
 | `src/app/pages/(app)/cluster.tsx`               | Thin page shell                                                                              |
@@ -316,8 +315,8 @@ No database change. Reads go through `#libs/cache` under `docker:swarm:`, like t
 - `DockerSwarm` against the existing Docker mock: grouping tasks per node, the worker and not-in-a-swarm
   states, refusing to demote the last manager.
 - `HangarStore.stack` with a fake `CommandRunner`, as `compose` is tested: the exact `docker stack` argv per
-  verb, `.env.global` in `env`, deploy order forwards and `rm` backwards, compose apps refused, and
-  `compose()` skipping the `swarm:` apps.
+  verb, `.env.global` in `env`, deploy order forwards and `rm` backwards, and a group covering only the apps
+  with a `compose.swarm.yml`.
 - `HangarStore` display name: `x-hangar.name`, then `name`, then the folder name.
 - `SwarmBackup` with a fake archive: the file decrypts with the test identity, pruning keeps 14.
 - One manual drill before releasing step 5: back up a test cluster, restore it on a fresh VM.
@@ -441,26 +440,25 @@ then shows its error state, which is the "tolère 0 panne" the header announced.
 
 Branch `feat/swarm-stacks`, on top of step 2.
 
-**Decided (was open question 1):** a `swarm:` list in `hangar.yml` marks the apps that run in the swarm. Like
-the categories, it is written by hand: the UI never edits `hangar.yml`, which is the store's configuration,
-so "Déployer sur le swarm" is only offered for the listed apps. Going through Hangar is never required. A stack deployed by hand, with `docker stack deploy` or
-`swarm <app> deploy`, shows on `/cluster` and can be redeployed or removed from its sheet as soon as it is
-named after an installed store app with a `compose.swarm.yml`. The list only drives the grouped commands:
-`swarm deploy` / `swarm rm` and categories cover the listed apps, and `store up`, `store down` and categories
-skip them, so compose never starts a second copy. `store <app>` refuses a listed app by name.
+**Decided (was open question 1):** compose and Swarm are independent, and an app may run both ways. Nothing
+in `hangar.yml` marks an app for the swarm: one with a `compose.swarm.yml` is available for it, and
+`swarm deploy` / `swarm rm` (whole store or category) cover those apps, as `store up` covers the apps of the
+categories. The UI never edits `hangar.yml`, which is the store's configuration. Going through Hangar is
+never required either: a stack deployed by hand, with
+`docker stack deploy` or `swarm <app> deploy`, shows on `/cluster` and can be redeployed or removed from its
+sheet as soon as it is named after an installed store app with a `compose.swarm.yml`.
 
 | Where                           | What                                                                                                                                       |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `HangarConfig`                  | `swarm()`, read like the categories; Hangar never writes it                                                                                |
-| `HangarApp`                     | `swarmReady` (ships a `compose.swarm.yml`), `runsInSwarm` (listed); `name` reads `x-hangar.name` first                                     |
-| `HangarStore.stack(name, args)` | Same resolution and ordering as `compose`; a group covers its listed apps, one app only needs its `compose.swarm.yml`                      |
-| `HangarStore.deployToSwarm`     | For a listed app: link, `compose down` if it runs, deploy; a failed move from compose removes the partial stack and brings compose back    |
+| `HangarApp`                     | `swarmReady` (ships a non-empty `compose.swarm.yml`); `name` reads `x-hangar.name` first                                                   |
+| `HangarStore.stack(name, args)` | Same resolution and ordering as `compose`; a group covers its apps with a `compose.swarm.yml`                                              |
+| `HangarStore.deployToSwarm`     | Link, then deploy; the app's compose project is left alone                                                                                 |
 | `HangarStore.isStackManageable` | Installed, with a `compose.swarm.yml`: what the stack sheet's buttons and their actions both check                                         |
-| `HangarStore.composeProjectIds` | Leaves the listed apps out, so `/apps`, its operations and the image update check skip them                                                |
+| Uninstall                       | `compose down`, then `docker stack rm` when the swarm runs a stack of it                                                                   |
 | `AppFiles` / `HangarStore`      | Saving `compose.swarm.yml`, or `compose.yml` next to a non-empty one, runs `docker stack config` with `.env.global` first                  |
 | `Runtime`                       | `RunOptions.env`, the child's extra variables; any non-zero exit fails, with the end of stderr as message                                  |
 | `src/cli/commands/swarm.ts`     | `swarm <target> <verb>`, `swarm ls`                                                                                                        |
-| Store card                      | "Swarm" badge, and "Déployer sur le swarm" once listed; uninstalling a listed app removes its stack and asks to unlist it                  |
+| Store card                      | "Swarm" badge and "Déployer sur le swarm" for any app with a `compose.swarm.yml`                                                           |
 | `/cluster` stack sheet          | Any stack: its tasks from `DockerSwarm.stackTasks` (`GET /tasks`), failed attempts included. For a store app: "Mettre à jour", "Supprimer" |
 
 **Checked on a `docker:dind` swarm (29.x).** `docker stack config` rejects a `depends_on` condition and a
