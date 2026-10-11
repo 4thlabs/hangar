@@ -63,6 +63,11 @@ descriptor reaches its components only through `import()`.
 A library's unit of work is a class taking its dependencies as constructor arguments — that is
 what lets a test pass an in-memory database instead of mocking a module.
 
+Helpers and constants are static members of a class, in libraries and modules alike: no free
+function or module-level `const`. The exceptions are React components and hooks, Waku page exports
+(`getConfig`), `"use server"` action exports, test fixtures under `mock/`, and the commander
+definitions in `src/cli`.
+
 ## Responsive layouts
 
 One tree, never one per breakpoint: a subtree hidden with `md:hidden` is still mounted, and every
