@@ -49,7 +49,7 @@ export class AppsSnapshot {
    * every row.
    */
   private static category(categories: readonly Category[], stack: string) {
-    const found = categories.find(category => category.stacks.includes(stack));
+    const found = categories.find(category => category.stacks.some(entry => entry.id === stack));
 
     return found && { name: found.name, color: found.color };
   }

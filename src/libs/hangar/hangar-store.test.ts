@@ -1,7 +1,8 @@
-import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { logger } from "#libs/logs";
 import { HangarRuntimeError } from "./hangar-error.ts";
 import { HangarStore } from "./hangar-store.ts";
 import type { CommandRunner } from "./runtime/runtime.ts";
@@ -17,7 +18,6 @@ categories:
   - name: utilities
     color: green
     stacks: [beta-app, gamma-app]
-shared: [networks.yml]
 `;
 
 /** The copy of a compose file awaiting `docker compose config`, one per save, beside the real one. */
@@ -55,15 +55,19 @@ describe("HangarStore", () => {
 
     expect(store.dataPath).toBe(path.resolve(dataDir));
     expect(store.storePath).toBe(path.join(dataDir, "app-store"));
-    expect(store.installedPath).toBe(path.join(dataDir, "app-installed"));
+    expect(store.appsPath).toBe(path.join(dataDir, "app-store", "store"));
   });
 
-  it("resolves all stacks, categories, and individual stack names", async () => {
+  it("reserves the store command's words for category names, and leaves the swarm's free", () => {
+    expect([...HangarStore.CliWords].sort()).toEqual(["down", "install", "ls", "pull", "up"]);
+  });
+
+  it("tells the whole store, a category and an app apart", async () => {
     const store = await createStore(dataDir, createRuntime());
 
-    expect(store.resolve()).toEqual(["alpha-app", "beta-app", "gamma-app"]);
-    expect(store.resolve("essentials")).toEqual(["alpha-app", "beta-app"]);
-    expect(store.resolve("custom-app")).toEqual(["custom-app"]);
+    expect(store.target()).toEqual({ kind: "all" });
+    expect(store.target("essentials")).toEqual({ kind: "category", name: "essentials" });
+    expect(store.target("custom-app")).toEqual({ kind: "app", id: "custom-app" });
   });
 
   it("installs a store that ships no config", async () => {
@@ -72,24 +76,7 @@ describe("HangarStore", () => {
     await expect(store.install()).resolves.toBeUndefined();
   });
 
-  it("links an available app without replacing an existing destination", async () => {
-    const store = await createStore(dataDir, createRuntime());
-    const source = path.join(store.storePath, "store", "alpha-app");
-    const destination = path.join(store.installedPath, "alpha-app");
-
-    await mkdir(source, { recursive: true });
-    await mkdir(store.installedPath, { recursive: true });
-
-    await store.link("alpha-app");
-
-    expect((await lstat(destination)).isSymbolicLink()).toBe(true);
-    expect(await readlink(destination)).toBe(source);
-
-    await store.link("alpha-app");
-    expect(await readlink(destination)).toBe(source);
-  });
-
-  it("pulls an installed store", async () => {
+  it("pulls a store already cloned", async () => {
     const runtime = createRuntime();
     const store = await createStore(dataDir, runtime);
 
@@ -101,7 +88,7 @@ describe("HangarStore", () => {
     expect(runtime.run).toHaveBeenCalledWith("git", ["-C", store.storePath, "pull", "--ff-only"]);
   });
 
-  it("clones and links configured apps when installation is requested", async () => {
+  it("clones the store on its first install, and keeps no state of its own beside it", async () => {
     const runtime: CommandRunner = {
       run: vi.fn(async () => {
         await Promise.all([
@@ -120,20 +107,15 @@ describe("HangarStore", () => {
       }),
     };
 
-    // No config up front: the categories it links by only arrive with the clone.
+    // No config up front: the categories only arrive with the clone.
     const store = new HangarStore(STORE_URL, dataDir, runtime);
 
     await store.install();
 
     expect(runtime.run).toHaveBeenCalledWith("git", ["clone", "--", STORE_URL, store.storePath]);
-    await expect(lstat(path.join(store.installedPath, "alpha-app"))).resolves.toMatchObject({});
-    expect((await lstat(path.join(store.installedPath, "alpha-app"))).isSymbolicLink()).toBe(true);
-    expect((await lstat(path.join(store.installedPath, "beta-app"))).isSymbolicLink()).toBe(true);
-    expect((await lstat(path.join(store.installedPath, "gamma-app"))).isSymbolicLink()).toBe(true);
-    // Shared files ride along with the stacks: compose resolves them from app-installed.
-    expect(await readlink(path.join(store.installedPath, "networks.yml"))).toBe(
-      path.join(store.storePath, "store", "networks.yml"),
-    );
+    expect(store.config.entries().map(entry => entry.id)).toEqual(["alpha-app", "beta-app", "gamma-app"]);
+    // hangar.yml declares, Docker says what runs: no installed state is written next to the clone.
+    expect((await readdir(dataDir)).sort()).toEqual([".env.global", "app-store"]);
   });
 
   it("bootstraps the global env with the variables the stacks reference", async () => {
@@ -160,19 +142,21 @@ describe("HangarStore", () => {
     expect(await store.env.read()).toEqual({ ALPHA_APP_TAG: "", APP_DATA_DIR: path.join(dataDir, "app-data") });
   });
 
-  it("keeps shared files out of the app list", async () => {
+  it("lists as apps only the folders holding a compose file", async () => {
     const store = await createStore(dataDir, createRuntime());
     const alphaApp = path.join(store.storePath, "store", "alpha-app");
 
     await Promise.all([
       mkdir(path.join(store.storePath, ".git"), { recursive: true }),
       mkdir(alphaApp, { recursive: true }),
-      mkdir(store.installedPath, { recursive: true }),
     ]);
 
     await Promise.all([
       writeFile(path.join(alphaApp, "compose.yml"), "services: {}\n"),
+      // A shared fragment, listed nowhere: it is no folder, so no app.
       writeFile(path.join(store.storePath, "store", "networks.yml"), "networks: {}\n"),
+      mkdir(path.join(store.storePath, "store", "docs"), { recursive: true }),
+      mkdir(path.join(store.storePath, "store", ".github"), { recursive: true }),
     ]);
 
     await store.refresh();
@@ -180,7 +164,7 @@ describe("HangarStore", () => {
     expect([...store.apps].map(app => app.id)).toEqual(["alpha-app"]);
   });
 
-  it("refreshes app metadata and installation state from disk", async () => {
+  it("refreshes app metadata from disk", async () => {
     const store = await createStore(dataDir, createRuntime());
     const alphaApp = path.join(store.storePath, "store", "alpha-app");
     const betaApp = path.join(store.storePath, "store", "beta-app");
@@ -189,13 +173,11 @@ describe("HangarStore", () => {
       mkdir(path.join(store.storePath, ".git"), { recursive: true }),
       mkdir(alphaApp, { recursive: true }),
       mkdir(betaApp, { recursive: true }),
-      mkdir(store.installedPath, { recursive: true }),
     ]);
 
     await Promise.all([
       writeFile(path.join(alphaApp, "compose.yml"), "name: Alpha App\nx-hangar:\n  icon: alpha.svg\n"),
       writeFile(path.join(betaApp, "compose.yml"), "x-hangar:\n  icon: beta.svg\n"),
-      mkdir(path.join(store.installedPath, "alpha-app")),
     ]);
 
     await store.refresh();
@@ -206,7 +188,6 @@ describe("HangarStore", () => {
           id: "alpha-app",
           name: "Alpha App",
           icon: "alpha.svg",
-          installed: true,
           swarmReady: false,
           containerName: "alpha-app",
         },
@@ -214,7 +195,6 @@ describe("HangarStore", () => {
           id: "beta-app",
           name: "Beta-app",
           icon: "beta.svg",
-          installed: false,
           swarmReady: false,
           containerName: "beta-app",
         },
@@ -233,7 +213,6 @@ describe("HangarStore", () => {
       mkdir(path.join(store.storePath, ".git"), { recursive: true }),
       mkdir(named, { recursive: true }),
       mkdir(sidecarFirst, { recursive: true }),
-      mkdir(store.installedPath, { recursive: true }),
     ]);
 
     await Promise.all([
@@ -252,7 +231,7 @@ describe("HangarStore", () => {
     expect(store.app("immich")?.containerName).toBe("immich-server");
   });
 
-  it("keeps going when an app has no x-hangar block or no compose.yml", async () => {
+  it("keeps going when an app has no x-hangar block, and skips a folder with no compose.yml", async () => {
     const store = await createStore(dataDir, createRuntime());
     const good = path.join(store.storePath, "store", "good-app");
     const noMetadata = path.join(store.storePath, "store", "no-metadata-app");
@@ -263,7 +242,6 @@ describe("HangarStore", () => {
       mkdir(good, { recursive: true }),
       mkdir(noMetadata, { recursive: true }),
       mkdir(noCompose, { recursive: true }),
-      mkdir(store.installedPath, { recursive: true }),
     ]);
 
     await Promise.all([
@@ -281,7 +259,6 @@ describe("HangarStore", () => {
           id: "good-app",
           name: "Good",
           icon: "good.svg",
-          installed: false,
           swarmReady: false,
           containerName: "good-app",
         },
@@ -289,7 +266,6 @@ describe("HangarStore", () => {
           id: "no-metadata-app",
           name: "No Metadata",
           icon: undefined,
-          installed: false,
           swarmReady: false,
           containerName: "no-metadata-app",
         },
@@ -306,7 +282,6 @@ describe("HangarStore", () => {
       id: "old",
       name: "Old",
       icon: "old.svg",
-      installed: true,
       swarmReady: false,
       containerName: "old",
     });
@@ -321,7 +296,6 @@ describe("HangarStore", () => {
     const app = (id: string) => path.join(store.storePath, "store", id);
 
     await mkdir(path.join(store.storePath, ".git"), { recursive: true });
-    await mkdir(store.installedPath, { recursive: true });
     await Promise.all(["both-app", "top-app", "plain-app"].map(id => mkdir(app(id), { recursive: true })));
     await Promise.all([
       writeFile(path.join(app("both-app"), "compose.yml"), "name: Top\nx-hangar:\n  name: Both\nservices: {}\n"),
@@ -341,7 +315,6 @@ describe("HangarStore", () => {
     const app = (id: string) => path.join(store.storePath, "store", id);
 
     await mkdir(path.join(store.storePath, ".git"), { recursive: true });
-    await mkdir(store.installedPath, { recursive: true });
     await Promise.all(["alpha-app", "beta-app"].map(id => mkdir(app(id), { recursive: true })));
     await Promise.all([
       writeFile(path.join(app("alpha-app"), "compose.yml"), "services: {}\n"),
@@ -355,28 +328,14 @@ describe("HangarStore", () => {
     expect(store.app("beta-app")).toMatchObject({ swarmReady: false });
   });
 
-  it("returns only installed app ids", async () => {
+  it("names the declared apps and every app of the store, for the Docker layer", async () => {
     const store = await createStore(dataDir, createRuntime());
 
-    store.apps.add({
-      id: "a",
-      name: "A",
-      icon: undefined,
-      installed: true,
-      swarmReady: false,
-      containerName: "a",
-    });
+    store.apps.add({ id: "alpha-app", name: "Alpha", icon: undefined, swarmReady: false, containerName: "alpha-app" });
+    store.apps.add({ id: "solo-app", name: "Solo", icon: undefined, swarmReady: false, containerName: "solo-app" });
 
-    store.apps.add({
-      id: "b",
-      name: "B",
-      icon: undefined,
-      installed: false,
-      swarmReady: false,
-      containerName: "b",
-    });
-
-    expect(store.installedProjectIds()).toEqual(new Set(["a"]));
+    expect(store.declaredAppIds()).toEqual(new Set(["alpha-app", "beta-app", "gamma-app"]));
+    expect(store.appIds()).toEqual(new Set(["alpha-app", "solo-app"]));
   });
 
   it("looks up a store app by id", async () => {
@@ -386,7 +345,6 @@ describe("HangarStore", () => {
       id: "a",
       name: "A",
       icon: undefined,
-      installed: true,
       swarmReady: false,
       containerName: "a",
     });
@@ -395,18 +353,114 @@ describe("HangarStore", () => {
     expect(store.app("missing")).toBeUndefined();
   });
 
-  it("links and lists a stack a saved config adds", async () => {
+  it("lists the apps a saved config declares", async () => {
     const store = await createStore(dataDir, createRuntime());
 
-    await mkdir(store.installedPath, { recursive: true });
     await mkdir(path.join(store.storePath, ".git"));
     await mkdir(path.join(store.storePath, "store", "delta-app"), { recursive: true });
     await writeFile(path.join(store.storePath, "store", "delta-app", "compose.yml"), "services: {}\n");
+    await writeFile(path.join(store.storePath, "store", "delta-app", "compose.swarm.yml"), "services: {}\n");
 
-    await store.saveConfig("categories:\n  - name: extra\n    color: red\n    stacks: [delta-app]\n");
+    await store.saveConfig(
+      "categories:\n  - name: extra\n    color: red\n    stacks: [delta-app]\nswarm: [delta-app]\n",
+    );
 
-    expect((await lstat(path.join(store.installedPath, "delta-app"))).isSymbolicLink()).toBe(true);
-    expect(store.app("delta-app")?.installed).toBe(true);
+    expect(store.declaredAppIds()).toEqual(new Set(["delta-app"]));
+    expect(store.config.swarm()).toEqual(["delta-app"]);
+    expect(store.app("delta-app")).toMatchObject({ swarmReady: true });
+  });
+
+  it("refuses to save a config the store contradicts, leaving the file untouched", async () => {
+    const store = await createStore(dataDir, createRuntime());
+    const file = path.join(store.storePath, "config", "hangar.yml");
+
+    await mkdir(path.join(store.appsPath, "delta-app"), { recursive: true });
+    await writeFile(path.join(store.appsPath, "delta-app", "compose.yml"), "services: {}\n");
+
+    const source = [
+      "categories:",
+      "  - { name: extra, color: red, stacks: [delta-app, ghost-app, { id: delta-app, run: false }] }",
+      "  - { name: up, color: red, stacks: [{ id: delta-app, update: false }] }",
+      "swarm: [delta-app]",
+      "",
+    ].join("\n");
+
+    await expect(store.saveConfig(source)).rejects.toThrow(
+      [
+        "Invalid Hangar config:",
+        "✖ ghost-app is not an app of the store: no store/ghost-app/compose.yml",
+        "✖ delta-app is declared twice, in extra and extra",
+        "✖ The category up is named like a CLI command",
+        "✖ delta-app is declared twice, in extra and up",
+        "✖ delta-app is listed under swarm but has no compose.swarm.yml",
+      ].join("\n"),
+    );
+
+    expect(await readFile(file, "utf8")).toBe(CATEGORIES);
+  });
+
+  it("loads a config the store contradicts, warning about each problem instead of refusing it", async () => {
+    const store = await createStore(dataDir, createRuntime());
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+
+    await writeFile(
+      path.join(store.storePath, "config", "hangar.yml"),
+      "categories:\n  - { name: extra, color: red, stacks: [ghost-app] }\n",
+    );
+
+    await store.loadConfig();
+
+    expect(store.config.entries().map(entry => entry.id)).toEqual(["ghost-app"]);
+    expect(warn).toHaveBeenCalledWith(
+      "hangar.yml: ghost-app is not an app of the store: no store/ghost-app/compose.yml",
+    );
+
+    warn.mockRestore();
+  });
+
+  it("checks a saved config against the folders that are apps, and only those", async () => {
+    const store = await createStore(dataDir, createRuntime());
+
+    await mkdir(path.join(store.appsPath, "notes"), { recursive: true });
+    await mkdir(path.join(store.appsPath, "MyApp"), { recursive: true });
+    await mkdir(path.join(store.appsPath, "blank-app"), { recursive: true });
+    await writeFile(path.join(store.appsPath, "networks.yml"), "networks: {}\n");
+    await writeFile(path.join(store.appsPath, "MyApp", "compose.yml"), "services: {}\n");
+    // An empty compose file still makes an app, as the commands take it.
+    await writeFile(path.join(store.appsPath, "blank-app", "compose.yml"), "");
+
+    const source = "categories:\n  - { name: lab, color: red, stacks: [notes, networks.yml, MyApp, blank-app] }\n";
+
+    await expect(store.saveConfig(source)).rejects.toThrow(
+      [
+        "✖ notes is not an app of the store: no store/notes/compose.yml",
+        "✖ networks.yml is not an app of the store: no store/networks.yml/compose.yml",
+        // Not a valid id: the store never lists it, so the config may not name it either.
+        "✖ MyApp is not an app of the store: no store/MyApp/compose.yml",
+      ].join("\n"),
+    );
+  });
+
+  it("reports a contradicted config once when asked, not on every refresh, the shared list included", async () => {
+    const store = await createStore(dataDir, createRuntime());
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+
+    await mkdir(path.join(store.storePath, ".git"), { recursive: true });
+    await writeFile(
+      path.join(store.storePath, "config", "hangar.yml"),
+      "categories:\n  - { name: extra, color: red, stacks: [ghost-app] }\nshared: [networks.yml]\n",
+    );
+
+    await store.refresh();
+    expect(warn).not.toHaveBeenCalled();
+
+    await store.checkConfig();
+    expect(warn).toHaveBeenCalledWith(
+      "hangar.yml: ghost-app is not an app of the store: no store/ghost-app/compose.yml",
+    );
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("shared is no longer read"));
+    warn.mockRestore();
   });
 
   describe("createApp", () => {
@@ -416,7 +470,6 @@ describe("HangarStore", () => {
       const runtime = createRuntime();
       const store = await createStore(dataDir, runtime);
 
-      await mkdir(store.installedPath, { recursive: true });
       await mkdir(path.join(store.storePath, ".git"));
 
       await store.createApp("delta-app", COMPOSE);
@@ -440,13 +493,14 @@ describe("HangarStore", () => {
       await expect(lstat(path.join(store.storePath, "store", "delta-app"))).rejects.toThrow(/ENOENT/);
     });
 
-    it("refuses ids that escape the store, shared files and creating an existing app", async () => {
+    it("refuses ids that escape the store, a shared file's name and creating an existing app", async () => {
       const store = await createStore(dataDir, createRuntime());
 
       await mkdir(path.join(store.storePath, "store", "delta-app"), { recursive: true });
+      await writeFile(path.join(store.storePath, "store", "networks.yml"), "networks: {}\n");
 
       await expect(store.createApp("../config", COMPOSE)).rejects.toThrow(/Invalid app id/);
-      await expect(store.createApp("networks.yml", COMPOSE)).rejects.toThrow(/shared/);
+      await expect(store.createApp("networks.yml", COMPOSE)).rejects.toThrow(/already exists/);
       await expect(store.createApp("delta-app", COMPOSE)).rejects.toThrow(/already exists/);
     });
   });
@@ -567,10 +621,14 @@ describe("HangarStore", () => {
       expect(runtime.run).toHaveBeenCalledTimes(1);
     });
 
-    it("refuses the files of a shared file or of a missing app", async () => {
+    it("refuses the files of a shared file, of a folder with no compose file, or of a missing app", async () => {
       const { store } = await withApp();
 
-      await expect(store.files("networks.yml")).rejects.toThrow(/shared/);
+      await writeFile(path.join(store.appsPath, "networks.yml"), "networks: {}\n");
+      await mkdir(path.join(store.appsPath, "docs"), { recursive: true });
+
+      await expect(store.files("networks.yml")).rejects.toThrow(/does not exist/);
+      await expect(store.files("docs")).rejects.toThrow(/does not exist/);
       await expect(store.files("other-app")).rejects.toThrow(/does not exist/);
     });
   });
@@ -579,14 +637,15 @@ describe("HangarStore", () => {
 describe("HangarStore.compose", () => {
   let dataDir: string;
 
+  /** Apps of the store: a folder in the clone with a compose file. */
   const withStacks = async (...stacks: string[]) => {
     const runtime = createRuntime();
     const store = await createStore(dataDir, runtime);
 
     await Promise.all(
       stacks.map(async stack => {
-        await mkdir(path.join(store.installedPath, stack), { recursive: true });
-        await writeFile(path.join(store.installedPath, stack, "compose.yml"), "services: {}\n");
+        await mkdir(path.join(store.appsPath, stack), { recursive: true });
+        await writeFile(path.join(store.appsPath, stack, "compose.yml"), "services: {}\n");
       }),
     );
 
@@ -629,7 +688,7 @@ describe("HangarStore.compose", () => {
         "-p",
         "alpha-app",
         "-f",
-        path.join(store.installedPath, "alpha-app", "compose.yml"),
+        path.join(store.appsPath, "alpha-app", "compose.yml"),
         "up",
         "-d",
       ],
@@ -640,7 +699,7 @@ describe("HangarStore.compose", () => {
   it("pins the project name to the stack, not the compose file's display name", async () => {
     const { store, runtime } = await withStacks("alpha-app");
 
-    await writeFile(path.join(store.installedPath, "alpha-app", "compose.yml"), "name: Alpha App\nservices: {}\n");
+    await writeFile(path.join(store.appsPath, "alpha-app", "compose.yml"), "name: Alpha App\nservices: {}\n");
 
     await store.compose("alpha-app", ["up", "-d"]);
 
@@ -653,7 +712,7 @@ describe("HangarStore.compose", () => {
         "-p",
         "alpha-app",
         "-f",
-        path.join(store.installedPath, "alpha-app", "compose.yml"),
+        path.join(store.appsPath, "alpha-app", "compose.yml"),
         "up",
         "-d",
       ],
@@ -684,10 +743,140 @@ describe("HangarStore.compose", () => {
     expect(runtime.run).not.toHaveBeenCalled();
   });
 
-  it("rejects when a stack is not installed", async () => {
-    const { store, runtime } = await withStacks("alpha-app");
+  it("rejects a name that is no app of the store, and runs any app that is, declared or not", async () => {
+    const { store, runtime } = await withStacks("alpha-app", "solo-app");
 
-    await expect(store.compose("missing-app", ["logs"])).rejects.toThrow("Failed to find project: missing-app");
+    await expect(store.compose("missing-app", ["logs"])).rejects.toThrow("Unknown app or category: missing-app");
+    await expect(store.compose("../config", ["logs"])).rejects.toThrow("Unknown app or category: ../config");
+    // A shared fragment sits in store/ too, but holds no compose file.
+    await writeFile(path.join(store.appsPath, "networks.yml"), "networks: {}\n");
+    await expect(store.compose("networks.yml", ["logs"])).rejects.toThrow("Unknown app or category: networks.yml");
+    expect(runtime.run).not.toHaveBeenCalled();
+
+    // In no category: the clone is all an app needs to run.
+    await store.compose("solo-app", ["up", "-d"]);
+    expect(targets(runtime)).toEqual(["solo-app"]);
+  });
+
+  /** A store declaring `hangar.yml` as given, with these apps in its clone. */
+  const withConfig = async (config: string, ...stacks: string[]) => {
+    const fixture = await withStacks(...stacks);
+
+    await writeFile(path.join(fixture.store.storePath, "config", "hangar.yml"), config);
+    await fixture.store.config.load();
+
+    return fixture;
+  };
+
+  /** Infrastructure starts by itself; in the lab, llama-cpp only when asked. */
+  const OPTIONS = `
+categories:
+  - name: infra
+    color: blue
+    stacks: [traefik, { id: arcane, update: false }]
+  - name: lab
+    color: amber
+    stacks: [{ id: llama-cpp, run: false }, miniflux]
+`;
+
+  it("leaves the run: false apps out of a whole-store up and pull, but not out of down", async () => {
+    const { store, runtime } = await withConfig(OPTIONS, "traefik", "arcane", "llama-cpp", "miniflux");
+
+    await store.compose("up", ["-d"]);
+    expect(targets(runtime)).toEqual(["traefik", "arcane", "miniflux"]);
+
+    runtime.run.mockClear();
+    // pull runs in parallel: only the set of apps is fixed, not the order of the calls.
+    await store.compose("pull", []);
+    expect(targets(runtime).sort()).toEqual(["arcane", "miniflux", "traefik"]);
+
+    runtime.run.mockClear();
+    // Before host maintenance: an app started by hand must not survive a whole-store down.
+    await store.compose("down", []);
+    expect(targets(runtime)).toEqual(["miniflux", "llama-cpp", "arcane", "traefik"]);
+  });
+
+  it("covers the run: false apps of a category named explicitly, and an app named directly", async () => {
+    const { store, runtime } = await withConfig(OPTIONS, "traefik", "arcane", "llama-cpp", "miniflux");
+
+    await store.compose("lab", ["up", "-d"]);
+    await store.compose("llama-cpp", ["up", "-d"]);
+
+    expect(targets(runtime)).toEqual(["llama-cpp", "miniflux", "llama-cpp"]);
+  });
+
+  it("keeps an app that ships a compose.swarm.yml in the compose groups: compose and swarm are independent", async () => {
+    const { store, runtime } = await withConfig(OPTIONS, "traefik", "arcane", "llama-cpp", "miniflux");
+
+    await writeFile(path.join(store.appsPath, "miniflux", "compose.swarm.yml"), "services: {}\n");
+    await store.compose("lab", ["down"]);
+
+    expect(targets(runtime)).toEqual(["miniflux", "llama-cpp"]);
+  });
+
+  it("does nothing on a category with nothing to run, rather than taking it for an app id", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+
+    const { store, runtime } = await withConfig(
+      "categories:\n  - { name: empty, color: blue, stacks: [] }\n  - { name: gone, color: blue, stacks: [ghost-app] }\n",
+    );
+
+    await expect(store.compose("empty", ["up", "-d"])).resolves.toBeUndefined();
+    await expect(store.compose("gone", ["up", "-d"])).resolves.toBeUndefined();
+    expect(runtime.run).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("skips, in a group, the entries compose could not run: no app behind the id, or no valid project name", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+
+    const { store, runtime } = await withConfig(
+      "categories:\n  - { name: lab, color: blue, stacks: [ghost-app, llama.cpp, alpha-app] }\n",
+      "llama.cpp",
+      "alpha-app",
+    );
+
+    await store.compose("up", ["-d"]);
+
+    expect(targets(runtime)).toEqual(["alpha-app"]);
+    expect(warn).toHaveBeenCalledWith("Skipping ghost-app: not an app of the store");
+    expect(warn).toHaveBeenCalledWith("Skipping llama.cpp: compose rejects it as a project name");
+    warn.mockRestore();
+  });
+
+  it("refuses an attached up on a category that covers several apps, but not on one app", async () => {
+    const { store, runtime } = await withConfig(OPTIONS, "traefik", "arcane", "llama-cpp", "miniflux");
+
+    await expect(store.compose("infra", ["up"])).rejects.toThrow("Non detached mode");
+    await store.compose("llama-cpp", ["up"]);
+
+    expect(targets(runtime)).toEqual(["llama-cpp"]);
+  });
+
+  it("runs one app as itself, even when a category or a whole-store word bears its name", async () => {
+    const { store, runtime } = await withConfig(
+      "categories:\n  - { name: alpha-app, color: blue, stacks: [beta-app, gamma-app] }\n",
+      "alpha-app",
+      "beta-app",
+      "gamma-app",
+      "up",
+    );
+
+    await store.composeApp("alpha-app", ["up", "-d"]);
+    await store.composeApp("up", ["logs"]);
+
+    // compose() would have read both names as groups: the category, then the whole store.
+    expect(targets(runtime)).toEqual(["alpha-app", "up"]);
+  });
+
+  it("refuses to run one app compose rejects as a project name, with a reason", async () => {
+    const { store, runtime } = await withStacks("llama.cpp");
+
+    await expect(store.composeApp("llama.cpp", ["up", "-d"])).rejects.toThrow(
+      "llama.cpp cannot run with compose: a project name takes lowercase letters, digits, - and _",
+    );
+
+    await expect(store.compose("llama.cpp", ["up", "-d"])).rejects.toThrow("llama.cpp cannot run with compose");
     expect(runtime.run).not.toHaveBeenCalled();
   });
 
@@ -724,21 +913,33 @@ describe("HangarStore in the swarm", () => {
     await rm(dataDir, { recursive: true, force: true });
   });
 
-  /** Installed apps; the swarm-ready ones get a compose.swarm.yml. */
+  /** The categories group the compose apps; the swarm list, independent of them, names solo-app too. */
+  const SWARM_CATEGORIES = `
+categories:
+  - name: essentials
+    color: blue
+    stacks: [alpha-app, beta-app]
+  - name: utilities
+    color: green
+    stacks: [gamma-app, { id: delta-app, run: false }]
+swarm: [gamma-app, solo-app, alpha-app]
+`;
+
+  /** Apps of the store; the swarm-ready ones get a compose.swarm.yml. */
   const withApps = async ({ ready }: { ready: string[] }) => {
     const runtime = createRuntime();
     const store = await createStore(dataDir, runtime);
 
-    await writeFile(path.join(store.storePath, "config", "hangar.yml"), CATEGORIES);
+    await writeFile(path.join(store.storePath, "config", "hangar.yml"), SWARM_CATEGORIES);
     await writeFile(path.join(store.dataPath, ".env.global"), "DOMAIN=home.lan\n");
     await store.config.load();
     await Promise.all(
-      ["alpha-app", "beta-app", "gamma-app", "solo-app"].map(async app => {
-        await mkdir(path.join(store.installedPath, app), { recursive: true });
-        await writeFile(path.join(store.installedPath, app, "compose.yml"), "services: {}\n");
+      ["alpha-app", "beta-app", "gamma-app", "delta-app", "solo-app"].map(async app => {
+        await mkdir(path.join(store.appsPath, app), { recursive: true });
+        await writeFile(path.join(store.appsPath, app, "compose.yml"), "services: {}\n");
 
         if (ready.includes(app)) {
-          await writeFile(path.join(store.installedPath, app, "compose.swarm.yml"), "services: {}\n");
+          await writeFile(path.join(store.appsPath, app, "compose.swarm.yml"), "services: {}\n");
         }
       }),
     );
@@ -777,20 +978,10 @@ describe("HangarStore in the swarm", () => {
   it("takes an empty compose.swarm.yml for none: the app cannot run in the swarm yet", async () => {
     const { store, runtime } = await withApps({ ready: [] });
 
-    await writeFile(path.join(store.installedPath, "alpha-app", "compose.swarm.yml"), "");
+    await writeFile(path.join(store.appsPath, "alpha-app", "compose.swarm.yml"), "");
 
     await expect(store.deployToSwarm("alpha-app")).rejects.toThrow("alpha-app is not a swarm app");
     expect(runtime.run).not.toHaveBeenCalled();
-  });
-
-  it("removes a stack on uninstall when it can, and says what is left when it cannot", async () => {
-    const { store, runtime } = await withApps({ ready: ["alpha-app"] });
-
-    await expect(store.removeStackIfPossible("alpha-app")).resolves.toBeNull();
-
-    runtime.run.mockRejectedValue(new HangarRuntimeError(1, "this node is not a swarm manager"));
-
-    await expect(store.removeStackIfPossible("alpha-app")).resolves.toBe("this node is not a swarm manager");
   });
 
   /** The stack each call named: its last argument, which `deploy`, `rm` and `ps` end with. */
@@ -798,7 +989,7 @@ describe("HangarStore in the swarm", () => {
 
   it("deploys an app from its two files, with .env.global in the environment", async () => {
     const { store, runtime } = await withApps({ ready: ["alpha-app"] });
-    const folder = path.join(store.installedPath, "alpha-app");
+    const folder = path.join(store.appsPath, "alpha-app");
 
     await store.stack("alpha-app", ["deploy", "--prune"]);
 
@@ -820,7 +1011,7 @@ describe("HangarStore in the swarm", () => {
 
   it("maps each verb to its docker stack call", async () => {
     const { store, runtime } = await withApps({ ready: ["alpha-app"] });
-    const folder = path.join(store.installedPath, "alpha-app");
+    const folder = path.join(store.appsPath, "alpha-app");
     const files = ["-c", path.join(folder, "compose.yml"), "-c", path.join(folder, "compose.swarm.yml")];
 
     for (const verb of [["config"], ["rm"], ["ps", "--no-trunc"], ["services"]]) {
@@ -835,26 +1026,38 @@ describe("HangarStore in the swarm", () => {
     ]);
   });
 
-  it("deploys the category apps that have a compose.swarm.yml, in order, and removes them backwards", async () => {
-    const { store, runtime } = await withApps({ ready: ["alpha-app", "gamma-app", "solo-app"] });
+  it("deploys the swarm list in its order, and removes it backwards", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app", "beta-app", "gamma-app", "solo-app"] });
 
     await store.stack("deploy", []);
 
-    // `solo-app` is in no category: like `store up`, the whole store means its categories.
-    expect(stacks(runtime)).toEqual(["alpha-app", "gamma-app"]);
+    // beta-app ships a compose.swarm.yml but is not listed: the categories say nothing about the swarm.
+    expect(stacks(runtime)).toEqual(["gamma-app", "solo-app", "alpha-app"]);
 
     runtime.run.mockClear();
     await store.stack("rm", []);
 
-    expect(stacks(runtime)).toEqual(["gamma-app", "alpha-app"]);
+    expect(stacks(runtime)).toEqual(["alpha-app", "solo-app", "gamma-app"]);
   });
 
-  it("restricts a category to its apps that have a compose.swarm.yml", async () => {
-    const { store, runtime } = await withApps({ ready: ["beta-app"] });
+  it("refuses a category: categories group the compose apps", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app", "beta-app"] });
 
-    await store.stack("essentials", ["deploy"]);
+    await expect(store.stack("essentials", ["deploy"])).rejects.toThrow(
+      "essentials is a category: categories group the compose apps",
+    );
 
-    expect(stacks(runtime)).toEqual(["beta-app"]);
+    expect(runtime.run).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the swarm list is empty", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"] });
+
+    await writeFile(path.join(store.storePath, "config", "hangar.yml"), "categories: []\n");
+    await store.config.load();
+
+    await expect(store.stack("deploy", [])).resolves.toBeUndefined();
+    expect(runtime.run).not.toHaveBeenCalled();
   });
 
   it("manages an app named directly, as a stack deployed by hand", async () => {
@@ -865,9 +1068,66 @@ describe("HangarStore in the swarm", () => {
     expect(stacks(runtime)).toEqual(["alpha-app"]);
   });
 
-  it("refuses an app without compose.swarm.yml, and an unknown verb", async () => {
+  it("skips, with a warning, a listed app without compose.swarm.yml, and refuses it by name", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+    const { store, runtime } = await withApps({ ready: ["gamma-app", "solo-app"] });
+
+    await store.stack("deploy", []);
+
+    expect(stacks(runtime)).toEqual(["gamma-app", "solo-app"]);
+    expect(warn).toHaveBeenCalledWith("Skipping alpha-app: it has no compose.swarm.yml");
+    await expect(store.stack("alpha-app", ["deploy"])).rejects.toThrow("alpha-app is not a swarm app");
+    warn.mockRestore();
+  });
+
+  it("deploys an app hangar.yml declares nowhere: the file only drives the commands over lists", async () => {
+    const { store, runtime } = await withApps({ ready: ["delta-app"] });
+
+    await writeFile(path.join(store.storePath, "config", "hangar.yml"), "categories: []\n");
+    await store.config.load();
+
+    await store.stack("delta-app", ["deploy"]);
+    await store.compose("delta-app", ["up", "-d"]);
+
+    expect(runtime.run.mock.calls.map(([, args]) => args.slice(0, 2).join(" "))).toEqual([
+      "stack deploy",
+      "compose --env-file",
+    ]);
+  });
+
+  it("deploys one app as itself, even one named like a whole-list verb", async () => {
+    const { store, runtime } = await withApps({ ready: ["gamma-app"] });
+
+    await mkdir(path.join(store.appsPath, "deploy"), { recursive: true });
+    await writeFile(path.join(store.appsPath, "deploy", "compose.yml"), "services: {}\n");
+    await writeFile(path.join(store.appsPath, "deploy", "compose.swarm.yml"), "services: {}\n");
+
+    await store.stackApp("deploy", ["rm"]);
+
+    // stack("deploy", ["rm"]) would have taken the whole swarm list down.
+    expect(stacks(runtime)).toEqual(["deploy"]);
+  });
+
+  it("leaves out of the swarm list an id that is no folder name, before reading anything", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+    const { store, runtime } = await withApps({ ready: ["gamma-app"] });
+
+    await writeFile(
+      path.join(store.storePath, "config", "hangar.yml"),
+      "categories: []\nswarm: [../outside, gamma-app]\n",
+    );
+
+    await store.config.load();
+    await store.stack("deploy", []);
+
+    expect(stacks(runtime)).toEqual(["gamma-app"]);
+    warn.mockRestore();
+  });
+
+  it("refuses an unknown name, an app without compose.swarm.yml, and an unknown verb", async () => {
     const { store, runtime } = await withApps({ ready: ["alpha-app"] });
 
+    await expect(store.stack("ghost-app", ["deploy"])).rejects.toThrow("Unknown app or category: ghost-app");
     await expect(store.stack("beta-app", ["deploy"])).rejects.toThrow("beta-app is not a swarm app");
     await expect(store.stack("alpha-app", ["scale"])).rejects.toThrow("Unknown swarm command: scale");
     expect(runtime.run).not.toHaveBeenCalled();

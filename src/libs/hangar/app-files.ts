@@ -1,5 +1,6 @@
-import { lstat, realpath } from "node:fs/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
+import { logger } from "#libs/logs";
 import { AppFileSyntax } from "./app-file-syntax.ts";
 import { EditableFile } from "./editable-file.ts";
 import { HangarError, NotFoundError } from "./hangar-error.ts";
@@ -36,6 +37,27 @@ export class AppFiles {
 
   /** What Swarm adds to {@link ComposeFile}; its presence says the app can run in the swarm */
   static readonly SwarmFile = "compose.swarm.yml";
+
+  /**
+   * Whether the app in `folder` can run in the swarm: its {@link SwarmFile} exists with something in it.
+   * A fresh empty one, as the editor creates it, does not count yet.
+   * @param folder The app's folder under `store/`
+   */
+  static async isSwarmReady(folder: string) {
+    const file = path.join(folder, AppFiles.SwarmFile);
+
+    const source = await readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
+      // Absent is the common answer; anything else (permissions, a folder in its place) is worth a line,
+      // or the app silently loses its swarm side.
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
+        logger.warn("Could not read a compose.swarm.yml: the app is taken as not swarm-ready", { error, file });
+      }
+
+      return "";
+    });
+
+    return source.trim() !== "";
+  }
 
   private readonly id: string;
 

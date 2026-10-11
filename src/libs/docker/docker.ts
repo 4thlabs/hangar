@@ -64,12 +64,16 @@ type SystemDiskUsage = {
 };
 
 /** The slice of `HangarStore` this layer needs: which Compose projects a caller may see. */
-export interface InstalledApps {
-  installedProjectIds(): Set<string>;
+export interface StoreApps {
+  /** The apps `hangar.yml` puts in a category: each gets a row, even with no container. */
+  declaredAppIds(): Set<string>;
+
+  /** Every app of the store: one gets a row while Docker has a compose project for it. */
+  appIds(): Set<string>;
 }
 
 /**
- * The Docker Engine API over the socket, scoped to the apps Hangar installed: an inspect costs
+ * The Docker Engine API over the socket, scoped to the apps of the store: an inspect costs
  * ~5 ms instead of a process spawn. Compose commands go through the CLI (`hangar.store`).
  *
  * No `server-only` guard: see AGENTS.md § server-only.
@@ -89,8 +93,8 @@ export class Docker {
 
   private readonly docker: Dockerode;
 
-  /** Read per call, so a freshly installed app shows up without a restart. */
-  private readonly apps: InstalledApps;
+  /** Read per call, so a freshly declared or started app shows up without a restart. */
+  private readonly apps: StoreApps;
 
   /**
    * Default {@link ttl}. The daemon's events keep the containers live (see {@link follow}); this is
@@ -115,11 +119,11 @@ export class Docker {
 
   /**
    * @param docker An Engine API client; injected so the composition root owns the connection
-   * @param apps The installed-app lookup, satisfied by `hangar.store`
+   * @param apps The store-app lookup, satisfied by `hangar.store`
    * @param cache Where the daemon's answers are kept; one per process
    * @param ttl How long the loaded containers and images are reused; injected so a test can drive it
    */
-  constructor(docker: Dockerode, apps: InstalledApps, cache: Cache, ttl = Docker.Ttl) {
+  constructor(docker: Dockerode, apps: StoreApps, cache: Cache, ttl = Docker.Ttl) {
     this.docker = docker;
     this.apps = apps;
     this.cache = cache;
@@ -143,23 +147,23 @@ export class Docker {
   }
 
   /**
-   * Every installed app, as summaries of its Docker state.
+   * Every declared or running app of the store, as summaries of its Docker state.
    * ponytail: every Compose container is inspected, then filtered; Docker ANDs repeated `label`
    * filters, so the only daemon-side narrowing is one list per project, which is worse.
    */
   projects(): Promise<ComposeProjectsSnapshot> {
     return map(this.containers(), sources => ({
-      projects: new ComposeProjects(sources).summaries(this.apps.installedProjectIds()),
+      projects: new ComposeProjects(sources).summaries(this.apps.declaredAppIds(), this.apps.appIds()),
     }));
   }
 
   /**
-   * Every container of an installed app, with the registry digests of the image it runs. Derived
+   * Every container of a store app, with the registry digests of the image it runs. Derived
    * from the same containers as {@link projects}, so the update badge moves with them.
    */
   runningImages(): Promise<RunningImage[]> {
     return map(all([this.containers(), this.images()]), ([sources, digests]) => {
-      const installed = this.apps.installedProjectIds();
+      const known = this.apps.appIds();
 
       // By the image id the container runs, never by its reference: `compose pull` moves the tag
       // and leaves the containers on the image they were created with, so resolving the tag would
@@ -170,11 +174,11 @@ export class Docker {
           image: info.Image,
           digests: digests.get(info.ImageID) ?? [],
         }))
-        .filter(running => installed.has(running.project));
+        .filter(running => known.has(running.project));
     });
   }
 
-  /** Host-wide counts for the whole engine, not just the installed apps, as Arcane reports a remote one. */
+  /** Host-wide counts for the whole engine, not just the apps of the store, as Arcane reports a remote one. */
   overview(): Promise<DockerOverview> {
     return this.cache.get(Docker.key("overview"), Docker.OverviewPolicy, this.loadOverview);
   }
@@ -240,7 +244,7 @@ export class Docker {
 
   /**
    * Asks the registry, through the daemon so its credentials apply, what it serves for each
-   * reference the installed apps run. Skips local builds and pinned references; an unanswered
+   * reference the store apps run. Skips local builds and pinned references; an unanswered
    * reference is left out, which {@link Docker.outdated} reads as "don't know".
    */
   async remoteDigests(gap = Docker.RegistryGapMs): Promise<RemoteDigests> {
@@ -274,7 +278,7 @@ export class Docker {
   }
 
   /**
-   * Asks the registry about every installed image, then compares its answers with what runs now.
+   * Asks the registry about every image a store app runs, then compares its answers with what runs now.
    * @param gap Pause between two registry calls, from the store's `registryThrottling`
    */
   async checkUpdates(gap = Docker.RegistryGapMs): Promise<UpdateCheck> {
@@ -360,16 +364,14 @@ export class Docker {
   };
 
   /**
-   * Fetches the topology (services, containers, ports) of one installed app. No resource usage:
+   * Fetches the topology (services, containers, ports) of one store app. No resource usage:
    * that is sampled separately and arrives over the stats stream.
-   * An installed app with no container yet resolves to a stopped project with no service.
+   * A store app with no container yet resolves to a stopped project with no service.
    * @param project The Compose project name
-   * @returns Rejects with a {@link DockerNotFoundError} if the project is not an installed app
+   * @returns Rejects with a {@link DockerNotFoundError} if the project is no app of the store
    */
   projectDetail(project: string): Promise<ComposeProjectDetail> {
-    return map(this.containers(), sources =>
-      new ComposeProjects(sources, project).detail(project, this.apps.installedProjectIds()),
-    );
+    return map(this.containers(), sources => new ComposeProjects(sources, project).detail(project, this.apps.appIds()));
   }
 
   /**

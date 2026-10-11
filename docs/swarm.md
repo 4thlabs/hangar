@@ -81,10 +81,10 @@ filter: **Origine** (the stacks of your store apps, or the others), **Nœud** an
 live in the URL, so a filtered view can be bookmarked.
 
 Clicking a stack opens its tasks, node by node, with the past attempts and the error Docker gives for
-each failed one. A stack named after an installed store app that has a `compose.swarm.yml` carries a
+each failed one. A stack named after a store app that has a `compose.swarm.yml` carries a
 **Hangar** badge, and its sheet adds **Mettre à jour** (`docker stack deploy` again, which resolves the
 images anew and rolls the services that changed) and **Supprimer** (`docker stack rm`). Removing the stack keeps the app
-installed and its volumes on disk.
+in the store and its volumes on disk.
 
 The page reloads every 10 seconds: Docker emits no event when a task starts or stops.
 
@@ -93,7 +93,8 @@ The page reloads every 10 seconds: Docker emits no event when a task starts or s
 ### `compose.swarm.yml`
 
 An app runs in the swarm when its folder has a non-empty `compose.swarm.yml` next to its `compose.yml`.
-Nothing in `hangar.yml` marks it. The file only holds what Swarm adds or changes: Swarm merges it over
+Listing it under [`swarm:`](store.md#swarm) in `hangar.yml` makes `swarm deploy` take it. The file only
+holds what Swarm adds or changes: Swarm merges it over
 `compose.yml` itself, so the image, environment and volumes are written once.
 
 ```bash
@@ -223,14 +224,15 @@ directory corrupt it: give the Swarm copy its own volume, or run only one at a t
 Three ways, all naming the stack after the app id:
 
 - **From the store.** The card of an app with a `compose.swarm.yml` shows a **Swarm** badge and a
-  **Déployer sur le swarm** button. It installs the app if needed (link, `.env.global` variables), then
-  runs `docker stack deploy`. Its compose project, if any, is left as it is.
-- **From the CLI**, against a manager: `node bin/cli.js swarm miniflux deploy`, or `swarm deploy` for every
-  app that has a `compose.swarm.yml`, in category order. See [the CLI](cli.md#swarm-target-verb-args).
+  **Déployer sur le swarm** button. It adds the app's variables to `.env.global`, asks you to confirm
+  (naming any still empty), then runs `docker stack deploy`. Its compose project, if any, is left as it
+  is.
+- **From the CLI**, against a manager: `node bin/cli.js swarm miniflux deploy`, or `swarm deploy` for the
+  `swarm:` list of `hangar.yml`, in its order. See [the CLI](cli.md#swarm-target-verb-args).
 - **By hand**, with `docker stack deploy` and the commands above.
 
-The stack then shows on the Cluster page. Uninstalling the app from the store takes down both its
-compose project and its stack.
+The stack then shows on the Cluster page, where it is removed too: the store page starts and deploys,
+and never takes anything down.
 
 ## Not covered yet
 

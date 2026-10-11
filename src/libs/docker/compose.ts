@@ -30,7 +30,7 @@ export type ComposeProjectSummary = {
 /** Response body for the "list all projects" endpoint. */
 export type ComposeProjectsSnapshot = { projects: ComposeProjectSummary[] };
 
-/** One container of an installed app, and the registry digests of the image it runs. */
+/** One container of a store app, and the registry digests of the image it runs. */
 export type RunningImage = {
   project: string;
   /** The reference as Compose runs it, e.g. `nginx:alpine`. */
@@ -223,23 +223,26 @@ export class ComposeProjects {
   }
 
   /**
-   * One summary per installed project, sorted by name. Only apps Hangar installed are kept, and
-   * every installed app gets a row even when it has no container yet (never started, or removed
-   * by `compose down`).
-   * @param installed Project names Hangar installed and can run compose commands against
+   * One summary per project, sorted by name. A declared app gets a row even when it has no container
+   * (never started, or removed by `compose down`); any other app of the store only while Docker has
+   * containers for it. A project that is no app of the store is left out.
+   * @param declared The apps of the categories, always listed
+   * @param known Every app of the store, listed while it has containers
    */
-  summaries(installed: ReadonlySet<string>): ComposeProjectSummary[] {
-    const projects = new Map<string, Aggregate>(
-      [...installed].map(name => [name, { services: new Set(), containerIds: [], runningCount: 0, unhealthyCount: 0 }]),
-    );
+  summaries(declared: ReadonlySet<string>, known: ReadonlySet<string>): ComposeProjectSummary[] {
+    const projects = new Map<string, Aggregate>([...declared].map(name => [name, ComposeProjects.emptyAggregate()]));
 
     for (const container of this.containers) {
       const labels = container.info.Labels;
-      const aggregate = projects.get(labels[ComposeProjects.Label.project] ?? "");
+      const project = labels[ComposeProjects.Label.project] ?? "";
 
-      if (!aggregate) {
+      if (!known.has(project) && !declared.has(project)) {
         continue;
       }
+
+      const aggregate = projects.get(project) ?? ComposeProjects.emptyAggregate();
+
+      projects.set(project, aggregate);
 
       aggregate.services.add(labels[ComposeProjects.Label.service] ?? "");
       aggregate.containerIds.push(container.info.Id);
@@ -287,16 +290,21 @@ export class ComposeProjects {
       .sort((left, right) => ComposeProjects.compare(left.name, right.name));
   }
 
+  /** An aggregate for a project with no container counted yet. */
+  private static emptyAggregate(): Aggregate {
+    return { services: new Set(), containerIds: [], runningCount: 0, unhealthyCount: 0 };
+  }
+
   /**
    * The full topology of one project: its summary plus its services.
-   * An installed app with no container yet resolves to a stopped project with no service.
+   * An app of the store with no container yet resolves to a stopped project with no service.
    * @param project The Compose project name
-   * @param installed Project names Hangar installed and can run compose commands against
-   * @throws {DockerNotFoundError} if the project is not an installed app
+   * @param known Every app of the store, which Hangar can run compose commands against
+   * @throws {DockerNotFoundError} if the project is no app of the store
    */
-  detail(project: string, installed: ReadonlySet<string>): ComposeProjectDetail {
-    // One name in, one summary out: an app Hangar didn't install yields none, and reads as not found.
-    const [summary] = this.summaries(new Set(installed.has(project) ? [project] : []));
+  detail(project: string, known: ReadonlySet<string>): ComposeProjectDetail {
+    // One name in, one summary out: a project that is no store app yields none, and reads as not found.
+    const [summary] = this.summaries(new Set(known.has(project) ? [project] : []), known);
 
     if (!summary) {
       throw new DockerNotFoundError(`Compose project ${project}`);

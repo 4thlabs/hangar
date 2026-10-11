@@ -20,8 +20,8 @@ The CLI is not shipped in the container image.
 ### `store install`
 
 Clones the store into `<data>/app-store`, or pulls it with `--ff-only` when it is already there.
-Then links every app `hangar.yml` lists, plus the shared files, and adds the variables they
-reference to `.env.global`.
+Then adds the variables the apps `hangar.yml` declares reference, and those of the fragments next to
+them, to `.env.global`. Nothing else is written: any app of the store can be run by name.
 
 ```bash
 node bin/cli.js store install
@@ -29,8 +29,8 @@ node bin/cli.js store install
 
 ### `store up [args...]`
 
-Brings every listed stack up, detached, in the order `hangar.yml` lists them. Extra arguments are
-passed to `docker compose up`.
+Brings every listed stack up, detached, in the order `hangar.yml` lists them, except the
+`run: false` ones. Extra arguments are passed to `docker compose up`.
 
 ```bash
 node bin/cli.js store up --pull always
@@ -38,7 +38,8 @@ node bin/cli.js store up --pull always
 
 ### `store down [args...]`
 
-Takes every listed stack down, in reverse order.
+Takes every listed stack down, in reverse order, `run: false` included: an app started by hand
+does not survive a `store down` before host maintenance.
 
 ### `store ls [args...]`
 
@@ -49,8 +50,8 @@ Runs `docker compose ls`: the Compose projects running on the host.
 Runs any `docker compose` command against a target, which is one of:
 
 - **a stack**, by its app id: `jellyfin`;
-- **a category** from `hangar.yml`, covering its stacks: `Media`;
-- **`pull`**, covering every listed stack (as do `up` and `down` above).
+- **a category** from `hangar.yml`, covering its stacks, `run: false` included: `Media`;
+- **`pull`**, covering the same stacks as `store up`.
 
 ```bash
 node bin/cli.js store jellyfin logs -f
@@ -60,7 +61,8 @@ node bin/cli.js store pull
 
 On several stacks, `up` and `start` follow the category order, `down` and `stop` reverse it and
 stop at the first failure; every other command runs on all stacks in parallel and reports the
-first failure at the end. A non-detached `up` is only allowed on a single stack.
+first failure at the end. A non-detached `up` is only allowed on a single stack. A name that is
+neither a category nor an app of the store fails with `Unknown app or category`.
 
 Each call is `docker compose --env-file <data>/.env.global -p <stack> -f <compose.yml> …`, so the
 project is always named after the stack, as the web app expects.
@@ -80,15 +82,18 @@ The Swarm counterpart of `store`, for the apps that ship a `compose.swarm.yml` (
 
 The target is one of:
 
-- **an app**, by its id: any installed app with a `compose.swarm.yml`;
-- **a category**, covering its apps that have one;
-- **`deploy`** or **`rm`** alone, covering the apps of every category that have one, as `store up`
-  covers the apps of every category.
+- **an app**, by its id: any app of the store with a `compose.swarm.yml`, listed in `hangar.yml` or
+  not: the file only drives the commands over lists;
+- **`deploy`** or **`rm`** alone, covering the [`swarm:` list](store.md#swarm) of `hangar.yml`, in its
+  order for `deploy` and backwards for `rm`. A listed app without a `compose.swarm.yml` is skipped
+  with a warning.
+
+Categories group the compose apps: `swarm Media deploy` is refused.
 
 ```bash
-node bin/cli.js swarm deploy            # every app with a compose.swarm.yml, in category order
+node bin/cli.js swarm deploy            # the swarm: list, in its order
 node bin/cli.js swarm miniflux deploy   # one app; extra args go to docker stack deploy
-node bin/cli.js swarm Media rm          # a category, in reverse order
+node bin/cli.js swarm rm                # the swarm: list, backwards
 node bin/cli.js swarm miniflux ps
 ```
 

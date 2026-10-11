@@ -5,7 +5,7 @@ import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { notifications } from "#libs/notifications/server";
 import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
-import { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
+import { StoreActionResult } from "#modules/settings/actions/store-action-result.ts";
 
 export const manageStore = async (): Promise<StoreActionResult> => {
   const { user } = await sessions.require();

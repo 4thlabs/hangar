@@ -4,9 +4,7 @@ import { sessions } from "#libs/auth/server";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { ActionFailure } from "#modules/common/actions/action-failure.ts";
-import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
-import { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
-import { AppStacks } from "#modules/store/app-stacks.ts";
+import { ActionResult, type ReadResult } from "#modules/common/actions/action-result.ts";
 
 const UNKNOWN_APP = "Cette application n’existe pas dans le store.";
 
@@ -23,97 +21,70 @@ async function findApp(appId: string, rejected: string) {
   return app;
 }
 
-export const installApp = async (appId: string): Promise<StoreActionResult> => {
-  const app = await findApp(appId, "App installation rejected: unknown app");
+/**
+ * Seeds the app's variables in `.env.global`, then names those still empty, for the confirmation before
+ * "Démarrer" or "Déployer sur le swarm": seeding writes empty values, and an app would start with them.
+ */
+export const unfilledVariables = async (appId: string): Promise<ReadResult<string[]>> => {
+  const app = await findApp(appId, "Variable check rejected: unknown app");
 
   if (!app) {
-    return StoreActionResult.failure(UNKNOWN_APP);
-  }
-
-  if (app.installed) {
-    return StoreActionResult.success(`${app.name} est déjà installée.`);
+    return { success: false, message: UNKNOWN_APP };
   }
 
   try {
-    await hangar.store.link(app.id);
-    await hangar.store.refresh();
-    // Only this app's files: the variables it needs must show up in settings without a store update.
-    await hangar.store.env.ensure(app.id);
-
-    const installed = hangar.store.app(app.id)?.installed ?? false;
-
-    return installed
-      ? StoreActionResult.success(`${app.name} a été installée.`)
-      : StoreActionResult.failure(`L’installation de ${app.name} n’a pas pu être confirmée.`);
+    return { success: true, value: await hangar.store.env.unfilled(app.id) };
   } catch (error) {
-    logger.error("App installation failed", { error, appId: app.id });
+    const { message } = ActionFailure.from(
+      error,
+      "Variable check failed",
+      `La lecture des variables de ${app.name} a échoué.`,
+      { appId: app.id },
+    );
 
-    return StoreActionResult.failure(`L’installation de ${app.name} a échoué. ${SERVER_LOG_HINT}`);
+    return { success: false, message };
   }
 };
 
-export const uninstallApp = async (appId: string): Promise<StoreActionResult> => {
-  const app = await findApp(appId, "App uninstallation rejected: unknown app");
+/** Starts an app with compose, `docker compose up -d`; its swarm stack, if any, is left alone. */
+export const startApp = async (appId: string): Promise<ActionResult> => {
+  const app = await findApp(appId, "App start rejected: unknown app");
 
   if (!app) {
-    return StoreActionResult.failure(UNKNOWN_APP);
-  }
-
-  if (!app.installed) {
-    return StoreActionResult.success(`${app.name} n’est pas installée.`, false);
+    return ActionResult.failure(UNKNOWN_APP);
   }
 
   try {
-    // Down before unlinking: once the symlink is gone the compose files are unreachable and whatever
-    // runs becomes an orphan Hangar can no longer manage.
-    await hangar.store.compose(app.id, ["down"]);
+    await hangar.store.env.ensure(app.id);
+    await hangar.store.composeApp(app.id, ["up", "-d"], { capture: true });
 
-    // An app may run in the swarm too: its stack goes with it, when this node can remove it.
-    const stackLeftover = (await AppStacks.exists(app.id)) ? await hangar.store.removeStackIfPossible(app.id) : null;
-
-    await hangar.store.unlink(app.id);
-    await hangar.store.refresh();
-
-    const installed = hangar.store.app(app.id)?.installed ?? false;
-
-    const leftoverNote = stackLeftover
-      ? ` Sa stack n’a pas pu être supprimée (${stackLeftover}) : supprimez-la depuis un manager.`
-      : "";
-
-    return installed
-      ? StoreActionResult.failure(`La désinstallation de ${app.name} n’a pas pu être confirmée.`, true)
-      : StoreActionResult.success(`${app.name} a été désinstallée.${leftoverNote}`, false);
+    return ActionResult.success(`${app.name} a été démarrée.`);
   } catch (error) {
-    logger.error("App uninstallation failed", { error, appId: app.id });
-
-    return StoreActionResult.failure(`La désinstallation de ${app.name} a échoué. ${SERVER_LOG_HINT}`, true);
+    // Docker's own complaint (a bad file, a port taken) is shown as is: it says what to fix.
+    return ActionFailure.from(error, "App start failed", `Le démarrage de ${app.name} a échoué.`, { appId: app.id });
   }
 };
 
 /** Deploys an app's stack to the swarm, its compose project left alone; see `HangarStore.deployToSwarm`. */
-export const deployToSwarm = async (appId: string): Promise<StoreActionResult> => {
+export const deployToSwarm = async (appId: string): Promise<ActionResult> => {
   const app = await findApp(appId, "Swarm deployment rejected: unknown app");
 
   if (!app) {
-    return StoreActionResult.failure(UNKNOWN_APP);
+    return ActionResult.failure(UNKNOWN_APP);
   }
 
   if (!app.swarmReady) {
-    return StoreActionResult.failure(
-      `${app.name} n’a pas de compose.swarm.yml : elle ne peut pas tourner dans le swarm.`,
-    );
+    return ActionResult.failure(`${app.name} n’a pas de compose.swarm.yml : elle ne peut pas tourner dans le swarm.`);
   }
 
   try {
     await hangar.store.deployToSwarm(app.id, { capture: true });
 
-    return StoreActionResult.success(`${app.name} est déployée sur le swarm.`);
+    return ActionResult.success(`${app.name} est déployée sur le swarm.`);
   } catch (error) {
     // Docker's own complaint (not a manager, a bad file) is shown as is: it says what to fix.
-    const failure = ActionFailure.from(error, "Swarm deployment failed", `Le déploiement de ${app.name} a échoué.`, {
+    return ActionFailure.from(error, "Swarm deployment failed", `Le déploiement de ${app.name} a échoué.`, {
       appId: app.id,
     });
-
-    return { ...failure, installed: true };
   }
 };

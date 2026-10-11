@@ -29,7 +29,6 @@ describe("saveAppFile", () => {
   beforeAll(async () => {
     await mkdir(path.join(hangar.store.storePath, ".git"), { recursive: true });
     await mkdir(folder(), { recursive: true });
-    await mkdir(hangar.store.installedPath, { recursive: true });
     await symlink("compose.yml", path.join(folder(), "alias.yml"));
   });
 

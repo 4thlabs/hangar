@@ -114,7 +114,7 @@ export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
             <StatCard title="Services" value={totals.services} icon={LayersIcon} />
             <StatCard title="Conteneurs actifs" value={totals.running} icon={PlayIcon} />
             <StatCard title="Conteneurs arrêtés" value={totals.stopped} icon={SquareIcon} />
-            {/* Every installed app's containers at once: the stats stream covers the whole host, so
+            {/* Every listed app's containers at once: the stats stream covers the whole host, so
                 the ids are what scopes the totals to Hangar's apps. */}
             <LiveTotals containerIds={projects.flatMap(project => project.containerIds)} />
           </div>

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   compose: vi.fn(),
-  apps: new Set<{ id: string; installed: boolean }>(),
+  apps: new Set<{ id: string }>(),
   notify: vi.fn(),
   logger: { warn: vi.fn(), error: vi.fn() },
 }));
@@ -15,7 +15,7 @@ vi.mock("#libs/auth/server", () => ({ sessions: { get: mocks.getSession } }));
 vi.mock("#libs/hangar/server", () => ({
   hangar: {
     store: {
-      compose: mocks.compose,
+      composeApp: mocks.compose,
       app: (id: string) => [...mocks.apps].find(app => app.id === id),
     },
   },
@@ -32,8 +32,8 @@ describe("POST Docker Compose stream", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.apps.clear();
-    mocks.apps.add({ id: "alpha", installed: true });
-    mocks.apps.add({ id: "beta", installed: true });
+    mocks.apps.add({ id: "alpha" });
+    mocks.apps.add({ id: "beta" });
     mocks.getSession.mockResolvedValue({ user: { id: "1" } });
     mocks.compose.mockResolvedValue(undefined);
     mocks.notify.mockResolvedValue(undefined);

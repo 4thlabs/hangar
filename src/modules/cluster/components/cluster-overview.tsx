@@ -26,7 +26,7 @@ import { Button } from "#modules/common/ui/button.tsx";
 type ClusterOverviewProps = { search: ClusterSearchState } & (
   | {
       cluster: SwarmCluster;
-      /** The stacks named after an installed store app with a compose.swarm.yml: Hangar can redeploy them. */
+      /** The stacks named after a store app with a compose.swarm.yml: Hangar can redeploy them. */
       manageableStacks: string[];
     }
   | { error: string }

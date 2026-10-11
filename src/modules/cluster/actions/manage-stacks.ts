@@ -32,7 +32,7 @@ export const redeployStack = async (name: string): Promise<ActionResult> => {
   }
 
   try {
-    await hangar.store.stack(name, ["deploy", "--quiet"], { capture: true });
+    await hangar.store.stackApp(name, ["deploy", "--quiet"], { capture: true });
 
     return ActionResult.success(`${name} a été redéployée.`);
   } catch (error) {
@@ -40,7 +40,7 @@ export const redeployStack = async (name: string): Promise<ActionResult> => {
   }
 };
 
-/** Removes a stack from the swarm. The app stays installed, and its compose project, if any, untouched. */
+/** Removes a stack from the swarm. The app stays in the store, and its compose project, if any, untouched. */
 export const removeStack = async (name: string): Promise<ActionResult> => {
   await sessions.require();
 
@@ -49,7 +49,7 @@ export const removeStack = async (name: string): Promise<ActionResult> => {
   }
 
   try {
-    await hangar.store.stack(name, ["rm"], { capture: true });
+    await hangar.store.stackApp(name, ["rm"], { capture: true });
 
     return ActionResult.success(`${name} a été retirée du swarm.`);
   } catch (error) {

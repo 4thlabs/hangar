@@ -8,7 +8,7 @@ type AppsCategoryFilterProps = {
   counts: Partial<Record<string, number>>;
 };
 
-/** Lists categories from the installed apps, not `hangar.yml`, so no option filters to nothing. */
+/** Lists categories from the apps on the page, not `hangar.yml`, so no option filters to nothing. */
 export function AppsCategoryFilter({ counts }: AppsCategoryFilterProps) {
   const search = useSearch_UNSTABLE({ from: "/apps" });
   const setSearch = useSetSearch_UNSTABLE({ from: "/apps" });

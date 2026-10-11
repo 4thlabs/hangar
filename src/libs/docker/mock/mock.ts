@@ -1,7 +1,7 @@
 import type Dockerode from "dockerode";
 import { vi } from "vitest";
 import type { ComposeContainerSource } from "../compose.ts";
-import type { InstalledApps } from "../docker.ts";
+import type { StoreApps } from "../docker.ts";
 
 /**
  * The Engine API calls the {@link Docker} class makes, as vitest mocks. A test builds a client
@@ -63,9 +63,10 @@ export const fakeDockerode = () =>
     modem: { demuxStream: dockerMock.demuxStream },
   }) as unknown as Dockerode;
 
-/** An installed-app lookup over the given project names. */
-export const fakeApps = (...projects: string[]): InstalledApps => ({
-  installedProjectIds: () => new Set(projects),
+/** A store-app lookup over the given project names, each declared in a category. */
+export const fakeApps = (...projects: string[]): StoreApps => ({
+  declaredAppIds: () => new Set(projects),
+  appIds: () => new Set(projects),
 });
 
 type Overrides = {

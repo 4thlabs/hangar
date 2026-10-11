@@ -2,28 +2,20 @@ import { describe, expect, it } from "vitest";
 import { storeSearchCodec } from "#modules/store/search-codec.ts";
 
 describe("storeSearchCodec", () => {
-  it("defaults to an empty query and no filter", () => {
-    expect(storeSearchCodec.parse("")).toEqual({ q: "", filter: [] });
+  it("defaults to an empty query", () => {
+    expect(storeSearchCodec.parse("")).toEqual({ q: "" });
   });
 
-  it("parses both params", () => {
-    expect(storeSearchCodec.parse("q=jelly&filter=installed")).toEqual({ q: "jelly", filter: ["installed"] });
+  it("parses the query, and drops the installed filter it no longer has", () => {
+    expect(storeSearchCodec.parse("q=jelly&filter=installed")).toEqual({ q: "jelly" });
   });
 
-  it("drops an unknown filter instead of rejecting it", () => {
-    expect(storeSearchCodec.parse("filter=nope").filter).toEqual([]);
-  });
-
-  it("keeps both filters, deduped and in a stable order", () => {
-    expect(storeSearchCodec.parse("filter=available,installed,available").filter).toEqual(["installed", "available"]);
-  });
-
-  it("omits empty values from the serialized query", () => {
-    expect(storeSearchCodec.serialize({ q: "", filter: [] })).toBe("");
+  it("omits an empty query from the serialized params", () => {
+    expect(storeSearchCodec.serialize({ q: "" })).toBe("");
   });
 
   it("round-trips", () => {
-    const query = "q=home+assistant&filter=available";
+    const query = "q=home+assistant";
 
     expect(storeSearchCodec.serialize(storeSearchCodec.parse(query))).toBe(query);
   });

@@ -14,8 +14,8 @@ export const createHangar = () => {
 
     hangar.runtime.signals();
 
-    // The CLI has no boot step: load the categories `store up` needs.
-    await hangar.store.config.load();
+    // The CLI has no boot step: load the categories `store up` needs, and say what is wrong with them.
+    await hangar.store.loadConfig();
 
     return hangar;
   })();

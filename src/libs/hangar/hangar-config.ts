@@ -5,23 +5,41 @@ import { logger } from "#libs/logs";
 import { defaultWidgets, widgetConfigSchema, type WidgetConfig } from "#modules/widgets/config/widgets.ts";
 import { HangarError } from "./hangar-error.ts";
 
-/** A Stack category */
+/** A `stacks` entry in its long form: the app, and what the CLI and the nightly job do with it */
+const stackEntryObjectSchema = z.strictObject({
+  id: z.string().min(1),
+  /** Whether `store up` starts it with the others */
+  run: z.boolean().default(true),
+  /** Whether the nightly job updates it */
+  update: z.boolean().default(true),
+});
+
+/** A `stacks` entry: an app id, short for `{ id }` with every default, or the long form. */
+const stackEntrySchema = z.preprocess(
+  entry => (typeof entry === "string" ? { id: entry } : entry),
+  stackEntryObjectSchema,
+);
+
+/** A Stack category: how the Apps page groups the compose apps, and the order `store up` starts them in */
 const categorySchema = z.object({
   name: z.string().min(1),
   color: z.string().min(1),
-  stacks: z.array(z.string().min(1)),
+  stacks: z.array(stackEntrySchema),
 });
 
 const configSchema = z.object({
   categories: z.array(categorySchema),
-  /** Files the store ships next to its stacks and every stack may reference (networks, common env) */
-  shared: z.array(z.string().min(1)).default([]),
+  /** The apps `swarm deploy` runs in the swarm, in deploy order; independent of the categories */
+  swarm: z.array(z.string().min(1)).default([]),
+  /** No longer read: an app is a folder holding a compose file, so a shared fragment needs no listing */
+  shared: z.array(z.string().min(1)).optional(),
   /** The dashboard: which widgets are shown, in which column */
   widgets: z.array(widgetConfigSchema).default([...defaultWidgets]),
   /** Pause between two registry calls in the image update check, in ms: Hub and ghcr rate-limit a burst */
   registryThrottling: z.int().nonnegative().default(100),
 });
 
+export type StackEntry = z.infer<typeof stackEntryObjectSchema>;
 export type Category = z.infer<typeof categorySchema>;
 export type Config = z.infer<typeof configSchema>;
 
@@ -36,8 +54,11 @@ export class HangarConfig {
   /** The categories for the various stacks */
   private _categories: Category[] = [];
 
-  /** The files shared by every stack, linked next to them at install */
-  private _shared: string[] = [];
+  /** The apps `swarm deploy` runs in the swarm, in deploy order */
+  private _swarm: string[] = [];
+
+  /** Whether the file still lists `shared:` files, which are no longer read */
+  private _listsShared = false;
 
   /** The widgets the dashboard shows, in declaration order */
   private _widgets: WidgetConfig[] = [...defaultWidgets];
@@ -48,14 +69,40 @@ export class HangarConfig {
   /** Returns the categories */
   public categories = () => this._categories;
 
-  /** Returns the shared files */
-  public shared = () => this._shared;
+  /** Returns the apps `swarm deploy` runs, in deploy order */
+  public swarm = () => this._swarm;
+
+  /** Whether the file still lists `shared:` files, which are no longer read */
+  public listsShared = () => this._listsShared;
 
   /** Returns the dashboard widgets */
   public widgets = () => this._widgets;
 
   /** Returns the pause between two registry calls, in ms */
   public registryThrottling = () => this._registryThrottling;
+
+  /**
+   * The entries of every category, or of one, in start order. An app declared twice keeps its first
+   * entry, as the Apps page files it under its first category.
+   * @param category The category to cover, every one when absent
+   */
+  entries(category?: string): StackEntry[] {
+    const covered = this._categories.filter(candidate => category === undefined || candidate.name === category);
+    const firstEntries = new Map<string, StackEntry>();
+
+    for (const entry of covered.flatMap(candidate => candidate.stacks)) {
+      if (!firstEntries.has(entry.id)) {
+        firstEntries.set(entry.id, entry);
+      }
+    }
+
+    return [...firstEntries.values()];
+  }
+
+  /** The first entry declaring the app, `undefined` when no category lists it. */
+  entry(id: string): StackEntry | undefined {
+    return this.entries().find(entry => entry.id === id);
+  }
 
   /**
    * Does not read the file: call `load()` once the store is on disk.
@@ -113,11 +160,11 @@ export class HangarConfig {
   }
 
   /**
-   * Parses and validates a configuration.
+   * Parses and validates a configuration, without applying it.
    * hangar.yml is user-authored: validate here, or a missing `categories`
-   * surfaces much later as a crash inside HangarStore.resolve().
+   * surfaces much later as a crash inside HangarStore.
    */
-  private parse(source: string): Config {
+  parse(source: string): Config {
     let yaml: unknown;
 
     try {
@@ -137,7 +184,8 @@ export class HangarConfig {
 
   private apply(config: Config) {
     this._categories = config.categories;
-    this._shared = config.shared;
+    this._swarm = config.swarm;
+    this._listsShared = config.shared !== undefined;
     this._widgets = config.widgets;
     this._registryThrottling = config.registryThrottling;
   }

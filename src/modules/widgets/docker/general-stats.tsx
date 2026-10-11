@@ -21,7 +21,7 @@ const { appearance } = dockerGeneralStatsDescriptor;
 
 type DockerGeneralStatsCardProps = {
   overview: DockerOverview;
-  /** Installed apps the last image check found behind their registry. */
+  /** Store apps the last image check found behind their registry. */
   outdated: string[];
 };
 

@@ -1,39 +1,30 @@
 "use client";
 
 import { NetworkIcon } from "lucide-react";
-import { useState } from "react";
-import { useRouter } from "waku";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 import { deployToSwarm } from "#modules/store/actions/store-apps.ts";
+import { useUnfilledVariables } from "#modules/store/hooks/use-unfilled-variables.ts";
+import { UnfilledNote } from "#modules/store/unfilled-note.ts";
 
 type SwarmDeployButtonProps = {
   appId: string;
   appName: string;
-  /** Whether it runs with compose now, whose containers the deploy takes down first. */
-  installed: boolean;
 };
 
-/** "Déployer sur le swarm", next to the install button of an app that ships a compose.swarm.yml. */
-export function SwarmDeployButton({ appId, appName, installed }: SwarmDeployButtonProps) {
-  const router = useRouter();
+/** "Déployer sur le swarm", beside "Démarrer" on an app that ships a compose.swarm.yml, and independent of it. */
+export function SwarmDeployButton({ appId, appName }: SwarmDeployButtonProps) {
   const { run, isPending } = useServerAction();
-  const [confirming, setConfirming] = useState(false);
-
-  const composeNote = installed
-    ? " Ses conteneurs compose, s’ils tournent, ne sont pas touchés : avec les mêmes volumes, attention aux deux copies."
-    : "";
+  const { check, isChecking, unfilled, confirm, dismiss } = useUnfilledVariables(appId);
 
   function deploy() {
-    setConfirming(false);
-    run(
-      () => deployToSwarm(appId),
-      { success: "Déployée sur le swarm", error: "Échec du déploiement" },
-      () => router.reload(),
-    );
+    dismiss();
+    run(() => deployToSwarm(appId), { success: "Déployée sur le swarm", error: "Échec du déploiement" });
   }
+
+  const isBusy = isPending || isChecking;
 
   return (
     <>
@@ -42,20 +33,20 @@ export function SwarmDeployButton({ appId, appName, installed }: SwarmDeployButt
         size="icon-xs"
         variant="outline"
         className="absolute top-1.5 right-8"
-        disabled={isPending}
-        onClick={() => setConfirming(true)}
+        disabled={isBusy}
+        onClick={() => check(confirm)}
         aria-label={`Déployer ${appName} sur le swarm`}
         title="Déployer sur le swarm"
       >
-        {isPending ? <Spinner /> : <NetworkIcon />}
+        {isBusy ? <Spinner /> : <NetworkIcon />}
       </Button>
       <ConfirmDialog
-        open={confirming}
+        open={unfilled !== null}
         title={`Déployer ${appName} sur le swarm ?`}
-        description={`Elle est déployée avec compose.yml et compose.swarm.yml, et apparaîtra sur la page Cluster.${composeNote}`}
+        description={`Elle est déployée avec compose.yml et compose.swarm.yml, et apparaîtra sur la page Cluster. Ses conteneurs compose, s’ils tournent, ne sont pas touchés : avec les mêmes volumes, attention aux deux copies.${UnfilledNote.describe(unfilled ?? [])}`}
         confirmLabel="Déployer"
         onConfirm={deploy}
-        onCancel={() => setConfirming(false)}
+        onCancel={dismiss}
       />
     </>
   );

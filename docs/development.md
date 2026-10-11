@@ -13,7 +13,7 @@ npm run dev
 ```
 
 The app is served at <http://localhost:3010>. With the example `.env`, everything Hangar writes —
-the store clone, the installed links, `.env.global` and the database — goes to `./.data`, which
+the store clone, `.env.global` and the database — goes to `./.data`, which
 is git-ignored.
 
 ## Scripts
@@ -55,7 +55,8 @@ src/
 
 - **`libs`** hold the logic as classes that take their dependencies through their constructor,
   so a test can pass an in-memory database instead of mocking a module. `HangarStore` owns the
-  store clone, the links and the compose calls; `HangarConfig` reads `hangar.yml`; `HangarEnv`
+  store clone and the compose and stack calls; `HangarConfig` reads `hangar.yml`, which `ConfigCheck`
+  checks against the store; `HangarEnv`
   manages `.env.global`; `Docker` wraps the daemon and caches its answers, refreshed by its events.
   Slow reads go through the one `Cache` (`#libs/cache`, see [ADR 0001](adr/0001-cache.md)).
 - **`modules`** hold each page's server actions, components and hooks. The pages in `src/app` only

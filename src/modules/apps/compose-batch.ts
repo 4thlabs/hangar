@@ -49,7 +49,7 @@ async function runOne(operation: AppOperation, project: string, userId: string, 
   // always, since a run that fails half-way still leaves containers it started.
   try {
     await hangar.store
-      .compose(project, [...appOperationArguments[operation]], { pipe: output })
+      .composeApp(project, [...appOperationArguments[operation]], { pipe: output })
       .finally(() => docker.settle());
   } catch (error) {
     logger.error("Docker Compose stream command failed", { error, project, operation });

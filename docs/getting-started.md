@@ -85,25 +85,42 @@ Everything Hangar keeps sits under `HANGAR_DATA_DIR`:
 ├── app-store/                  # the clone of your store
 │   ├── config/hangar.yml
 │   └── store/<app>/compose.yml
-├── app-installed/              # one symlink per installed app, plus the shared files
-│   └── <app> -> ../app-store/store/<app>
 └── app-data/                   # APP_DATA_DIR: where stacks keep their volumes
     └── hangar/hangar.db        # Hangar's own database (users, notifications, jobs)
 ```
 
-Installing an app is creating its symlink in `app-installed/`; uninstalling stops the stack, then
-removes the link. The store clone itself is never touched by an install.
+Hangar keeps no list of installed apps: `hangar.yml` says which apps you mean to run, and Docker says
+what runs. Every command reads the app's files from the clone.
+
+## Upgrading from a Hangar with installed apps
+
+Earlier versions kept an `app-installed/` folder of symlinks, one per installed app. This one reads the
+apps straight from the clone and keeps no such state. Your apps keep running through the upgrade; then:
+
+1. **Check `hangar.yml`.** It loads as it is. `shared:` is no longer read, and logs a warning until you
+   remove it. If you deploy to a swarm, list those apps under [`swarm:`](store.md#swarm): `swarm deploy`
+   now only covers that list.
+2. **Bring your apps up once** (`store up`, or **Apps → up**). An app that mounts a file of its own
+   folder (`./config`, `./mqtt.conf`) now sees it under `app-store/store/<app>/` rather than
+   `app-installed/<app>/`. Same file, other path: compose recreates that container once.
+3. **Only then delete `app-installed/`.** A container not yet recreated still mounts through it: removed
+   too early, Docker would mount an empty folder in its place at the next restart.
+
+An app you installed from the store page but listed in no category stays on the Apps page while it
+runs. Add it to a category to keep its row once stopped.
 
 ## First launch
 
 1. **Create your account.** Open `http://<host>:3010` and register. Sign-in is email and password.
 2. **Install the store.** In **Paramètres → Store**, install the store: Hangar clones
-   `HANGAR_STORE_URL`, links every app `hangar.yml` lists, and creates `.env.global`. The same
+   `HANGAR_STORE_URL` and creates `.env.global` with the variables the apps `hangar.yml` declares
+   reference. The same
    button later pulls the store's latest commit.
 3. **Fill in the environment.** **Paramètres → Environnement** lists every `APP_*` and `<APP>_*`
-   variable the installed stacks reference and that has no value yet. `APP_DATA_DIR` is filled in
+   variable the declared apps reference and that has no value yet. `APP_DATA_DIR` is filled in
    for you.
-4. **Start your apps.** On **Apps**, select stacks and bring them up.
+4. **Start your apps.** On **Apps**, select the apps of your categories and bring them up, or use
+   **Démarrer** on any store card.
 
 > [!WARNING]
 > Registration is open to anyone who can reach the sign-up page, and an account can run
@@ -116,7 +133,7 @@ Two jobs run inside Hangar, scheduled at the first request the server answers:
 
 | Job                  | Schedule       | What it does                                                                                      |
 | -------------------- | -------------- | ------------------------------------------------------------------------------------------------- |
-| `CheckImageVersion`  | `17 */4 * * *` | Asks each registry for the digest of every image the installed apps run, and notifies on updates. |
+| `CheckImageVersion`  | `17 */4 * * *` | Asks each registry for the digest of every image the store apps run, and notifies on updates.     |
 | `UpdateOutdatedApps` | `47 4 * * *`   | Pulls and recreates every app whose registry serves a newer image, then notifies with the result. |
 
 Both can be run by hand from **Paramètres → Jobs**, which also shows their last results. Both run

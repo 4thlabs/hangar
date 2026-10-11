@@ -2,16 +2,14 @@ import { PlusIcon } from "lucide-react";
 import { Link } from "waku";
 import type { PageProps } from "waku/router";
 import { hangar } from "#libs/hangar/server";
+import { searchByName } from "#modules/common/search.ts";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
-import { installApp, uninstallApp } from "#modules/store/actions/store-apps.ts";
 import { StoreAppCard } from "#modules/store/components/store-app-card.tsx";
-import { StoreFilterMenu } from "#modules/store/components/store-filter-menu.tsx";
-import { StoreCatalog } from "#modules/store/listing.ts";
 import { storeSearchCodec } from "#modules/store/search-codec.ts";
 
 export default function StorePage({ search }: PageProps<"/store">) {
   const all = [...hangar.store.apps];
-  const { apps, counts } = StoreCatalog.list(all, search);
+  const apps = searchByName(search.q, all);
 
   return (
     <main>
@@ -19,7 +17,6 @@ export default function StorePage({ search }: PageProps<"/store">) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Store</h1>
         <div className="flex items-center gap-2">
-          <StoreFilterMenu counts={counts} />
           <Link to="/store/new" className={buttonVariants({ variant: "outline" })}>
             <PlusIcon data-icon="inline-start" />
             Nouvelle app
@@ -29,7 +26,7 @@ export default function StorePage({ search }: PageProps<"/store">) {
       {apps.length > 0 ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3">
           {apps.map(app => (
-            <StoreAppCard key={app.id} app={app} installApp={installApp} uninstallApp={uninstallApp} />
+            <StoreAppCard key={app.id} app={app} />
           ))}
         </div>
       ) : (

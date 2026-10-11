@@ -64,7 +64,7 @@ The date and time, from the visitor's own clock. Loads nothing.
 
 ### `docker-general-stats`
 
-Running and stopped containers, images, volumes and the installed apps due an image update,
+Running and stopped containers, images, volumes and the store apps due an image update,
 straight from the Docker daemon Hangar is connected to. It follows the daemon's events, so it has
 no `ttl`.
 

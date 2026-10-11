@@ -5,6 +5,8 @@ async function createHangar() {
   const hangar = Hangar.create(env.HANGAR_STORE_URL, env.HANGAR_DATA_DIR);
 
   await hangar.store.refresh();
+  // Once at boot, not on every refresh: a contradicted hangar.yml is reported, never refused here.
+  await hangar.store.checkConfig();
 
   return hangar;
 }

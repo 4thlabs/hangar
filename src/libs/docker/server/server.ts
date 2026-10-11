@@ -12,7 +12,7 @@ const globalForDocker = globalThis as unknown as { docker?: Docker; swarm?: Dock
 const client = new Dockerode();
 
 /**
- * The Docker layer for the web server, scoped to the apps this Hangar installed. Its client takes no
+ * The Docker layer for the web server, scoped to the apps of the store. Its client takes no
  * options, so it honours `DOCKER_HOST`.
  *
  * Not following the daemon's events yet: module scope in the RSC graph is evaluated by `waku build`,

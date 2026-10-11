@@ -5,7 +5,7 @@ import type { CreateJobServices } from "../services.ts";
 import { createWorkerServices } from "../worker.ts";
 
 /**
- * Asks the registry what it serves for every reference the installed apps run. The returned report
+ * Asks the registry what it serves for every reference the store apps run. The returned report
  * is stored as the job's `result`, which the Apps pages read back and compare with what runs then.
  */
 export class CheckImageVersion extends Job {
@@ -22,7 +22,7 @@ export class CheckImageVersion extends Job {
   }
 
   /**
-   * Asks the registry about every installed image and returns the report Sidequest stores.
+   * Asks the registry about every image a store app runs and returns the report Sidequest stores.
    */
   async run(): Promise<ImageUpdateReport> {
     const { hangar, docker, notifications } = await this.createServices();

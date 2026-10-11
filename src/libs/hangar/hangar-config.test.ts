@@ -24,19 +24,32 @@ categories:
 
     const config = await new HangarConfig(file).load();
 
-    expect(config.categories()).toEqual([{ name: "infra", color: "blue", stacks: ["traefik", "backrest"] }]);
-    expect(config.shared()).toEqual([]);
+    expect(config.categories()).toEqual([
+      {
+        name: "infra",
+        color: "blue",
+        stacks: [
+          { id: "traefik", run: true, update: true },
+          { id: "backrest", run: true, update: true },
+        ],
+      },
+    ]);
   });
 
-  it("loads the files shared by every stack", async () => {
-    const file = await configFile(`
-categories: []
-shared: [networks.yml]
-`);
+  it("still loads a file listing shared files, and tells it does", async () => {
+    const legacy = await new HangarConfig(await configFile("categories: []\nshared: [networks.yml]\n")).load();
+    const current = await new HangarConfig(await configFile("categories: []\n")).load();
 
-    const config = await new HangarConfig(file).load();
+    expect(legacy.listsShared()).toBe(true);
+    expect(current.listsShared()).toBe(false);
+  });
 
-    expect(config.shared()).toEqual(["networks.yml"]);
+  it("loads the swarm list in its order, empty when absent", async () => {
+    const set = await new HangarConfig(await configFile("categories: []\nswarm: [miniflux, whoami]\n")).load();
+    const unset = await new HangarConfig(await configFile("categories: []\n")).load();
+
+    expect(set.swarm()).toEqual(["miniflux", "whoami"]);
+    expect(unset.swarm()).toEqual([]);
   });
 
   it("loads the registry throttling, 100ms when absent", async () => {
@@ -123,7 +136,7 @@ categories:
     await config.write(source);
 
     expect(await readFile(file, "utf8")).toBe(source);
-    expect(config.categories()).toEqual([{ name: "infra", color: "blue", stacks: ["traefik"] }]);
+    expect(config.entries()).toEqual([{ id: "traefik", run: true, update: true }]);
   });
 
   it("refuses an invalid config without touching the file", async () => {
@@ -133,5 +146,80 @@ categories:
     await expect(config.write("categories: [")).rejects.toThrow(/Invalid YAML/);
     await expect(config.write("widgets: []\n")).rejects.toThrow(/categories/);
     expect(await readFile(file, "utf8")).toBe("categories: []\n");
+  });
+
+  it("reads a bare id and the long form with defaults as the same entry", async () => {
+    const file = await configFile(`
+categories:
+  - name: infra
+    color: blue
+    stacks:
+      - traefik
+      - { id: arcane }
+      - { id: miniflux, run: false, update: false }
+`);
+
+    const config = await new HangarConfig(file).load();
+
+    expect(config.entries()).toEqual([
+      { id: "traefik", run: true, update: true },
+      { id: "arcane", run: true, update: true },
+      { id: "miniflux", run: false, update: false },
+    ]);
+  });
+
+  it("rejects a misspelled option instead of dropping it, naming the entry", async () => {
+    const file = await configFile(`
+categories:
+  - name: infra
+    color: blue
+    stacks:
+      - { id: arcane, upadte: false }
+`);
+
+    await expect(new HangarConfig(file).load()).rejects.toThrow(/upadte[\s\S]*categories\[0\]\.stacks\[0\]/);
+  });
+
+  it("rejects an entry without an id, and a run that is not a yes or no", async () => {
+    const anonymous = await configFile("categories:\n  - { name: infra, color: blue, stacks: [{ run: false }] }\n");
+
+    // Compose and swarm are independent: `run` only says whether `store up` starts the app, never where.
+    const runtime = await configFile(
+      "categories:\n  - { name: infra, color: blue, stacks: [{ id: arcane, run: swarm }] }\n",
+    );
+
+    await expect(new HangarConfig(anonymous).load()).rejects.toThrow(/stacks\[0\]\.id/);
+    await expect(new HangarConfig(runtime).load()).rejects.toThrow(/stacks\[0\]\.run/);
+  });
+
+  it("lists the entries of every category or of one, in start order, an app declared twice keeping its first entry", async () => {
+    const file = await configFile(`
+categories:
+  - name: infra
+    color: blue
+    stacks: [traefik, { id: arcane, update: false }]
+  - name: home
+    color: green
+    stacks: [{ id: arcane, run: false }, frigate]
+`);
+
+    const config = await new HangarConfig(file).load();
+
+    expect(config.entries().map(entry => entry.id)).toEqual(["traefik", "arcane", "frigate"]);
+    expect(config.entries("home").map(entry => entry.id)).toEqual(["arcane", "frigate"]);
+    expect(config.entries("nowhere")).toEqual([]);
+    expect(config.entry("arcane")).toMatchObject({ update: false });
+    expect(config.entry("undeclared")).toBeUndefined();
+  });
+
+  it("parses a config without applying it", async () => {
+    const file = await configFile("categories: []\n");
+    const config = await new HangarConfig(file).load();
+
+    const parsed = config.parse("categories:\n  - { name: infra, color: blue, stacks: [traefik] }\n");
+
+    expect(parsed.categories[0]?.stacks).toEqual([{ id: "traefik", run: true, update: true }]);
+
+    expect(config.categories()).toEqual([]);
   });
 });

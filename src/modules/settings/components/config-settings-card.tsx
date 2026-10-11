@@ -28,8 +28,8 @@ export function ConfigSettingsCard({ source, saveConfig }: ConfigSettingsCardPro
       <CardHeader>
         <CardTitle>CONFIGURATION</CardTitle>
         <CardDescription>
-          Le fichier <code>hangar.yml</code> du store : catégories, fichiers partagés et widgets du tableau de bord. Il
-          est validé avant d’être écrit.
+          Le fichier <code>hangar.yml</code> du store : catégories, apps du swarm et widgets du tableau de bord. Il est
+          validé avant d’être écrit.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">{editor}</CardContent>

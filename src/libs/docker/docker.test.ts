@@ -13,8 +13,8 @@ const { DockerNotFoundError } = await import("./compose.ts");
 /** Shorthand for the shared fixture, which already defaults to one `alpha`/`web` container. */
 const container = containerSource;
 
-/** A client over the given installed apps; `alpha` unless a test says otherwise. */
-const client = (...installed: string[]) => new Docker(fakeDockerode(), fakeApps(...installed), new Cache());
+/** A client over the given store apps, each declared in a category. */
+const client = (...apps: string[]) => new Docker(fakeDockerode(), fakeApps(...apps), new Cache());
 
 const LABEL = {
   project: "com.docker.compose.project",
@@ -25,7 +25,7 @@ const LABEL = {
 beforeEach(() => vi.clearAllMocks());
 
 describe("Docker.projects", () => {
-  it("covers every installed app, including one with no container yet", async () => {
+  it("covers every declared app, including one with no container yet", async () => {
     givenContainers([container()]);
 
     const { projects } = await client("alpha", "gamma").projects();
@@ -34,7 +34,7 @@ describe("Docker.projects", () => {
     expect(projects[1]).toMatchObject({ status: "stopped", containerIds: [] });
   });
 
-  it("ignores containers from projects Hangar did not install", async () => {
+  it("ignores containers from projects that are no app of the store", async () => {
     givenContainers([
       container(),
       container({ Id: "beta-1", labels: { [LABEL.project]: "beta", [LABEL.service]: "api" } }),
@@ -43,6 +43,16 @@ describe("Docker.projects", () => {
     const { projects } = await client("alpha").projects();
 
     expect(projects.map(project => project.name)).toEqual(["alpha"]);
+  });
+
+  it("covers a store app in no category while Docker runs a project for it", async () => {
+    givenContainers([container({ Id: "beta-1", labels: { [LABEL.project]: "beta", [LABEL.service]: "api" } })]);
+
+    const apps = { declaredAppIds: () => new Set(["alpha"]), appIds: () => new Set(["alpha", "beta", "gamma"]) };
+    const { projects } = await new Docker(fakeDockerode(), apps, new Cache()).projects();
+
+    // gamma is in the store, but neither declared nor running: no row.
+    expect(projects.map(project => project.name)).toEqual(["alpha", "beta"]);
   });
 });
 
@@ -63,7 +73,7 @@ describe("Docker.projectDetail", () => {
     expect(detail.containerIds).toHaveLength(1);
   });
 
-  it("returns an empty detail for an installed app without containers", async () => {
+  it("returns an empty detail for a store app without containers", async () => {
     givenContainers([]);
 
     await expect(client("alpha", "gamma").projectDetail("gamma")).resolves.toMatchObject({
@@ -74,7 +84,7 @@ describe("Docker.projectDetail", () => {
     });
   });
 
-  it("rejects a project that is not an installed app", async () => {
+  it("rejects a project that is no app of the store", async () => {
     givenContainers([container()]);
 
     await expect(client("beta").projectDetail("alpha")).rejects.toThrow(DockerNotFoundError);
@@ -197,7 +207,7 @@ describe("Docker.sampleStats", () => {
 
     const samples = await client("alpha").sampleStats();
 
-    // The whole host, not just installed apps: the caller picks the ids it is showing.
+    // The whole host, not just the store apps: the caller picks the ids it is showing.
     expect([...samples.keys()]).toEqual(["container-1", "container-2"]);
     expect(dockerMock.stats).toHaveBeenCalledWith("container-1", { stream: false, "one-shot": true });
   });

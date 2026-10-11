@@ -7,7 +7,7 @@ const { project: PROJECT, service: SERVICE } = ComposeProjects.Label;
 const container = containerSource;
 
 describe("Compose project aggregation", () => {
-  it("groups by canonical labels, ignores one-offs and non-installed projects, and sorts projects", () => {
+  it("groups by canonical labels, ignores one-offs and projects that are no store app, and sorts projects", () => {
     const containers = [
       container({
         Id: "beta-1",
@@ -24,7 +24,7 @@ describe("Compose project aggregation", () => {
       }),
     ];
 
-    expect(new ComposeProjects(containers).summaries(new Set(["alpha", "beta"]))).toEqual([
+    expect(new ComposeProjects(containers).summaries(new Set(["alpha", "beta"]), new Set(["alpha", "beta"]))).toEqual([
       {
         name: "alpha",
         status: "partial",
@@ -43,13 +43,24 @@ describe("Compose project aggregation", () => {
       },
     ]);
 
-    expect(new ComposeProjects(containers).summaries(new Set(["alpha"])).map(summary => summary.name)).toEqual([
+    expect(
+      new ComposeProjects(containers).summaries(new Set(["alpha"]), new Set(["alpha"])).map(summary => summary.name),
+    ).toEqual(["alpha"]);
+  });
+
+  it("lists an app of the store that is not declared only while it has containers", () => {
+    const containers = [container({ Id: "beta-1", labels: { [PROJECT]: "beta", [SERVICE]: "api" } })];
+    const known = new Set(["alpha", "beta", "gamma"]);
+
+    // beta runs, so it gets a row; gamma has no container and no category, so it gets none.
+    expect(new ComposeProjects(containers).summaries(new Set(["alpha"]), known).map(summary => summary.name)).toEqual([
       "alpha",
+      "beta",
     ]);
   });
 
-  it("lists an installed app that has no container yet as stopped", () => {
-    expect(new ComposeProjects([]).summaries(new Set(["gamma"]))).toEqual([
+  it("lists a declared app that has no container yet as stopped", () => {
+    expect(new ComposeProjects([]).summaries(new Set(["gamma"]), new Set(["gamma"]))).toEqual([
       {
         name: "gamma",
         status: "stopped",

@@ -4,18 +4,18 @@ import { type HangarApp } from "#libs/hangar";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardTitle } from "#modules/common/ui/card.tsx";
-import type { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
-import { StoreAppButton } from "#modules/store/components/store-app-button.tsx";
+import { StartAppButton } from "#modules/store/components/start-app-button.tsx";
 import { SwarmDeployButton } from "#modules/store/components/swarm-deploy-button.tsx";
 
 type StoreAppCardProps = {
   app: HangarApp;
-  installApp: (appId: string) => Promise<StoreActionResult>;
-  uninstallApp: (appId: string) => Promise<StoreActionResult>;
 };
 
-/** Server component: only the buttons below are interactive. */
-export function StoreAppCard({ app, installApp, uninstallApp }: StoreAppCardProps) {
+/**
+ * Server component: only the buttons below are interactive. Compose and swarm are two independent
+ * buttons; what runs is for the Apps and Cluster pages to show, and to stop.
+ */
+export function StoreAppCard({ app }: StoreAppCardProps) {
   return (
     <Card className="relative gap-2 py-3">
       <Link
@@ -42,14 +42,8 @@ export function StoreAppCard({ app, installApp, uninstallApp }: StoreAppCardProp
           </Badge>
         )}
       </CardContent>
-      {app.swarmReady && <SwarmDeployButton appId={app.id} appName={app.name} installed={app.installed} />}
-      <StoreAppButton
-        appId={app.id}
-        appName={app.name}
-        installed={app.installed}
-        installApp={installApp}
-        uninstallApp={uninstallApp}
-      />
+      {app.swarmReady && <SwarmDeployButton appId={app.id} appName={app.name} />}
+      <StartAppButton appId={app.id} appName={app.name} />
     </Card>
   );
 }

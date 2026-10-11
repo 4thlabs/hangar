@@ -34,12 +34,12 @@ handful of shell aliases to bring things up in the right order. Hangar keeps tha
 Compose files in a git repository you own — and adds what is tedious to do by hand:
 
 - **A store you own.** Every app is a folder with a `compose.yml` in your own git repository.
-  Hangar clones it, links the apps you install, and runs `docker compose` against them.
-- **Apps at a glance.** Status, containers, live logs and stats for every installed stack, with
+  Hangar clones it and runs `docker compose` against the apps, straight from the clone.
+- **Apps at a glance.** Status, containers, live logs and stats for every app of your categories, with
   up, update, force recreate and down one click away and their output streamed as they run.
 - **Image updates.** Every four hours Hangar asks the registries whether a newer image exists
   for what you run, and every night it can pull and recreate the outdated apps for you.
-- **One global environment.** Hangar scans the installed stacks for the `${VARIABLES}` they
+- **One global environment.** Hangar scans the apps of `hangar.yml` for the `${VARIABLES}` they
   reference and lists the ones still to fill in `.env.global`, which you edit from the UI.
 - **A dashboard.** Widgets for Docker, Arcane, Backrest, Beszel, Frigate, Gluetun, Jellyfin,
   Miniflux, tcg-collector and GitHub releases, laid out from the store's `hangar.yml`.

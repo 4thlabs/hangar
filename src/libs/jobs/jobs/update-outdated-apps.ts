@@ -1,13 +1,14 @@
 import { Job } from "sidequest";
 import { logger } from "#libs/logs";
-import type { CreateJobServices } from "../services.ts";
+import type { CreateJobServices, JobServices } from "../services.ts";
 import { createWorkerServices } from "../worker.ts";
 
 /** What one auto-update run did, kept in the job's `result` column for the Jobs settings table. */
 export type AutoUpdateReport = { ranAt: string; updated: string[]; failed: string[] };
 
 /**
- * Pulls and recreates every installed app whose registry serves something newer.
+ * Pulls and recreates every running app whose registry serves something newer, except those
+ * `hangar.yml` declares with `update: false`.
 
  * Runs nightly on its own schedule, and by hand from Settings > JOBS.
  */
@@ -33,7 +34,13 @@ export class UpdateOutdatedApps extends Job {
     // Asked here rather than read off the last `CheckImageVersion` result: that report is up to
     // four hours old, and pulling for an app already up to date is a recreate for nothing.
     const { outdated } = await docker.checkUpdates(hangar.store.config.registryThrottling());
-    const projects = [...outdated];
+    const running = await UpdateOutdatedApps.running(docker);
+
+    // Only what runs: `up -d` would start a stopped app. And never an app `hangar.yml` keeps to manual
+    // updates; its badge stays on the Apps page.
+    const projects = [...outdated].filter(
+      project => running.has(project) && hangar.store.config.entry(project)?.update !== false,
+    );
 
     const updated: string[] = [];
     const failed: string[] = [];
@@ -42,7 +49,7 @@ export class UpdateOutdatedApps extends Job {
     // everything else on the host.
     for (const project of projects) {
       try {
-        await hangar.store.compose(project, ["up", "-d", "--pull", "always"]);
+        await hangar.store.composeApp(project, ["up", "-d", "--pull", "always"]);
         updated.push(project);
       } catch (error) {
         failed.push(project);
@@ -68,5 +75,12 @@ export class UpdateOutdatedApps extends Job {
     }
 
     return { ranAt: new Date().toISOString(), updated, failed };
+  }
+
+  /** The projects with at least one running container. */
+  private static async running(docker: JobServices["docker"]) {
+    const { projects } = await docker.projects();
+
+    return new Set(projects.filter(project => project.runningCount > 0).map(project => project.name));
   }
 }

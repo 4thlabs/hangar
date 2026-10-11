@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { load } from "js-yaml";
 import { logger } from "#libs/logs";
 import { AppFiles } from "./app-files.ts";
-import { HangarConfig } from "./hangar-config.ts";
+import { ConfigCheck } from "./config-check.ts";
+import { HangarConfig, type Config } from "./hangar-config.ts";
 import { HangarEnv } from "./hangar-env.ts";
 import { HangarError, HangarRuntimeError } from "./hangar-error.ts";
 import { Runtime, type CommandRunner, type RunOptions } from "./runtime/runtime.ts";
@@ -14,37 +15,54 @@ export type HangarApp = {
   /** `x-hangar.name`, else the compose file's top-level `name`, else the capitalized id. */
   name: string;
   icon: string | undefined;
-  installed: boolean;
   /** Whether the app ships a `compose.swarm.yml`, so it can run in the swarm. */
   swarmReady: boolean;
   /** The container the app's own service declares, which Traefik routes `<container>.<DOMAIN>` to. */
   containerName: string;
 };
 
-/** The app store on disk: its stacks, the installed links, and the compose commands over them. */
+/** What a CLI name addresses: the whole store, one category, or one app. */
+export type StoreTarget = { kind: "all" } | { kind: "category"; name: string } | { kind: "app"; id: string };
+
+/**
+ * The app store on disk: its apps, and the compose and stack commands over them. Hangar keeps no state
+ * of its own about them: `hangar.yml` declares, Docker says what runs.
+ */
 export class HangarStore {
   /** Run order per compose command: 1 in stack order, -1 in reverse, absent means parallel */
   static readonly CommandOrder: Record<string, number> = { up: 1, start: 1, restart: 1, down: -1, stop: -1 };
 
   /** Commands that address the whole store instead of a single stack */
-  static readonly GlobalCommand = ["up", "down", "pull"];
+  private static readonly GlobalCommand = ["up", "down", "pull"];
+
+  /**
+   * The `store` command's own words, the global commands and its subcommands: a category named after one
+   * could never be addressed. `swarm` takes no category, so its `deploy` and `rm` are free.
+   */
+  static readonly CliWords = [...HangarStore.GlobalCommand, "install", "ls"];
 
   /** Run order per stack verb, as {@link CommandOrder}: deploy forwards, remove backwards */
   private static readonly StackCommandOrder: Record<string, number> = { deploy: 1, rm: -1 };
 
-  /** Stack verbs that address every `swarm:` app instead of a single one */
-  static readonly GlobalStackCommand = ["deploy", "rm"];
+  /** Stack verbs that address the whole `swarm:` list of hangar.yml instead of a single app */
+  private static readonly GlobalStackCommand = ["deploy", "rm"];
+
+  /** The whole-store compose commands that start apps, or ready them to start: they skip `run: false` */
+  private static readonly StartCommand = ["up", "pull"];
+
+  /** What compose accepts as a project name, which an app id becomes (`-p <app>`) */
+  static readonly ProjectName = /^[a-z0-9][a-z0-9_-]*$/;
 
   /** A stack id is a folder name under `store/` (`llama.cpp`): no separator, no leading dot, nothing to climb out with */
   private static readonly StackId = /^[a-z0-9][a-z0-9._-]*$/;
 
   readonly dataPath: string;
 
-  /** One symlink per installed app, next to the shared files. */
-  readonly installedPath: string;
-
   /** The clone of the store repository. */
   readonly storePath: string;
+
+  /** The clone's `store/` folder: one folder per app, and the shared fragments next to them. */
+  readonly appsPath: string;
 
   readonly url: string;
 
@@ -56,96 +74,165 @@ export class HangarStore {
 
   private readonly runtime: CommandRunner;
 
-  /** Every app the store carries, installed or not. */
+  /** What {@link checkConfig} last logged, so the same report is not logged twice in a row */
+  private lastConfigReport = "";
+
+  /** Every app the store carries: each folder of `store/` holding a compose file. */
   apps: Set<HangarApp> = new Set();
 
   /**
    * @param url The store repository to clone
-   * @param dataDir Where the store, the installed links and the app data live
+   * @param dataDir Where the store, the global environment and the app data live
    */
   constructor(url: string, dataDir: string, runtime: CommandRunner) {
     this.url = url;
     this.dataPath = path.resolve(dataDir);
     this.storePath = path.join(this.dataPath, "app-store");
-    this.installedPath = path.join(this.dataPath, "app-installed");
+    this.appsPath = path.join(this.storePath, "store");
     this.config = new HangarConfig(path.join(this.storePath, "config", "hangar.yml"));
     // APP_DATA_DIR is the one variable Hangar can answer for the operator: the stacks keep
     // their data under the same resolved data directory Hangar itself uses.
-    this.env = new HangarEnv(this.dataPath, this.installedPath, { APP_DATA_DIR: path.join(this.dataPath, "app-data") });
+    this.env = new HangarEnv(this.dataPath, this.appsPath, async () => this.envScope(), {
+      APP_DATA_DIR: path.join(this.dataPath, "app-data"),
+    });
+
     this.runtime = runtime;
   }
 
   /**
-   * Resolve a name to the stacks it covers: no name covers every category,
-   * a category its own stacks, anything else is taken as a stack name.
-   * @param name A global command, a category or a stack name
+   * What a name addresses: no name the whole store, a category its own apps, anything else one app.
+   * A category named like an app wins, which a save refuses (see {@link ConfigCheck}).
+   * @param name Empty, a category or an app id
    */
-  resolve(name: string = "") {
-    // prettier-ignore
-    const stacks = [...new Set(
-        this.config.categories()
-            .filter(c => name.length == 0 || c.name === name)
-            .flatMap(c => c.stacks)
-    )];
+  target(name: string = ""): StoreTarget {
+    if (name === "") {
+      return { kind: "all" };
+    }
 
-    return stacks.length > 0 ? stacks : [name];
+    if (this.config.categories().some(category => category.name === name)) {
+      return { kind: "category", name };
+    }
+
+    return { kind: "app", id: name };
   }
 
   /**
-   * Whether `name` addresses several apps at once: the whole store (empty) or a category.
-   * @param name A category or an app id
+   * The compose apps a group covers, in start order, minus the `run: false` ones when a start
+   * command covers the whole store.
+   * @param target The whole store or a category
+   * @param command The compose command
    */
-  private isGroup(name: string) {
-    return name === "" || this.config.categories().some(category => category.name === name);
+  private groupApps(target: StoreTarget, command: string) {
+    const isBulkStart = target.kind === "all" && HangarStore.StartCommand.includes(command);
+    const category = target.kind === "category" ? target.name : undefined;
+
+    return this.config
+      .entries(category)
+      .filter(entry => entry.run || !isBulkStart)
+      .map(entry => entry.id);
   }
 
   /**
-   * Links(symlink) a stack into the installed apps.
-   * @param name the stack name
+   * Rejects a name that is neither a category nor an app of the store: a folder of `store/` holding a
+   * compose file, so a shared fragment (`networks.yml`) is no app either.
+   * @param id The name, taken for an app id
    */
-  async link(name: string) {
-    const source = path.join(this.storePath, "store", name);
-    const destination = path.join(this.installedPath, name);
+  private async requireApp(id: string) {
+    if (!(await this.isStoreApp(id))) {
+      throw new HangarRuntimeError(1, `Unknown app or category: ${id}`);
+    }
+  }
 
-    if ((await Runtime.exists(source)) && !(await Runtime.exists(destination))) {
-      logger.info(`Linking application: ${name}`);
-      await symlink(source, destination, "dir");
+  /** Rejects an id that is no app of the store, or one compose would refuse as a project name. */
+  private async requireComposeApp(id: string) {
+    await this.requireApp(id);
+
+    if (!HangarStore.ProjectName.test(id)) {
+      throw new HangarRuntimeError(
+        1,
+        `${id} cannot run with compose: a project name takes lowercase letters, digits, - and _; rename its folder`,
+      );
     }
   }
 
   /**
-   * Removes a stack's symlink from the installed apps, leaving the stack itself in the store.
-   * @param name the stack name
+   * The one rule for what an app is: a folder of `store/`, named as an app id may be, holding a compose
+   * file. A shared fragment (`networks.yml`) or a folder with no compose file is no app.
    */
-  async unlink(name: string) {
-    const destination = path.join(this.installedPath, name);
-
-    if (await Runtime.exists(destination)) {
-      logger.info(`Unlinking application: ${name}`);
-      await unlink(destination);
-    }
-  }
-
-  /** Links every stack the config lists, and the shared files (networks, common env) next to them. */
-  private async linkAll() {
-    const entries = [...this.resolve(), ...this.config.shared()];
-
-    // prettier-ignore
-    await Promise.all(
-      entries
-        .map(async entry => await this.link(entry)
-        .catch(ex => logger.error(`Failed to link: ${entry}`, { error: ex }))),
-    );
+  private async isStoreApp(id: string) {
+    return HangarStore.StackId.test(id) && Runtime.exists(path.join(this.appsPath, id, AppFiles.ComposeFile));
   }
 
   /**
-   * Writes hangar.yml, then links what it now lists and reloads the apps.
-   * @param source The YAML; an invalid one throws and leaves the file untouched
+   * The apps hangar.yml declares, in a category or in the swarm list: what a full `.env.global` scan
+   * covers. An id that is no folder name is left out: it would read outside `store/`.
+   */
+  private envScope() {
+    return [...new Set([...this.declaredAppIds(), ...this.config.swarm()])].filter(id => HangarStore.StackId.test(id));
+  }
+
+  /** The apps of the categories: each gets an Apps page row, even with no container. */
+  declaredAppIds(): Set<string> {
+    return new Set(this.config.entries().map(entry => entry.id));
+  }
+
+  /** Every app of the store: one Docker runs a compose project for gets an Apps page row too. */
+  appIds(): Set<string> {
+    return new Set([...this.apps].map(app => app.id));
+  }
+
+  /**
+   * Writes hangar.yml, then reloads the apps.
+   * @param source The YAML; an invalid one, or one {@link ConfigCheck} finds a problem in, throws and
+   * leaves the file untouched
    */
   async saveConfig(source: string) {
+    const problems = await this.configProblems(this.config.parse(source));
+
+    if (problems.length > 0) {
+      throw new HangarError(`Invalid Hangar config:\n${problems.map(problem => `✖ ${problem}`).join("\n")}`);
+    }
+
     await this.config.write(source);
-    await this.linkAll();
     await this.refresh();
+  }
+
+  /** Loads hangar.yml, then {@link checkConfig}: what the CLI and an install start from. */
+  async loadConfig() {
+    await this.config.load();
+    await this.checkConfig();
+  }
+
+  /**
+   * Logs what {@link ConfigCheck} finds wrong with the loaded hangar.yml, without refusing it: a file
+   * that loaded before must keep the server booting, and each problem has a fallback (see the spec).
+   * Called at boot, by each command and after a pull, not on every {@link refresh}; a report identical to
+   * the last one is not logged again, so `store install` does not repeat what the command already said.
+   */
+  async checkConfig() {
+    const config = { categories: this.config.categories(), swarm: this.config.swarm() };
+    const problems = await this.configProblems(config);
+
+    if (this.config.listsShared()) {
+      problems.push("shared is no longer read, and can be removed: an app is a folder holding a compose file");
+    }
+
+    const report = problems.join("\n");
+
+    if (report === this.lastConfigReport) {
+      return;
+    }
+
+    this.lastConfigReport = report;
+
+    for (const problem of problems) {
+      logger.warn(`hangar.yml: ${problem}`);
+    }
+  }
+
+  /** What {@link ConfigCheck} finds wrong with a config, against the apps the store holds now. */
+  private async configProblems(config: Pick<Config, "categories" | "swarm">) {
+    return new ConfigCheck(this.appsPath, HangarStore.CliWords).problems(config, new Set(await this.appFolders()));
   }
 
   /** Whether the store repository has been cloned. */
@@ -158,10 +245,6 @@ export class HangarStore {
    * is already there.
    */
   async install() {
-    if (!(await Runtime.exists(this.installedPath))) {
-      await mkdir(this.installedPath, { recursive: true });
-    }
-
     if (await this.isInstalled()) {
       await this.runtime.run("git", ["-C", this.storePath, "pull", "--ff-only"]);
     } else {
@@ -169,8 +252,7 @@ export class HangarStore {
     }
 
     // The categories only exist once the clone brought hangar.yml in.
-    await this.config.load();
-    await this.linkAll();
+    await this.loadConfig();
 
     // The stacks are composed with .env.global: without it every compose call fails, so a
     // fresh install leaves the operator the list of variables to fill rather than nothing.
@@ -178,21 +260,17 @@ export class HangarStore {
   }
 
   /**
-   * Runs docker compose against a single installed stack
+   * Runs docker compose against a single app of the store, its id already checked by the caller
    * @param stack The stack name
    * @param args Arguments passed through to docker compose
    * @param options Run options, forwarded to the runtime (`pipe` to capture the output)
    */
   private async composeStack(stack: string, args: string[], options?: RunOptions) {
-    const compose = path.join(this.installedPath, stack, AppFiles.ComposeFile);
-
-    if (!(await Runtime.exists(compose))) {
-      throw new HangarRuntimeError(1, `Failed to find project: ${stack}`);
-    }
+    const compose = path.join(this.appsPath, stack, AppFiles.ComposeFile);
 
     // `-p` pins the project to the stack name: the compose file's `name:` is a display label
     // ("Home Assistant"), and compose would derive the project from it by dropping everything
-    // outside [a-z0-9_-] ("homeassistant"), so its containers no longer match the installed app.
+    // outside [a-z0-9_-] ("homeassistant"), so its containers no longer match the app.
     // prettier-ignore
     return this.runtime.run("docker", [
       "compose",
@@ -204,8 +282,22 @@ export class HangarStore {
   }
 
   /**
-   * Runs docker compose against every stack, a category or a single stack.
-   * @param name A global command, a category or a stack name
+   * Runs docker compose against one app, its id taken as is: never read as a category or a whole-store
+   * word, so an app named like one is still only itself. What the site and the jobs call.
+   * @param app The app id
+   * @param args Arguments passed through to docker compose
+   * @param options Run options, forwarded to the runtime (`pipe` to stream the output)
+   */
+  async composeApp(app: string, args: string[], options?: RunOptions) {
+    await this.requireComposeApp(app);
+
+    return this.composeStack(app, args, options);
+  }
+
+  /**
+   * Runs docker compose against the apps of the whole store or of a category, or against a single app.
+   * On the whole store, `up` and `pull` leave out the `run: false` ones.
+   * @param name A global command, a category or an app id
    * @param args Arguments passed through to docker compose
    * @param options Run options, forwarded to the runtime (`pipe` to capture the output)
    */
@@ -217,7 +309,13 @@ export class HangarStore {
     }
 
     const command = args[0] ?? "";
-    const stacks = this.resolve(name);
+    const stacks = await this.composeApps(this.target(name), command);
+
+    if (stacks.length === 0) {
+      logger.info(`No compose app to run ${command} on in ${name || "the store"}`);
+
+      return;
+    }
 
     if (command === "up" && !HangarStore.detached(args) && stacks.length > 1) {
       throw new HangarRuntimeError(1, "Non detached mode only authorised on a single stack");
@@ -226,6 +324,40 @@ export class HangarStore {
     await HangarStore.runInOrder(stacks, HangarStore.CommandOrder[command] ?? 0, stack =>
       this.composeStack(stack, args, options),
     );
+  }
+
+  /**
+   * The apps a compose command covers. A group leaves out, with a warning, the entries compose cannot
+   * run: an id with no folder in the store, or one compose rejects as a project name.
+   */
+  private async composeApps(target: StoreTarget, command: string) {
+    if (target.kind === "app") {
+      await this.requireComposeApp(target.id);
+
+      return [target.id];
+    }
+
+    const apps = this.groupApps(target, command);
+    const runnable = await Promise.all(apps.map(app => this.isComposeRunnable(app)));
+
+    return apps.filter((_app, index) => runnable[index]);
+  }
+
+  /** Whether a declared app can run with compose; logs why when it cannot. */
+  private async isComposeRunnable(app: string) {
+    if (!HangarStore.ProjectName.test(app)) {
+      logger.warn(`Skipping ${app}: compose rejects it as a project name`);
+
+      return false;
+    }
+
+    if (!(await this.isStoreApp(app))) {
+      logger.warn(`Skipping ${app}: not an app of the store`);
+
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -262,14 +394,17 @@ export class HangarStore {
    * | `ps [args]`     | `docker stack ps …args <app>`                                         |
    * | `services`      | `docker stack services <app>`                                         |
    *
-   * Any installed app with a `compose.swarm.yml` will do.
+   * Any app with a `compose.swarm.yml` will do. Its id is taken as is: never read as `deploy` or `rm` of
+   * the whole swarm list, so an app named like one is still only itself. What the site calls.
    * @param app The app id
    * @param args The verb, then arguments passed through to it
    * @param options Run options, forwarded to the runtime
    */
-  private async stackApp(app: string, args: string[], options: RunOptions = {}) {
-    const swarmFile = await this.installedSwarmFile(app);
-    const files = ["-c", path.join(this.installedPath, app, AppFiles.ComposeFile), "-c", swarmFile];
+  async stackApp(app: string, args: string[], options: RunOptions = {}) {
+    await this.requireApp(app);
+
+    const swarmFile = await this.swarmFile(app);
+    const files = ["-c", path.join(this.appsPath, app, AppFiles.ComposeFile), "-c", swarmFile];
     const [verb = "", ...rest] = args;
 
     const stackArgs: Record<string, string[]> = {
@@ -290,10 +425,10 @@ export class HangarStore {
   }
 
   /**
-   * Runs a `docker stack` verb (see {@link stackApp}) against every `swarm:` app, a category, or one app.
-   * The whole store and a category cover their apps that have a `compose.swarm.yml`, as `store up` covers
-   * the apps of the categories; one app named directly needs one too.
-   * @param name A global verb (`deploy`, `rm`), a category or an app id
+   * Runs a `docker stack` verb (see {@link stackApp}) against the `swarm:` list of hangar.yml, in its
+   * order, or against one app, which needs a `compose.swarm.yml`. Categories group the compose apps, so a
+   * category is refused. Independent of {@link compose}: an app may run both ways.
+   * @param name A global verb (`deploy`, `rm`) or an app id
    * @param args The verb, then arguments passed through to it
    * @param options Run options, forwarded to the runtime (`pipe` to capture the output)
    */
@@ -304,85 +439,76 @@ export class HangarStore {
       name = "";
     }
 
-    const apps = this.isGroup(name) ? await this.swarmApps(name) : [name];
+    const verb = args[0] ?? "";
+    const target = this.target(name);
 
-    await HangarStore.runInOrder(apps, HangarStore.StackCommandOrder[args[0] ?? ""] ?? 0, app =>
+    if (target.kind === "category") {
+      throw new HangarRuntimeError(
+        1,
+        `${name} is a category: categories group the compose apps. Name an app, or deploy / rm the swarm: list`,
+      );
+    }
+
+    const apps = target.kind === "app" ? [target.id] : await this.swarmApps();
+
+    if (apps.length === 0) {
+      logger.info(`No swarm app to run ${verb} on in the swarm: list of hangar.yml`);
+
+      return;
+    }
+
+    await HangarStore.runInOrder(apps, HangarStore.StackCommandOrder[verb] ?? 0, app =>
       this.stackApp(app, args, options),
     );
   }
 
   /**
-   * Deploys an app's stack from the store: links it, then deploys it. Its compose project, if it runs, is
-   * left alone: an app may run with both. `hangar.yml` is never edited.
+   * Deploys an app's stack from the store. Its compose project, if it runs, is left alone: an app may run
+   * with both. `hangar.yml` is never edited.
    * @param app The app id; it must ship a `compose.swarm.yml`
    * @param options Run options for the stack call (`capture` to keep its output)
    */
   async deployToSwarm(app: string, options?: RunOptions) {
-    await this.link(app);
-    await this.installedSwarmFile(app);
+    // Checked before seeding: an app that cannot run in the swarm leaves .env.global as it was.
+    await this.swarmFile(app);
     await this.env.ensure(app);
-
-    try {
-      await this.stackApp(app, ["deploy", "--quiet"], options);
-    } finally {
-      await this.refresh();
-    }
+    await this.stackApp(app, ["deploy", "--quiet"], options);
   }
 
   /**
-   * Whether Hangar can deploy this stack again and remove it: it is named after an installed app that
-   * ships a `compose.swarm.yml`, whoever deployed it.
+   * Whether Hangar can deploy this stack again and remove it: it is named after a store app that ships a
+   * `compose.swarm.yml`, whoever deployed it.
    */
   isStackManageable(name: string) {
-    const app = this.app(name);
-
-    return Boolean(app?.installed && app.swarmReady);
-  }
-
-  /**
-   * Removes an app's stack on uninstall, when this node can: one that is no longer a manager cannot,
-   * but the app must still be able to leave Hangar.
-   * @returns Docker's complaint when the stack is left to remove from a manager, `null` once removed
-   */
-  async removeStackIfPossible(app: string): Promise<string | null> {
-    return this.stackApp(app, ["rm"], { capture: true }).then(
-      () => null,
-      (error: unknown) => {
-        if (error instanceof HangarError) {
-          return error.message;
-        }
-
-        throw error;
-      },
-    );
+    return Boolean(this.app(name)?.swarmReady);
   }
 
   /** Every stack name {@link isStackManageable} accepts. */
   manageableStacks(): string[] {
-    return [...this.apps].map(app => app.id).filter(id => this.isStackManageable(id));
+    return [...this.appIds()].filter(id => this.isStackManageable(id));
   }
 
-  /** The installed app's compose.swarm.yml, or a rejection saying why the app cannot run in the swarm. */
-  private async installedSwarmFile(app: string) {
-    const swarmFile = path.join(this.installedPath, app, AppFiles.SwarmFile);
-
-    if (!(await HangarStore.hasContent(swarmFile))) {
-      throw new HangarRuntimeError(
-        1,
-        `${app} is not a swarm app: it has no ${AppFiles.SwarmFile}, or is not installed`,
-      );
+  /** The app's compose.swarm.yml, or a rejection saying the app cannot run in the swarm. */
+  private async swarmFile(app: string) {
+    if (!(await AppFiles.isSwarmReady(path.join(this.appsPath, app)))) {
+      throw new HangarRuntimeError(1, `${app} is not a swarm app: it has no ${AppFiles.SwarmFile}`);
     }
 
-    return swarmFile;
+    return path.join(this.appsPath, app, AppFiles.SwarmFile);
   }
 
-  /** The apps of a group, in category order, that are installed with a `compose.swarm.yml`. */
-  private async swarmApps(group: string) {
-    const apps = this.resolve(group);
+  /**
+   * The `swarm:` list, in deploy order, minus the apps without a `compose.swarm.yml`, which are skipped
+   * with a warning: the list named them, so a silent skip would hide a mistake.
+   */
+  private async swarmApps() {
+    // An id that is no folder name is left out before any path is built from it.
+    const apps = [...new Set(this.config.swarm())].filter(app => HangarStore.StackId.test(app));
+    const ready = await Promise.all(apps.map(app => AppFiles.isSwarmReady(path.join(this.appsPath, app))));
 
-    const ready = await Promise.all(
-      apps.map(app => HangarStore.hasContent(path.join(this.installedPath, app, AppFiles.SwarmFile))),
-    );
+    for (const app of apps.filter((_app, index) => !ready[index])) {
+      logger.warn(`Skipping ${app}: it has no ${AppFiles.SwarmFile}`);
+    }
 
     return apps.filter((_app, index) => ready[index]);
   }
@@ -405,7 +531,7 @@ export class HangarStore {
    * @param source The compose YAML
    */
   async createApp(id: string, source: string) {
-    const folder = this.appFolder(id);
+    const folder = this.stackPath(id);
 
     if (await Runtime.exists(folder)) {
       throw new HangarError(`The app ${id} already exists`);
@@ -423,12 +549,12 @@ export class HangarStore {
 
   /**
    * The files of a store app, to list, read and write.
-   * @param id The app id, its folder under `store/`; must already exist and not be a shared file
+   * @param id The app id, its folder under `store/`; must already hold a compose file
    */
   async files(id: string) {
-    const folder = this.appFolder(id);
+    const folder = this.stackPath(id);
 
-    if (!(await Runtime.exists(folder))) {
+    if (!(await this.isStoreApp(id))) {
       throw new HangarError(`The app ${id} does not exist`);
     }
 
@@ -436,17 +562,6 @@ export class HangarStore {
       compose: (appFolder, target, source) => this.writeValidatedCompose(appFolder, target, source),
       swarm: (appFolder, target, source) => this.writeValidatedSwarm(appFolder, target, source),
     });
-  }
-
-  /** The folder of an app that may be created or edited: not one of the shared files. */
-  private appFolder(id: string) {
-    const folder = this.stackPath(id);
-
-    if (this.config.shared().includes(id)) {
-      throw new HangarError(`${id} is a shared file, not an app`);
-    }
-
-    return folder;
   }
 
   /**
@@ -468,7 +583,7 @@ export class HangarStore {
         "config", "-q",
       ], { capture: true });
 
-      if (await HangarStore.hasContent(swarmFile)) {
+      if (await AppFiles.isSwarmReady(folder)) {
         await this.checkStack(pending, swarmFile);
       }
     });
@@ -524,47 +639,32 @@ export class HangarStore {
     ], { capture: true, env: await this.env.read() });
   }
 
-  /**
-   * Whether a file exists with something in it: a fresh empty compose.swarm.yml, as the editor creates
-   * it, does not make an app able to run in the swarm yet.
-   */
-  private static async hasContent(file: string) {
-    const source = await readFile(file, "utf8").catch(() => "");
-
-    return source.trim() !== "";
-  }
-
   /** The folder of a store app, once its id is known not to escape `store/`. */
   private stackPath(id: string) {
     if (!HangarStore.StackId.test(id)) {
       throw new HangarError(`Invalid app id: ${id}`);
     }
 
-    return path.join(this.storePath, "store", id);
+    return path.join(this.appsPath, id);
   }
 
-  /** The ids of the installed apps. */
-  installedProjectIds(): Set<string> {
-    return new Set([...this.apps].flatMap(app => (app.installed ? [app.id] : [])));
-  }
-
-  /** Reloads `hangar.yml` and every app's compose file. */
+  /**
+   * Reloads `hangar.yml` and every app's compose file. The new list replaces the old one only once
+   * complete, so a reader in between still sees every app.
+   */
   async refresh() {
-    this.apps.clear();
+    const loaded = new Set<HangarApp>();
 
     if (await this.isInstalled()) {
       await this.config.load();
 
-      const shared = this.config.shared();
-      const entries = await readdir(path.join(this.storePath, "store"), { recursive: false });
-      const apps = entries.filter(entry => !shared.includes(entry));
-      const installed = await readdir(this.installedPath, { recursive: false });
+      const apps = await this.appFolders();
 
       // One malformed app is skipped: a rejection here would fail the server's boot.
       await Promise.all(
         apps.map(async app => {
           try {
-            const source = await readFile(path.join(this.storePath, "store", app, AppFiles.ComposeFile), "utf8");
+            const source = await readFile(path.join(this.appsPath, app, AppFiles.ComposeFile), "utf8");
             const yaml = load(source, { filename: AppFiles.ComposeFile }) as Record<string, unknown> | undefined;
             const metadata = yaml?.["x-hangar"] as { name?: string; icon?: string } | undefined;
             const services = (yaml?.["services"] ?? {}) as Record<string, { container_name?: string } | undefined>;
@@ -573,12 +673,11 @@ export class HangarStore {
             const service = services[app] ?? Object.values(services)[0];
 
             // `x-hangar.name` first: Swarm rejects a top-level `name`, so a swarm-ready app moves it there.
-            this.apps.add({
+            loaded.add({
               id: app,
               name: metadata?.name ?? (yaml?.["name"] as string | undefined) ?? HangarStore.capitalize(app),
               icon: metadata?.icon,
-              installed: installed.indexOf(app) !== -1,
-              swarmReady: await HangarStore.hasContent(path.join(this.storePath, "store", app, AppFiles.SwarmFile)),
+              swarmReady: await AppFiles.isSwarmReady(path.join(this.appsPath, app)),
               containerName: service?.container_name ?? app,
             });
           } catch (error) {
@@ -587,6 +686,27 @@ export class HangarStore {
         }),
       );
     }
+
+    this.apps = loaded;
+  }
+
+  /**
+   * The folders of `store/` holding a compose file: the store's apps, none before the clone. A shared
+   * fragment (`networks.yml`) or a folder with no compose file is no app.
+   */
+  private async appFolders() {
+    const entries = await readdir(this.appsPath, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") {
+        return [];
+      }
+
+      throw error;
+    });
+
+    const folders = entries.filter(entry => entry.isDirectory()).map(entry => entry.name);
+    const apps = await Promise.all(folders.map(async folder => ((await this.isStoreApp(folder)) ? [folder] : [])));
+
+    return apps.flat();
   }
 
   /** Whether the compose args ask for detached mode. */

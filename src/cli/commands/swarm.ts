@@ -8,7 +8,7 @@ const trailingArguments = new Argument("[args...]", "docker stack arguments");
 swarm
   .description("commands for the apps that run in the swarm")
   .passThroughOptions(true)
-  .argument("<target>", "an app, a category, or deploy / rm for every swarm: app")
+  .argument("<target>", "an app, or deploy / rm for the swarm: list of hangar.yml")
   .addArgument(trailingArguments)
   .action(async (target: string, args: string[]) => {
     process.exitCode = await run(hangar => hangar.store.stack(target, args));

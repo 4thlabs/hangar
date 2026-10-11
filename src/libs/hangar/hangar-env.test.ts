@@ -8,25 +8,35 @@ import { HangarEnv } from "./hangar-env.ts";
 describe("HangarEnv", () => {
   let dir: string;
   let file: string;
-  let installedPath: string;
+  let appsPath: string;
   let env: HangarEnv;
 
-  /** Installs an app, with the files compose interpolates: its compose and an optional app.env. */
-  const stack = async (name: string, compose: string, appEnv?: string) => {
-    await mkdir(path.join(installedPath, name), { recursive: true });
-    await writeFile(path.join(installedPath, name, "compose.yml"), compose, "utf8");
+  /** The apps a full scan covers, as the store would name them. */
+  let scope: string[];
+
+  /** Puts an app in the store, with the files compose interpolates: its compose and an optional app.env. */
+  const storeApp = async (name: string, compose: string, appEnv?: string) => {
+    await mkdir(path.join(appsPath, name), { recursive: true });
+    await writeFile(path.join(appsPath, name, "compose.yml"), compose, "utf8");
 
     if (appEnv !== undefined) {
-      await writeFile(path.join(installedPath, name, "app.env"), appEnv, "utf8");
+      await writeFile(path.join(appsPath, name, "app.env"), appEnv, "utf8");
     }
+  };
+
+  /** Puts an app in the store and in the scan's scope. */
+  const stack = async (name: string, compose: string, appEnv?: string) => {
+    await storeApp(name, compose, appEnv);
+    scope.push(name);
   };
 
   beforeEach(async () => {
     dir = await mkdtemp(path.join(tmpdir(), "hangar-env-"));
-    installedPath = path.join(dir, "app-installed");
+    appsPath = path.join(dir, "app-store", "store");
     file = path.join(dir, ".env.global");
-    await mkdir(installedPath, { recursive: true });
-    env = new HangarEnv(dir, installedPath);
+    scope = [];
+    await mkdir(appsPath, { recursive: true });
+    env = new HangarEnv(dir, appsPath, async () => scope);
   });
 
   afterEach(async () => {
@@ -37,13 +47,13 @@ describe("HangarEnv", () => {
     expect(await env.read()).toEqual({});
   });
 
-  it("collects the variables the installed apps reference, and only those", async () => {
+  it("collects the variables the apps in scope and the shared fragments reference, and only those", async () => {
     await stack(
       "alpha-app",
       "services:\n  alpha:\n    image: alpha:${ALPHA_APP_TAG:-latest}\n    working_dir: ${PWD}\n    environment:\n      DOMAIN: $DOMAIN\n      PRICE: $$5\n",
     );
 
-    await writeFile(path.join(installedPath, "networks.yml"), "networks:\n  web:\n    name: ${NETWORK}\n", "utf8");
+    await writeFile(path.join(appsPath, "networks.yml"), "networks:\n  web:\n    name: ${NETWORK}\n", "utf8");
 
     // PWD is compose's to fill, `$$5` is an escaped dollar, everything else is the operator's.
     expect(await env.required()).toEqual(["ALPHA_APP_TAG", "DOMAIN", "NETWORK"]);
@@ -63,9 +73,9 @@ describe("HangarEnv", () => {
     await stack("alpha-app", "services:\n  alpha:\n    image: alpha:${ALPHA_APP_TAG}\n");
     // What glance and traefik keep under config/: the app expands these itself, compose never
     // reads them, so `${…}` in there asks nothing of the operator.
-    await mkdir(path.join(installedPath, "alpha-app", "config", "widgets"), { recursive: true });
+    await mkdir(path.join(appsPath, "alpha-app", "config", "widgets"), { recursive: true });
     await writeFile(
-      path.join(installedPath, "alpha-app", "config", "widgets", "card.yml"),
+      path.join(appsPath, "alpha-app", "config", "widgets", "card.yml"),
       "url: ${ALPHA_APP_WIDGET_URL}\n",
       "utf8",
     );
@@ -73,19 +83,14 @@ describe("HangarEnv", () => {
     expect(await env.required()).toEqual(["ALPHA_APP_TAG"]);
   });
 
-  it("asks for nothing when no app is installed yet", async () => {
+  it("asks for nothing when no app is in scope yet", async () => {
     expect(await env.required()).toEqual([]);
   });
 
-  it("ignores an app that sits in the store but was never installed", async () => {
+  it("ignores an app that sits in the store but is out of scope", async () => {
     await stack("alpha-app", "services:\n  alpha:\n    image: alpha:${ALPHA_APP_TAG}\n");
-    // Not linked into app-installed: the store carries it, this machine does not run it.
-    await mkdir(path.join(dir, "app-store", "store", "beta-app"), { recursive: true });
-    await writeFile(
-      path.join(dir, "app-store", "store", "beta-app", "compose.yml"),
-      "services:\n  beta:\n    image: beta:${BETA_APP_TAG}\n",
-      "utf8",
-    );
+    // The store carries it, this machine does not run it.
+    await storeApp("beta-app", "services:\n  beta:\n    image: beta:${BETA_APP_TAG}\n");
 
     await env.ensure();
 
@@ -135,6 +140,63 @@ describe("HangarEnv", () => {
     expect(await env.read()).toEqual({ GLUETUN_API_KEY: "" });
   });
 
+  it("seeds a named app's own prefix before it is in scope", async () => {
+    // What starting an app for the first time does: its variables must be there before compose reads them.
+    await storeApp("beta-app", "services:\n  beta:\n    image: beta:${BETA_APP_TAG}\n");
+
+    await env.ensure("beta-app");
+
+    expect(await env.read()).toEqual({ BETA_APP_TAG: "" });
+  });
+
+  it("skips an app in scope whose folder is gone from the store", async () => {
+    await stack("alpha-app", "services:\n  alpha:\n    image: alpha:${ALPHA_APP_TAG}\n");
+    scope.push("removed-app");
+
+    await env.ensure();
+
+    expect(await env.read()).toEqual({ ALPHA_APP_TAG: "" });
+  });
+
+  it("names the variables an app would start with empty, after seeding them", async () => {
+    await storeApp(
+      "beta-app",
+      "services:\n  beta:\n    image: beta:${BETA_APP_TAG}\n    environment:\n      KEY: ${BETA_APP_KEY}\n      DOMAIN: ${DOMAIN}\n",
+    );
+
+    await env.write({ BETA_APP_TAG: "v1" });
+
+    // DOMAIN is the operator's, not the app's: it is neither seeded nor reported.
+    expect(await env.unfilled("beta-app")).toEqual(["BETA_APP_KEY"]);
+    expect(await env.read()).toEqual({ BETA_APP_KEY: "", BETA_APP_TAG: "v1" });
+  });
+
+  it("names no variable once the app's are all filled, a default counting as filled", async () => {
+    env = new HangarEnv(dir, appsPath, async () => scope, { APP_DATA_DIR: "/srv/hangar/.data" });
+    await storeApp("beta-app", "services:\n  beta:\n    volumes: [${APP_DATA_DIR}/beta:/data]\n");
+
+    expect(await env.unfilled("beta-app")).toEqual([]);
+  });
+
+  it("seeds a key a shared fragment takes from a store app that is out of scope", async () => {
+    // gluetun is in the store, declared nowhere: it still owns GLUETUN_*.
+    await storeApp("gluetun", "services:\n  gluetun:\n    image: gluetun\n");
+    await writeFile(path.join(appsPath, "networks.yml"), "x-vpn: ${GLUETUN_SUBNET}\nx-other: ${NOBODY_KEY}\n", "utf8");
+
+    await env.ensure();
+
+    expect(await env.read()).toEqual({ GLUETUN_SUBNET: "" });
+  });
+
+  it("creates the file even when no app references a variable: compose fails without one", async () => {
+    await stack("alpha-app", "services:\n  alpha:\n    image: alpha\n");
+
+    await env.ensure();
+
+    expect(await readFile(file, "utf8")).toContain("# Global Environment Variables");
+    expect(await env.read()).toEqual({});
+  });
+
   it("creates the file with the keys the apps expect, left empty to fill", async () => {
     await stack(
       "alpha-app",
@@ -147,7 +209,7 @@ describe("HangarEnv", () => {
   });
 
   it("pre-fills a new variable Hangar already knows the value of", async () => {
-    env = new HangarEnv(dir, installedPath, { APP_DATA_DIR: "/srv/hangar/.data" });
+    env = new HangarEnv(dir, appsPath, async () => scope, { APP_DATA_DIR: "/srv/hangar/.data" });
     await stack(
       "alpha-app",
       "services:\n  alpha:\n    volumes: [${APP_DATA_DIR}/alpha:/data]\n    environment:\n      TAG: ${ALPHA_APP_TAG}\n",
@@ -192,7 +254,7 @@ describe("HangarEnv", () => {
     await env.write({ SYNCIN_API_KEY: "" });
 
     expect(await env.appVar("sync-in", "API_KEY")).toBeUndefined();
-    expect(await env.appVar("never-installed", "API_KEY")).toBeUndefined();
+    expect(await env.appVar("never-declared", "API_KEY")).toBeUndefined();
   });
 
   it("serves a looked-up variable from memory, until a write changes it", async () => {

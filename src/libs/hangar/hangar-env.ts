@@ -3,8 +3,9 @@ import path from "node:path";
 import { parse } from "dotenv";
 import { logger } from "#libs/logs";
 import { HangarError } from "./hangar-error.ts";
+import { Runtime } from "./runtime/runtime.ts";
 
-/** What a scan of `app-installed` expects: a dangling app symlink, or a shared fragment read as a directory. */
+/** What a scan of the store expects: an app that is gone, or a shared fragment read as a directory. */
 const EXPECTED_SCAN_ERRORS = new Set(["ENOENT", "ENOTDIR"]);
 
 /** A `.catch` handler that turns any scan error into `fallback`, logging the unexpected ones. */
@@ -13,7 +14,7 @@ function fallbackOnScanError<T>(fallback: T, target: string) {
     const isExpected = error.code !== undefined && EXPECTED_SCAN_ERRORS.has(error.code);
 
     if (!isExpected) {
-      logger.warn("Skipping an unreadable path in the installed apps", { error, path: target });
+      logger.warn("Skipping an unreadable path in the store", { error, path: target });
     }
 
     return fallback;
@@ -44,8 +45,11 @@ export class HangarEnv {
 
   private readonly _file: string;
 
-  /** The directory holding the installed apps, whose files declare the variables */
-  private readonly _installedPath: string;
+  /** The store's app folders, and the fragments they share at its root */
+  private readonly _appsPath: string;
+
+  /** The apps a full scan covers, whose prefixes it may seed */
+  private readonly _scope: () => Promise<string[]>;
 
   /** Values a new variable starts with, when Hangar already knows the answer */
   private readonly _defaults: Record<string, string>;
@@ -59,13 +63,20 @@ export class HangarEnv {
   public file = () => this._file;
 
   /**
-   * Reads nothing: neither the file nor the apps exist before the store is installed.
+   * Reads nothing: neither the file nor the apps exist before the store is cloned.
    * @param dataPath The data directory, holding the env file
-   * @param installedPath The directory holding the installed apps, whose files declare the variables
+   * @param appsPath The store's `store/` folder: one folder per app, shared fragments at its root
+   * @param scope The apps a full scan covers; read on every scan, so it follows the store
    * @param defaults Values to pre-fill the matching variables with when they first appear
    */
-  constructor(dataPath: string, installedPath: string, defaults: Record<string, string> = {}) {
-    this._installedPath = installedPath;
+  constructor(
+    dataPath: string,
+    appsPath: string,
+    scope: () => Promise<string[]>,
+    defaults: Record<string, string> = {},
+  ) {
+    this._appsPath = appsPath;
+    this._scope = scope;
     this._file = path.join(dataPath, ".env.global");
     this._defaults = defaults;
   }
@@ -138,7 +149,7 @@ export class HangarEnv {
     return next;
   }
 
-  /** Every variable the installed apps reference (`${VAR}` and `$VAR`), seeded or not. */
+  /** Every variable the apps in scope and the shared fragments reference (`${VAR}` and `$VAR`), seeded or not. */
   async required() {
     return this.referenced(await this.files());
   }
@@ -146,58 +157,87 @@ export class HangarEnv {
   /**
    * Seeds the namespaced variables (`APP_*`, `<APP>_*`) the apps reference, empty unless a default
    * is known. Only ever adds; a bare name like `DOMAIN` is left to the operator.
-   * @param app The app whose files to read, or every installed app when absent
+   * @param app The app whose files to read, or every app in scope when absent
    */
   async ensure(app?: string) {
-    const current = await this.read();
-    // Naming the apps is a directory listing; reading their files is what the scope saves.
-    const allowed = ["APP_", ...(await this.apps()).flatMap(name => HangarEnv.prefixes(name))];
-
-    const missing = (await this.referenced(await this.files(app)))
-      .filter(key => !(key in current) && allowed.some(prefix => key.startsWith(prefix)))
-      .map(key => [key, this._defaults[key] ?? ""] as const);
-
-    return missing.length > 0 ? this.write(Object.fromEntries(missing)) : current;
-  }
-
-  /** The installed apps: the entries of `app-installed` that read as a directory. */
-  private async apps() {
-    const apps = await Promise.all(
-      (await this.entries()).map(async entry => {
-        const target = path.join(this._installedPath, entry);
-        const inner = await readdir(target).catch(fallbackOnScanError(null, target));
-
-        return inner === null ? [] : [entry];
-      }),
-    );
-
-    return apps.flat();
+    return this.seed(await this.seedable(app));
   }
 
   /**
-   * The files compose reads for an app, or every app: its own directory, not `config/`, which the
-   * app reads itself. ponytail: an `include:` from a subdirectory would be missed.
-   * @param app The app to list, or every installed entry when absent
+   * Seeds an app's variables, then names those still empty: what it would start with blank, a database
+   * password included. A bare name like `DOMAIN` is the operator's and left out, as {@link ensure} does.
+   * @param app The app about to start
    */
-  private async files(app?: string) {
-    const files = await Promise.all(
-      (app ? [app] : await this.entries()).map(async entry => {
-        const target = path.join(this._installedPath, entry);
-        const inner = await readdir(target).catch(fallbackOnScanError(null, target));
+  async unfilled(app: string) {
+    const keys = await this.seedable(app);
+    const current = await this.seed(keys);
 
-        // Not a directory: a shared fragment like `networks.yml`, which is itself the file.
-        return inner === null ? [target] : inner.map(file => path.join(target, file));
-      }),
-    );
-
-    return files.flat();
+    return keys.filter(key => !current[key]);
   }
 
-  /** What sits in `app-installed`, minus the dotfiles; empty when the store ships no stacks yet. */
-  private async entries() {
-    const entries = await readdir(this._installedPath).catch(fallbackOnScanError([], this._installedPath));
+  /** Adds the keys the file lacks, empty unless a default is known; returns the variables as they now stand. */
+  private async seed(keys: string[]) {
+    const current = await this.read();
 
-    return entries.filter(entry => !entry.startsWith("."));
+    const missing = keys.filter(key => !(key in current)).map(key => [key, this._defaults[key] ?? ""] as const);
+
+    // Every compose call passes `--env-file`: with no file at all it fails, so one is written even when
+    // no app references a variable yet.
+    const mustWrite = missing.length > 0 || !(await Runtime.exists(this._file));
+
+    return mustWrite ? this.write(Object.fromEntries(missing)) : current;
+  }
+
+  /** The namespaced variables (`APP_*`, `<APP>_*`) the app, or every app in scope, references. */
+  private async seedable(app?: string) {
+    const allowed = ["APP_", ...(await this.owners()).flatMap(name => HangarEnv.prefixes(name))];
+
+    return (await this.referenced(await this.files(app))).filter(key => allowed.some(prefix => key.startsWith(prefix)));
+  }
+
+  /**
+   * The folders of the store, each owning its `<APP>_*` prefix whether it is in scope or not: a shared
+   * fragment, or an app's own env file, may reach for a neighbour's key.
+   */
+  private async owners() {
+    return (await this.storeEntries()).filter(entry => entry.isDirectory()).map(entry => entry.name);
+  }
+
+  /**
+   * The files compose reads for an app, or for every app in scope plus the fragments at the root of
+   * the store (`networks.yml`): the app's own directory, not `config/`, which the app reads itself.
+   * ponytail: an `include:` from a subdirectory would be missed.
+   * @param app The app to list, or every app in scope when absent
+   */
+  private async files(app?: string) {
+    if (app) {
+      return this.appFiles(app);
+    }
+
+    // An app in scope whose folder is gone lists no file, and so asks for nothing.
+    const apps = await Promise.all((await this._scope()).map(scoped => this.appFiles(scoped)));
+
+    return [...apps.flat(), ...(await this.sharedFiles())];
+  }
+
+  /** The files directly in an app's folder; none when it has no folder. */
+  private async appFiles(app: string) {
+    const folder = path.join(this._appsPath, app);
+    const inner = await readdir(folder).catch(fallbackOnScanError([], folder));
+
+    return inner.map(file => path.join(folder, file));
+  }
+
+  /** The files at the root of the store, next to the app folders, minus the dotfiles. */
+  private async sharedFiles() {
+    return (await this.storeEntries())
+      .filter(entry => entry.isFile() && !entry.name.startsWith("."))
+      .map(entry => path.join(this._appsPath, entry.name));
+  }
+
+  /** What sits directly in `store/`: the app folders and the shared fragments; nothing before the clone. */
+  private storeEntries() {
+    return readdir(this._appsPath, { withFileTypes: true }).catch(fallbackOnScanError([], this._appsPath));
   }
 
   /**
