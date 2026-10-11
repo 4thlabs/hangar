@@ -254,13 +254,13 @@ export class HangarStore {
    * the stack name, which is the app id. `.env.global` goes into the child's environment: unlike
    * compose, `docker stack` has no `--env-file`, and interpolates from its own.
    *
-   * | Verb            | Runs                                                                  |
-   * | --------------- | --------------------------------------------------------------------- |
-   * | `deploy [args]` | `docker stack deploy -c compose.yml -c compose.swarm.yml …args <app>` |
-   * | `config`        | `docker stack config -c compose.yml -c compose.swarm.yml`             |
-   * | `rm`            | `docker stack rm <app>`                                               |
-   * | `ps [args]`     | `docker stack ps …args <app>`                                         |
-   * | `services`      | `docker stack services <app>`                                         |
+   * | Verb            | Runs                                                                                 |
+   * | --------------- | ------------------------------------------------------------------------------------ |
+   * | `deploy [args]` | `docker stack deploy -c compose.yml -c compose.swarm.yml --detach=false …args <app>` |
+   * | `config`        | `docker stack config -c compose.yml -c compose.swarm.yml`                            |
+   * | `rm`            | `docker stack rm <app>`                                                              |
+   * | `ps [args]`     | `docker stack ps …args <app>`                                                        |
+   * | `services`      | `docker stack services <app>`                                                        |
    *
    * Any installed app with a `compose.swarm.yml` will do.
    * @param app The app id
@@ -273,7 +273,9 @@ export class HangarStore {
     const [verb = "", ...rest] = args;
 
     const stackArgs: Record<string, string[]> = {
-      deploy: ["deploy", ...files, ...rest, app],
+      // Waits for the replicas to run instead of returning once the services are updated, ahead of
+      // docker's coming default; before `rest`, so a caller's own `--detach` wins.
+      deploy: ["deploy", ...files, "--detach=false", ...rest, app],
       config: ["config", ...files, ...rest],
       rm: ["rm", ...rest, app],
       ps: ["ps", ...rest, app],
