@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SwarmStack } from "#libs/docker";
+import { ClusterStacks, type ClusterStack } from "./cluster-stacks.ts";
 import { ClusterSearch, type ClusterSearchState } from "./search.ts";
 import { StackFilter } from "./stack-filter.ts";
 
@@ -27,7 +28,17 @@ const search = (overrides: Partial<ClusterSearchState> = {}): ClusterSearchState
   ...overrides,
 });
 
-const names = (rows: SwarmStack[]) => rows.map(row => row.name);
+const names = (rows: ClusterStack[]) => rows.map(row => row.name);
+
+describe("ClusterStacks.list", () => {
+  it("adds the installed swarm-ready apps no stack runs yet, by name, as /apps lists an app never started", () => {
+    const rows = ClusterStacks.list(stacks, ["miniflux", "adguard"]);
+
+    expect(names(rows)).toEqual(["adguard", "broken", "kuma", "miniflux"]);
+    expect(rows[0]).toEqual({ name: "adguard", health: "undeployed", running: 0, desired: 0, placement: [] });
+    expect(rows.filter(ClusterStacks.isDeployed)).toHaveLength(3);
+  });
+});
 
 describe("StackFilter.apply", () => {
   it("keeps every stack, by name, when nothing is selected", () => {
@@ -54,6 +65,14 @@ describe("StackFilter.apply", () => {
 
   it("finds a stack by a part of its name", () => {
     expect(names(StackFilter.apply(stacks, search({ q: "flux" }), []))).toEqual(["miniflux"]);
+  });
+
+  it("keeps the undeployed apps apart, and sorts them after the stopped stacks", () => {
+    const rows = ClusterStacks.list(stacks, ["adguard"]);
+    const byHealth = StackFilter.apply(rows, search({ sort: { column: "health", descending: false } }), ["adguard"]);
+
+    expect(names(StackFilter.apply(rows, search({ health: ["undeployed"] }), ["adguard"]))).toEqual(["adguard"]);
+    expect(names(byHealth)).toEqual(["miniflux", "kuma", "broken", "adguard"]);
   });
 });
 

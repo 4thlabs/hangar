@@ -3,7 +3,6 @@
 import { sessions } from "#libs/auth/server";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
-import { ActionFailure } from "#modules/common/actions/action-failure.ts";
 import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
 import { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
 import { AppStacks } from "#modules/store/app-stacks.ts";
@@ -87,33 +86,5 @@ export const uninstallApp = async (appId: string): Promise<StoreActionResult> =>
     logger.error("App uninstallation failed", { error, appId: app.id });
 
     return StoreActionResult.failure(`La désinstallation de ${app.name} a échoué. ${SERVER_LOG_HINT}`, true);
-  }
-};
-
-/** Deploys an app's stack to the swarm, its compose project left alone; see `HangarStore.deployToSwarm`. */
-export const deployToSwarm = async (appId: string): Promise<StoreActionResult> => {
-  const app = await findApp(appId, "Swarm deployment rejected: unknown app");
-
-  if (!app) {
-    return StoreActionResult.failure(UNKNOWN_APP);
-  }
-
-  if (!app.swarmReady) {
-    return StoreActionResult.failure(
-      `${app.name} n’a pas de compose.swarm.yml : elle ne peut pas tourner dans le swarm.`,
-    );
-  }
-
-  try {
-    await hangar.store.deployToSwarm(app.id, { capture: true });
-
-    return StoreActionResult.success(`${app.name} est déployée sur le swarm.`);
-  } catch (error) {
-    // Docker's own complaint (not a manager, a bad file) is shown as is: it says what to fix.
-    const failure = ActionFailure.from(error, "Swarm deployment failed", `Le déploiement de ${app.name} a échoué.`, {
-      appId: app.id,
-    });
-
-    return { ...failure, installed: true };
   }
 };

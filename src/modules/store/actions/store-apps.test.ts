@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,9 +28,9 @@ vi.mock("#libs/hangar/server", async () => {
 });
 
 const { hangar } = await import("#libs/hangar/server");
-const { deployToSwarm, uninstallApp } = await import("#modules/store/actions/store-apps.ts");
+const { uninstallApp } = await import("#modules/store/actions/store-apps.ts");
 
-const CONFIG = "# The store\ncategories:\n  - name: Web\n    color: blue\n    stacks: [whoami, plain, ready]\n";
+const CONFIG = "# The store\ncategories:\n  - name: Web\n    color: blue\n    stacks: [whoami, ready]\n";
 
 /** The `docker` calls made so far, as `compose down` or `stack deploy` style strings. */
 const dockerCalls = () =>
@@ -40,7 +40,7 @@ const dockerCalls = () =>
     return isStack ? `stack ${args[1]}` : `compose ${args.at(-1)}`;
   });
 
-describe("deployToSwarm", () => {
+describe("uninstallApp", () => {
   const app = (id: string) => path.join(hangar.store.storePath, "store", id);
 
   beforeEach(async () => {
@@ -49,12 +49,10 @@ describe("deployToSwarm", () => {
     await mkdir(path.join(hangar.store.storePath, "config"), { recursive: true });
     await mkdir(hangar.store.installedPath, { recursive: true });
     await mkdir(app("whoami"), { recursive: true });
-    await mkdir(app("plain"), { recursive: true });
     await mkdir(app("ready"), { recursive: true });
     await writeFile(path.join(hangar.store.storePath, "config", "hangar.yml"), CONFIG);
     await writeFile(path.join(app("whoami"), "compose.yml"), "x-hangar:\n  name: Who Am I\nservices: {}\n");
     await writeFile(path.join(app("whoami"), "compose.swarm.yml"), "services: {}\n");
-    await writeFile(path.join(app("plain"), "compose.yml"), "services: {}\n");
     await writeFile(path.join(app("ready"), "compose.yml"), "services: {}\n");
     await writeFile(path.join(app("ready"), "compose.swarm.yml"), "services: {}\n");
     await hangar.store.refresh();
@@ -67,36 +65,11 @@ describe("deployToSwarm", () => {
     await rm(mocks.dataDir, { recursive: true, force: true });
   });
 
-  it("deploys an app's stack, leaving its compose project and hangar.yml as they were", async () => {
-    const config = path.join(hangar.store.storePath, "config", "hangar.yml");
-    const result = await deployToSwarm("whoami");
-
-    expect(result).toMatchObject({ success: true, message: "Who Am I est déployée sur le swarm." });
-    expect(dockerCalls()).toEqual(["stack deploy"]);
-    expect(await readFile(config, "utf8")).toBe(CONFIG);
-  });
-
-  it("passes on Docker's reason when the deploy fails", async () => {
-    vi.mocked(hangar.runtime.run).mockRejectedValue(new HangarRuntimeError(1, "this node is not a swarm manager"));
-
-    const result = await deployToSwarm("whoami");
-
-    expect(result.success).toBe(false);
-    expect(result.message).toContain("this node is not a swarm manager");
-  });
-
-  it("refuses an app without compose.swarm.yml, running nothing", async () => {
-    const result = await deployToSwarm("plain");
-
-    expect(result.success).toBe(false);
-    expect(hangar.runtime.run).not.toHaveBeenCalled();
-  });
-
   it("takes both down on uninstall: the compose project, and the stack the swarm runs", async () => {
     mocks.stacks = [{ name: "ready" }];
 
-    await deployToSwarm("ready");
-    vi.mocked(hangar.runtime.run).mockClear();
+    await hangar.store.link("ready");
+    await hangar.store.refresh();
 
     const result = await uninstallApp("ready");
 
@@ -117,7 +90,8 @@ describe("deployToSwarm", () => {
   it("says what is left when the stack cannot go on uninstall", async () => {
     mocks.stacks = [{ name: "whoami" }];
 
-    await deployToSwarm("whoami");
+    await hangar.store.link("whoami");
+    await hangar.store.refresh();
     vi.mocked(hangar.runtime.run).mockImplementation(async (_command, args) => {
       if (args[0] === "stack") {
         throw new HangarRuntimeError(1, "this node is not a swarm manager");

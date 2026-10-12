@@ -20,26 +20,6 @@ export const readStackTasks = async (name: string): Promise<ReadResult<SwarmStac
   }
 };
 
-/**
- * Deploys a stack again from its store files, to apply an edit or pull a moved tag. The events bring
- * the new services to /cluster.
- */
-export const redeployStack = async (name: string): Promise<ActionResult> => {
-  await sessions.require();
-
-  if (!hangar.store.isStackManageable(name)) {
-    return ActionResult.failure(`${name} n’est pas une app du store prête pour le swarm.`);
-  }
-
-  try {
-    await hangar.store.stack(name, ["deploy", "--quiet"], { capture: true });
-
-    return ActionResult.success(`${name} a été redéployée.`);
-  } catch (error) {
-    return SwarmFailure.from(error, "Stack redeploy failed", { stack: name });
-  }
-};
-
 /** Removes a stack from the swarm. The app stays installed, and its compose project, if any, untouched. */
 export const removeStack = async (name: string): Promise<ActionResult> => {
   await sessions.require();

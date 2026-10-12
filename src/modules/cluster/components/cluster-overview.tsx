@@ -5,6 +5,7 @@ import { useState, type ComponentProps } from "react";
 import { useSetSearch_UNSTABLE } from "waku/router/client";
 import type { SwarmCluster } from "#libs/docker";
 import { SwarmRules } from "#libs/docker/swarm-rules";
+import { ClusterStacks } from "#modules/cluster/cluster-stacks.ts";
 import { ClusterEmpty } from "#modules/cluster/components/cluster-empty.tsx";
 import { NodeCard } from "#modules/cluster/components/node-card.tsx";
 import { StackFilters } from "#modules/cluster/components/stack-filters.tsx";
@@ -26,7 +27,7 @@ import { Button } from "#modules/common/ui/button.tsx";
 type ClusterOverviewProps = { search: ClusterSearchState } & (
   | {
       cluster: SwarmCluster;
-      /** The stacks named after an installed store app with a compose.swarm.yml: Hangar can redeploy them. */
+      /** The installed store apps with a compose.swarm.yml: Hangar deploys them, and lists them until it has. */
       manageableStacks: string[];
     }
   | { error: string }
@@ -38,6 +39,8 @@ export function ClusterOverview(props: ClusterOverviewProps) {
   const cluster = "cluster" in props ? props.cluster : null;
   const manager = cluster?.state === "manager" ? cluster : null;
   const manageableStacks = "manageableStacks" in props ? props.manageableStacks : [];
+  const stacks = manager ? ClusterStacks.list(manager.stacks, manageableStacks) : [];
+  const openRow = stacks.find(stack => stack.name === openStack);
   const setSearch = useSetSearch_UNSTABLE({ from: "/cluster" });
   const onSort = (column: StackSortColumn) => void setSearch({ sort: TableSort.next(props.search.sort, column) });
 
@@ -92,12 +95,12 @@ export function ClusterOverview(props: ClusterOverviewProps) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Stacks</h2>
             <div className="flex flex-wrap items-center gap-2">
-              <StackFilters nodes={manager.nodes} counts={StackFilter.counts(manager.stacks, manageableStacks)} />
+              <StackFilters nodes={manager.nodes} counts={StackFilter.counts(stacks, manageableStacks)} />
             </div>
           </div>
           <StackTableOrEmpty
-            stacks={StackFilter.apply(manager.stacks, props.search, manageableStacks)}
-            total={manager.stacks.length}
+            stacks={StackFilter.apply(stacks, props.search, manageableStacks)}
+            total={stacks.length}
             manageableStacks={manageableStacks}
             sort={props.search.sort}
             onSort={onSort}
@@ -111,6 +114,7 @@ export function ClusterOverview(props: ClusterOverviewProps) {
       <StackSheet
         stack={openStack}
         manageable={openStack !== null && manageableStacks.includes(openStack)}
+        deployed={openRow !== undefined && ClusterStacks.isDeployed(openRow)}
         onClose={() => setOpenStack(null)}
       />
     </>
@@ -125,7 +129,9 @@ function StackTableOrEmpty({ total, ...table }: ComponentProps<typeof StackTable
 
   return (
     <p className="text-sm text-muted-foreground">
-      {total === 0 ? "Aucune stack déployée." : "Aucune stack ne correspond à ces filtres."}
+      {total === 0
+        ? "Aucune stack, ni app installée prête pour le swarm."
+        : "Aucune stack ne correspond à ces filtres."}
     </p>
   );
 }

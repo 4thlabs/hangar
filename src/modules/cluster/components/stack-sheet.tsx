@@ -1,11 +1,12 @@
 "use client";
 
-import { RefreshCwIcon, Trash2Icon, UploadIcon } from "lucide-react";
+import { RefreshCwIcon, RocketIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "waku";
 import type { SwarmStackTask } from "#libs/docker";
 import { RelativeTime } from "#libs/format";
-import { readStackTasks, redeployStack, removeStack } from "#modules/cluster/actions/manage-stacks.ts";
+import { readStackTasks, removeStack } from "#modules/cluster/actions/manage-stacks.ts";
+import { StackDeployOutput } from "#modules/cluster/components/stack-deploy-output.tsx";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import { LogsSheet } from "#modules/common/components/logs-sheet.tsx";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
@@ -19,38 +20,57 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#
 type StackSheetProps = {
   /** The stack to show, `null` keeping the sheet closed. */
   stack: string | null;
-  /** Whether Hangar can deploy it again and remove it: a store app with a compose.swarm.yml. */
+  /** Whether Hangar can deploy it and remove it: an installed store app with a compose.swarm.yml. */
   manageable: boolean;
+  /** Whether the swarm runs it; an undeployed one has no task to show, only its deploy. */
+  deployed: boolean;
   onClose: () => void;
 };
 
 /** The tasks of one stack, per node, with the deploy and removal Hangar can do on its own apps. */
-export function StackSheet({ stack, manageable, onClose }: StackSheetProps) {
+export function StackSheet({ stack, manageable, deployed, onClose }: StackSheetProps) {
   const router = useRouter();
   const tasks = useServerRead<SwarmStackTask[]>();
   const operation = useServerAction();
   const [confirmingRemoval, setConfirmingRemoval] = useState(false);
+  // Bumped by each deploy: its output remounts, which runs the deploy again. Zero shows none.
+  const [deployRun, setDeployRun] = useState(0);
+  const [deploying, setDeploying] = useState(false);
   const { load, reset } = tasks;
+  const deployLabel = deployed ? "Mettre à jour" : "Déployer";
+  const DeployIcon = deployed ? UploadIcon : RocketIcon;
 
-  // Read afresh each time a stack opens, and forgotten when the sheet closes. Only `stack` drives it:
-  // `load` and `reset` are new functions on every render.
+  // Another stack, or a closed sheet, shows no earlier deploy.
+  useEffect(() => {
+    setDeployRun(0);
+    setDeploying(false);
+  }, [stack]);
+
+  // Read afresh each time a stack opens or gets deployed, and forgotten when the sheet closes. `load`
+  // and `reset` are new functions on every render.
   useEffect(() => {
     reset();
 
-    if (stack) {
+    if (stack && deployed) {
       load(() => readStackTasks(stack));
     }
-  }, [stack]);
+  }, [stack, deployed]);
 
-  function redeploy(name: string) {
-    operation.run(
-      () => redeployStack(name),
-      { success: "Stack redéployée", error: "Échec du déploiement" },
-      async () => {
-        load(() => readStackTasks(name));
-        await router.reload();
-      },
-    );
+  function deploy() {
+    setDeploying(true);
+    setDeployRun(run => run + 1);
+  }
+
+  // No toast: the route's notification reports the outcome. A first deploy turns `deployed` on with the
+  // reload, which reads the tasks; an update reads them here.
+  function deployFinished() {
+    setDeploying(false);
+
+    if (stack && deployed) {
+      load(() => readStackTasks(stack));
+    }
+
+    void router.reload();
   }
 
   function remove(name: string) {
@@ -72,49 +92,64 @@ export function StackSheet({ stack, manageable, onClose }: StackSheetProps) {
       <SheetContent className="data-[side=right]:w-full data-[side=right]:sm:max-w-3xl">
         <SheetHeader>
           <SheetTitle>{stack}</SheetTitle>
-          <SheetDescription>Les tâches de la stack sur chaque nœud, avec les tentatives passées.</SheetDescription>
+          <SheetDescription>
+            {deployed
+              ? "Les tâches de la stack sur chaque nœud, avec les tentatives passées."
+              : "Une app installée, prête pour le swarm."}
+          </SheetDescription>
         </SheetHeader>
 
         <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-4">
           <div className="flex flex-wrap gap-2">
-            <PendingButton
-              type="button"
-              size="sm"
-              variant="outline"
-              pending={tasks.isLoading}
-              pendingLabel="Actualiser"
-              icon={<RefreshCwIcon data-icon="inline-start" />}
-              onClick={() => stack && load(() => readStackTasks(stack))}
-            >
-              Actualiser
-            </PendingButton>
+            {deployed && (
+              <PendingButton
+                type="button"
+                size="sm"
+                variant="outline"
+                pending={tasks.isLoading}
+                pendingLabel="Actualiser"
+                icon={<RefreshCwIcon data-icon="inline-start" />}
+                onClick={() => stack && load(() => readStackTasks(stack))}
+              >
+                Actualiser
+              </PendingButton>
+            )}
             {manageable && (
-              <>
-                <PendingButton
-                  type="button"
-                  size="sm"
-                  pending={operation.isPending}
-                  pendingLabel="Mettre à jour"
-                  icon={<UploadIcon data-icon="inline-start" />}
-                  onClick={() => stack && redeploy(stack)}
-                  title="docker stack deploy"
-                >
-                  Mettre à jour
-                </PendingButton>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  disabled={operation.isPending}
-                  onClick={() => setConfirmingRemoval(true)}
-                  title="docker stack rm"
-                >
-                  <Trash2Icon data-icon="inline-start" />
-                  Supprimer
-                </Button>
-              </>
+              <PendingButton
+                type="button"
+                size="sm"
+                pending={deploying}
+                disabled={operation.isPending}
+                pendingLabel={deployLabel}
+                icon={<DeployIcon data-icon="inline-start" />}
+                onClick={deploy}
+                title="docker stack deploy"
+              >
+                {deployLabel}
+              </PendingButton>
+            )}
+            {manageable && deployed && (
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                disabled={operation.isPending || deploying}
+                onClick={() => setConfirmingRemoval(true)}
+                title="docker stack rm"
+              >
+                <Trash2Icon data-icon="inline-start" />
+                Supprimer
+              </Button>
             )}
           </div>
+
+          {!deployed && deployRun === 0 && (
+            <p className="text-sm text-muted-foreground">
+              Pas encore déployée : elle le sera avec son compose.yml et son compose.swarm.yml.
+            </p>
+          )}
+
+          {stack && deployRun > 0 && <StackDeployOutput key={deployRun} stack={stack} onFinished={deployFinished} />}
 
           {tasks.error && (
             <Alert variant="destructive">

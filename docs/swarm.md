@@ -7,7 +7,7 @@ and deploy the store apps that ship a `compose.swarm.yml`.
 
 Compose and Swarm are independent. An app can run with compose on Hangar's host, in the swarm, or both,
 and deploying one way never touches the other. `/apps` lists the compose projects only, `/cluster` the
-Swarm stacks only.
+Swarm stacks, and the installed apps you can deploy there.
 
 ## What Hangar needs
 
@@ -96,7 +96,8 @@ deploy:
 
 The table lists every stack of the swarm, deployed by Hangar or not: its health, its running and
 desired replicas, and the nodes its tasks run on, with how many on each. A stack whose tasks run
-nowhere stays listed, so you can see why.
+nowhere stays listed, so you can see why. Every installed app that has a `compose.swarm.yml` is listed
+too, as **Non déployée** (◌) until it runs in the swarm, as `/apps` lists an app never started.
 
 As on `/apps`, the navbar search finds a stack by name, the column headers sort, and three menus
 filter: **Origine** (the stacks of your store apps, or the others), **Nœud** and **Santé**. The filters
@@ -106,9 +107,11 @@ Clicking a stack opens its tasks, node by node, with the past attempts and the e
 each failed one. One **Logs** button per service follows its output, every task on every node, from the
 last 200 lines: each line names its task and node, as `docker service logs` does (`miniflux_web.2@pi-01 |`).
 The daemon must still hold the logs, as with the default `json-file` driver, `local` or `journald`. A stack named after an installed store app that has a `compose.swarm.yml` carries a
-**Hangar** badge, and its sheet adds **Mettre à jour** (`docker stack deploy` again, which resolves the
-images anew and rolls the services that changed) and **Supprimer** (`docker stack rm`). Removing the stack keeps the app
-installed and its volumes on disk.
+**Hangar** badge, and its sheet adds **Déployer** while it runs nowhere, then **Mettre à jour**
+(`docker stack deploy` again, which resolves the images anew and rolls the services that changed) and
+**Supprimer** (`docker stack rm`). A deploy shows Docker's output live in the sheet; closing the sheet
+does not stop it, and a notification says how it ended. Removing the stack keeps the app installed and
+its volumes on disk: it goes back to **Non déployée**.
 
 The page reloads every 10 seconds: Docker emits no event when a task starts or stops.
 
@@ -264,9 +267,9 @@ directory corrupt it: give the Swarm copy its own volume, or run only one at a t
 
 Three ways, all naming the stack after the app id:
 
-- **From the store.** The card of an app with a `compose.swarm.yml` shows a **Swarm** badge and a
-  **Déployer sur le swarm** button. It installs the app if needed (link, `.env.global` variables), then
-  runs `docker stack deploy`. Its compose project, if any, is left as it is.
+- **From the Cluster page.** Install the app from the store as any other (its card shows a **Swarm**
+  badge): it then shows in the stack table as **Non déployée**. Its sheet's **Déployer** runs
+  `docker stack deploy` and streams its output. Its compose project, if any, is left as it is.
 - **From the CLI**, against a manager: `node bin/cli.js swarm miniflux deploy`, or `swarm deploy` for every
   app that has a `compose.swarm.yml`, in category order. See [the CLI](cli.md#swarm-target-verb-args).
 - **By hand**, with `docker stack deploy` and the commands above.
@@ -275,8 +278,7 @@ Hangar's deploy waits for the services to run (`--detach=false`): it ends once e
 pulls on every node make it take a while. From the CLI, `swarm miniflux deploy --detach=true` returns as
 soon as the services are updated.
 
-The stack then shows on the Cluster page. Uninstalling the app from the store takes down both its
-compose project and its stack.
+Uninstalling the app from the store takes down both its compose project and its stack.
 
 ## Not covered yet
 

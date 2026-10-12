@@ -46,7 +46,7 @@ Compose files in a git repository you own — and adds what is tedious to do by 
 - **Notifications.** Available updates and the result of the nightly auto-update land in the
   notification menu.
 - **Docker Swarm.** When the host is in a swarm, the Cluster page shows its nodes and stacks,
-  creates or joins a swarm, and deploys the store apps that ship a `compose.swarm.yml`.
+  creates or joins a swarm, and deploys the installed apps that ship a `compose.swarm.yml`.
 - **Edit in place.** The `compose.yml` of each app and the store's `hangar.yml` can be edited
   from the browser, validated before they are written.
 

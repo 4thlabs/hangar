@@ -76,6 +76,16 @@ describe("ClusterOverview", () => {
     expect(html).toContain("aucune tâche");
   });
 
+  it("lists an installed swarm-ready app no stack runs yet, to deploy it from its sheet", () => {
+    const html = renderToStaticMarkup(
+      <ClusterOverview cluster={manager} manageableStacks={["miniflux", "adguard"]} search={noSearch} />,
+    );
+
+    expect(html).toContain(">adguard<");
+    expect(html).toContain("◌");
+    expect(html).toContain("Non déployée");
+  });
+
   it("shows an unreachable, drained worker for what it is", () => {
     const html = render(manager);
 
