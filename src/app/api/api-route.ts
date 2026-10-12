@@ -1,4 +1,4 @@
-import { PassThrough, Readable, type Writable } from "node:stream";
+import { PassThrough, Readable, Writable } from "node:stream";
 import { sessions } from "#libs/auth/server";
 import { NotFoundError } from "#libs/hangar";
 import { logger } from "#libs/logs";
@@ -23,19 +23,39 @@ export function apiStream(stream: Readable, contentType = "text/plain; charset=u
 }
 
 /**
- * Streams the output of commands that outlive the request: leaving the page must not stop them. A write
- * error is ignored and an aborted request drains the stream, which would otherwise buffer it all.
+ * Streams the output of commands that outlive the request: leaving the page must not stop them.
+ *
+ * The commands write to a stand-in rather than to the response: once the page is closed, the response
+ * stream is destroyed, and a child piped into it would no longer be read and block on its own output.
+ * The stand-in forwards while the page reads, drops the rest after, and never holds a command back.
  * @param run Writes the output and ends the stream; not awaited, so it reports its own outcome
  */
-export function apiCommandStream(request: Request, run: (output: Writable) => Promise<void>): Response {
-  const output = new PassThrough();
+export function apiCommandStream(run: (output: Writable) => Promise<void>): Response {
+  const response = new PassThrough();
 
-  output.on("error", () => {});
-  request.signal.addEventListener("abort", () => output.resume());
+  // A closed page destroys the response with an error, which must not crash the server.
+  response.on("error", () => {});
+
+  const output = new Writable({
+    write(chunk: Buffer, _encoding, callback) {
+      if (!response.destroyed) {
+        response.write(chunk);
+      }
+
+      callback();
+    },
+    final(callback) {
+      if (!response.destroyed) {
+        response.end();
+      }
+
+      callback();
+    },
+  });
 
   void run(output);
 
-  return apiStream(output);
+  return apiStream(response);
 }
 
 /** One Server-Sent Event, carrying a JSON payload. */

@@ -30,8 +30,6 @@ export const POST = apiRoute(
     }
 
     // Its failures are reported per app, as notifications.
-    return apiCommandStream(request, output =>
-      runComposeBatch({ operation, projects, userId: session.user.id, output }),
-    );
+    return apiCommandStream(output => runComposeBatch({ operation, projects, userId: session.user.id, output }));
   },
 );

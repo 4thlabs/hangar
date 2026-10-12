@@ -7,7 +7,7 @@ import { StackDeployment } from "#modules/cluster/stack-deployment.ts";
 /** Streams `docker stack deploy` of a store app; the deploy outlives the request and notifies its end. */
 export const POST = apiRoute<ApiContext<"/api/docker/swarm/stacks/[stack]/deploy">>(
   { log: "Swarm stack deploy stream failed to start", unavailable: "Le daemon Docker est indisponible." },
-  async (request, { params }, session) => {
+  async (_request, { params }, session) => {
     const { stack } = params;
 
     if (!hangar.store.isStackManageable(stack)) {
@@ -17,6 +17,6 @@ export const POST = apiRoute<ApiContext<"/api/docker/swarm/stacks/[stack]/deploy
     }
 
     // Its outcome is reported as a notification.
-    return apiCommandStream(request, output => StackDeployment.run({ stack, userId: session.user.id, output }));
+    return apiCommandStream(output => StackDeployment.run({ stack, userId: session.user.id, output }));
   },
 );
