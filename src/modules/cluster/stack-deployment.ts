@@ -45,12 +45,11 @@ export class StackDeployment {
 
   /** Resolves to whether the deploy went through. */
   private static async deploy(stack: string, output: Writable) {
-    // Docker's progress, one line per refresh without a terminal, minus the repeats. Forwarded by hand,
-    // not piped: once the page is closed the output is destroyed, and a pipe would then stop reading
-    // Docker, which blocks the deploy on its own output.
+    // Docker's progress, one line per refresh without a terminal, minus the repeats. `end: false`: the
+    // marker comes after it.
     const progress = new RepeatedLineFilter();
 
-    progress.on("data", (chunk: Buffer) => output.write(chunk));
+    progress.pipe(output, { end: false });
 
     try {
       // A compose.swarm.yml added after the install may reference variables the install did not seed.
