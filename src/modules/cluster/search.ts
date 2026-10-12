@@ -5,13 +5,16 @@ import { TableSort, type SortState } from "#modules/common/table-sort.ts";
 /** Sortable columns of the stack table. */
 export type StackSortColumn = "name" | "health" | "replicas" | "nodes";
 
+/** A stack's health in the swarm, or `undeployed` for an installed swarm-ready app no stack runs yet. */
+export type StackHealth = SwarmStackHealth | "undeployed";
+
 /** Whether Hangar can redeploy a stack (a store app with a compose.swarm.yml), or something else deployed it. */
 export type StackOrigin = "hangar" | "other";
 
 /** What the /cluster stack table shows, as its search params say it. */
 export type ClusterSearchState = {
   q: string;
-  health: SwarmStackHealth[];
+  health: StackHealth[];
   /** Hostnames: a stack shows when one of its tasks runs on one of them. */
   node: string[];
   origin: StackOrigin[];
@@ -22,7 +25,7 @@ export type ClusterSearchState = {
 /** The search params of /cluster, comma-separated multi-selects where empty means no filter. */
 export class ClusterSearch {
   /** Every health, from the best, in the order the filter lists them and the column sorts them. */
-  static readonly Healths: readonly SwarmStackHealth[] = ["running", "partial", "stopped"];
+  static readonly Healths: readonly StackHealth[] = ["running", "partial", "stopped", "undeployed"];
 
   static readonly Origins: readonly StackOrigin[] = ["hangar", "other"];
 

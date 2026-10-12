@@ -1,4 +1,4 @@
-import type { SwarmStack } from "#libs/docker";
+import type { ClusterStack } from "#modules/cluster/cluster-stacks.ts";
 import {
   ClusterSearch,
   type ClusterSearchState,
@@ -19,7 +19,7 @@ export type StackFilterCounts = {
 /** The /cluster stack table's filters and sort, applied to what the server read. */
 export class StackFilter {
   /** What each sortable column compares on. Health sorts by severity, the best first. */
-  private static readonly SortValue: Record<StackSortColumn, (stack: SwarmStack) => number | string> = {
+  private static readonly SortValue: Record<StackSortColumn, (stack: ClusterStack) => number | string> = {
     name: stack => stack.name,
     health: stack => ClusterSearch.Healths.indexOf(stack.health),
     replicas: stack => stack.desired,
@@ -30,7 +30,7 @@ export class StackFilter {
    * Narrows the stacks to the selected healths, nodes and origins, then to the query, then sorts them.
    * @param manageable The stacks Hangar can redeploy, which make the `hangar` origin
    */
-  static apply(stacks: readonly SwarmStack[], search: ClusterSearchState, manageable: readonly string[]) {
+  static apply(stacks: readonly ClusterStack[], search: ClusterSearchState, manageable: readonly string[]) {
     const kept = stacks.filter(
       stack =>
         StackFilter.matches(search.health, stack.health) &&
@@ -45,7 +45,7 @@ export class StackFilter {
   }
 
   /** How many stacks fall under each option of each filter, over every stack. */
-  static counts(stacks: readonly SwarmStack[], manageable: readonly string[]): StackFilterCounts {
+  static counts(stacks: readonly ClusterStack[], manageable: readonly string[]): StackFilterCounts {
     return {
       health: countBy(stacks, stack => stack.health),
       node: countBy(
@@ -56,7 +56,7 @@ export class StackFilter {
     };
   }
 
-  static origin(stack: SwarmStack, manageable: readonly string[]): StackOrigin {
+  static origin(stack: ClusterStack, manageable: readonly string[]): StackOrigin {
     return manageable.includes(stack.name) ? "hangar" : "other";
   }
 
@@ -65,7 +65,7 @@ export class StackFilter {
     return selected.length === 0 || selected.includes(value);
   }
 
-  private static runsOnAny(stack: SwarmStack, hostnames: readonly string[]) {
+  private static runsOnAny(stack: ClusterStack, hostnames: readonly string[]) {
     return hostnames.length === 0 || stack.placement.some(place => hostnames.includes(place.hostname));
   }
 }

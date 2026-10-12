@@ -98,8 +98,8 @@ What Swarm accepts in the `compose.yml` it merges over:
 - A bind mount (`${APP_DATA_DIR}/miniflux/db`) must exist on whichever node runs the task: pin the
   service with a placement constraint, mount the same share on every node, or use an `nfs` volume.
 
-The store card of such an app shows a **Swarm** badge and a **Déployer sur le swarm** button, which
-links the app and deploys its stack. Compose and Swarm are independent: the app can run with compose
+The store card of such an app shows a **Swarm** badge. Once installed, the app shows on the Cluster
+page, which deploys its stack (see [Docker Swarm](swarm.md#deploy-it)). Compose and Swarm are independent: the app can run with compose
 on Hangar's node and in the swarm at the same time, and deploying one never touches the other. Mind
 the volumes both copies would share. Uninstalling the app takes both down. Deploying by hand works as well, from the CLI (`swarm miniflux deploy`) or with
 `docker stack deploy`; the stack then shows on the Cluster page all the same. Hangar names the stack

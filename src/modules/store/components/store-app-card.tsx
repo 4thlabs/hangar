@@ -6,7 +6,6 @@ import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardTitle } from "#modules/common/ui/card.tsx";
 import type { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
 import { StoreAppButton } from "#modules/store/components/store-app-button.tsx";
-import { SwarmDeployButton } from "#modules/store/components/swarm-deploy-button.tsx";
 
 type StoreAppCardProps = {
   app: HangarApp;
@@ -37,12 +36,14 @@ export function StoreAppCard({ app, installApp, uninstallApp }: StoreAppCardProp
         )}
         <CardTitle className="line-clamp-2 text-base leading-tight">{app.name}</CardTitle>
         {app.swarmReady && (
-          <Badge variant="outline" title="A un compose.swarm.yml : elle peut aussi tourner dans le swarm">
+          <Badge
+            variant="outline"
+            title="A un compose.swarm.yml : une fois installée, elle se déploie depuis la page Cluster"
+          >
             Swarm
           </Badge>
         )}
       </CardContent>
-      {app.swarmReady && <SwarmDeployButton appId={app.id} appName={app.name} installed={app.installed} />}
       <StoreAppButton
         appId={app.id}
         appName={app.name}

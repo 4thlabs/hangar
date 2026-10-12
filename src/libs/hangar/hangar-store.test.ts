@@ -759,27 +759,12 @@ describe("HangarStore in the swarm", () => {
     expect(projects(runtime)).toEqual(["alpha-app", "beta-app", "beta-app"]);
   });
 
-  /** The `docker` calls made, as `compose down` or `stack deploy`. */
-  const dockerCalls = (runtime: ReturnType<typeof createRuntime>) =>
-    runtime.run.mock.calls.map(([, args]) => (args[0] === "stack" ? `stack ${args[1]}` : `compose ${args.at(-1)}`));
-
-  it("deploys an app's stack, leaving its compose project and hangar.yml alone", async () => {
-    const { store, runtime } = await withApps({ ready: ["alpha-app"] });
-    const config = path.join(store.storePath, "config", "hangar.yml");
-    const before = await readFile(config, "utf8");
-
-    await store.deployToSwarm("alpha-app");
-
-    expect(dockerCalls(runtime)).toEqual(["stack deploy"]);
-    expect(await readFile(config, "utf8")).toBe(before);
-  });
-
   it("takes an empty compose.swarm.yml for none: the app cannot run in the swarm yet", async () => {
     const { store, runtime } = await withApps({ ready: [] });
 
     await writeFile(path.join(store.installedPath, "alpha-app", "compose.swarm.yml"), "");
 
-    await expect(store.deployToSwarm("alpha-app")).rejects.toThrow("alpha-app is not a swarm app");
+    await expect(store.stack("alpha-app", ["deploy"])).rejects.toThrow("alpha-app is not a swarm app");
     expect(runtime.run).not.toHaveBeenCalled();
   });
 

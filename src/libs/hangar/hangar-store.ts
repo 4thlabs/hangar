@@ -321,24 +321,6 @@ export class HangarStore {
   }
 
   /**
-   * Deploys an app's stack from the store: links it, then deploys it. Its compose project, if it runs, is
-   * left alone: an app may run with both. `hangar.yml` is never edited.
-   * @param app The app id; it must ship a `compose.swarm.yml`
-   * @param options Run options for the stack call (`capture` to keep its output)
-   */
-  async deployToSwarm(app: string, options?: RunOptions) {
-    await this.link(app);
-    await this.installedSwarmFile(app);
-    await this.env.ensure(app);
-
-    try {
-      await this.stackApp(app, ["deploy", "--quiet"], options);
-    } finally {
-      await this.refresh();
-    }
-  }
-
-  /**
    * Whether Hangar can deploy this stack again and remove it: it is named after an installed app that
    * ships a `compose.swarm.yml`, whoever deployed it.
    */

@@ -7,11 +7,10 @@ import type {
   SwarmNodeAvailability,
   SwarmNodeRole,
   SwarmNodeStatus,
-  SwarmStackHealth,
 } from "#libs/docker";
 import { SwarmRules } from "#libs/docker/swarm-rules";
 import { plural } from "#modules/apps/format.ts";
-import type { StackOrigin } from "#modules/cluster/search.ts";
+import type { StackHealth, StackOrigin } from "#modules/cluster/search.ts";
 
 /** What /cluster shows when this node cannot describe the cluster. */
 export type ClusterEmptyText = {
@@ -43,17 +42,19 @@ export class ClusterLabels {
     drain: "Drainé",
   };
 
-  static readonly Health: Record<SwarmStackHealth, string> = {
+  static readonly Health: Record<StackHealth, string> = {
     running: "Tous les réplicas tournent",
     partial: "Une partie des réplicas tourne",
     stopped: "Aucun réplica ne tourne",
+    undeployed: "Installée, pas encore déployée sur le swarm",
   };
 
   /** The health in a word, for the table and its filter. */
-  static readonly HealthShort: Record<SwarmStackHealth, string> = {
+  static readonly HealthShort: Record<StackHealth, string> = {
     running: "En cours",
     partial: "Partielle",
     stopped: "Arrêtée",
+    undeployed: "Non déployée",
   };
 
   static readonly Origin: Record<StackOrigin, string> = {
@@ -61,17 +62,19 @@ export class ClusterLabels {
     other: "Autres",
   };
 
-  /** The dot before a stack: full, half or empty, as its replicas run. */
-  static readonly HealthSymbol: Record<SwarmStackHealth, string> = {
+  /** The dot before a stack: full, half or empty, as its replicas run, and dotted when it runs nowhere yet. */
+  static readonly HealthSymbol: Record<StackHealth, string> = {
     running: "●",
     partial: "◐",
     stopped: "○",
+    undeployed: "◌",
   };
 
-  static readonly HealthClass: Record<SwarmStackHealth, string> = {
+  static readonly HealthClass: Record<StackHealth, string> = {
     running: "text-emerald-600 dark:text-emerald-400",
     partial: "text-amber-600 dark:text-amber-400",
     stopped: "text-destructive",
+    undeployed: "text-muted-foreground",
   };
 
   static readonly NodeAction: Record<SwarmNodeAction, string> = {

@@ -1,9 +1,9 @@
 "use client";
 
 import { useSearch_UNSTABLE, useSetSearch_UNSTABLE } from "waku/router/client";
-import type { SwarmNode, SwarmStackHealth } from "#libs/docker";
+import type { SwarmNode } from "#libs/docker";
 import { ClusterLabels } from "#modules/cluster/labels.ts";
-import { ClusterSearch, type StackOrigin } from "#modules/cluster/search.ts";
+import { ClusterSearch, type StackHealth, type StackOrigin } from "#modules/cluster/search.ts";
 import type { StackFilterCounts } from "#modules/cluster/stack-filter.ts";
 import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
 
@@ -48,7 +48,7 @@ export function StackFilters({ nodes, counts }: StackFiltersProps) {
           count: counts.health[health] ?? 0,
         }))}
         selected={search?.health ?? []}
-        onChange={health => void setSearch({ health: health as SwarmStackHealth[] })}
+        onChange={health => void setSearch({ health: health as StackHealth[] })}
       />
     </>
   );
