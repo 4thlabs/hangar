@@ -3,11 +3,12 @@ import type { SwarmNodeAction, SwarmNodeRefusal } from "./swarm-rules/index.ts";
 /** Why Hangar turned a node action down before calling the daemon. */
 export type SwarmRefusal = SwarmNodeRefusal | "unknown-node";
 
-/** A node action Hangar turned down, before anything was sent to the daemon. */
+/** A change to a node Hangar turned down, before anything was sent to the daemon. */
 export class SwarmRefusedError extends Error {
   readonly refusal: SwarmRefusal;
 
-  constructor(refusal: SwarmRefusal, action: SwarmNodeAction, nodeId: string) {
+  /** @param action The node action, or `relabel` for a change of its labels */
+  constructor(refusal: SwarmRefusal, action: SwarmNodeAction | "relabel", nodeId: string) {
     super(`Refused to ${action} swarm node ${nodeId}: ${refusal}`);
     this.name = "SwarmRefusedError";
     this.refusal = refusal;

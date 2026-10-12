@@ -1,9 +1,11 @@
 "use server";
 
+import * as z from "zod";
 import { sessions } from "#libs/auth/server";
-import type { SwarmJoinCommands } from "#libs/docker";
+import type { SwarmJoinCommands, SwarmNodeLabelChanges } from "#libs/docker";
 import { swarm } from "#libs/docker/server";
 import { SwarmRules } from "#libs/docker/swarm-rules";
+import { logger } from "#libs/logs";
 import { SwarmFailure } from "#modules/cluster/actions/swarm-failure.ts";
 import { SwarmInput } from "#modules/cluster/actions/swarm-input.ts";
 import { ClusterLabels } from "#modules/cluster/labels.ts";
@@ -26,6 +28,40 @@ export const changeSwarmNode = async (nodeId: string, hostname: string, action: 
     return ActionResult.success(ClusterLabels.NodeActionDone[action](hostname));
   } catch (error) {
     return SwarmFailure.from(error, `Swarm ${action} failed`, { nodeId });
+  }
+};
+
+/** What the labels dialog may send, checked with the same rules it applies as you type. */
+const labelChangesSchema = z.object({
+  set: z.record(
+    z.string().refine(key => SwarmRules.isLabelKey(key)),
+    z.string().refine(value => SwarmRules.isLabelValue(value)),
+  ),
+  remove: z.array(z.string()),
+});
+
+/** Adds, changes and drops the labels of a node from its card on /cluster. */
+export const changeSwarmNodeLabels = async (
+  nodeId: string,
+  hostname: string,
+  changes: SwarmNodeLabelChanges,
+): Promise<ActionResult> => {
+  await sessions.require();
+
+  const parsed = labelChangesSchema.safeParse(changes);
+
+  if (!parsed.success) {
+    logger.warn("Swarm node labels rejected", { nodeId, issues: parsed.error.issues });
+
+    return ActionResult.failure(ClusterLabels.InvalidLabel);
+  }
+
+  try {
+    await swarm.changeNodeLabels(nodeId, parsed.data);
+
+    return ActionResult.success(`Labels de ${hostname} enregistrés.`);
+  } catch (error) {
+    return SwarmFailure.from(error, "Swarm node labels failed", { nodeId });
   }
 };
 

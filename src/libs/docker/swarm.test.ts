@@ -61,6 +61,8 @@ describe("DockerSwarm.cluster", () => {
         cpus: 4,
         memoryBytes: 8 * 1024 ** 3,
         engineVersion: "29.1.3",
+        labels: { zone: "home" },
+        engineLabels: {},
         tasks: 0,
         actions: ["drain"],
       },
@@ -74,6 +76,17 @@ describe("DockerSwarm.cluster", () => {
 
     expect(dockerMock.listTasks).toHaveBeenCalledWith({ filters: { "desired-state": ["running"] } });
     expect(dockerMock.listServices).toHaveBeenCalledWith({ status: true });
+  });
+
+  it("tells the node labels Hangar can change from the ones the host's daemon.json sets", async () => {
+    givenSwarm({ nodes: [swarmNode({ labels: { disk: "ssd" }, engineLabels: { gpu: "nvidia" } })] });
+
+    const cluster = await client().cluster();
+
+    expect(cluster.state === "manager" && cluster.nodes[0]).toMatchObject({
+      labels: { disk: "ssd" },
+      engineLabels: { gpu: "nvidia" },
+    });
   });
 
   it("puts this node first, then the managers, then the workers by hostname", async () => {
@@ -307,6 +320,56 @@ describe("DockerSwarm.changeNode", () => {
       ["old", ["promote", "drain", "remove"]],
       ["pi-01", ["promote", "drain"]],
     ]);
+  });
+});
+
+describe("DockerSwarm.changeNodeLabels", () => {
+  const labelled = () => [swarmNode({ id: "nas", leader: true, labels: { zone: "home", disk: "hdd", old: "" } })];
+
+  it("adds, changes and drops labels over the daemon's current ones, at the node's version", async () => {
+    givenSwarm({ nodes: labelled() });
+
+    await client().changeNodeLabels("nas", { set: { disk: "ssd", gpu: "" }, remove: ["old"] });
+
+    expect(dockerMock.updateNode).toHaveBeenCalledWith("nas", {
+      _query: { version: 42 },
+      _body: { Role: "manager", Availability: "active", Labels: { zone: "home", disk: "ssd", gpu: "" } },
+    });
+  });
+
+  it("keeps a key both removed and set, with its new value", async () => {
+    givenSwarm({ nodes: labelled() });
+
+    await client().changeNodeLabels("nas", { set: { disk: "nvme" }, remove: ["disk"] });
+
+    expect(dockerMock.updateNode).toHaveBeenCalledWith(
+      "nas",
+      expect.objectContaining({ _body: expect.objectContaining({ Labels: { zone: "home", disk: "nvme", old: "" } }) }),
+    );
+  });
+
+  it("refuses a node no longer in the cluster, without calling the daemon", async () => {
+    givenSwarm({ nodes: labelled() });
+
+    await expect(client().changeNodeLabels("ghost", { set: { disk: "ssd" }, remove: [] })).rejects.toMatchObject({
+      refusal: "unknown-node",
+    });
+
+    expect(dockerMock.updateNode).not.toHaveBeenCalled();
+  });
+
+  it("passes on the daemon's refusal when the node changed since it was read", async () => {
+    givenSwarm({ nodes: labelled() });
+    dockerMock.updateNode.mockRejectedValueOnce(
+      Object.assign(new Error("(HTTP code 500) server error"), {
+        statusCode: 500,
+        json: { message: "update out of sequence" },
+      }),
+    );
+
+    await expect(client().changeNodeLabels("nas", { set: { disk: "ssd" }, remove: [] })).rejects.toEqual(
+      new SwarmDaemonError(500, "update out of sequence"),
+    );
   });
 });
 

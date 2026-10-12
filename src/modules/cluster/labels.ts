@@ -100,6 +100,13 @@ export class ClusterLabels {
   static readonly AdvertiseHint =
     "Facultatif. À préciser si le serveur a plusieurs adresses : une IP ou une interface (eth0).";
 
+  /** What sets an engine label, and why the page cannot change it. */
+  static readonly EngineLabelHint = "Label du moteur, défini dans le daemon.json de l’hôte";
+
+  /** Why a node label is refused, as the dialog shows it under the field and the action in its toast. */
+  static readonly InvalidLabel =
+    "Clé : lettres, chiffres, « . », « _ » et « - », sans espace. Valeur : une seule ligne, 255 caractères au plus.";
+
   /** How many characters of the cluster id the page shows, as the `docker` CLI shortens ids. */
   private static readonly ShortIdLength = 12;
 
@@ -111,6 +118,11 @@ export class ClusterLabels {
   /** A drained or paused node takes no new task, which deserves to stand out. */
   static availabilityVariant(availability: SwarmNodeAvailability) {
     return availability === "active" ? "secondary" : "outline";
+  }
+
+  /** A label as `docker node inspect` would set it: `key=value`, or the key alone when it has no value. */
+  static label(key: string, value: string) {
+    return value ? `${key}=${value}` : key;
   }
 
   /** The one line under the title: which cluster, how big, how much it can lose. */
