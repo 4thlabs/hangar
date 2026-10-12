@@ -22,6 +22,7 @@ export const dockerMock = {
   listNodes: vi.fn(),
   listServices: vi.fn(),
   listTasks: vi.fn(),
+  serviceLogs: vi.fn(),
   updateNode: vi.fn(),
   removeNode: vi.fn(),
   swarmInit: vi.fn(),
@@ -52,6 +53,9 @@ export const fakeDockerode = () =>
     listNodes: dockerMock.listNodes,
     listServices: dockerMock.listServices,
     listTasks: dockerMock.listTasks,
+    getService: (id: string) => ({
+      logs: (options: unknown) => dockerMock.serviceLogs(id, options),
+    }),
     getNode: (id: string) => ({
       update: (options: unknown) => dockerMock.updateNode(id, options),
       remove: (options: unknown) => dockerMock.removeNode(id, options),

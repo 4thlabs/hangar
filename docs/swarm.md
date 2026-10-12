@@ -81,7 +81,9 @@ filter: **Origine** (the stacks of your store apps, or the others), **Nœud** an
 live in the URL, so a filtered view can be bookmarked.
 
 Clicking a stack opens its tasks, node by node, with the past attempts and the error Docker gives for
-each failed one. A stack named after an installed store app that has a `compose.swarm.yml` carries a
+each failed one. One **Logs** button per service follows its output, every task on every node, from the
+last 200 lines: each line names its task and node, as `docker service logs` does (`miniflux_web.2@pi-01 |`).
+The daemon must still hold the logs, as with the default `json-file` driver, `local` or `journald`. A stack named after an installed store app that has a `compose.swarm.yml` carries a
 **Hangar** badge, and its sheet adds **Mettre à jour** (`docker stack deploy` again, which resolves the
 images anew and rolls the services that changed) and **Supprimer** (`docker stack rm`). Removing the stack keeps the app
 installed and its volumes on disk.

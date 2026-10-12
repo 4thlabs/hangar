@@ -845,6 +845,28 @@ describe("HangarStore in the swarm", () => {
     ]);
   });
 
+  it("reads a service's logs with docker service logs, its name prefixed with the app's once", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"] });
+
+    await store.stack("alpha-app", ["logs", "web", "-f", "--tail", "50"]);
+    await store.stack("alpha-app", ["logs", "alpha-app_db"]);
+
+    expect(runtime.run.mock.calls.map(([, args]) => args)).toEqual([
+      ["service", "logs", "-f", "--tail", "50", "alpha-app_web"],
+      ["service", "logs", "alpha-app_db"],
+    ]);
+  });
+
+  it("asks for the service when logs names none, running nothing", async () => {
+    const { store, runtime } = await withApps({ ready: ["alpha-app"] });
+
+    await expect(store.stack("alpha-app", ["logs"])).rejects.toThrow(
+      "Name a service of alpha-app: swarm alpha-app logs <service>",
+    );
+
+    expect(runtime.run).not.toHaveBeenCalled();
+  });
+
   it("deploys the category apps that have a compose.swarm.yml, in order, and removes them backwards", async () => {
     const { store, runtime } = await withApps({ ready: ["alpha-app", "gamma-app", "solo-app"] });
 
