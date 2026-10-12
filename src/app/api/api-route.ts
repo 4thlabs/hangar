@@ -1,4 +1,4 @@
-import { Readable } from "node:stream";
+import { PassThrough, Readable, type Writable } from "node:stream";
 import { sessions } from "#libs/auth/server";
 import { NotFoundError } from "#libs/hangar";
 import { logger } from "#libs/logs";
@@ -20,6 +20,22 @@ export function apiStream(stream: Readable, contentType = "text/plain; charset=u
       "X-Accel-Buffering": "no",
     },
   });
+}
+
+/**
+ * Streams the output of commands that outlive the request: leaving the page must not stop them. A write
+ * error is ignored and an aborted request drains the stream, which would otherwise buffer it all.
+ * @param run Writes the output and ends the stream; not awaited, so it reports its own outcome
+ */
+export function apiCommandStream(request: Request, run: (output: Writable) => Promise<void>): Response {
+  const output = new PassThrough();
+
+  output.on("error", () => {});
+  request.signal.addEventListener("abort", () => output.resume());
+
+  void run(output);
+
+  return apiStream(output);
 }
 
 /** One Server-Sent Event, carrying a JSON payload. */

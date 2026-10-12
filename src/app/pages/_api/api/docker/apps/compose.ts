@@ -1,6 +1,5 @@
-import { PassThrough } from "node:stream";
 import { logger } from "#libs/logs";
-import { apiError, apiRoute, apiStream } from "#app/api/api-route.ts";
+import { apiCommandStream, apiError, apiRoute } from "#app/api/api-route.ts";
 import { isAppOperation } from "#modules/apps/actions/app-operation.ts";
 import { refuseAppOperation } from "#modules/apps/actions/app-operations.ts";
 import { runComposeBatch } from "#modules/apps/compose-batch.ts";
@@ -30,15 +29,9 @@ export const POST = apiRoute(
       }
     }
 
-    const output = new PassThrough();
-
-    // Without a reader the stream would buffer the whole batch or throw on a write; neither may stop the commands.
-    output.on("error", () => {});
-    request.signal.addEventListener("abort", () => output.resume());
-
-    // Not awaited: its failures are reported per app, as notifications.
-    void runComposeBatch({ operation, projects, userId: session.user.id, output });
-
-    return apiStream(output);
+    // Its failures are reported per app, as notifications.
+    return apiCommandStream(request, output =>
+      runComposeBatch({ operation, projects, userId: session.user.id, output }),
+    );
   },
 );

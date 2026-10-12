@@ -5,8 +5,8 @@ import { logger } from "#libs/logs";
 import { notifications } from "#libs/notifications/server";
 import { actionLabel, operationOutcome, type AppOperation } from "#modules/apps/actions/app-operation.ts";
 import { appOperationArguments } from "#modules/apps/actions/app-operations.ts";
-import { COMPOSE_EXIT_MARKER } from "#modules/apps/actions/compose-stream.ts";
 import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
+import { CommandStream } from "#modules/common/command-stream.ts";
 
 type ComposeBatch = {
   operation: AppOperation;
@@ -33,9 +33,7 @@ export async function runComposeBatch({ operation, projects, userId, output }: C
     }
   }
 
-  // The marker carries the number of failed apps, so `composeExitCode` keeps its meaning:
-  // zero is still "everything went through".
-  output.end(`\n${COMPOSE_EXIT_MARKER}${failures}\n`);
+  CommandStream.end(output, failures);
 }
 
 /** Runs the command on one app and notifies its outcome. Resolves to whether it succeeded. */

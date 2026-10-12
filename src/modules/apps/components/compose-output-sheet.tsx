@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { type AppOperation } from "#modules/apps/actions/app-operation.ts";
-import { composeExitCode } from "#modules/apps/actions/compose-stream.ts";
 import { plural } from "#modules/apps/format.ts";
 import { StreamOutput, StreamStatusBadge } from "#modules/common/components/stream-output.tsx";
-import { useStreamText } from "#modules/common/hooks/use-stream-text.ts";
+import { useCommandStream } from "#modules/common/hooks/use-command-stream.ts";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "#modules/common/ui/sheet.tsx";
 
 type ComposeOutputSheetProps = {
@@ -27,27 +25,7 @@ export function ComposeOutputSheet({ projects, operation, label, onClose, onFini
       ? `/api/docker/apps/compose?operation=${operation}&projects=${projects.map(encodeURIComponent).join(",")}`
       : null;
 
-  const { text, status, error } = useStreamText(endpoint, "POST");
-
-  const finishedRef = useRef(false);
-
-  useEffect(() => {
-    if (status === "connecting" || status === "connected") {
-      finishedRef.current = false;
-    }
-
-    if (finishedRef.current) {
-      return;
-    }
-
-    if (status === "ended") {
-      finishedRef.current = true;
-      onFinished(composeExitCode(text));
-    } else if (status === "error") {
-      finishedRef.current = true;
-      onFinished(null);
-    }
-  }, [onFinished, status, text]);
+  const { text, status, error } = useCommandStream(endpoint, onFinished);
 
   return (
     <Sheet open={operation !== null} onOpenChange={open => !open && onClose()}>
