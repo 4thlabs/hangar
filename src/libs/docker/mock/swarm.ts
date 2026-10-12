@@ -8,6 +8,9 @@ type NodeOverrides = {
   leader?: boolean;
   state?: string;
   availability?: string;
+  labels?: Record<string, string>;
+  /** The labels its daemon sets from `daemon.json`. */
+  engineLabels?: Record<string, string>;
 };
 
 /** One node as `GET /nodes` lists it, with only the fields `DockerSwarm` reads filled in. */
@@ -18,15 +21,17 @@ export function swarmNode({
   leader = false,
   state = "ready",
   availability = "active",
+  labels = { zone: "home" },
+  engineLabels = {},
 }: NodeOverrides = {}) {
   return {
     ID: id,
     Version: { Index: 42 },
-    Spec: { Role: role, Availability: availability, Labels: { zone: "home" } },
+    Spec: { Role: role, Availability: availability, Labels: labels },
     Description: {
       Hostname: hostname,
       Resources: { NanoCPUs: 4_000_000_000, MemoryBytes: 8 * 1024 ** 3 },
-      Engine: { EngineVersion: "29.1.3" },
+      Engine: { EngineVersion: "29.1.3", Labels: engineLabels },
     },
     Status: { State: state },
     ...(role === "manager" ? { ManagerStatus: { Leader: leader, Reachability: "reachable" } } : {}),
@@ -160,6 +165,8 @@ export function swarmNodeView(overrides: Partial<SwarmNode> = {}): SwarmNode {
     cpus: 8,
     memoryBytes: 32 * 1024 ** 3,
     engineVersion: "29.1.3",
+    labels: {},
+    engineLabels: {},
     tasks: 0,
     actions: [],
     ...overrides,

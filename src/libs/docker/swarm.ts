@@ -47,6 +47,10 @@ export type SwarmNode = {
   cpus: number;
   memoryBytes: number;
   engineVersion: string;
+  /** Its node labels, which placement constraints read as `node.labels.<key>`; Hangar can change them. */
+  labels: Record<string, string>;
+  /** The labels its daemon sets from `daemon.json`, read as `engine.labels.<key>`; only the host changes them. */
+  engineLabels: Record<string, string>;
   /** The tasks running on it, every stack counted. */
   tasks: number;
   /** What Hangar can change on this node now; see `SwarmRules.nodeRefusal`. */
@@ -92,6 +96,17 @@ export type SwarmStackTask = {
   error: string;
 };
 
+/**
+ * The node labels to change, as the page sends them: the others are left as the daemon has them, so a
+ * label added from the CLI since the page loaded survives.
+ */
+export type SwarmNodeLabelChanges = {
+  /** The labels to add or overwrite, by key; an empty value is a label all the same. */
+  set: Record<string, string>;
+  /** The keys to drop; a key also in `set` is kept, with its new value. */
+  remove: string[];
+};
+
 /** The commands that add a node to the swarm, one per role it joins as. Secret: they carry the tokens. */
 export type SwarmJoinCommands = { worker: string; manager: string };
 
@@ -129,11 +144,11 @@ type SwarmInspect = {
 type NodeInfo = {
   ID: string;
   Version?: { Index: number };
-  Spec?: { Role?: string; Availability?: SwarmNodeAvailability };
+  Spec?: { Role?: string; Availability?: SwarmNodeAvailability; Labels?: Record<string, string> };
   Description?: {
     Hostname?: string;
     Resources?: { NanoCPUs?: number; MemoryBytes?: number };
-    Engine?: { EngineVersion?: string };
+    Engine?: { EngineVersion?: string; Labels?: Record<string, string> };
   };
   Status?: { State?: SwarmNodeStatus };
   ManagerStatus?: { Leader?: boolean };
@@ -304,15 +319,31 @@ export class DockerSwarm {
     if (action === "remove") {
       await DockerSwarm.daemon(this.docker.getNode(nodeId).remove({}));
     } else {
-      // The update replaces the whole spec, so the change is merged over the current one, at its version.
-      await DockerSwarm.daemon(
-        this.docker.getNode(nodeId).update({
-          _query: { version: target.Version?.Index },
-          _body: { ...target.Spec, ...DockerSwarm.SpecChanges[action] },
-        }),
-      );
+      await this.updateSpec(target, DockerSwarm.SpecChanges[action]);
     }
 
+    await this.settle();
+  }
+
+  /**
+   * Adds, changes or drops node labels, over the labels the daemon has now rather than the cached ones.
+   * Any node takes them, a down one included: its spec lives with the managers.
+   * @param nodeId The node's id, from {@link cluster}
+   * @param changes Keys checked with `SwarmRules.isLabelKey`, values with `SwarmRules.isLabelValue`
+   * @returns Rejects with a {@link SwarmRefusedError} for a node no longer in the cluster, or with a
+   * {@link SwarmDaemonError}, e.g. when the node changed between the read and the update
+   */
+  async changeNodeLabels(nodeId: string, { set, remove }: SwarmNodeLabelChanges): Promise<void> {
+    const nodes = (await DockerSwarm.daemon(this.docker.listNodes())) as NodeInfo[];
+    const target = nodes.find(node => node.ID === nodeId);
+
+    if (!target) {
+      throw new SwarmRefusedError("unknown-node", "relabel", nodeId);
+    }
+
+    const kept = Object.entries(target.Spec?.Labels ?? {}).filter(([key]) => !remove.includes(key));
+
+    await this.updateSpec(target, { Labels: { ...Object.fromEntries(kept), ...set } });
     await this.settle();
   }
 
@@ -424,6 +455,16 @@ export class DockerSwarm {
     return output;
   }
 
+  /** The update replaces the whole spec, so the change is merged over the current one, at its version. */
+  private async updateSpec(node: NodeInfo, change: object): Promise<void> {
+    await DockerSwarm.daemon(
+      this.docker.getNode(node.ID).update({
+        _query: { version: node.Version?.Index },
+        _body: { ...node.Spec, ...change },
+      }),
+    );
+  }
+
   /** Awaits an Engine API call, turning the daemon's own refusal into a {@link SwarmDaemonError}. */
   private static async daemon<T>(call: Promise<T>): Promise<T> {
     try {
@@ -490,6 +531,8 @@ export class DockerSwarm {
         cpus: (resources?.NanoCPUs ?? 0) / 1e9,
         memoryBytes: resources?.MemoryBytes ?? 0,
         engineVersion: node.Description?.Engine?.EngineVersion ?? "",
+        labels: node.Spec?.Labels ?? {},
+        engineLabels: node.Description?.Engine?.Labels ?? {},
         tasks: running.filter(task => task.NodeID === node.ID).length,
         actions: SwarmRules.nodeActions(state, managers),
       };

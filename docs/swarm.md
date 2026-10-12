@@ -46,7 +46,7 @@ affected.
 ### Nodes
 
 One card per node: its role (leader, manager or worker), its status, its availability, its CPUs, memory,
-Docker version, and how many tasks run on it. The node Hangar runs on is marked **★ ce nœud**. The title
+Docker version, how many tasks run on it, and its labels. The node Hangar runs on is marked **★ ce nœud**. The title
 line sums up the cluster and how many manager failures it tolerates: with 3 managers it survives 1, with
 5 it survives 2, and with 1 or 2 none.
 
@@ -69,6 +69,28 @@ A few things Swarm itself decides:
 - Demoting the node Hangar runs on costs Hangar its view of the cluster. The confirmation warns you.
 - Right after a promotion, the daemon refuses a demotion for a couple of seconds, until the Raft group
   settles. Try again.
+
+### Node labels
+
+A placement constraint can pick nodes by label rather than by hostname, so the stack follows the
+disk or the GPU when the machine is renamed or replaced. Each card has a **Labels** button to add,
+change and drop them, as `docker node update --label-add` and `--label-rm` would:
+
+```yaml
+# compose.swarm.yml
+deploy:
+  placement:
+    constraints: [node.labels.storage == nas] # any node labelled storage=nas
+```
+
+- A key is letters, digits, `.`, `_` and `-`: the only keys a constraint can name. A value is one line,
+  and may be empty, though `==` cannot match an empty value.
+- Only what you changed is sent, over the labels the daemon has at that moment: a label added from the
+  CLI meanwhile is kept.
+- A node that is down can be labelled too: its labels live with the managers.
+- The card also shows, with a server icon, the labels the host sets in its `daemon.json`
+  (`"labels": ["arch=arm64"]`). Constraints read them as `engine.labels.<key>`; only the host changes
+  them, and `systemctl reload docker` picks the change up.
 
 ### Stacks
 
@@ -211,11 +233,11 @@ A bind mount such as `${APP_DATA_DIR}/miniflux/db` must exist on whichever node 
 Hangar copies no data between nodes. A volume in `compose.swarm.yml` replaces the one of `compose.yml`
 with the same target path, so the choice stays in the Swarm file:
 
-| Way               | When                                                      | In `compose.swarm.yml`                                     |
-| ----------------- | --------------------------------------------------------- | ---------------------------------------------------------- |
-| Pin the service   | The data stays on one node                                | `deploy.placement.constraints: [node.hostname == nas]`     |
-| Override the path | A share is mounted at the same path on every node (fstab) | `volumes: [/mnt/nas/miniflux/db:/var/lib/postgresql/data]` |
-| NFS volume        | Docker mounts the share itself, wherever the task runs    | a named volume with the `nfs` driver options, below        |
+| Way               | When                                                      | In `compose.swarm.yml`                                                                   |
+| ----------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Pin the service   | The data stays on one node                                | `deploy.placement.constraints: [node.labels.storage == nas]` or `[node.hostname == nas]` |
+| Override the path | A share is mounted at the same path on every node (fstab) | `volumes: [/mnt/nas/miniflux/db:/var/lib/postgresql/data]`                               |
+| NFS volume        | Docker mounts the share itself, wherever the task runs    | a named volume with the `nfs` driver options, below                                      |
 
 ```yaml
 # store/miniflux/compose.swarm.yml: the database on an NFS share instead of the nas's disk

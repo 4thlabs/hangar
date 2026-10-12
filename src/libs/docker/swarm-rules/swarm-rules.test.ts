@@ -40,3 +40,23 @@ describe("SwarmRules.faultTolerance", () => {
     expect([1, 2, 3, 4, 5, 7].map(managers => SwarmRules.faultTolerance(managers))).toEqual([0, 0, 1, 1, 2, 3]);
   });
 });
+
+describe("SwarmRules node labels", () => {
+  it("takes the keys a placement constraint can name", () => {
+    expect(["disk", "storage.tier", "zone-1", "GPU_vendor", "9a"].every(key => SwarmRules.isLabelKey(key))).toBe(true);
+  });
+
+  it("refuses a key a constraint could not name, or none at all", () => {
+    expect(["", "-disk", ".zone", "my disk", "zone=home", "é", "a".repeat(129)].some(SwarmRules.isLabelKey)).toBe(
+      false,
+    );
+  });
+
+  it("takes any one-line value, an empty one included", () => {
+    expect(["", "ssd", "Salle à manger", "10.0.0.1:2377"].every(value => SwarmRules.isLabelValue(value))).toBe(true);
+  });
+
+  it("refuses a value over several lines, or too long", () => {
+    expect(["ssd\nzone=x", "tab\there", "a".repeat(256)].some(SwarmRules.isLabelValue)).toBe(false);
+  });
+});

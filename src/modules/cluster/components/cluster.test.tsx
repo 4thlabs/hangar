@@ -84,6 +84,26 @@ describe("ClusterOverview", () => {
     expect(html).toContain("Aucune tâche");
   });
 
+  it("shows a node's labels, the ones from the host's daemon.json marked apart", () => {
+    const labelled = managerView({
+      nodes: [node({ labels: { zone: "home", gpu: "" }, engineLabels: { arch: "arm64" } })],
+    });
+
+    const html = render(labelled);
+
+    expect(html).toContain(">gpu<");
+    expect(html).toContain(">zone=home<");
+    expect(html).toContain("Label du moteur, défini dans le daemon.json de l’hôte : </span>");
+    expect(html).toContain(">arch=arm64<");
+  });
+
+  it("offers every node its labels, the unreachable one included, and lists none when it has none", () => {
+    const html = render(manager);
+
+    expect(html.match(/>Labels</g)).toHaveLength(2);
+    expect(html).not.toContain('aria-label="Labels"');
+  });
+
   const emptyStates: [SwarmCluster, string][] = [
     [{ state: "inactive", error: "" }, "Créer le cluster"],
     [{ state: "locked", error: "" }, "docker swarm unlock"],
