@@ -67,7 +67,9 @@ export function StackSheet({ stack, manageable, onClose }: StackSheetProps) {
 
   return (
     <Sheet open={stack !== null} onOpenChange={open => !open && onClose()}>
-      <SheetContent className="sm:max-w-3xl">
+      {/* The full screen on a phone, for the task table. The `data-[side=right]` prefix is the sheet's
+          own, which a bare `sm:max-w-*` would not override. */}
+      <SheetContent className="data-[side=right]:w-full data-[side=right]:sm:max-w-3xl">
         <SheetHeader>
           <SheetTitle>{stack}</SheetTitle>
           <SheetDescription>Les tâches de la stack sur chaque nœud, avec les tentatives passées.</SheetDescription>

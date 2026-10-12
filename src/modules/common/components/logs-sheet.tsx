@@ -1,7 +1,7 @@
 "use client";
 
 import { EraserIcon, FileTextIcon, RefreshCwIcon } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState, type UIEvent } from "react";
 import { StreamOutput, StreamStatusBadge } from "#modules/common/components/stream-output.tsx";
 import { useStreamText } from "#modules/common/hooks/use-stream-text.ts";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -31,11 +31,36 @@ export function LogsSheet({ endpoint, name, context, label = "Logs" }: LogsSheet
   const [open, setOpen] = useState(false);
   const [following, setFollowing] = useState(true);
   const { text: logs, status, error, clear, reconnect } = useStreamText(open ? endpoint : null);
+  const lastScrollTop = useRef(0);
+
+  /**
+   * Following stops when the reader scrolls up, and resumes at the bottom. A scroll event lands after the
+   * text may have grown again, so the distance to the bottom alone would read a burst of lines, such as
+   * the first 200, as the reader leaving.
+   */
+  function handleScroll({ currentTarget: viewport }: UIEvent<HTMLDivElement>) {
+    const isAtBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 32;
+    const scrolledUp = viewport.scrollTop < lastScrollTop.current;
+
+    lastScrollTop.current = viewport.scrollTop;
+
+    if (isAtBottom) {
+      setFollowing(true);
+    } else if (scrolledUp) {
+      setFollowing(false);
+    }
+  }
+
+  /** Back to following the tail, as when the sheet opens: the scroll position starts over. */
+  function followFromStart() {
+    lastScrollTop.current = 0;
+    setFollowing(true);
+  }
 
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
       clear();
-      setFollowing(true);
+      followFromStart();
     }
 
     setOpen(nextOpen);
@@ -69,7 +94,7 @@ export function LogsSheet({ endpoint, name, context, label = "Logs" }: LogsSheet
               variant="outline"
               size="sm"
               onClick={() => {
-                setFollowing(true);
+                followFromStart();
                 reconnect();
               }}
               disabled={status === "connecting"}
@@ -93,7 +118,7 @@ export function LogsSheet({ endpoint, name, context, label = "Logs" }: LogsSheet
             error={error}
             placeholder="En attente de logs…"
             follow={following}
-            onScroll={({ currentTarget: v }) => setFollowing(v.scrollHeight - v.scrollTop - v.clientHeight < 32)}
+            onScroll={handleScroll}
           />
         </div>
       </SheetContent>
