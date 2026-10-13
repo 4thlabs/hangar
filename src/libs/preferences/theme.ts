@@ -13,12 +13,6 @@ export class Theme {
   static readonly Palettes = [
     { value: "claude", label: "Claude" },
     { value: "nord", label: "Nord" },
-    { value: "nord-frost", label: "Nord Frost" },
-    { value: "vintage-paper", label: "Vintage Paper" },
-    { value: "vs-code", label: "VS Code" },
-    { value: "northern-lights", label: "Northern Lights" },
-    { value: "taupe", label: "Taupe" },
-    { value: "sunset-horizon", label: "Sunset Horizon" },
   ] as const;
 
   /** Every color mode, in the order the settings page lists them. */
