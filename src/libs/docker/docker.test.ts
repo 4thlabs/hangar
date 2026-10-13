@@ -184,6 +184,22 @@ describe("Docker.openLogs", () => {
 
     expect(source.destroyed).toBe(true);
   });
+
+  it("tears the log stream down when the request was aborted while it opened", async () => {
+    givenContainers([logged(inAlpha)]);
+    const source = new PassThrough();
+    const controller = new AbortController();
+
+    dockerMock.logs.mockImplementation(async () => {
+      controller.abort();
+
+      return source;
+    });
+
+    await client("alpha").openLogs("alpha", CONTAINER_ID, controller.signal);
+
+    expect(source.destroyed).toBe(true);
+  });
 });
 
 describe("Docker.sampleStats", () => {

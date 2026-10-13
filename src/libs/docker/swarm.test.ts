@@ -571,6 +571,22 @@ describe("DockerSwarm.openServiceLogs", () => {
 
     expect(source.destroyed).toBe(true);
   });
+
+  it("tears the log stream down when the request was aborted while it opened", async () => {
+    givenStack();
+    const source = new PassThrough();
+    const controller = new AbortController();
+
+    dockerMock.serviceLogs.mockImplementation(async () => {
+      controller.abort();
+
+      return source;
+    });
+
+    await client().openServiceLogs("miniflux", "miniflux_web", controller.signal);
+
+    expect(source.destroyed).toBe(true);
+  });
 });
 
 describe("DockerSwarm daemon refusals", () => {

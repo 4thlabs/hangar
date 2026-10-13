@@ -419,7 +419,13 @@ export class Docker {
       output.end();
     });
 
-    signal.addEventListener("abort", () => logs.destroy());
+    // The client may have left while the stream was opening: that abort has already fired and never
+    // reaches a listener added now, so `docker logs -f` would follow forever.
+    if (signal.aborted) {
+      logs.destroy();
+    } else {
+      signal.addEventListener("abort", () => logs.destroy(), { once: true });
+    }
 
     return output;
   }
