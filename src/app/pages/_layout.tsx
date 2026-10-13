@@ -16,8 +16,8 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <link rel="manifest" href="/manifest.webmanifest" />
         {/* iOS only reads the manifest icons since 17.4; before that this tag is all it looks at. */}
         <link rel="apple-touch-icon" href="/images/icon.png" />
-        {/* ponytail: pinned to Nord, while the app ships 8 palettes × light/dark — varying the tint
-            per palette would duplicate 16 values the CSS already holds. Revisit if the mismatch shows. */}
+        {/* ponytail: pinned to Nord, while the app ships 2 palettes × light/dark — varying the tint
+            per palette would duplicate 4 values the CSS already holds. Revisit if the mismatch shows. */}
         {theme === "system" ? (
           <>
             <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2e3440" />
