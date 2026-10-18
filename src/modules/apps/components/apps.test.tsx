@@ -82,6 +82,17 @@ describe("Docker apps views", () => {
     expect(html).not.toContain("Détails");
   });
 
+  it("groups the up -d variants under Up's menu instead of showing a button each", () => {
+    const html = renderToStaticMarkup(<AppsTable projects={snapshot.projects} />);
+
+    expect(html).toContain('title="docker compose up -d"');
+    expect(html).toContain('aria-label="Autres options de Up"');
+    expect(html).toContain('title="docker compose down"');
+    // The menu renders its items only once opened.
+    expect(html).not.toContain("Force recreate");
+    expect(html).not.toContain("--pull always");
+  });
+
   it("marks the sorted column for assistive tech and leaves the others neutral", () => {
     const html = renderToStaticMarkup(
       <AppsTable
