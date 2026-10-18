@@ -128,13 +128,14 @@ still throttle you, raise [`registryThrottling`](store.md#registrythrottling) in
 Hangar compresses its own responses, but static assets are served before that middleware runs,
 so let the proxy compress them. Exclude `text/event-stream`: compose output, logs and stats are
 streamed as server-sent events, and a buffering proxy would deliver them all at once at the end.
-With Traefik:
+Exclude `application/zip` too: Traefik's list replaces its own default, which leaves archives out,
+and a backup gzipped again would download without its size. With Traefik:
 
 ```yaml
 labels:
   - traefik.enable=true
   - traefik.http.routers.hangar.middlewares=hangar-compress
-  - traefik.http.middlewares.hangar-compress.compress.excludedcontenttypes=text/event-stream
+  - traefik.http.middlewares.hangar-compress.compress.excludedcontenttypes=text/event-stream,application/zip
 ```
 
 ## Updating Hangar
