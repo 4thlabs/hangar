@@ -1,8 +1,7 @@
-import { DuplicatedJobError, ScheduledJobRegistry, Sidequest, type JobState } from "sidequest";
+import { DuplicatedJobError } from "sidequest";
 import type { BackupConfig } from "#libs/hangar";
-import { BackupApp } from "../jobs/backup-app.ts";
 
-/** Where the backup runs go: Sidequest in production, a double in the tests. */
+/** Where the backup runs go: Sidequest in production (`server/backup-queue.ts`), a double in the tests. */
 export type BackupQueue = {
   /** Enqueues a run of `app` on every tick of `cron`, and returns the schedule's id */
   schedule(cron: string, app: string): Promise<string>;
@@ -24,18 +23,6 @@ export type BackupRequest = "enqueued" | "already-running";
  * and again whenever hangar.yml changes.
  */
 export class BackupJobs {
-  /** A queue of their own: a backup can take hours, and must not hold up the image checks */
-  static readonly Queue = "backups";
-
-  /**
-   * Past it, the run is aborted. A run with no timeout is taken for stale after ten minutes and run
-   * a second time, which a large app's backup would easily outlast.
-   */
-  private static readonly Timeout = 6 * 60 * 60 * 1_000;
-
-  /** The states of a run still to finish */
-  private static readonly ActiveStates: JobState[] = ["waiting", "claimed", "running"];
-
   private readonly queue: BackupQueue;
 
   /** The registered schedules, by app */
@@ -122,45 +109,4 @@ export class BackupJobs {
       }
     }
   }
-
-  /** The runs as Sidequest takes them: one at a time per app, never retried, aborted past the timeout. */
-  static sidequest(): BackupQueue {
-    // No `.with()`: it would replace the services the job builds by default. Unique by `[app]`,
-    // so a run asked for by hand and a scheduled one never overlap.
-    const builder = () =>
-      Sidequest.build(BackupApp)
-        .queue(BackupJobs.Queue)
-        .unique({ withArgs: true })
-        .maxAttempts(1)
-        .timeout(BackupJobs.Timeout);
-
-    return {
-      schedule: async (cron, app) => (await builder().schedule(cron, app)).id,
-      unschedule: async scheduleId => {
-        await ScheduledJobRegistry.stop(scheduleId);
-      },
-      enqueue: async app => {
-        await builder().enqueue(app);
-      },
-      countActive: async app => {
-        const runs = await Sidequest.job.list({
-          // Spelled out, as `ImageCheckReport` does: the bundle may rename the class.
-          jobClass: "BackupApp",
-          state: BackupJobs.ActiveStates,
-          args: [app],
-          limit: 1,
-        });
-
-        return runs.length;
-      },
-    };
-  }
 }
-
-// Reused across HMR reloads, otherwise dev registers every schedule a second time
-const globalForBackupJobs = globalThis as unknown as { backupJobs?: BackupJobs };
-
-/** The backup runs of the web server, which owns the schedules. */
-export const backupJobs = globalForBackupJobs.backupJobs ?? new BackupJobs(BackupJobs.sidequest());
-
-globalForBackupJobs.backupJobs = backupJobs;

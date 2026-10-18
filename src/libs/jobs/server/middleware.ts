@@ -4,7 +4,7 @@ import { env } from "#libs/env";
 import { hangar } from "#libs/hangar/server";
 import { CheckImageVersion } from "../jobs/check-image-version.ts";
 import { UpdateOutdatedApps } from "../jobs/update-outdated-apps.ts";
-import { backupJobs, BackupJobs } from "./backup-jobs.ts";
+import { backupJobs, SidequestBackupQueue } from "./backup-queue.ts";
 
 /**
  * Starts Sidequest and schedules Hangar's jobs, once, after the first request the server answers.
@@ -44,7 +44,7 @@ export class SidequestBoot {
         },
         queues: [
           { name: "default", concurrency: 1, priority: 50, state: "active" },
-          { name: BackupJobs.Queue, concurrency: 1, priority: 10, state: "active" },
+          { name: SidequestBackupQueue.Name, concurrency: 1, priority: 10, state: "active" },
         ],
         abortGracePeriodMs: SidequestBoot.AbortGracePeriod,
         // Jobs come from `sidequest.jobs.js`, not from stack-trace guessing. See that file.
