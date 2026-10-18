@@ -1,6 +1,6 @@
 export * from "./app-id.ts";
 export type { AppFiles } from "./app-files.ts";
-export type { Category } from "./hangar-config.ts";
+export type { BackupConfig, Category } from "./hangar-config.ts";
 export type { HangarApp } from "./hangar-store.ts";
 export * from "./hangar-env.ts";
 export * from "./hangar-error.ts";
