@@ -11,6 +11,9 @@ import type { InstalledApps } from "../docker.ts";
 export const dockerMock = {
   listContainers: vi.fn(),
   inspect: vi.fn(),
+  createContainer: vi.fn(),
+  startContainer: vi.fn(),
+  removeContainer: vi.fn(),
   logs: vi.fn(),
   stats: vi.fn(),
   demuxStream: vi.fn(),
@@ -39,8 +42,14 @@ export const fakeDockerode = () =>
   ({
     listContainers: dockerMock.listContainers,
     listImages: dockerMock.listImages,
+    createContainer: async (options: unknown) => {
+      const id = await dockerMock.createContainer(options);
+
+      return { start: () => dockerMock.startContainer(id) };
+    },
     getContainer: (id: string) => ({
       inspect: () => dockerMock.inspect(id),
+      remove: () => dockerMock.removeContainer(id),
       logs: (options: unknown) => dockerMock.logs(id, options),
       stats: (options: unknown) => dockerMock.stats(id, options),
     }),
