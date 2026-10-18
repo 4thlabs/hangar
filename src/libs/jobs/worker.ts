@@ -14,6 +14,10 @@ export async function createWorkerServices(): Promise<JobServices> {
   // and loading this one opens the store.
   const { hangar } = await import("#libs/hangar/server");
 
+  // The worker threads outlive a run, and the store above is loaded once per thread: without a
+  // reload, a run would miss every hangar.yml edit made since the thread started.
+  await hangar.store.refresh();
+
   return {
     hangar,
     // Same arguments the web server passes in `#libs/docker/server`, with a cache of the run's own.
