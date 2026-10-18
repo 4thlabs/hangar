@@ -2,13 +2,18 @@
 
 import { useState } from "react";
 import { useRouter } from "waku";
-import { AppCommands, type AppCommand } from "#modules/apps/actions/app-operation.ts";
+import { AppCommands, type AppCommand, type UpFlag } from "#modules/apps/actions/app-operation.ts";
+import { ToggledSet } from "#modules/common/toggled-set.ts";
 
 /** Compose run state for the table and the detail page. No toast: the route's notification reports the outcome. */
 export function useComposeRun(projects: string[]) {
   const router = useRouter();
   const [confirmation, setConfirmation] = useState<AppCommand | null>(null);
   const [running, setRunning] = useState<AppCommand | null>(null);
+
+  // The flags ticked in Up's menu, for this page visit only: never saved, and unticked once a run
+  // starts, so a forced recreate never carries over to the next Up.
+  const [flags, setFlags] = useState<ReadonlySet<UpFlag>>(() => new Set());
 
   // Frozen when the command starts: the table's selection keeps moving under the user's clicks,
   // and the output sheet must keep streaming the apps the command actually got.
@@ -20,6 +25,7 @@ export function useComposeRun(projects: string[]) {
     }
 
     setConfirmation(null);
+    setFlags(new Set());
     setTargets(projects);
     setRunning(command);
   }
@@ -38,6 +44,8 @@ export function useComposeRun(projects: string[]) {
     cancel: () => setConfirmation(null),
     running,
     targets,
+    flags,
+    toggleFlag: (flag: UpFlag, ticked: boolean) => setFlags(current => ToggledSet.create(current, flag, ticked)),
     run,
     request,
     disabled: running !== null || projects.length === 0,

@@ -82,15 +82,15 @@ describe("Docker apps views", () => {
     expect(html).not.toContain("Détails");
   });
 
-  it("groups the up -d variants under Up's menu instead of showing a button each", () => {
+  it("offers Up's flags in its menu, none ticked, instead of a button per variant", () => {
     const html = renderToStaticMarkup(<AppsTable projects={snapshot.projects} />);
 
     expect(html).toContain('title="docker compose up -d"');
-    expect(html).toContain('aria-label="Autres options de Up"');
+    expect(html).toContain('aria-label="Options de Up"');
     expect(html).toContain('title="docker compose restart"');
     expect(html).toContain('title="docker compose down"');
-    // The menu renders its items only once opened.
-    expect(html).not.toContain("Force recreate");
+    // The menu renders its checkboxes only once opened.
+    expect(html).not.toContain("--force-recreate");
     expect(html).not.toContain("--pull always");
   });
 

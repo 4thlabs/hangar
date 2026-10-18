@@ -36,7 +36,8 @@ Compose files in a git repository you own — and adds what is tedious to do by 
 - **A store you own.** Every app is a folder with a `compose.yml` in your own git repository.
   Hangar clones it, links the apps you install, and runs `docker compose` against them.
 - **Apps at a glance.** Status, containers, live logs and stats for every installed stack, with
-  up, update, force recreate and down one click away and their output streamed as they run.
+  up (with pull and force-recreate as options), restart and down one click away and their output
+  streamed as they run.
 - **Image updates.** Every four hours Hangar asks the registries whether a newer image exists
   for what you run, and every night it can pull and recreate the outdated apps for you.
 - **One global environment.** Hangar scans the installed stacks for the `${VARIABLES}` they

@@ -11,6 +11,7 @@ import type { AppSortColumn, AppsSort } from "#modules/apps/search-codec.ts";
 import { statusLabel, statusVariant } from "#modules/apps/status.ts";
 import { SortableHead } from "#modules/common/components/sortable-head.tsx";
 import { navigationPrefetch } from "#modules/common/navigations.ts";
+import { ToggledSet } from "#modules/common/toggled-set.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
 
@@ -28,17 +29,7 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
   const compose = useComposeRun(selected);
 
   function toggle(name: string, checked: boolean) {
-    setSelection(current => {
-      const next = new Set(current);
-
-      if (checked) {
-        next.add(name);
-      } else {
-        next.delete(name);
-      }
-
-      return next;
-    });
+    setSelection(current => ToggledSet.create(current, name, checked));
   }
 
   return (
@@ -53,6 +44,8 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
           running={compose.running}
           disabled={compose.disabled}
           size="sm"
+          flags={compose.flags}
+          onToggleFlag={compose.toggleFlag}
           onRequest={compose.request}
         />
       </div>

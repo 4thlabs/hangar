@@ -17,8 +17,8 @@ import { ButtonGroup } from "#modules/common/ui/button-group.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "#modules/common/ui/dropdown-menu.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
@@ -28,6 +28,9 @@ type ComposeOperationButtonsProps = {
   running: AppCommand | null;
   disabled: boolean;
   size?: "sm" | undefined;
+  /** The flags ticked in Up's menu, which Up runs with. */
+  flags: ReadonlySet<UpFlag>;
+  onToggleFlag: (flag: UpFlag, ticked: boolean) => void;
   /** Runs a command, after the confirmation it calls for (see `useComposeRun`). */
   onRequest: (command: AppCommand) => void;
 };
@@ -42,10 +45,17 @@ class OperationIcons {
 
 /**
  * The compose operation buttons, shared by the apps table and the detail page; state lives in `useComposeRun`.
- * Grouped by command: Up carries its `up -d` variants in a menu, so adding one does not add a button.
+ * Grouped by command: Up's flags are checkboxes in its menu, so a new flag does not add a button.
  */
-export function ComposeOperationButtons({ running, disabled, size, onRequest }: ComposeOperationButtonsProps) {
-  const up = AppCommands.create("up");
+export function ComposeOperationButtons({
+  running,
+  disabled,
+  size,
+  flags,
+  onToggleFlag,
+  onRequest,
+}: ComposeOperationButtonsProps) {
+  const up = AppCommands.create("up", flags);
   const restart = AppCommands.create("restart");
   const down = AppCommands.create("down");
 
@@ -58,9 +68,12 @@ export function ComposeOperationButtons({ running, disabled, size, onRequest }: 
           disabled={disabled}
           onClick={() => onRequest(up)}
           title={AppCommands.commandLine(up)}
+          // The count alone does not say which flags; the name gives the whole command.
+          aria-label={`${AppCommands.OperationLabel.up} : ${AppCommands.commandLine(up)}`}
         >
           {running?.operation === "up" ? <Spinner /> : <PowerIcon data-icon="inline-start" />}
-          {AppCommands.label(up)}
+          {AppCommands.OperationLabel.up}
+          {up.flags.length > 0 && <span className="opacity-70">· {up.flags.length}</span>}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -69,27 +82,30 @@ export function ComposeOperationButtons({ running, disabled, size, onRequest }: 
                 type="button"
                 size={size === "sm" ? "icon-sm" : "icon"}
                 disabled={disabled}
-                aria-label={`Autres options de ${AppCommands.label(up)}`}
+                aria-label={`Options de ${AppCommands.OperationLabel.up}`}
               />
             }
           >
             <ChevronDownIcon />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={6} className="min-w-56">
+          <DropdownMenuContent align="end" sideOffset={6} className="min-w-60">
             {AppCommands.FlagOrder.map(flag => {
-              const variant = AppCommands.create("up", [flag]);
               const Icon = OperationIcons.Flag[flag];
 
               return (
-                <DropdownMenuItem key={flag} onClick={() => onRequest(variant)}>
+                <DropdownMenuCheckboxItem
+                  key={flag}
+                  checked={flags.has(flag)}
+                  onCheckedChange={ticked => onToggleFlag(flag, ticked)}
+                >
                   <Icon />
                   <span className="flex flex-col">
-                    {AppCommands.label(variant)}
+                    {AppCommands.Flags[flag].label}
                     <span className="font-mono text-xs text-muted-foreground">
-                      {AppCommands.arguments(variant).join(" ")}
+                      {AppCommands.Flags[flag].arguments.join(" ")}
                     </span>
                   </span>
-                </DropdownMenuItem>
+                </DropdownMenuCheckboxItem>
               );
             })}
           </DropdownMenuContent>
