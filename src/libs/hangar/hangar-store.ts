@@ -4,6 +4,7 @@ import path from "node:path";
 import { load } from "js-yaml";
 import { logger } from "#libs/logs";
 import { AppFiles } from "./app-files.ts";
+import { AppId } from "./app-id.ts";
 import { HangarConfig } from "./hangar-config.ts";
 import { HangarEnv } from "./hangar-env.ts";
 import { HangarError, HangarRuntimeError } from "./hangar-error.ts";
@@ -35,10 +36,13 @@ export class HangarStore {
   /** Stack verbs that address every `swarm:` app instead of a single one */
   static readonly GlobalStackCommand = ["deploy", "rm"];
 
-  /** A stack id is a folder name under `store/` (`llama.cpp`): no separator, no leading dot, nothing to climb out with */
-  private static readonly StackId = /^[a-z0-9][a-z0-9._-]*$/;
-
   readonly dataPath: string;
+
+  /** Where the stacks keep their data, one folder per app: `APP_DATA_DIR`. */
+  readonly appDataPath: string;
+
+  /** Where the backups of each app are kept, one folder per app. */
+  readonly backupsPath: string;
 
   /** One symlink per installed app, next to the shared files. */
   readonly installedPath: string;
@@ -68,10 +72,12 @@ export class HangarStore {
     this.dataPath = path.resolve(dataDir);
     this.storePath = path.join(this.dataPath, "app-store");
     this.installedPath = path.join(this.dataPath, "app-installed");
+    this.appDataPath = path.join(this.dataPath, "app-data");
+    this.backupsPath = path.join(this.dataPath, "app-backups");
     this.config = new HangarConfig(path.join(this.storePath, "config", "hangar.yml"));
     // APP_DATA_DIR is the one variable Hangar can answer for the operator: the stacks keep
     // their data under the same resolved data directory Hangar itself uses.
-    this.env = new HangarEnv(this.dataPath, this.installedPath, { APP_DATA_DIR: path.join(this.dataPath, "app-data") });
+    this.env = new HangarEnv(this.dataPath, this.installedPath, { APP_DATA_DIR: this.appDataPath });
     this.runtime = runtime;
   }
 
@@ -527,7 +533,7 @@ export class HangarStore {
 
   /** The folder of a store app, once its id is known not to escape `store/`. */
   private stackPath(id: string) {
-    if (!HangarStore.StackId.test(id)) {
+    if (!AppId.isValid(id)) {
       throw new HangarError(`Invalid app id: ${id}`);
     }
 
