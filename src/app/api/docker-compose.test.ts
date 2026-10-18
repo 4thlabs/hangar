@@ -47,7 +47,7 @@ describe("POST Docker Compose stream", () => {
   });
 
   it.each([
-    ["an unknown operation", "operation=restart&projects=alpha"],
+    ["an unknown operation", "operation=rm&projects=alpha"],
     ["an empty selection", "operation=up&projects="],
     ["a project name that is not one", "operation=up&projects=../alpha"],
   ])("rejects %s before invoking Compose", async (_case, query) => {
@@ -67,6 +67,7 @@ describe("POST Docker Compose stream", () => {
 
   it.each([
     ["up", ["up", "-d"]],
+    ["restart", ["restart"]],
     ["down", ["down"]],
     ["recreate", ["up", "-d", "--force-recreate"]],
     ["update", ["up", "-d", "--pull", "always"]],
