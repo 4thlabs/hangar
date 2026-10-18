@@ -119,9 +119,9 @@ The page reloads every 10 seconds: Docker emits no event when a task starts or s
 
 ### The overlay network
 
-The compose apps share bridge networks such as `hangar-main-net`, which `compose.prod.yml` creates. A
-bridge only reaches its own host, so the stacks share an overlay network instead, created once on a
-manager:
+The compose apps share bridge networks such as `hangar-main-net`, which Hangar's own
+`compose.yml`, at the root of this repository, creates. A bridge only reaches its own host, so the
+stacks share an overlay network instead, created once on a manager:
 
 ```bash
 docker network create -d overlay --attachable hangar-overlay-net
@@ -132,7 +132,7 @@ A stack joins it as an `external` network, from its `compose.swarm.yml` (below).
 lets a plain container join it, such as a Traefik run with compose on a node of the swarm: without it,
 only Swarm services can.
 
-`compose.prod.yml` does not create it: Docker creates an overlay only on a manager, and Hangar must
+Hangar's `compose.yml` does not create it: Docker creates an overlay only on a manager, and Hangar must
 start outside a swarm too.
 
 ### `compose.swarm.yml`
