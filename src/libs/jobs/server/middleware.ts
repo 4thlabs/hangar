@@ -2,6 +2,7 @@ import { MiddlewareHandler } from "hono/types";
 import { Sidequest } from "sidequest";
 import { env } from "#libs/env";
 import { hangar } from "#libs/hangar/server";
+import { logger } from "#libs/logs";
 import { CheckImageVersion } from "../jobs/check-image-version.ts";
 import { UpdateOutdatedApps } from "../jobs/update-outdated-apps.ts";
 import { backupJobs, SidequestBackupQueue } from "./backup-queue.ts";
@@ -60,7 +61,11 @@ export class SidequestBoot {
 
       await Sidequest.build(UpdateOutdatedApps).schedule(SidequestBoot.UpdateSchedule);
 
-      await backupJobs.start(hangar.store.config.backups());
+      // Not left to fail the boot: every request would then start Sidequest again, and register the
+      // other schedules once more. The next save of hangar.yml registers the backups again.
+      await backupJobs.start(hangar.store.config.backups()).catch((error: unknown) => {
+        logger.error("Failed to schedule the backups", { error });
+      });
 
       this.configured = true;
     };

@@ -236,7 +236,8 @@ that way can come back inconsistent. Set `stop: true` for an app with a database
 files and back them up with the database's own dump. With `stop: true`, only the services running
 when the backup starts are stopped, and they are started again whatever the outcome; a service
 that does not start again gets a notification of its own. Hangar refuses to stop the app it runs
-in.
+in, which it recognises by its hostname, the short container id Docker gives it: on the host
+network or with a `hostname:` of its own it cannot, so leave `stop` off for its own app.
 
 **Schedules.** A schedule follows the time zone of the Hangar container (`TZ`). A run is never
 retried and is aborted after 6 hours; a failed one is notified. Saving `hangar.yml` from
