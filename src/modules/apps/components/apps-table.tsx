@@ -53,8 +53,7 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
           running={compose.running}
           disabled={compose.disabled}
           size="sm"
-          onRun={compose.run}
-          onConfirm={compose.setConfirmation}
+          onRequest={compose.request}
         />
       </div>
 

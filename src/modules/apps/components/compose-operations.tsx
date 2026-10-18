@@ -9,7 +9,7 @@ import {
   Trash2Icon,
   type LucideIcon,
 } from "lucide-react";
-import { actionLabel, type AppOperation } from "#modules/apps/actions/app-operation.ts";
+import { AppCommands, type AppCommand, type UpFlag } from "#modules/apps/actions/app-operation.ts";
 import { ComposeOutputSheet } from "#modules/apps/components/compose-output-sheet.tsx";
 import type { useComposeRun } from "#modules/apps/hooks/use-compose-run.ts";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
@@ -23,44 +23,44 @@ import {
 } from "#modules/common/ui/dropdown-menu.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 
-/** Operations that interrupt the app (restart, replace or destroy its containers), so confirmed before they run. */
-export type DestructiveOperation = Exclude<AppOperation, "up">;
-
 type ComposeOperationButtonsProps = {
-  /** The operation currently running, which gets the spinner. `null` while idle. */
-  running: AppOperation | null;
+  /** The command currently running, which gets the spinner. `null` while idle. */
+  running: AppCommand | null;
   disabled: boolean;
   size?: "sm" | undefined;
-  /** `up` runs straight away; the others are handed over for confirmation first. */
-  onRun: (operation: "up") => void;
-  onConfirm: (operation: DestructiveOperation) => void;
+  /** Runs a command, after the confirmation it calls for (see `useComposeRun`). */
+  onRequest: (command: AppCommand) => void;
 };
 
-/** The operations reached from Up's menu: `up -d` with one flag more. */
-class UpVariants {
-  static readonly All = [
-    { operation: "update", icon: ArrowUpFromLineIcon, command: "up -d --pull always" },
-    { operation: "recreate", icon: RefreshCwIcon, command: "up -d --force-recreate" },
-  ] as const satisfies readonly { operation: DestructiveOperation; icon: LucideIcon; command: string }[];
-
-  static includes(operation: AppOperation | null) {
-    return UpVariants.All.some(variant => variant.operation === operation);
-  }
+/** How the operation buttons draw each command. */
+class OperationIcons {
+  static readonly Flag: Record<UpFlag, LucideIcon> = {
+    pull: ArrowUpFromLineIcon,
+    forceRecreate: RefreshCwIcon,
+  };
 }
 
 /**
  * The compose operation buttons, shared by the apps table and the detail page; state lives in `useComposeRun`.
- * Grouped by command: Up carries its `up -d` variants in a menu, so adding an operation does not add a button.
+ * Grouped by command: Up carries its `up -d` variants in a menu, so adding one does not add a button.
  */
-export function ComposeOperationButtons({ running, disabled, size, onRun, onConfirm }: ComposeOperationButtonsProps) {
-  const upRunning = running === "up" || UpVariants.includes(running);
+export function ComposeOperationButtons({ running, disabled, size, onRequest }: ComposeOperationButtonsProps) {
+  const up = AppCommands.create("up");
+  const restart = AppCommands.create("restart");
+  const down = AppCommands.create("down");
 
   return (
     <>
       <ButtonGroup>
-        <Button type="button" size={size} disabled={disabled} onClick={() => onRun("up")} title="docker compose up -d">
-          {upRunning ? <Spinner /> : <PowerIcon data-icon="inline-start" />}
-          {actionLabel.up}
+        <Button
+          type="button"
+          size={size}
+          disabled={disabled}
+          onClick={() => onRequest(up)}
+          title={AppCommands.commandLine(up)}
+        >
+          {running?.operation === "up" ? <Spinner /> : <PowerIcon data-icon="inline-start" />}
+          {AppCommands.label(up)}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -69,22 +69,29 @@ export function ComposeOperationButtons({ running, disabled, size, onRun, onConf
                 type="button"
                 size={size === "sm" ? "icon-sm" : "icon"}
                 disabled={disabled}
-                aria-label={`Autres options de ${actionLabel.up}`}
+                aria-label={`Autres options de ${AppCommands.label(up)}`}
               />
             }
           >
             <ChevronDownIcon />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" sideOffset={6} className="min-w-56">
-            {UpVariants.All.map(({ operation, icon: Icon, command }) => (
-              <DropdownMenuItem key={operation} onClick={() => onConfirm(operation)}>
-                <Icon />
-                <span className="flex flex-col">
-                  {actionLabel[operation]}
-                  <span className="font-mono text-xs text-muted-foreground">{command}</span>
-                </span>
-              </DropdownMenuItem>
-            ))}
+            {AppCommands.FlagOrder.map(flag => {
+              const variant = AppCommands.create("up", [flag]);
+              const Icon = OperationIcons.Flag[flag];
+
+              return (
+                <DropdownMenuItem key={flag} onClick={() => onRequest(variant)}>
+                  <Icon />
+                  <span className="flex flex-col">
+                    {AppCommands.label(variant)}
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {AppCommands.arguments(variant).join(" ")}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              );
+            })}
           </DropdownMenuContent>
         </DropdownMenu>
       </ButtonGroup>
@@ -93,52 +100,46 @@ export function ComposeOperationButtons({ running, disabled, size, onRun, onConf
         variant="outline"
         size={size}
         disabled={disabled}
-        onClick={() => onConfirm("restart")}
-        title="docker compose restart"
+        onClick={() => onRequest(restart)}
+        title={AppCommands.commandLine(restart)}
       >
-        {running === "restart" ? <Spinner /> : <RotateCwIcon data-icon="inline-start" />}
-        {actionLabel.restart}
+        {running?.operation === "restart" ? <Spinner /> : <RotateCwIcon data-icon="inline-start" />}
+        {AppCommands.label(restart)}
       </Button>
       <Button
         type="button"
         variant="destructive"
         size={size}
         disabled={disabled}
-        onClick={() => onConfirm("down")}
-        title="docker compose down"
+        onClick={() => onRequest(down)}
+        title={AppCommands.commandLine(down)}
       >
-        {running === "down" ? <Spinner /> : <Trash2Icon data-icon="inline-start" />}
-        {actionLabel.down}
+        {running?.operation === "down" ? <Spinner /> : <Trash2Icon data-icon="inline-start" />}
+        {AppCommands.label(down)}
       </Button>
     </>
   );
 }
 
 type ComposeConfirmDialogProps = {
-  /** The operation awaiting confirmation, `null` keeping the dialog closed. */
-  operation: DestructiveOperation | null;
+  /** The command awaiting confirmation, `null` keeping the dialog closed. */
+  command: AppCommand | null;
   /** Wording differs by caller: one app by name, or N selected apps. */
   title: string;
   description: string;
-  onConfirm: (operation: DestructiveOperation) => void;
+  onConfirm: (command: AppCommand) => void;
   onCancel: () => void;
 };
 
-/** Confirmation step for the destructive operations, with the wording left to the caller. */
-export function ComposeConfirmDialog({
-  operation,
-  title,
-  description,
-  onConfirm,
-  onCancel,
-}: ComposeConfirmDialogProps) {
+/** Confirmation step for the commands that take apps down, with the wording left to the caller. */
+export function ComposeConfirmDialog({ command, title, description, onConfirm, onCancel }: ComposeConfirmDialogProps) {
   return (
     <ConfirmDialog
-      open={operation !== null}
+      open={command !== null}
       title={title}
       description={description}
-      destructive={operation === "down"}
-      onConfirm={() => operation && onConfirm(operation)}
+      destructive={command?.operation === "down"}
+      onConfirm={() => command && onConfirm(command)}
       onCancel={onCancel}
     />
   );
@@ -152,47 +153,51 @@ type ComposeRunDialogsProps = {
   count: number;
 };
 
-/** The confirmation's wording for one app or for several, French agreeing in number. */
-const TARGET_WORDING = {
-  one: { apps: "cette application", staysListed: "Elle restera listée" },
-  many: { apps: "ces applications", staysListed: "Elles resteront listées" },
-};
+/** What a confirmation says before a compose command, French agreeing in number with the apps. */
+class ComposeConfirmation {
+  static readonly TargetWording = {
+    one: { apps: "cette application", staysListed: "Elle restera listée" },
+    many: { apps: "ces applications", staysListed: "Elles resteront listées" },
+  };
+
+  static title(command: AppCommand, subject: string) {
+    if (command.operation === "down") {
+      return `Arrêter ${subject} ?`;
+    }
+
+    return `${AppCommands.label(command)} ${subject} ?`;
+  }
+
+  static description(command: AppCommand, count: number) {
+    const { apps, staysListed } =
+      count > 1 ? ComposeConfirmation.TargetWording.many : ComposeConfirmation.TargetWording.one;
+
+    if (command.operation === "down") {
+      return `Docker Compose supprimera les conteneurs et réseaux de ${apps}. ${staysListed}, à l’arrêt.`;
+    }
+
+    if (command.operation === "restart") {
+      return `Les conteneurs de ${apps} seront redémarrés sans être recréés : une configuration modifiée ne sera pas prise en compte.`;
+    }
+
+    return command.flags.map(flag => AppCommands.Flags[flag].consequence(apps)).join(" ");
+  }
+}
 
 /** The confirmation and the output sheet behind `ComposeOperationButtons`, for either caller. */
 export function ComposeRunDialogs({ compose, subject, count }: ComposeRunDialogsProps) {
-  const { confirmation, setConfirmation, running, targets, run, close, finished } = compose;
-  const { apps, staysListed } = count > 1 ? TARGET_WORDING.many : TARGET_WORDING.one;
-
-  const title: Record<DestructiveOperation, string> = {
-    restart: `Redémarrer ${subject} ?`,
-    down: `Arrêter ${subject} ?`,
-    recreate: `Recréer ${subject} ?`,
-    update: `Mettre à jour ${subject} ?`,
-  };
-
-  const description: Record<DestructiveOperation, string> = {
-    restart: `Les conteneurs de ${apps} seront redémarrés sans être recréés : une configuration modifiée ne sera pas prise en compte.`,
-    down: `Docker Compose supprimera les conteneurs et réseaux de ${apps}. ${staysListed}, à l’arrêt.`,
-    recreate: `Tous les conteneurs de ${apps} seront recréés, même si leur configuration n’a pas changé.`,
-    update: "Les images seront retirées du registre et les conteneurs recréés avec la nouvelle version.",
-  };
+  const { confirmation, cancel, running, targets, run, close, finished } = compose;
 
   return (
     <>
       <ComposeConfirmDialog
-        operation={confirmation}
-        title={confirmation ? title[confirmation] : ""}
-        description={confirmation ? description[confirmation] : ""}
+        command={confirmation}
+        title={confirmation ? ComposeConfirmation.title(confirmation, subject) : ""}
+        description={confirmation ? ComposeConfirmation.description(confirmation, count) : ""}
         onConfirm={run}
-        onCancel={() => setConfirmation(null)}
+        onCancel={cancel}
       />
-      <ComposeOutputSheet
-        projects={targets}
-        operation={running}
-        label={running ? actionLabel[running] : ""}
-        onClose={close}
-        onFinished={finished}
-      />
+      <ComposeOutputSheet projects={targets} command={running} onClose={close} onFinished={finished} />
     </>
   );
 }
