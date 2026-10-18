@@ -44,8 +44,11 @@ Compose files in a git repository you own — and adds what is tedious to do by 
   reference and lists the ones still to fill in `.env.global`, which you edit from the UI.
 - **A dashboard.** Widgets for Docker, Arcane, Backrest, Beszel, Frigate, Gluetun, Jellyfin,
   Miniflux, tcg-collector and GitHub releases, laid out from the store's `hangar.yml`.
-- **Notifications.** Available updates and the result of the nightly auto-update land in the
-  notification menu.
+- **Backups.** Each app's data folder can be archived into a zip, on a cron schedule or by hand,
+  with include and exclude globs, the app stopped meanwhile if need be. The archives are
+  downloaded from the app's page.
+- **Notifications.** Available updates, the result of the nightly auto-update and failed backups
+  land in the notification menu.
 - **Docker Swarm.** When the host is in a swarm, the Cluster page shows its nodes and stacks,
   creates or joins a swarm, and deploys the installed apps that ship a `compose.swarm.yml`.
 - **Edit in place.** The `compose.yml` of each app and the store's `hangar.yml` can be edited
