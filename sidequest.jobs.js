@@ -3,5 +3,6 @@
 // import deadlocks the whole server — and the chunk renames the class anyway. `manualJobResolution`
 // points the worker at this file instead: a plain module, outside the bundle, exporting every job
 // class under its real name.
+export { BackupApp } from "./src/libs/jobs/jobs/backup-app.ts";
 export { CheckImageVersion } from "./src/libs/jobs/jobs/check-image-version.ts";
 export { UpdateOutdatedApps } from "./src/libs/jobs/jobs/update-outdated-apps.ts";
