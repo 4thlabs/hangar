@@ -1,8 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { load } from "js-yaml";
+import { validate as isValidCron } from "node-cron";
 import * as z from "zod";
 import { logger } from "#libs/logs";
 import { defaultWidgets, widgetConfigSchema, type WidgetConfig } from "#modules/widgets/config/widgets.ts";
+import { AppId } from "./app-id.ts";
 import { HangarError } from "./hangar-error.ts";
 
 /** A Stack category */
@@ -10,6 +12,33 @@ const categorySchema = z.object({
   name: z.string().min(1),
   color: z.string().min(1),
   stacks: z.array(z.string().min(1)),
+});
+
+/** The backup of one app's data folder */
+const backupSchema = z.object({
+  app: z.string().regex(AppId.Pattern, "Invalid app id"),
+  /** A cron expression; without one, the app is only backed up by hand */
+  schedule: z
+    .string()
+    .refine(schedule => isValidCron(schedule), "Invalid cron expression")
+    .optional(),
+  /** How many archives to keep: the oldest go once a new one is written */
+  keep: z.int().positive().default(7),
+  /** Whether to stop the running services while their files are read: a live database copies inconsistent */
+  stop: z.boolean().default(false),
+  /** The folder to back up, under `app-data/`; the app id when absent */
+  path: z
+    .string()
+    .refine(
+      // Relative and downward only: no leading `/`, no `.` or `..` segment, nothing outside the app's data.
+      folder => folder.split("/").every(segment => segment !== "" && segment !== "." && segment !== ".."),
+      "Must be a folder under app-data/, without . or .. segments",
+    )
+    .optional(),
+  /** Globs of the files to archive, relative to the folder */
+  include: z.array(z.string().min(1)).min(1).default(["**"]),
+  /** Globs of the files and folders to leave out, relative to the folder */
+  exclude: z.array(z.string().min(1)).default([]),
 });
 
 const configSchema = z.object({
@@ -20,9 +49,25 @@ const configSchema = z.object({
   widgets: z.array(widgetConfigSchema).default([...defaultWidgets]),
   /** Pause between two registry calls in the image update check, in ms: Hub and ghcr rate-limit a burst */
   registryThrottling: z.int().nonnegative().default(100),
+  /** The apps whose data folder is backed up, one entry per app */
+  backups: z
+    .array(backupSchema)
+    .default([])
+    .superRefine((backups, context) => {
+      const seen = new Set<string>();
+
+      backups.forEach((backup, index) => {
+        if (seen.has(backup.app)) {
+          context.addIssue({ code: "custom", message: `${backup.app} is backed up twice`, path: [index, "app"] });
+        }
+
+        seen.add(backup.app);
+      });
+    }),
 });
 
 export type Category = z.infer<typeof categorySchema>;
+export type BackupConfig = z.infer<typeof backupSchema>;
 export type Config = z.infer<typeof configSchema>;
 
 /**
@@ -45,6 +90,9 @@ export class HangarConfig {
   /** The pause between two registry calls in the image update check, in ms */
   private _registryThrottling = 100;
 
+  /** The apps whose data folder is backed up */
+  private _backups: BackupConfig[] = [];
+
   /** Returns the categories */
   public categories = () => this._categories;
 
@@ -56,6 +104,12 @@ export class HangarConfig {
 
   /** Returns the pause between two registry calls, in ms */
   public registryThrottling = () => this._registryThrottling;
+
+  /** Returns the backups, one per app */
+  public backups = () => this._backups;
+
+  /** Returns the backup of an app, `undefined` when hangar.yml declares none */
+  public backup = (app: string) => this._backups.find(backup => backup.app === app);
 
   /**
    * Does not read the file: call `load()` once the store is on disk.
@@ -140,5 +194,6 @@ export class HangarConfig {
     this._shared = config.shared;
     this._widgets = config.widgets;
     this._registryThrottling = config.registryThrottling;
+    this._backups = config.backups;
   }
 }

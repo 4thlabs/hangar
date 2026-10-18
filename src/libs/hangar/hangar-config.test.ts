@@ -115,6 +115,63 @@ categories:
     await expect(new HangarConfig(file).load()).rejects.toThrow(/categories\[0\]\.color/);
   });
 
+  it("loads the backups with their defaults, and finds one by app", async () => {
+    const file = await configFile(`
+categories: []
+backups:
+  - app: jellyfin
+    schedule: "30 3 * * *"
+    exclude: ["**/cache/**"]
+  - app: miniflux
+    path: miniflux/db
+    keep: 2
+    stop: true
+`);
+
+    const config = await new HangarConfig(file).load();
+
+    expect(config.backups()).toEqual([
+      { app: "jellyfin", schedule: "30 3 * * *", keep: 7, stop: false, include: ["**"], exclude: ["**/cache/**"] },
+      { app: "miniflux", path: "miniflux/db", keep: 2, stop: true, include: ["**"], exclude: [] },
+    ]);
+
+    expect(config.backup("miniflux")?.keep).toBe(2);
+    expect(config.backup("immich")).toBeUndefined();
+  });
+
+  it("declares no backups when hangar.yml has none", async () => {
+    const config = await new HangarConfig(await configFile("categories: []\n")).load();
+
+    expect(config.backups()).toEqual([]);
+  });
+
+  it("rejects a backup scheduled with an invalid cron expression", async () => {
+    const file = await configFile(`
+categories: []
+backups:
+  - { app: jellyfin, schedule: "61 * * * *" }
+`);
+
+    await expect(new HangarConfig(file).load()).rejects.toThrow(/backups\[0\]\.schedule/);
+  });
+
+  it.each(["../hangar", "/etc", "jellyfin/../hangar", ".", "jellyfin/"])(
+    "rejects a backup path that leaves the app data: %s",
+    async folder => {
+      const file = await configFile(`categories: []\nbackups:\n  - { app: jellyfin, path: "${folder}" }\n`);
+
+      await expect(new HangarConfig(file).load()).rejects.toThrow(/backups\[0\]\.path/);
+    },
+  );
+
+  it("rejects an app backed up twice, and an id that is not an app's", async () => {
+    const twice = await configFile("categories: []\nbackups:\n  - { app: jellyfin }\n  - { app: jellyfin }\n");
+    const invalid = await configFile('categories: []\nbackups:\n  - { app: "../jellyfin" }\n');
+
+    await expect(new HangarConfig(twice).load()).rejects.toThrow(/jellyfin is backed up twice/);
+    await expect(new HangarConfig(invalid).load()).rejects.toThrow(/backups\[0\]\.app/);
+  });
+
   it("writes a valid config and applies it", async () => {
     const file = await configFile("categories: []\n");
     const config = await new HangarConfig(file).load();
