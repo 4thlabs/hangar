@@ -1,10 +1,11 @@
-import { createWriteStream } from "node:fs";
+import { createWriteStream, type ReadStream } from "node:fs";
 import { mkdir, open, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import type { PassThrough } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { finished, pipeline } from "node:stream/promises";
 import { ZipFile } from "yazl";
 import { AppId, HangarError, NotFoundError, type BackupConfig } from "#libs/hangar";
+import { logger } from "#libs/logs";
 import { BackupFiles } from "./backup-files.ts";
 
 /** One archive of an app, as the app page lists it. */
@@ -81,20 +82,24 @@ export class AppBackups {
     const target = path.join(folder, `${archive}${AppBackups.Extension}`);
     const files = new BackupFiles(source, config.include, config.exclude);
 
+    let count: number;
+
     try {
-      const count = await AppBackups.zip(files, AppBackups.entryPrefix(config), partial, signal);
-
+      count = await AppBackups.zip(files, AppBackups.entryPrefix(config), partial, signal);
       await rename(partial, target);
-
-      const { size } = await stat(target);
-
-      await this.prune(config.app, config.keep);
-
-      return { archive, size, files: count, skippedLinks: files.skippedLinks() };
     } catch (error) {
       await rm(partial, { force: true });
       throw error;
     }
+
+    const { size } = await stat(target);
+
+    // The new archive is written by now: an old one left on disk is no reason to fail the run.
+    await this.prune(config.app, config.keep).catch((error: unknown) => {
+      logger.warn("Failed to remove the oldest archives", { error, app: config.app, keep: config.keep });
+    });
+
+    return { archive, size, files: count, skippedLinks: files.skippedLinks() };
   }
 
   /** The archives of an app, newest first; none when it was never backed up. */
@@ -116,13 +121,16 @@ export class AppBackups {
       .sort()
       .reverse();
 
-    return Promise.all(
+    const listed = await Promise.all(
       archives.map(async archive => {
-        const { size } = await stat(path.join(folder, `${archive}${AppBackups.Extension}`));
+        // Removed since the folder was read, by a prune or from the page: no longer one to list.
+        const stats = await BackupFiles.unlessGone(stat(path.join(folder, `${archive}${AppBackups.Extension}`)), null);
 
-        return { archive, size, createdAt: AppBackups.createdAt(archive) };
+        return stats ? [{ archive, size: stats.size, createdAt: AppBackups.createdAt(archive) }] : [];
       }),
     );
+
+    return listed.flat();
   }
 
   /**
@@ -211,7 +219,7 @@ export class AppBackups {
     // would crash the process meanwhile. The failure is not dropped: the `await` below rethrows it.
     written.catch(() => {});
 
-    // yazl reports a file it cannot read on itself; failing the output fails `written` with it.
+    // yazl reports its own failures on itself; failing the output fails `written` with them.
     zip.on("error", (error: Error) => output.destroy(error));
 
     let count = 0;
@@ -220,26 +228,21 @@ export class AppBackups {
       for await (const file of files.entries()) {
         signal?.throwIfAborted();
 
+        // Opened only now, once the previous file is in: one file open at a time.
+        const stream = await AppBackups.openUnlessGone(file.absolute);
+
+        if (!stream) {
+          continue;
+        }
+
         if (output.destroyed) {
+          stream.destroy();
           break;
         }
 
-        const options = { mtime: file.stats.mtime, mode: file.stats.mode };
-
-        // Lazy: one file open at a time. No `size`: a file still growing must not fail the archive.
-        zip.addReadStreamLazy(`${prefix}/${file.relative}`, options, callback => {
-          open(file.absolute, "r").then(
-            handle => {
-              const stream = handle.createReadStream();
-
-              // yazl pipes the stream without listening to it: an unheard read error would crash the process.
-              stream.once("error", error => output.destroy(error));
-              callback(null, stream);
-            },
-            (error: unknown) => callback(error, undefined as never),
-          );
-        });
-
+        // No `size`: a file still growing must not fail the archive.
+        zip.addReadStream(stream, `${prefix}/${file.relative}`, { mtime: file.stats.mtime, mode: file.stats.mode });
+        await AppBackups.consumed(stream, output);
         count++;
       }
 
@@ -251,6 +254,29 @@ export class AppBackups {
     await written;
 
     return count;
+  }
+
+  /** A file to read, or `null` when it was removed since the walk listed it. */
+  private static async openUnlessGone(file: string) {
+    const handle = await BackupFiles.unlessGone(open(file, "r"), null);
+
+    return handle?.createReadStream() ?? null;
+  }
+
+  /**
+   * Settles once yazl has read `stream` to its end, or rejects on a read error. Once the output is
+   * gone (aborted, failed), nothing reads the file any more: it is closed rather than left open.
+   */
+  private static async consumed(stream: ReadStream, output: PassThrough) {
+    const close = () => stream.destroy();
+
+    output.once("close", close);
+
+    try {
+      await finished(stream);
+    } finally {
+      output.off("close", close);
+    }
   }
 
   /** Removes the partial archives a run left behind when it was killed. */

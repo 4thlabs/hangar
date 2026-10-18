@@ -51,7 +51,6 @@ export class BackupFiles {
   }
 
   private async *walk(relativeFolder: string): AsyncGenerator<BackupFile> {
-    // A live app removes files while the walk runs (a journal, a temp file): gone is not a failure.
     const entries = await BackupFiles.unlessGone(
       readdir(path.join(this.root, relativeFolder), { withFileTypes: true }),
       [] as Dirent[],
@@ -90,8 +89,11 @@ export class BackupFiles {
     }
   }
 
-  /** `operation`'s result, or `fallback` when the path it reads no longer exists. */
-  private static async unlessGone<T, F>(operation: Promise<T>, fallback: F): Promise<T | F> {
+  /**
+   * `operation`'s result, or `fallback` when the path it reads no longer exists: a live app removes
+   * files at any time (a journal, a temp file), and one gone is no failure of the backup.
+   */
+  static async unlessGone<T, F>(operation: Promise<T>, fallback: F): Promise<T | F> {
     try {
       return await operation;
     } catch (error) {
