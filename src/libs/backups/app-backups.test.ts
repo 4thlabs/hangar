@@ -1,3 +1,4 @@
+import * as fs from "node:fs/promises";
 import { chmod, mkdir, mkdtemp, readdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,6 +7,37 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { openPromise, type Entry } from "yauzl";
 import { HangarError, NotFoundError, type BackupConfig } from "#libs/hangar";
 import { AppBackups } from "./app-backups.ts";
+
+const mocks = vi.hoisted(() => ({ logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+
+vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
+
+// The real filesystem, with `open`, `stat` and `rm` spied on: a test makes one of them fail as a
+// live app or a concurrent removal would.
+vi.mock("node:fs/promises", async importOriginal => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+
+  return { ...actual, open: vi.fn(actual.open), stat: vi.fn(actual.stat), rm: vi.fn(actual.rm) };
+});
+
+/** The error a path gets once removed. */
+function gone(file: string) {
+  return Object.assign(new Error(`ENOENT: no such file or directory, '${file}'`), { code: "ENOENT" });
+}
+
+/** Makes `operation` fail with `error` on `file`, and run for real on every other path. */
+async function failOn(operation: "open" | "stat" | "rm", file: string, error: Error) {
+  const actual = await vi.importActual<typeof fs>("node:fs/promises");
+  const real = actual[operation] as (...args: unknown[]) => Promise<unknown>;
+
+  vi.mocked(fs[operation]).mockImplementation((async (target: unknown, ...rest: unknown[]) => {
+    if (target === file) {
+      throw error;
+    }
+
+    return real(target, ...rest);
+  }) as never);
+}
 
 /** A data directory with `app-data/` and `app-backups/`, and the backups over it. */
 async function dataDir() {
@@ -58,8 +90,14 @@ function backupOf(app: string, overrides: Partial<BackupConfig> = {}): BackupCon
 }
 
 describe("AppBackups", () => {
-  afterEach(() => {
+  afterEach(async () => {
+    const actual = await vi.importActual<typeof fs>("node:fs/promises");
+
     vi.useRealTimers();
+    vi.clearAllMocks();
+    vi.mocked(fs.open).mockImplementation(actual.open);
+    vi.mocked(fs.stat).mockImplementation(actual.stat);
+    vi.mocked(fs.rm).mockImplementation(actual.rm);
   });
 
   it("archives the app's data folder, dotfiles included, under its path in app-data", async () => {
@@ -220,6 +258,49 @@ describe("AppBackups", () => {
 
     await expect(backups.create(backupOf("jellyfin"))).rejects.toThrow(/EACCES/);
     expect(await readdir(path.join(backupsPath, "jellyfin"))).toEqual([]);
+  });
+
+  it("leaves out a file removed after the walk listed it, and archives the rest", async () => {
+    const { appData, backupsPath, backups } = await dataDir();
+    const journal = path.join(appData, "jellyfin", "data", "library.db-journal");
+
+    await files(path.join(appData, "jellyfin"), { "data/library.db": "db", "data/library.db-journal": "journal" });
+    await failOn("open", journal, gone(journal));
+
+    const summary = await backups.create(backupOf("jellyfin"));
+
+    expect(summary.files).toBe(1);
+    expect(await unzip(path.join(backupsPath, "jellyfin", `${summary.archive}.zip`))).toEqual({
+      "jellyfin/data/library.db": "db",
+    });
+  });
+
+  it("lists the archives still there when one is removed meanwhile", async () => {
+    const { backupsPath, backups } = await dataDir();
+    const folder = path.join(backupsPath, "jellyfin");
+    const removed = path.join(folder, "2026-10-17T03-30-00-000Z.zip");
+
+    await files(folder, { "2026-10-17T03-30-00-000Z.zip": "", "2026-10-18T03-30-00-000Z.zip": "" });
+
+    await failOn("stat", removed, gone(removed));
+
+    expect((await backups.list("jellyfin")).map(archive => archive.archive)).toEqual(["2026-10-18T03-30-00-000Z"]);
+  });
+
+  it("succeeds with its archive written when an old one cannot be removed", async () => {
+    const { appData, backupsPath, backups } = await dataDir();
+    const folder = path.join(backupsPath, "jellyfin");
+    const old = path.join(folder, "2026-10-17T03-30-00-000Z.zip");
+
+    await files(path.join(appData, "jellyfin"), { "config/system.xml": "<xml/>" });
+    await files(folder, { "2026-10-17T03-30-00-000Z.zip": "" });
+
+    await failOn("rm", old, Object.assign(new Error("EBUSY: resource busy"), { code: "EBUSY" }));
+
+    const summary = await backups.create(backupOf("jellyfin", { keep: 1 }));
+
+    expect((await readdir(folder)).sort()).toEqual(["2026-10-17T03-30-00-000Z.zip", `${summary.archive}.zip`]);
+    expect(mocks.logger.warn).toHaveBeenCalledWith("Failed to remove the oldest archives", expect.anything());
   });
 
   it("leaves no archive behind when aborted", async () => {
