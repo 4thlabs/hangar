@@ -146,4 +146,13 @@ docker compose pull
 docker compose up -d
 ```
 
-Migrations run on start, so there is nothing else to do.
+Or from Hangar itself: **Paramètres → Hangar → Mettre à jour Hangar** pulls the image of the tag
+in your `compose.yml` and, when it changed, recreates Hangar's container. The other services of
+the file are left alone. A `hangar-self-update` container runs the two commands above, since
+Hangar cannot recreate the container it runs in. It stays once done, until the next update, so
+`docker logs hangar-self-update` shows how the last one went.
+
+That container runs Compose in your `compose.yml`'s folder but not in your shell: the variables
+the file needs must come from the `.env` next to it, not from `export`s.
+
+Either way, migrations run on start, so there is nothing else to do.

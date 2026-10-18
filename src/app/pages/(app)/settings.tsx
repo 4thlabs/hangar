@@ -5,8 +5,10 @@ import { saveConfig } from "#modules/settings/actions/manage-config.ts";
 import { saveEnv } from "#modules/settings/actions/manage-env.ts";
 import { cancelJob, runJob } from "#modules/settings/actions/manage-job.ts";
 import { manageStore } from "#modules/settings/actions/manage-store.ts";
+import { readHangarImage, updateHangar } from "#modules/settings/actions/update-hangar.ts";
 import { ConfigSettingsCard } from "#modules/settings/components/config-settings-card.tsx";
 import { EnvSettingsCard } from "#modules/settings/components/env-settings-card.tsx";
+import { HangarUpdateCard } from "#modules/settings/components/hangar-update-card.tsx";
 import { JobsSettingsCard } from "#modules/settings/components/jobs-settings-card.tsx";
 import { StoreSettingsCard } from "#modules/settings/components/store-settings-card.tsx";
 
@@ -15,6 +17,7 @@ export default async function SettingsPage() {
   const jobs = await Sidequest.job.list({ limit: 50 });
   const variables = await hangar.store.env.read();
   const config = await hangar.store.config.source();
+  const hangarImage = await readHangarImage();
 
   return (
     <main>
@@ -29,6 +32,7 @@ export default async function SettingsPage() {
           <TabsTrigger value="env">Environnement</TabsTrigger>
           <TabsTrigger value="config">Configuration</TabsTrigger>
           <TabsTrigger value="jobs">Jobs</TabsTrigger>
+          <TabsTrigger value="hangar">Hangar</TabsTrigger>
         </TabsList>
         <TabsContent value="store">
           <StoreSettingsCard storeUrl={hangar.store.url} initialInstalled={installed} manageStore={manageStore} />
@@ -41,6 +45,9 @@ export default async function SettingsPage() {
         </TabsContent>
         <TabsContent value="jobs">
           <JobsSettingsCard jobs={jobs} runJob={runJob} cancelJob={cancelJob} />
+        </TabsContent>
+        <TabsContent value="hangar">
+          <HangarUpdateCard image={hangarImage} updateHangar={updateHangar} />
         </TabsContent>
       </Tabs>
     </main>

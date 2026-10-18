@@ -1,8 +1,10 @@
 import "server-only";
+import { hostname } from "node:os";
 import Dockerode from "dockerode";
 import { cache } from "#libs/cache/server";
 import { hangar } from "#libs/hangar/server";
 import { Docker } from "../docker.ts";
+import { DockerSelfUpdate } from "../self-update.ts";
 import { DockerSwarm } from "../swarm.ts";
 
 // Reused across HMR reloads, otherwise dev stacks a second instance following the daemon
@@ -29,3 +31,6 @@ globalForDocker.docker = docker;
 export const swarm = globalForDocker.swarm ?? new DockerSwarm(client, cache);
 
 globalForDocker.swarm = swarm;
+
+/** Updates the container Hangar runs in. Docker names a container's host after its short id. */
+export const selfUpdate = new DockerSelfUpdate(client, hostname());
