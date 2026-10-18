@@ -139,7 +139,8 @@ labels:
 
 ## Updating Hangar
 
-Each `v*` tag publishes `X.Y.Z`, `X.Y` and `latest`. Pin the tag you want, then:
+Each `v*` tag publishes `X.Y.Z`, `X.Y` and `latest`. `edge` follows `main`: it is rebuilt on every
+merged pull request, ahead of any release, and may break. Pin the tag you want, then:
 
 ```bash
 docker compose pull
