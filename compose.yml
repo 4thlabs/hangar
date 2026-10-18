@@ -23,9 +23,10 @@ services:
       - traefik.enable=true
       # Hangar compresses its own responses, but `/assets/*` is served before that middleware
       # runs — 806 kB of JS against 247 kB gzipped. SSE is excluded or the stream is buffered
-      # instead of delivered frame by frame.
+      # instead of delivered frame by frame. This list replaces Traefik's own, which leaves zips out:
+      # a backup is compressed already, and gzipping it again would drop its Content-Length.
       - traefik.http.routers.hangar.middlewares=hangar-compress
-      - traefik.http.middlewares.hangar-compress.compress.excludedcontenttypes=text/event-stream
+      - traefik.http.middlewares.hangar-compress.compress.excludedcontenttypes=text/event-stream,application/zip
 
 networks:
   default:

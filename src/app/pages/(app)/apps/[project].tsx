@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import type { PageProps } from "waku/router";
+import { AppBackupsContent } from "#modules/apps/components/app-backups-content.tsx";
 import { AppDetailContent } from "#modules/apps/components/app-detail-content.tsx";
 import { PageSpinner } from "#modules/common/components/page-spinner.tsx";
 
@@ -11,6 +12,10 @@ export default function AppDetailPage({ project }: PageProps<"/apps/[project]">)
       {/* Keyed by the project, so every arrival gets a new boundary rather than reusing the route slot's. */}
       <Suspense key={project} fallback={<PageSpinner />}>
         <AppDetailContent project={project} />
+      </Suspense>
+      {/* Apart from Docker's: the archives are on disk, and stay reachable when the daemon is not. */}
+      <Suspense key={`${project}:backups`} fallback={null}>
+        <AppBackupsContent project={project} />
       </Suspense>
     </main>
   );
