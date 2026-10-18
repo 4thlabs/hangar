@@ -48,6 +48,9 @@ describe("POST Docker Compose stream", () => {
 
   it.each([
     ["an unknown operation", "operation=rm&projects=alpha"],
+    ["an unknown flag", "operation=up&flags=build&projects=alpha"],
+    ["a repeated flag", "operation=up&flags=pull,pull&projects=alpha"],
+    ["a flag on anything but up", "operation=down&flags=pull&projects=alpha"],
     ["an empty selection", "operation=up&projects="],
     ["a project name that is not one", "operation=up&projects=../alpha"],
   ])("rejects %s before invoking Compose", async (_case, query) => {
@@ -66,13 +69,14 @@ describe("POST Docker Compose stream", () => {
   });
 
   it.each([
-    ["up", ["up", "-d"]],
-    ["restart", ["restart"]],
-    ["down", ["down"]],
-    ["recreate", ["up", "-d", "--force-recreate"]],
-    ["update", ["up", "-d", "--pull", "always"]],
-  ])("maps %s to the expected Compose command", async (operation, args) => {
-    const response = await call(`operation=${operation}&projects=alpha`);
+    ["operation=up", ["up", "-d"]],
+    ["operation=up&flags=pull", ["up", "-d", "--pull", "always"]],
+    ["operation=up&flags=forceRecreate", ["up", "-d", "--force-recreate"]],
+    ["operation=up&flags=forceRecreate,pull", ["up", "-d", "--pull", "always", "--force-recreate"]],
+    ["operation=restart", ["restart"]],
+    ["operation=down", ["down"]],
+  ])("maps %s to the expected Compose command", async (query, args) => {
+    const response = await call(`${query}&projects=alpha`);
 
     await response.text();
 

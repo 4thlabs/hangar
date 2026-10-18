@@ -1,6 +1,6 @@
 "use client";
 
-import { type AppOperation } from "#modules/apps/actions/app-operation.ts";
+import { AppCommands, type AppCommand } from "#modules/apps/actions/app-operation.ts";
 import { plural } from "#modules/apps/format.ts";
 import { StreamOutput, StreamStatusBadge } from "#modules/common/components/stream-output.tsx";
 import { useCommandStream } from "#modules/common/hooks/use-command-stream.ts";
@@ -9,31 +9,30 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 type ComposeOutputSheetProps = {
   /** The apps the command runs over, in order. */
   projects: string[];
-  /** The running operation, or `null` when nothing runs and the sheet stays closed */
-  operation: AppOperation | null;
-  label: string;
+  /** The running command, or `null` when nothing runs and the sheet stays closed */
+  command: AppCommand | null;
   onClose: () => void;
   /** Called once when the command finished, with the number of failed apps (`null` if the stream broke) */
   onFinished: (code: number | null) => void;
 };
 
-export function ComposeOutputSheet({ projects, operation, label, onClose, onFinished }: ComposeOutputSheetProps) {
+export function ComposeOutputSheet({ projects, command, onClose, onFinished }: ComposeOutputSheetProps) {
   const subject = projects.length === 1 ? projects[0] : plural(projects.length, "application");
 
   const endpoint =
-    operation && projects.length > 0
-      ? `/api/docker/apps/compose?operation=${operation}&projects=${projects.map(encodeURIComponent).join(",")}`
+    command && projects.length > 0
+      ? `/api/docker/apps/compose?${AppCommands.query(command)}&projects=${projects.map(encodeURIComponent).join(",")}`
       : null;
 
   const { text, status, error } = useCommandStream(endpoint, onFinished);
 
   return (
-    <Sheet open={operation !== null} onOpenChange={open => !open && onClose()}>
+    <Sheet open={command !== null} onOpenChange={open => !open && onClose()}>
       <SheetContent className="sm:max-w-3xl">
         <SheetHeader>
           <div className="flex flex-wrap items-center gap-2 pr-8">
             <SheetTitle>
-              {label} · {subject}
+              {command ? AppCommands.label(command) : ""} · {subject}
             </SheetTitle>
             <StreamStatusBadge status={status} />
           </div>

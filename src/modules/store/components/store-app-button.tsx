@@ -3,6 +3,7 @@
 import { DownloadIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "waku";
+import { AppCommands } from "#modules/apps/actions/app-operation.ts";
 import { ComposeConfirmDialog } from "#modules/apps/components/compose-operations.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -72,7 +73,7 @@ export function StoreAppButton({ appId, appName, installed, installApp, uninstal
       </Button>
       {/* Reuses the apps confirmation: unlinking runs `docker compose down` first, same stakes. */}
       <ComposeConfirmDialog
-        operation={confirming ? "down" : null}
+        command={confirming ? AppCommands.create("down") : null}
         title={`Désinstaller ${appName} ?`}
         description="Les conteneurs de l’application sont arrêtés et supprimés, puis l’application est retirée des applications installées. Les volumes sont conservés."
         onConfirm={uninstall}

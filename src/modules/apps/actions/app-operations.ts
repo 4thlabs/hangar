@@ -1,16 +1,4 @@
 import { hangar } from "#libs/hangar/server";
-import type { AppOperation } from "./app-operation.ts";
-
-const COMPOSE_PROJECT_NAME = /^[a-z0-9][a-z0-9_-]*$/;
-
-/** Docker Compose arguments run for each operation */
-export const appOperationArguments: Record<AppOperation, readonly string[]> = {
-  up: ["up", "-d"],
-  restart: ["restart"],
-  down: ["down"],
-  recreate: ["up", "-d", "--force-recreate"],
-  update: ["up", "-d", "--pull", "always"],
-};
 
 /** Why a compose command was refused. */
 type AppOperationRefusal = {
@@ -18,15 +6,20 @@ type AppOperationRefusal = {
   message: string;
 };
 
-/** Why a compose command on `project` is refused (malformed name, or not an app Hangar manages), or `null`. */
-export function refuseAppOperation(project: string): AppOperationRefusal | null {
-  if (!COMPOSE_PROJECT_NAME.test(project)) {
-    return { reason: "invalid", message: "La commande Docker Compose est invalide." };
-  }
+/** The server-side checks on the apps a compose command targets. Its arguments come from `AppCommands`. */
+export class AppOperationGuard {
+  static readonly ComposeProjectName = /^[a-z0-9][a-z0-9_-]*$/;
 
-  if (!hangar.store.app(project)?.installed) {
-    return { reason: "unmanaged", message: "Cette application n’est pas installée et gérée par Hangar." };
-  }
+  /** Why a compose command on `project` is refused (malformed name, or not an app Hangar manages), or `null`. */
+  static refuse(project: string): AppOperationRefusal | null {
+    if (!AppOperationGuard.ComposeProjectName.test(project)) {
+      return { reason: "invalid", message: "La commande Docker Compose est invalide." };
+    }
 
-  return null;
+    if (!hangar.store.app(project)?.installed) {
+      return { reason: "unmanaged", message: "Cette application n’est pas installée et gérée par Hangar." };
+    }
+
+    return null;
+  }
 }

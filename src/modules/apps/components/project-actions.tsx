@@ -8,12 +8,7 @@ export function ProjectActions({ project }: { project: string }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <ComposeOperationButtons
-        running={compose.running}
-        disabled={compose.disabled}
-        onRun={compose.run}
-        onConfirm={compose.setConfirmation}
-      />
+      <ComposeOperationButtons running={compose.running} disabled={compose.disabled} onRequest={compose.request} />
       <ComposeRunDialogs compose={compose} subject={project} count={1} />
     </div>
   );
