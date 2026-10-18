@@ -13,6 +13,12 @@ on:
 permissions:
   contents: read
 
+# A merge landing while the previous one still builds cancels it, so `edge` cannot be
+# overwritten by an older commit whose build happened to finish last. Tags and PRs run to the end.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
 jobs:
   ci:
     name: Checks
@@ -58,7 +64,8 @@ jobs:
   image:
     name: Build ${{ matrix.platform }}
     needs: ci
-    if: startsWith(github.ref, 'refs/tags/v')
+    # A merged PR (a push to main) publishes `edge`; a `v*` tag publishes the release.
+    if: github.event_name == 'push'
 
     # Each platform builds on its own architecture: QEMU emulation crashes Node
     # with SIGILL during the Waku build. Free arm64 runners, no emulation.
@@ -147,7 +154,8 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=edge,branch=main
 
       - name: Create the manifest list
         working-directory: /tmp/digests
