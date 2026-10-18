@@ -1,11 +1,13 @@
+import type { AppBackups } from "#libs/backups";
 import type { Docker } from "#libs/docker";
 import type { Hangar } from "#libs/hangar";
 import type { Notifications } from "#libs/notifications";
 
-/** What a job works with: the installed apps, the daemon, and the notification centre. */
+/** What a job works with: the installed apps, the daemon, the app archives, and the notification centre. */
 export type JobServices = {
   hangar: Hangar;
   docker: Docker;
+  backups: AppBackups;
   notifications: Notifications;
 };
 

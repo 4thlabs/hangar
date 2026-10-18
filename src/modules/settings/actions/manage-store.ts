@@ -2,6 +2,7 @@
 
 import { sessions } from "#libs/auth/server";
 import { hangar } from "#libs/hangar/server";
+import { backupJobs } from "#libs/jobs/server";
 import { logger } from "#libs/logs";
 import { notifications } from "#libs/notifications/server";
 import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
@@ -18,6 +19,8 @@ export const manageStore = async (): Promise<StoreActionResult> => {
   void hangar.store
     .install()
     .then(() => hangar.store.refresh())
+    // The pull may have brought a hangar.yml with other backups.
+    .then(() => backupJobs.sync(hangar.store.config.backups()))
     .then(() =>
       notifications.notify({
         userId: user.id,

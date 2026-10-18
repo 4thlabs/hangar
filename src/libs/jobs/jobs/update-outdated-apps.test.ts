@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AppBackups } from "#libs/backups";
 import type { Docker } from "#libs/docker";
 import type { Hangar } from "#libs/hangar";
 import type { Notifications } from "#libs/notifications";
@@ -18,6 +19,7 @@ const notify = vi.fn();
 const services = {
   hangar: { store: { config: { registryThrottling: () => 0 }, compose } } as unknown as Hangar,
   docker: { checkUpdates } as unknown as Docker,
+  backups: {} as AppBackups,
   notifications: { notify } as unknown as Notifications,
 } satisfies JobServices;
 
