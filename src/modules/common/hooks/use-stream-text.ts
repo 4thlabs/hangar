@@ -16,7 +16,7 @@ export const streamStatusLabel: Record<StreamStatus, string> = {
 
 /**
  * Streams a chunked text endpoint (container logs, compose output), keeping the last {@link MAX_STREAM_CHARACTERS}.
- * A `null` endpoint stays idle; the request is aborted on unmount or endpoint change.
+ * A `null` endpoint stays idle and keeps the last text; the request is aborted on unmount or endpoint change.
  */
 export function useStreamText(endpoint: string | null, method: "GET" | "POST" = "GET") {
   const [text, setText] = useState("");
@@ -33,6 +33,9 @@ export function useStreamText(endpoint: string | null, method: "GET" | "POST" = 
     const controller = new AbortController();
 
     async function follow(url: string) {
+      // Every request starts from scratch: the hook outlives its requests (the compose sheet stays
+      // mounted between commands), and a new command's output would otherwise land after the last one's.
+      setText("");
       setStatus("connecting");
       setError(null);
 
