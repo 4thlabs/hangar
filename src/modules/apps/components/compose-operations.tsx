@@ -5,6 +5,7 @@ import {
   ChevronDownIcon,
   PowerIcon,
   RefreshCwIcon,
+  RotateCwIcon,
   Trash2Icon,
   type LucideIcon,
 } from "lucide-react";
@@ -22,7 +23,7 @@ import {
 } from "#modules/common/ui/dropdown-menu.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 
-/** Operations that replace or destroy containers, so the ones that need confirming before they run. */
+/** Operations that interrupt the app (restart, replace or destroy its containers), so confirmed before they run. */
 export type DestructiveOperation = Exclude<AppOperation, "up">;
 
 type ComposeOperationButtonsProps = {
@@ -89,6 +90,17 @@ export function ComposeOperationButtons({ running, disabled, size, onRun, onConf
       </ButtonGroup>
       <Button
         type="button"
+        variant="outline"
+        size={size}
+        disabled={disabled}
+        onClick={() => onConfirm("restart")}
+        title="docker compose restart"
+      >
+        {running === "restart" ? <Spinner /> : <RotateCwIcon data-icon="inline-start" />}
+        {actionLabel.restart}
+      </Button>
+      <Button
+        type="button"
         variant="destructive"
         size={size}
         disabled={disabled}
@@ -152,12 +164,14 @@ export function ComposeRunDialogs({ compose, subject, count }: ComposeRunDialogs
   const { apps, staysListed } = count > 1 ? TARGET_WORDING.many : TARGET_WORDING.one;
 
   const title: Record<DestructiveOperation, string> = {
+    restart: `Redémarrer ${subject} ?`,
     down: `Arrêter ${subject} ?`,
     recreate: `Recréer ${subject} ?`,
     update: `Mettre à jour ${subject} ?`,
   };
 
   const description: Record<DestructiveOperation, string> = {
+    restart: `Les conteneurs de ${apps} seront redémarrés sans être recréés : une configuration modifiée ne sera pas prise en compte.`,
     down: `Docker Compose supprimera les conteneurs et réseaux de ${apps}. ${staysListed}, à l’arrêt.`,
     recreate: `Tous les conteneurs de ${apps} seront recréés, même si leur configuration n’a pas changé.`,
     update: "Les images seront retirées du registre et les conteneurs recréés avec la nouvelle version.",

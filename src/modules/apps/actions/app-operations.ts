@@ -6,6 +6,7 @@ const COMPOSE_PROJECT_NAME = /^[a-z0-9][a-z0-9_-]*$/;
 /** Docker Compose arguments run for each operation */
 export const appOperationArguments: Record<AppOperation, readonly string[]> = {
   up: ["up", "-d"],
+  restart: ["restart"],
   down: ["down"],
   recreate: ["up", "-d", "--force-recreate"],
   update: ["up", "-d", "--pull", "always"],

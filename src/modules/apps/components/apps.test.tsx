@@ -87,6 +87,7 @@ describe("Docker apps views", () => {
 
     expect(html).toContain('title="docker compose up -d"');
     expect(html).toContain('aria-label="Autres options de Up"');
+    expect(html).toContain('title="docker compose restart"');
     expect(html).toContain('title="docker compose down"');
     // The menu renders its items only once opened.
     expect(html).not.toContain("Force recreate");

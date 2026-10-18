@@ -1,11 +1,12 @@
-export type AppOperation = "up" | "down" | "recreate" | "update";
+export type AppOperation = "up" | "restart" | "down" | "recreate" | "update";
 
 export const isAppOperation = (value: string): value is AppOperation =>
-  value === "up" || value === "down" || value === "recreate" || value === "update";
+  value === "up" || value === "restart" || value === "down" || value === "recreate" || value === "update";
 
 /** Button/toast label for each operation, shared by the table and the detail page. */
 export const actionLabel: Record<AppOperation, string> = {
   up: "Up",
+  restart: "Redémarrer",
   down: "Down",
   recreate: "Force recreate",
   update: "Mettre à jour",
@@ -14,6 +15,7 @@ export const actionLabel: Record<AppOperation, string> = {
 /** What each operation did to an app, for the notification filed when the command ends. */
 export const operationOutcome: Record<AppOperation, (project: string) => string> = {
   up: project => `${project} a été démarrée ou mise à jour.`,
+  restart: project => `${project} a été redémarrée.`,
   down: project => `${project} a été arrêtée et supprimée.`,
   recreate: project => `${project} a été recréée.`,
   update: project => `${project} a été mise à jour depuis son registre.`,
