@@ -9,6 +9,7 @@ import { formatBytes } from "#modules/apps/format.ts";
 import type { ActionResult } from "#modules/common/actions/action-result.ts";
 import { AutoReload } from "#modules/common/components/auto-reload.tsx";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
+import { LocalDateTime } from "#modules/common/components/local-date-time.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
@@ -75,7 +76,9 @@ export function AppBackupsCard({ project, schedule, archives, running, backupApp
             <TableBody>
               {archives.map(({ archive, size, createdAt }) => (
                 <TableRow key={archive}>
-                  <TableCell className="pl-6">{BackupsView.date(createdAt)}</TableCell>
+                  <TableCell className="pl-6">
+                    <LocalDateTime value={createdAt} />
+                  </TableCell>
                   <TableCell className="tabular-nums">{formatBytes(size)}</TableCell>
                   <TableCell className="pr-6">
                     <div className="flex justify-end gap-2">
@@ -83,7 +86,7 @@ export function AppBackupsCard({ project, schedule, archives, running, backupApp
                         size="icon-sm"
                         variant="outline"
                         title="Télécharger"
-                        aria-label={`Télécharger l’archive du ${BackupsView.date(createdAt)}`}
+                        aria-label={`Télécharger l’archive ${archive}`}
                         render={<a href={`/api/backups/${project}/${archive}`} download />}
                       >
                         <DownloadIcon />
@@ -93,7 +96,7 @@ export function AppBackupsCard({ project, schedule, archives, running, backupApp
                         size="icon-sm"
                         variant="ghost"
                         title="Supprimer"
-                        aria-label={`Supprimer l’archive du ${BackupsView.date(createdAt)}`}
+                        aria-label={`Supprimer l’archive ${archive}`}
                         disabled={isPending}
                         onClick={() => setArchiveToDelete(archive)}
                       >

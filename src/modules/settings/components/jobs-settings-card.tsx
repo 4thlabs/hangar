@@ -4,6 +4,7 @@ import { RotateCcwIcon, XIcon } from "lucide-react";
 import type { JobData, JobState } from "sidequest";
 import { useRouter } from "waku";
 import type { ActionResult } from "#modules/common/actions/action-result.ts";
+import { LocalDateTime } from "#modules/common/components/local-date-time.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -22,8 +23,6 @@ const stateLabel: Record<JobState, string> = {
 
 /** Only these can still be stopped; the others already reached a final state. */
 const cancellable: JobState[] = ["waiting", "claimed", "running"];
-
-const formatDate = (date: Date | null) => (date ? new Date(date).toLocaleString("fr-FR") : "—");
 
 const endedAt = (job: JobData) => job.completed_at ?? job.failed_at ?? job.canceled_at;
 
@@ -80,8 +79,12 @@ export function JobsSettingsCard({ jobs, runJob, cancelJob }: JobsSettingsCardPr
                   <TableCell className="tabular-nums">
                     {job.attempt} / {job.max_attempts}
                   </TableCell>
-                  <TableCell>{formatDate(job.inserted_at)}</TableCell>
-                  <TableCell>{formatDate(endedAt(job))}</TableCell>
+                  <TableCell>
+                    <LocalDateTime value={job.inserted_at} />
+                  </TableCell>
+                  <TableCell>
+                    <LocalDateTime value={endedAt(job)} />
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
                       <Button
