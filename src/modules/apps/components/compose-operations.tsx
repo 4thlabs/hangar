@@ -1,11 +1,25 @@
 "use client";
 
-import { ArrowUpFromLineIcon, PowerIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
+import {
+  ArrowUpFromLineIcon,
+  ChevronDownIcon,
+  PowerIcon,
+  RefreshCwIcon,
+  Trash2Icon,
+  type LucideIcon,
+} from "lucide-react";
 import { actionLabel, type AppOperation } from "#modules/apps/actions/app-operation.ts";
 import { ComposeOutputSheet } from "#modules/apps/components/compose-output-sheet.tsx";
 import type { useComposeRun } from "#modules/apps/hooks/use-compose-run.ts";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
+import { ButtonGroup } from "#modules/common/ui/button-group.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "#modules/common/ui/dropdown-menu.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 
 /** Operations that replace or destroy containers, so the ones that need confirming before they run. */
@@ -16,44 +30,63 @@ type ComposeOperationButtonsProps = {
   running: AppOperation | null;
   disabled: boolean;
   size?: "sm" | undefined;
-  /** `up` runs straight away; the other three are handed over for confirmation first. */
+  /** `up` runs straight away; the others are handed over for confirmation first. */
   onRun: (operation: "up") => void;
   onConfirm: (operation: DestructiveOperation) => void;
 };
 
-/** The compose operation buttons, shared by the apps table and the detail page; state lives in `useComposeRun`. */
+/** The operations reached from Up's menu: `up -d` with one flag more. */
+class UpVariants {
+  static readonly All = [
+    { operation: "update", icon: ArrowUpFromLineIcon, command: "up -d --pull always" },
+    { operation: "recreate", icon: RefreshCwIcon, command: "up -d --force-recreate" },
+  ] as const satisfies readonly { operation: DestructiveOperation; icon: LucideIcon; command: string }[];
+
+  static includes(operation: AppOperation | null) {
+    return UpVariants.All.some(variant => variant.operation === operation);
+  }
+}
+
+/**
+ * The compose operation buttons, shared by the apps table and the detail page; state lives in `useComposeRun`.
+ * Grouped by command: Up carries its `up -d` variants in a menu, so adding an operation does not add a button.
+ */
 export function ComposeOperationButtons({ running, disabled, size, onRun, onConfirm }: ComposeOperationButtonsProps) {
-  const icon = (operation: AppOperation, Idle: typeof PowerIcon) =>
-    running === operation ? <Spinner /> : <Idle data-icon="inline-start" />;
+  const upRunning = running === "up" || UpVariants.includes(running);
 
   return (
     <>
-      <Button type="button" size={size} disabled={disabled} onClick={() => onRun("up")} title="docker compose up -d">
-        {icon("up", PowerIcon)}
-        {actionLabel.up}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size={size}
-        disabled={disabled}
-        onClick={() => onConfirm("update")}
-        title="docker compose up -d --pull always"
-      >
-        {icon("update", ArrowUpFromLineIcon)}
-        {actionLabel.update}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size={size}
-        disabled={disabled}
-        onClick={() => onConfirm("recreate")}
-        title="docker compose up -d --force-recreate"
-      >
-        {icon("recreate", RefreshCwIcon)}
-        {actionLabel.recreate}
-      </Button>
+      <ButtonGroup>
+        <Button type="button" size={size} disabled={disabled} onClick={() => onRun("up")} title="docker compose up -d">
+          {upRunning ? <Spinner /> : <PowerIcon data-icon="inline-start" />}
+          {actionLabel.up}
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                size={size === "sm" ? "icon-sm" : "icon"}
+                disabled={disabled}
+                aria-label={`Autres options de ${actionLabel.up}`}
+              />
+            }
+          >
+            <ChevronDownIcon />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" sideOffset={6} className="min-w-56">
+            {UpVariants.All.map(({ operation, icon: Icon, command }) => (
+              <DropdownMenuItem key={operation} onClick={() => onConfirm(operation)}>
+                <Icon />
+                <span className="flex flex-col">
+                  {actionLabel[operation]}
+                  <span className="font-mono text-xs text-muted-foreground">{command}</span>
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </ButtonGroup>
       <Button
         type="button"
         variant="destructive"
@@ -62,7 +95,7 @@ export function ComposeOperationButtons({ running, disabled, size, onRun, onConf
         onClick={() => onConfirm("down")}
         title="docker compose down"
       >
-        {icon("down", Trash2Icon)}
+        {running === "down" ? <Spinner /> : <Trash2Icon data-icon="inline-start" />}
         {actionLabel.down}
       </Button>
     </>
