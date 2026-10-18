@@ -159,6 +159,11 @@ widgets:
   - { type: frigate-events, column: 3, url: http://frigate:5000 }
 
 registryThrottling: 100
+
+backups:
+  - app: jellyfin
+    schedule: "30 3 * * *"
+    exclude: ["**/cache/**", "**/*.log"]
 ```
 
 ### `categories`
@@ -191,3 +196,60 @@ on the type. See [Widgets](widgets.md).
 
 Default `100`. Pause between two registry calls in the image update check, in milliseconds.
 Docker Hub and ghcr.io rate-limit bursts; raise this if the check comes back throttled.
+
+### `backups`
+
+Default `[]`. The apps whose data folder Hangar archives into a zip, one entry per app. Each
+entry is backed up on its schedule, and by hand from the app's page (**Sauvegardes → Sauvegarder
+maintenant**), which also lists the archives to download or delete.
+
+```yaml
+backups:
+  - app: immich
+    schedule: "0 3 * * *" # every night at 3:00
+    keep: 14
+    stop: true
+    path: immich/library
+    include: ["**"]
+    exclude: ["**/thumbs/**", "**/encoded-video/**"]
+```
+
+| Field      | Type     | Default  | Description                                                                         |
+| ---------- | -------- | -------- | ----------------------------------------------------------------------------------- |
+| `app`      | string   | —        | The app id. Each app appears once.                                                  |
+| `schedule` | string   | none     | A cron expression. Without one, the app is only backed up by hand.                  |
+| `keep`     | integer  | `7`      | How many archives to keep: the oldest go once a new one is written.                 |
+| `stop`     | boolean  | `false`  | Stop the running services while their files are read, then start them again.        |
+| `path`     | string   | `<app>`  | The folder to back up, under `<data>/app-data/`. It may not climb out of it.        |
+| `include`  | string[] | `["**"]` | Globs of the files to archive, relative to `path`.                                  |
+| `exclude`  | string[] | `[]`     | Globs of the files and folders to leave out; an excluded folder is not walked into. |
+
+The globs match dotfiles too (`.config/`, `.local/`): `**` is everything. Symbolic links are left
+out, never followed; the run's report in **Paramètres → Jobs** counts them.
+
+The archives are kept in `<data>/app-backups/<app>/`, named after the time they were started
+(`2026-10-18T03-30-00-000Z.zip`, in UTC). The ones made by hand count towards `keep` like the
+others. They sit on the same disk as the data they copy: mind `keep` against the free space.
+
+**Live data.** With `stop: false` the files are read while the app writes them: a database copied
+that way can come back inconsistent. Set `stop: true` for an app with a database, or exclude its
+files and back them up with the database's own dump. With `stop: true`, only the services running
+when the backup starts are stopped, and they are started again whatever the outcome; a service
+that does not start again gets a notification of its own. Hangar refuses to stop the app it runs
+in.
+
+**Schedules.** A schedule follows the time zone of the Hangar container (`TZ`). A run is never
+retried and is aborted after 6 hours; a failed one is notified. Saving `hangar.yml` from
+**Paramètres → Configuration**, or updating the store from **Paramètres → Store**, applies the new
+schedules at once. A `store install` from the [CLI](cli.md) runs in another process: the server only
+sees its schedules once restarted.
+
+**Restoring.** An archive keeps the path of the folder under `app-data/`, so it unzips in place.
+Stop the app first; zip keeps no owner, so give the files back to the app's user afterwards:
+
+```bash
+node bin/cli.js store immich stop
+unzip -o immich-2026-10-18T03-00-00-000Z.zip -d <data>/app-data
+chown -R 1000:1000 <data>/app-data/immich/library
+node bin/cli.js store immich start
+```
