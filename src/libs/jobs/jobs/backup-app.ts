@@ -21,6 +21,12 @@ export type BackupReport = BackupSummary & {
  * read, and started again whatever the outcome.
  */
 export class BackupApp extends Job {
+  /**
+   * The hostname Docker gives a container, its short id. A container on the host network, or given
+   * a hostname of its own, does not have it: Hangar cannot tell it is the one it runs in.
+   */
+  private static readonly ContainerHostname = /^[0-9a-f]{12}$/;
+
   /** Builds what the run works with. */
   private readonly createServices: CreateJobServices;
 
@@ -40,15 +46,18 @@ export class BackupApp extends Job {
    */
   async run(app: string): Promise<BackupReport> {
     const services = await this.createServices();
-    const config = services.hangar.store.config.backup(app);
-
-    if (!config) {
-      throw new HangarError(`hangar.yml declares no backup for ${app}`);
-    }
-
-    const running = config.stop ? await BackupApp.runningServices(services.docker, app) : [];
+    // Set once known, so the `finally` starts again exactly what this run stopped.
+    let running: string[] = [];
 
     try {
+      const config = services.hangar.store.config.backup(app);
+
+      if (!config) {
+        throw new HangarError(`hangar.yml declares no backup for ${app}`);
+      }
+
+      running = config.stop ? await BackupApp.runningServices(services.docker, app) : [];
+
       if (running.length > 0) {
         await services.hangar.store.compose(app, ["stop", ...running]);
       }
@@ -84,10 +93,11 @@ export class BackupApp extends Job {
   private static async runningServices(docker: Docker, app: string) {
     const detail = await docker.projectDetail(app);
     const running = detail.services.filter(service => service.runningCount > 0);
-    // Docker names a container's host after its short id; outside a container, no id matches.
     const self = hostname();
+    // Only a hostname shaped like a short id can name a container: a host called `cafe` would match some.
+    const isSelf = (id: string) => BackupApp.ContainerHostname.test(self) && id.startsWith(self);
 
-    if (running.some(service => service.containers.some(container => container.id.startsWith(self)))) {
+    if (running.some(service => service.containers.some(container => isSelf(container.id)))) {
       throw new HangarError(`${app} runs Hangar itself: stopping it would stop its own backup`);
     }
 

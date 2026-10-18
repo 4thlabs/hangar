@@ -8,8 +8,10 @@ import { BackupApp } from "./backup-app.ts";
 
 vi.mock("#libs/logs", () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
 
-// The short id Docker gives Hangar's own container as its hostname.
-vi.mock("node:os", async importOriginal => ({ ...(await importOriginal<object>()), hostname: () => "4a1b2c3d4e5f" }));
+// The hostname Hangar runs under: by default the short id Docker gives its own container.
+const host = vi.hoisted(() => ({ name: "4a1b2c3d4e5f" }));
+
+vi.mock("node:os", async importOriginal => ({ ...(await importOriginal<object>()), hostname: () => host.name }));
 
 const backup = vi.fn<(app: string) => BackupConfig | undefined>();
 const compose = vi.fn();
@@ -49,6 +51,7 @@ function service(name: string, states: string[], idPrefix = "0f0f0f0f0f0f") {
 describe("BackupApp", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    host.name = "4a1b2c3d4e5f";
     compose.mockResolvedValue(undefined);
     create.mockResolvedValue(summary);
   });
@@ -125,13 +128,36 @@ describe("BackupApp", () => {
 
     expect(compose).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ dedupeKey: "backup:hangar" }));
   });
 
-  it("fails an app hangar.yml declares no backup for", async () => {
+  it("takes no host name for a container id unless it is shaped like one", async () => {
+    host.name = "cafe";
+    backup.mockReturnValue(backupOf("immich", { stop: true }));
+    projectDetail.mockResolvedValue({ services: [service("server", ["running"], "cafe12345678")] });
+
+    await job.run("immich");
+
+    expect(compose).toHaveBeenCalledWith("immich", ["stop", "server"]);
+  });
+
+  it("notifies an app hangar.yml declares no backup for", async () => {
     backup.mockReturnValue(undefined);
 
     await expect(job.run("jellyfin")).rejects.toThrow(/declares no backup for jellyfin/);
 
     expect(create).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ dedupeKey: "backup:jellyfin" }));
+  });
+
+  it("notifies a backup the daemon cannot tell the running services of, stopping nothing", async () => {
+    backup.mockReturnValue(backupOf("immich", { stop: true }));
+    projectDetail.mockRejectedValue(new Error("connect ENOENT /var/run/docker.sock"));
+
+    await expect(job.run("immich")).rejects.toThrow(/docker\.sock/);
+
+    expect(compose).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ dedupeKey: "backup:immich" }));
   });
 });
