@@ -480,8 +480,9 @@ export class DockerSwarm {
     }
   }
 
+  /** The members of the Raft group, which the quorum counts: not a node promoted that never joined. */
   private static managerCount(nodes: NodeInfo[]) {
-    return nodes.filter(node => node.Spec?.Role === "manager").length;
+    return nodes.filter(node => node.ManagerStatus !== undefined).length;
   }
 
   /**

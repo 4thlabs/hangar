@@ -401,8 +401,9 @@ hostname.
 Branch `feat/swarm-node-actions`, on top of step 1.
 
 **Rules (`#libs/docker/swarm-rules`).** One method, `SwarmRules.nodeRefusal(action, node, managers)`,
-says why an action does not apply: `already-done`, `last-manager`, `manager-not-removable` (the daemon only
-removes a manager once demoted), `node-not-down`. It fills `SwarmNode.actions`, which decides the buttons, and
+says why an action does not apply: `already-done`, `last-manager`, `not-raft-member` (a node promoted but not in
+Raft, which the daemon cannot demote), `manager-not-removable` (the daemon only removes a manager once
+demoted), `node-not-down` (it is still ready). `managers` counts the Raft members, read from `ManagerStatus`. It fills `SwarmNode.actions`, which decides the buttons, and
 guards `DockerSwarm.changeNode` against a stale page.
 
 **Writes (`DockerSwarm`).**

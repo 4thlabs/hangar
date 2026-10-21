@@ -45,7 +45,7 @@ export class SwarmRules {
   /**
    * Why `action` cannot run on `node`, or `null` when it can. One rule for both the buttons the page
    * offers and the check before the call, so a stale page cannot do what the buttons would not.
-   * @param managers How many managers the cluster has, the node included if it is one
+   * @param managers How many members the Raft group has, the node included if it is one
    */
   static nodeRefusal(action: SwarmNodeAction, node: SwarmNodeState, managers: number): SwarmNodeRefusal | null {
     const isManager = node.role !== "worker";
@@ -69,8 +69,9 @@ export class SwarmRules {
       case "activate":
         return node.availability === "active" ? "already-done" : null;
       case "remove":
-        // The daemon refuses to remove a member of the Raft group: it must be demoted first.
-        if (node.isRaftMember) {
+        // The daemon refuses to remove a manager still in the Raft group: it must be demoted first. A
+        // demoted node still leaving it is a worker already, and goes.
+        if (isManager && node.isRaftMember) {
           return "manager-not-removable";
         }
 
