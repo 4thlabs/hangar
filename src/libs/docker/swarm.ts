@@ -533,7 +533,9 @@ export class DockerSwarm {
       return {
         id: node.ID,
         hostname: node.Description?.Hostname ?? node.ID,
-        ...state,
+        role: state.role,
+        status: state.status,
+        availability: state.availability,
         cpus: (resources?.NanoCPUs ?? 0) / 1e9,
         memoryBytes: resources?.MemoryBytes ?? 0,
         engineVersion: node.Description?.Engine?.EngineVersion ?? "",
@@ -590,6 +592,8 @@ export class DockerSwarm {
       role: DockerSwarm.role(node),
       status: node.Status?.State ?? "unknown",
       availability: node.Spec?.Availability ?? "active",
+      // `GET /nodes` reads `ManagerStatus` from the Raft member list.
+      isRaftMember: node.ManagerStatus !== undefined,
     };
   }
 

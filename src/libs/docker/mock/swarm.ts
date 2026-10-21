@@ -6,6 +6,8 @@ type NodeOverrides = {
   hostname?: string;
   role?: "manager" | "worker";
   leader?: boolean;
+  /** Whether it is in the managers' Raft group; a manager is, unless promoted while out of reach. */
+  raftMember?: boolean;
   state?: string;
   availability?: string;
   labels?: Record<string, string>;
@@ -19,6 +21,7 @@ export function swarmNode({
   hostname = "nas",
   role = "manager",
   leader = false,
+  raftMember = role === "manager",
   state = "ready",
   availability = "active",
   labels = { zone: "home" },
@@ -34,7 +37,7 @@ export function swarmNode({
       Engine: { EngineVersion: "29.1.3", Labels: engineLabels },
     },
     Status: { State: state },
-    ...(role === "manager" ? { ManagerStatus: { Leader: leader, Reachability: "reachable" } } : {}),
+    ...(raftMember ? { ManagerStatus: { Leader: leader, Reachability: "reachable" } } : {}),
   };
 }
 

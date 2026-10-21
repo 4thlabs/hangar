@@ -4,10 +4,20 @@ import type { SwarmNodeAvailability, SwarmNodeRole, SwarmNodeStatus } from "../s
 export type SwarmNodeAction = "promote" | "demote" | "drain" | "activate" | "remove";
 
 /** Why an action does not apply to a node; see {@link SwarmRules.nodeRefusal}. */
-export type SwarmNodeRefusal = "already-done" | "last-manager" | "manager-not-removable" | "node-not-down";
+export type SwarmNodeRefusal =
+  "already-done" | "last-manager" | "not-raft-member" | "manager-not-removable" | "node-not-down";
 
 /** The fields of a node that decide which actions apply to it. */
-export type SwarmNodeState = { role: SwarmNodeRole; status: SwarmNodeStatus; availability: SwarmNodeAvailability };
+export type SwarmNodeState = {
+  role: SwarmNodeRole;
+  status: SwarmNodeStatus;
+  availability: SwarmNodeAvailability;
+  /**
+   * Whether it sits in the managers' Raft group. A promotion only records the wish: a node promoted
+   * while out of reach is a manager in name only until it joins, and the daemon then refuses to demote it.
+   */
+  isRaftMember: boolean;
+};
 
 /**
  * The rules of the swarm the page shares with the library. Client-safe: no Node module, no client,
@@ -48,18 +58,24 @@ export class SwarmRules {
           return "already-done";
         }
 
+        // Swarmkit demotes by leaving Raft, which a manager in name only cannot do; it can be removed.
+        if (!node.isRaftMember) {
+          return "not-raft-member";
+        }
+
         return managers <= 1 ? "last-manager" : null;
       case "drain":
         return node.availability === "drain" ? "already-done" : null;
       case "activate":
         return node.availability === "active" ? "already-done" : null;
       case "remove":
-        // The daemon refuses to remove a manager from the Raft group: it must be demoted first.
-        if (isManager) {
+        // The daemon refuses to remove a member of the Raft group: it must be demoted first.
+        if (node.isRaftMember) {
           return "manager-not-removable";
         }
 
-        return node.status === "down" ? null : "node-not-down";
+        // Without `force`, the daemon only refuses a ready node; one it lost track of goes too.
+        return node.status === "ready" ? "node-not-down" : null;
     }
   }
 
