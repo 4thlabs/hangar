@@ -8,8 +8,9 @@ export class SwarmFailure {
   private static readonly RefusalMessage: Record<SwarmRefusal, string> = {
     "already-done": "Ce nœud est déjà dans cet état.",
     "last-manager": "C'est le dernier manager du cluster : le rétrograder le laisserait sans manager.",
+    "not-raft-member": "Ce nœud n'a jamais rejoint les managers : Docker ne peut pas le rétrograder, retirez-le.",
     "manager-not-removable": "Un manager ne peut pas être retiré : rétrogradez-le d'abord.",
-    "node-not-down": "Seul un nœud injoignable peut être retiré : arrêtez-le, ou faites-lui quitter le swarm.",
+    "node-not-down": "Un nœud prêt ne peut pas être retiré : drainez-le, puis faites-lui quitter le swarm.",
     "unknown-node": "Ce nœud ne fait plus partie du cluster.",
   };
 

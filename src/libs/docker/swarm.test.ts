@@ -292,6 +292,16 @@ describe("DockerSwarm.changeNode", () => {
     expect(dockerMock.updateNode).not.toHaveBeenCalled();
   });
 
+  it("removes a manager that never joined Raft once it is down, rather than demote it", async () => {
+    givenSwarm({ nodes: [...cluster(), swarmNode({ id: "lost", role: "manager", raftMember: false, state: "down" })] });
+
+    await expect(client().changeNode("lost", "demote")).rejects.toMatchObject({ refusal: "not-raft-member" });
+    await client().changeNode("lost", "remove");
+
+    expect(dockerMock.removeNode).toHaveBeenCalledWith("lost", {});
+    expect(dockerMock.updateNode).not.toHaveBeenCalled();
+  });
+
   it("refuses to demote the last manager, without calling the daemon", async () => {
     givenSwarm({ nodes: cluster() });
 
