@@ -29,6 +29,10 @@ describe("SwarmRules.nodeActions", () => {
     expect(SwarmRules.nodeActions({ ...manager, status: "down" }, 3)).not.toContain("remove");
   });
 
+  it("offers removal to a down node demoted but still leaving Raft", () => {
+    expect(SwarmRules.nodeActions({ ...worker, status: "down", isRaftMember: true }, 2)).toContain("remove");
+  });
+
   it("offers a manager that never joined Raft its removal instead of a demotion the daemon refuses", () => {
     expect(SwarmRules.nodeActions({ ...unjoined, status: "down" }, 3)).toEqual(["drain", "remove"]);
     expect(SwarmRules.nodeActions(unjoined, 3)).toEqual(["drain"]);

@@ -59,13 +59,17 @@ fault tolerance becomes:
 | **Rétrograder** | `docker node demote`                       | The node is a manager, and another manager remains                              |
 | **Drainer**     | `docker node update --availability drain`  | The node takes tasks: they move to the other nodes, and none is scheduled there |
 | **Réactiver**   | `docker node update --availability active` | The node is drained or paused                                                   |
-| **Retirer**     | `docker node rm`                           | The node is a worker and is down                                                |
+| **Retirer**     | `docker node rm`                           | The node is not ready, and not a manager in the Raft group                      |
 
 A few things Swarm itself decides:
 
 - A manager cannot be removed: demote it first.
-- A worker reads as down about 15 seconds after it stops answering. Only then can it be removed; it
-  must rejoin with a token if it comes back.
+- A promotion only records the wish: a node promoted while out of reach never joins the managers'
+  Raft group, and the daemon refuses to demote it. Hangar offers **Retirer** instead once it is not
+  ready, and leaves it out of the manager count and the fault tolerance.
+- A node reads as down about 15 seconds after it stops answering. Only once it is no longer ready can
+  it be removed; it must rejoin with a token if it comes back. Still ready, drain it so no task lands
+  there, then run `docker swarm leave` on its host.
 - Demoting the node Hangar runs on costs Hangar its view of the cluster. The confirmation warns you.
 - Right after a promotion, the daemon refuses a demotion for a couple of seconds, until the Raft group
   settles. Try again.

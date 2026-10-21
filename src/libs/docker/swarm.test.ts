@@ -247,9 +247,11 @@ describe("DockerSwarm managers", () => {
         swarmNode({ id: "b" }),
         swarmNode({ id: "c" }),
         swarmNode({ id: "d", role: "worker" }),
+        swarmNode({ id: "e", raftMember: false }),
       ],
     });
 
+    // `e` was promoted but never joined Raft: it counts for no quorum.
     await expect(client().cluster()).resolves.toMatchObject({ managers: 3 });
   });
 });
