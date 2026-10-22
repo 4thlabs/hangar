@@ -1,4 +1,4 @@
-import type { TerminalSize } from "#libs/docker";
+import type { TerminalSize } from "#libs/terminals";
 import { TerminalProtocol, type TerminalMessage } from "./terminal-protocol.ts";
 
 /**

@@ -2,7 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 
 /**
- * The xterm terminal of a container's console, in the app's font and colors, kept fitted to its element.
+ * The xterm terminal of a shell, in the app's font and colors, kept fitted to its element.
  * Loaded with the terminal panel only: xterm touches `window` on load.
  */
 export class TerminalView {
