@@ -16,6 +16,7 @@ export const dockerMock = {
   removeContainer: vi.fn(),
   logs: vi.fn(),
   stats: vi.fn(),
+  exec: vi.fn(),
   demuxStream: vi.fn(),
   listImages: vi.fn(),
   distribution: vi.fn(),
@@ -52,6 +53,7 @@ export const fakeDockerode = () =>
       remove: () => dockerMock.removeContainer(id),
       logs: (options: unknown) => dockerMock.logs(id, options),
       stats: (options: unknown) => dockerMock.stats(id, options),
+      exec: (options: unknown) => dockerMock.exec(id, options),
     }),
     getImage: (reference: string) => ({
       distribution: (options: unknown) => dockerMock.distribution(reference, options),

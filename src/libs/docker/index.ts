@@ -5,3 +5,4 @@ export * from "./stats.ts";
 export * from "./swarm.ts";
 export * from "./swarm-errors.ts";
 export * from "./swarm-rules/index.ts";
+export * from "./terminals.ts";
