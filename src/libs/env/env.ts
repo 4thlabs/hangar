@@ -16,6 +16,14 @@ const envVariables = z.object({
   GITHUB_TOKEN: z.string().min(1).optional(),
   BETTER_AUTH_URL: z.url().optional(),
   BETTER_AUTH_SECRET: z.string().min(32).optional(),
+  // The host the Terminal page signs in to; the page explains how to set it up while these are missing.
+  HANGAR_SSH_HOST: z.string().min(1).optional(),
+  HANGAR_SSH_USER: z.string().min(1).optional(),
+  HANGAR_SSH_PORT: z
+    .string()
+    .regex(/^\d+$/, "Must be a port number")
+    .refine(port => Number(port) >= 1 && Number(port) <= 65_535, "Must be a port number, 1 to 65535")
+    .optional(),
 });
 
 const parsed = envVariables.safeParse(process.env);
