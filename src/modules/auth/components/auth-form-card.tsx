@@ -9,6 +9,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Field, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
 
+type AuthAlternate = {
+  prompt: string;
+  href: "/login" | "/register";
+  label: string;
+};
+
 type AuthFormCardProps = {
   title: string;
   description: string;
@@ -17,9 +23,8 @@ type AuthFormCardProps = {
   isPending: boolean;
   submitLabel: string;
   pendingLabel: string;
-  alternatePrompt: string;
-  alternateHref: "/login" | "/register";
-  alternateLabel: string;
+  /** The link to the other form, left out when that form is closed. */
+  alternate?: AuthAlternate | undefined;
   children: ReactNode;
   onSubmit: ComponentProps<"form">["onSubmit"];
 };
@@ -32,9 +37,7 @@ export function AuthFormCard({
   isPending,
   submitLabel,
   pendingLabel,
-  alternatePrompt,
-  alternateHref,
-  alternateLabel,
+  alternate,
   children,
   onSubmit,
 }: AuthFormCardProps) {
@@ -61,12 +64,14 @@ export function AuthFormCard({
           <PendingButton type="submit" className="w-full" pending={isPending} pendingLabel={pendingLabel}>
             {submitLabel}
           </PendingButton>
-          <p className="text-sm text-muted-foreground">
-            {alternatePrompt}{" "}
-            <Link to={alternateHref} className="underline underline-offset-4">
-              {alternateLabel}
-            </Link>
-          </p>
+          {alternate && (
+            <p className="text-sm text-muted-foreground">
+              {alternate.prompt}{" "}
+              <Link to={alternate.href} className="underline underline-offset-4">
+                {alternate.label}
+              </Link>
+            </p>
+          )}
         </CardFooter>
       </Card>
     </form>

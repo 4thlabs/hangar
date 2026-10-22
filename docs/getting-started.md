@@ -97,6 +97,7 @@ removes the link. The store clone itself is never touched by an install.
 ## First launch
 
 1. **Create your account.** Open `http://<host>:3010` and register. Sign-in is email and password.
+   This first account is the only one: once it exists, registration is closed.
 2. **Install the store.** In **Paramètres → Store**, install the store: Hangar clones
    `HANGAR_STORE_URL`, links every app `hangar.yml` lists, and creates `.env.global`. The same
    button later pulls the store's latest commit.
@@ -106,9 +107,9 @@ removes the link. The store clone itself is never touched by an install.
 4. **Start your apps.** On **Apps**, select stacks and bring them up.
 
 > [!WARNING]
-> Registration is open to anyone who can reach the sign-up page, and an account can run
-> `docker compose` on your host. Keep Hangar on a trusted network or behind an authenticating
-> proxy.
+> Until the first account exists, anyone who reaches the sign-up page can create it, and an
+> account can run `docker compose` on your host. Create yours as soon as Hangar is up, and keep
+> it on a trusted network or behind an authenticating proxy.
 
 ## Background jobs
 
