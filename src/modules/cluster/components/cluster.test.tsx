@@ -44,6 +44,7 @@ const manager = managerView({
       role: "worker",
       status: "down",
       availability: "drain",
+      isRaftMember: false,
       actions: ["promote", "activate", "remove"],
     }),
   ],
@@ -60,6 +61,22 @@ describe("ClusterOverview", () => {
     expect(html.match(/★ ce nœud/g)).toHaveLength(1);
     expect(html).toContain("8 CPU · 32 GiB · Docker 29.1.3");
     expect(html).toContain("2 tâches");
+  });
+
+  it("tells a manager that never joined Raft apart from the leader and the managers it counts", () => {
+    const html = render(
+      managerView({
+        nodes: [
+          node(),
+          node({ id: "node-2", hostname: "pi-02", role: "manager" }),
+          node({ id: "node-3", hostname: "desktop", role: "manager", isRaftMember: false, status: "down" }),
+        ],
+      }),
+    );
+
+    expect(html.match(/>Leader</g)).toHaveLength(1);
+    expect(html.match(/>Manager</g)).toHaveLength(1);
+    expect(html).toContain(">Manager hors Raft<");
   });
 
   it("lists each stack once, with its replicas and where its tasks run, the idle ones included", () => {

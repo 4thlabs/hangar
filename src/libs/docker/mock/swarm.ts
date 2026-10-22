@@ -165,6 +165,7 @@ export function swarmNodeView(overrides: Partial<SwarmNode> = {}): SwarmNode {
     role: "leader",
     status: "ready",
     availability: "active",
+    isRaftMember: true,
     cpus: 8,
     memoryBytes: 32 * 1024 ** 3,
     engineVersion: "29.1.3",

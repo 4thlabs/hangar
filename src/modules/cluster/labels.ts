@@ -3,6 +3,7 @@ import type {
   SwarmJoinCommands,
   SwarmLimitedView,
   SwarmManagerView,
+  SwarmNode,
   SwarmNodeAction,
   SwarmNodeAvailability,
   SwarmNodeRole,
@@ -28,6 +29,12 @@ export class ClusterLabels {
     manager: "Manager",
     worker: "Worker",
   };
+
+  /** A node promoted that never joined Raft: `docker node ls` gives it no manager status at all. */
+  static readonly OutsideRaft = "Manager hors Raft";
+
+  static readonly OutsideRaftHint =
+    "Promu, mais absent du groupe Raft des managers : il ne compte pas pour le quorum. Juste promu, il le rejoint dans un instant ; injoignable, retirez-le.";
 
   static readonly NodeStatus: Record<SwarmNodeStatus, string> = {
     ready: "Prêt",
@@ -112,6 +119,33 @@ export class ClusterLabels {
 
   /** How many characters of the cluster id the page shows, as the `docker` CLI shortens ids. */
   private static readonly ShortIdLength = 12;
+
+  /** A manager in its spec only, which the quorum does not count. */
+  static isOutsideRaft(node: Pick<SwarmNode, "role" | "isRaftMember">) {
+    return node.role === "manager" && !node.isRaftMember;
+  }
+
+  /** The node's role in a word, a manager outside Raft told apart from one the quorum counts. */
+  static role(node: Pick<SwarmNode, "role" | "isRaftMember">) {
+    if (ClusterLabels.isOutsideRaft(node)) {
+      return ClusterLabels.OutsideRaft;
+    }
+
+    return ClusterLabels.Role[node.role];
+  }
+
+  /** Only the leader is filled: a plain manager would otherwise read as one at a glance. */
+  static roleVariant(node: Pick<SwarmNode, "role" | "isRaftMember">) {
+    if (node.role === "leader") {
+      return "default";
+    }
+
+    if (node.role === "manager" && node.isRaftMember) {
+      return "secondary";
+    }
+
+    return "outline";
+  }
 
   /** A node the managers cannot reach reads as a fault; one they hear from, as a plain fact. */
   static nodeStatusVariant(status: SwarmNodeStatus) {

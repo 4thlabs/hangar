@@ -44,6 +44,8 @@ export type SwarmNode = {
   role: SwarmNodeRole;
   status: SwarmNodeStatus;
   availability: SwarmNodeAvailability;
+  /** False for a node promoted that never joined the managers' Raft group: a manager in name only. */
+  isRaftMember: boolean;
   cpus: number;
   memoryBytes: number;
   engineVersion: string;
@@ -534,9 +536,7 @@ export class DockerSwarm {
       return {
         id: node.ID,
         hostname: node.Description?.Hostname ?? node.ID,
-        role: state.role,
-        status: state.status,
-        availability: state.availability,
+        ...state,
         cpus: (resources?.NanoCPUs ?? 0) / 1e9,
         memoryBytes: resources?.MemoryBytes ?? 0,
         engineVersion: node.Description?.Engine?.EngineVersion ?? "",
