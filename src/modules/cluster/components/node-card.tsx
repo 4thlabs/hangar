@@ -26,7 +26,12 @@ export function NodeCard({ cluster, node }: NodeCardProps) {
           {isCurrent && <span className="text-xs font-normal text-muted-foreground">★ ce nœud</span>}
         </CardTitle>
         <div className="flex flex-wrap gap-1.5">
-          <Badge variant={node.role === "worker" ? "outline" : "default"}>{ClusterLabels.Role[node.role]}</Badge>
+          <Badge
+            variant={ClusterLabels.roleVariant(node)}
+            title={ClusterLabels.isOutsideRaft(node) ? ClusterLabels.OutsideRaftHint : undefined}
+          >
+            {ClusterLabels.role(node)}
+          </Badge>
           <Badge variant={ClusterLabels.nodeStatusVariant(node.status)}>{ClusterLabels.NodeStatus[node.status]}</Badge>
           <Badge variant={ClusterLabels.availabilityVariant(node.availability)}>
             {ClusterLabels.Availability[node.availability]}

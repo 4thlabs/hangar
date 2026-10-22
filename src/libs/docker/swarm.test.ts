@@ -58,6 +58,7 @@ describe("DockerSwarm.cluster", () => {
         role: "leader",
         status: "ready",
         availability: "active",
+        isRaftMember: true,
         cpus: 4,
         memoryBytes: 8 * 1024 ** 3,
         engineVersion: "29.1.3",

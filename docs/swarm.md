@@ -45,8 +45,8 @@ affected.
 
 ### Nodes
 
-One card per node: its role (leader, manager or worker), its status, its availability, its CPUs, memory,
-Docker version, how many tasks run on it, and its labels. The node Hangar runs on is marked **★ ce nœud**. The title
+One card per node: its role (leader, manager, manager outside Raft, or worker), its status, its
+availability, its CPUs, memory, Docker version, how many tasks run on it, and its labels. The node Hangar runs on is marked **★ ce nœud**. The title
 line sums up the cluster and how many manager failures it tolerates: with 3 managers it survives 1, with
 5 it survives 2, and with 1 or 2 none.
 
@@ -65,8 +65,9 @@ A few things Swarm itself decides:
 
 - A manager cannot be removed: demote it first.
 - A promotion only records the wish: a node promoted while out of reach never joins the managers'
-  Raft group, and the daemon refuses to demote it. Hangar offers **Retirer** instead once it is not
-  ready, and leaves it out of the manager count and the fault tolerance.
+  Raft group, and the daemon refuses to demote it. `docker node ls` leaves its manager status blank;
+  Hangar marks it **Manager hors Raft**, offers **Retirer** instead once it is not ready, and leaves it
+  out of the manager count and the fault tolerance.
 - A node reads as down about 15 seconds after it stops answering. Only once it is no longer ready can
   it be removed; it must rejoin with a token if it comes back. Still ready, drain it so no task lands
   there, then run `docker swarm leave` on its host.
