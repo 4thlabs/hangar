@@ -319,6 +319,20 @@ describe("HostShells failures", () => {
     await terminal.ends();
     expect(terminal.text).toContain("Impossible de joindre server.lan:22 : connect ECONNREFUSED 10.0.0.2:22");
   });
+
+  it("says why each address failed, for a host that resolves to several", async () => {
+    client.socketError = new AggregateError(
+      [new Error("connect ECONNREFUSED 172.17.0.1:22"), new Error("connect ENETUNREACH fd00::1:22")],
+      "",
+    );
+
+    const terminal = screen(await hostShells().open(SIZE));
+
+    await terminal.ends();
+    expect(terminal.text).toContain(
+      "Impossible de joindre server.lan:22 : connect ECONNREFUSED 172.17.0.1:22, connect ENETUNREACH fd00::1:22",
+    );
+  });
 });
 
 describe("HostShells shell", () => {
