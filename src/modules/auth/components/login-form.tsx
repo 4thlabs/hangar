@@ -5,7 +5,12 @@ import { useRouter } from "waku";
 import { authClient } from "#libs/auth/client";
 import { AuthEmailField, AuthFormCard, AuthPasswordField } from "#modules/auth/components/auth-form-card.tsx";
 
-export function LoginForm() {
+type LoginFormProps = {
+  /** Whether no account exists yet: the link to the sign-up page only shows then. */
+  registrationOpen: boolean;
+};
+
+export function LoginForm({ registrationOpen }: LoginFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
@@ -46,9 +51,9 @@ export function LoginForm() {
       isPending={isPending}
       submitLabel="Sign in"
       pendingLabel="Signing in…"
-      alternatePrompt="Don't have an account?"
-      alternateHref="/register"
-      alternateLabel="Create one"
+      alternate={
+        registrationOpen ? { prompt: "Don't have an account?", href: "/register", label: "Create one" } : undefined
+      }
       onSubmit={handleSubmit}
     >
       <AuthEmailField disabled={isPending} />

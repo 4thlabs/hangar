@@ -59,9 +59,7 @@ export function RegisterForm() {
       isPending={isPending}
       submitLabel="Create account"
       pendingLabel="Creating account…"
-      alternatePrompt="Already have an account?"
-      alternateHref="/login"
-      alternateLabel="Sign in"
+      alternate={{ prompt: "Already have an account?", href: "/login", label: "Sign in" }}
       onSubmit={handleSubmit}
     >
       <Field>
