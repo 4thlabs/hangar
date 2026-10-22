@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ApiResponse } from "#modules/common/api-response.ts";
 
 const MAX_STREAM_CHARACTERS = 200_000;
 
@@ -43,9 +44,7 @@ export function useStreamText(endpoint: string | null, method: "GET" | "POST" = 
         const response = await fetch(url, { method, signal: controller.signal });
 
         if (!response.ok) {
-          const body = (await response.json()) as { error?: { message?: string } };
-
-          throw new Error(body.error?.message ?? "Impossible de charger le flux.");
+          throw await ApiResponse.error(response, "Impossible de charger le flux.");
         }
 
         if (!response.body) {
