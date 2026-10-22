@@ -125,14 +125,22 @@ describe("Docker apps views", () => {
     expect(html).toContain("Socket inaccessible");
   });
 
-  it("renders live metrics from the stats frame, ports and the logs action", () => {
+  it("renders live metrics from the stats frame, ports and the console action", () => {
     const html = renderToStaticMarkup(<ContainerTable stats={stats} project="alpha" containers={[container]} />);
 
     expect(html).toContain("alpha-web-1");
     expect(html).toContain("nginx:latest");
     expect(html).toContain("8080");
     expect(html).toContain("12.5 %");
-    expect(html).toContain("Logs");
+    expect(html).toContain("Ouvrir la console de alpha-web-1");
+  });
+
+  it("offers only the logs of a container that is not running: Docker runs no exec in it", () => {
+    const stopped = { ...container, state: "exited" };
+    const html = renderToStaticMarkup(<ContainerTable stats={stats} project="alpha" containers={[stopped]} />);
+
+    expect(html).toContain("Voir les logs de alpha-web-1");
+    expect(html).not.toContain("Ouvrir la console");
   });
 
   it("shows dashes for a container the stats stream has no frame for", () => {

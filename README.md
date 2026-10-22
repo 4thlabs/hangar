@@ -38,6 +38,8 @@ Compose files in a git repository you own — and adds what is tedious to do by 
 - **Apps at a glance.** Status, containers, live logs and stats for every installed stack, with
   up (with pull and force-recreate as options), restart and down one click away and their output
   streamed as they run.
+- **A terminal in each container.** A shell in any running container, beside its logs, without an
+  SSH session and a `docker exec -it`.
 - **Image updates.** Every four hours Hangar asks the registries whether a newer image exists
   for what you run, and every night it can pull and recreate the outdated apps for you.
 - **One global environment.** Hangar scans the installed stacks for the `${VARIABLES}` they
