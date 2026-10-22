@@ -163,7 +163,19 @@ export class HostShells {
       return `Accès refusé pour ${this.target.username} : vérifiez le mot de passe, ou importez une clé que son ~/.ssh/authorized_keys autorise.`;
     }
 
-    return `Impossible de joindre ${this.address} : ${error.message}`;
+    return `Impossible de joindre ${this.address} : ${HostShells.reason(error)}`;
+  }
+
+  /**
+   * A connection error's own words. A host that resolves to several addresses, as `host.docker.internal`
+   * does with IPv6 enabled, fails with an AggregateError whose message is empty: each attempt says why.
+   */
+  private static reason(error: Error): string {
+    if (error instanceof AggregateError) {
+      return error.errors.map((attempt: Error) => attempt.message).join(", ");
+    }
+
+    return error.message;
   }
 
   /** Says in red why the shell did not open, and ends the terminal. */
