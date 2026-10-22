@@ -10,12 +10,19 @@ services:
       - HANGAR_STORE_URL=${HANGAR_STORE_URL?required}
       - BETTER_AUTH_URL=${BETTER_AUTH_URL?required}
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET?required}
+      # Terminal page; without a value, a key is left out rather than passed empty, which fails validation
+      - HANGAR_SSH_HOST=${HANGAR_SSH_HOST:-host.docker.internal}
+      - HANGAR_SSH_USER
+      - HANGAR_SSH_PORT
     volumes:
       - ${PWD}/.data:/app/data
       - ${PWD}/.data:${PWD}/.data
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - 3010:3010
+    # The machine Docker runs on, HANGAR_SSH_HOST's default
+    extra_hosts:
+      - host.docker.internal:host-gateway
     networks:
       - default
       - servarr
