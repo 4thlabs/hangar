@@ -119,21 +119,17 @@ removes the link. The store clone itself is never touched by an install.
 ## Terminal on the host
 
 The **Terminal** page opens a shell on the host, over SSH: Hangar runs in a container, so a shell
-of its own would be the container's. Name the host and the account, then recreate Hangar's
-container:
+of its own would be the container's. Name the account in `.env`, then recreate Hangar's container:
 
-```yaml
-services:
-  hangar:
-    environment:
-      - HANGAR_SSH_HOST=host.docker.internal
-      - HANGAR_SSH_USER=you
-    extra_hosts:
-      - host.docker.internal:host-gateway
+```sh
+HANGAR_SSH_USER="you"
+# HANGAR_SSH_HOST="host.docker.internal"
+# HANGAR_SSH_PORT="22"
 ```
 
-`host.docker.internal` is the machine Docker runs on, provided its `sshd` listens on the Docker
-bridge too (the default `ListenAddress` covers every interface). Any other address works.
+The host defaults to `host.docker.internal`, which `compose.yml` maps to the machine Docker runs on
+(`extra_hosts: host-gateway`), provided its `sshd` listens on the Docker bridge too (the default
+`ListenAddress` covers every interface). Any other address works.
 
 The terminal signs in the way `ssh` does, asking in the terminal itself:
 
