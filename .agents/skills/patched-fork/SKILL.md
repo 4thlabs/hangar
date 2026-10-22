@@ -138,6 +138,18 @@ thing that decides how to resolve. Two outcomes worth watching for:
 - Upstream restructured the code the patch touches → reapply the *intent*, not
   the diff. The FORK_PATCHES entry describes the intent; that's what it's for.
 
+Before rebasing, `git cherry -v <upstream-remote>/main <branch>` marks with `-`
+the patches upstream already carries verbatim; the rebase drops those silently.
+A patch upstream adapted shows as `+` and conflicts — compare commit titles
+against `git log <upstream-remote>/main` and `git range-diff` the pair to tell
+"upstreamed with tweaks" from a real conflict.
+
+**When the last patch goes**, keep the pipeline. The workflow then builds the
+release tag unchanged under the same `-patched` tag, so consumers stay on one
+image source instead of switching to upstream's image and back when the next
+patch lands. Say in `FORK_PATCHES.md` that no code patch is carried, so nobody
+mistakes the image for a patched build.
+
 Then finish:
 
 ```bash
@@ -159,7 +171,8 @@ The workflow can succeed and still ship the wrong thing. Two checks catch it:
 
 - The "applying:" line in the log lists exactly the fork's patches. Too many
   means the history stopped being linear; too few means the path filter ate a
-  real patch.
+  real patch. "no patches to apply" is only right when `FORK_PATCHES.md` says
+  no code patch is carried.
 - The published tag is `<newest-upstream-version>-patched`. If it's an older
   version, the tag fetch pattern missed upstream's newest release — check whether
   upstream changed its tag format (`v1.2.3` vs `1.2.3` vs `app-v1.2.3`).
