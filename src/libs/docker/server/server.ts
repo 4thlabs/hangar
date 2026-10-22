@@ -5,14 +5,13 @@ import { cache } from "#libs/cache/server";
 import { hangar } from "#libs/hangar/server";
 import { Docker } from "../docker.ts";
 import { DockerSelfUpdate } from "../self-update.ts";
+import { ContainerShells } from "../shells.ts";
 import { DockerSwarm } from "../swarm.ts";
-import { ContainerTerminals } from "../terminals.ts";
 
 // Reused across HMR reloads, otherwise dev stacks a second instance following the daemon
 const globalForDocker = globalThis as unknown as {
   docker?: Docker;
   swarm?: DockerSwarm;
-  terminals?: ContainerTerminals;
 };
 
 /** One connection to the daemon, shared by both layers. */
@@ -37,10 +36,8 @@ export const swarm = globalForDocker.swarm ?? new DockerSwarm(client, cache);
 
 globalForDocker.swarm = swarm;
 
-/** The shells open in the apps' containers; reused across HMR reloads too, or a reload would orphan them. */
-export const terminals = globalForDocker.terminals ?? new ContainerTerminals(client, docker);
-
-globalForDocker.terminals = terminals;
+/** Starts the shells of the apps' containers; `#libs/terminals/server` keeps them open. */
+export const containerShells = new ContainerShells(client, docker);
 
 /** Updates the container Hangar runs in. Docker names a container's host after its short id. */
 export const selfUpdate = new DockerSelfUpdate(client, hostname());

@@ -1,12 +1,12 @@
 import type { ApiContext } from "waku/router";
-import { terminals } from "#libs/docker/server";
+import { terminals } from "#libs/terminals/server";
 import { apiError, apiRoute } from "#app/api/api-route.ts";
-import { TerminalMessages } from "#modules/apps/terminal-messages.ts";
+import { TerminalMessages } from "#modules/common/terminal-messages.ts";
 
 /** Types into an open terminal, or resizes it. */
-export const POST = apiRoute<ApiContext<"/api/docker/terminals/[terminal]">>(
+export const POST = apiRoute<ApiContext<"/api/terminals/[terminal]">>(
   {
-    log: "Failed to reach a container terminal",
+    log: "Failed to reach a terminal",
     unavailable: "Le terminal est indisponible.",
     notFound: "Ce terminal est fermé.",
   },

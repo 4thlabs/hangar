@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { TerminalOutbox } from "#modules/apps/terminal-outbox.ts";
-import { TerminalProtocol, type TerminalMessage } from "#modules/apps/terminal-protocol.ts";
-import { TerminalView } from "#modules/apps/terminal-view.ts";
 import { ApiResponse } from "#modules/common/api-response.ts";
 import type { StreamStatus } from "#modules/common/hooks/use-stream-text.ts";
+import { TerminalOutbox } from "#modules/common/terminal-outbox.ts";
+import { TerminalProtocol, type TerminalMessage } from "#modules/common/terminal-protocol.ts";
+import { TerminalView } from "#modules/common/terminal-view.ts";
 
 /**
  * A terminal in the returned element, wired to a shell the endpoint opens: its output streamed in, the

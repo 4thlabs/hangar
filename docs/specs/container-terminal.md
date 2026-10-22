@@ -34,7 +34,7 @@ Two routes, both behind `apiRoute` (a session is required):
 | Route                                                             | Body                            | Answers                                                         |
 | ----------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------- |
 | `POST /api/docker/apps/[project]/containers/[container]/terminal` | `{ cols, rows }`                | The raw TTY output, streamed; the session id in `X-Terminal-Id` |
-| `POST /api/docker/terminals/[terminal]`                           | `{ input }` or `{ cols, rows }` | `204`; `404` once the session is gone                           |
+| `POST /api/terminals/[terminal]`                                  | `{ input }` or `{ cols, rows }` | `204`; `404` once the session is gone                           |
 
 - The output is `application/octet-stream`: bytes go straight into `Terminal.write`, which decodes
   UTF-8 across chunk boundaries itself. It is not compressed (not a compressible type), and
@@ -49,9 +49,18 @@ Two routes, both behind `apiRoute` (a session is required):
 - A session belongs to the user who opened it: an id from someone else's reads as missing.
 - Bounds, checked with zod: `cols` and `rows` between 1 and 1000, `input` up to 64 KiB (a large paste).
 
-## Server: `ContainerTerminals` (`#libs/docker`)
+## Server
 
-A class holding the live sessions by id, bound with the `docker` instance in `#libs/docker/server`.
+Two classes, so the sessions serve any shell:
+
+- `TerminalSessions` (`#libs/terminals`, its instance in `#libs/terminals/server`) holds the live sessions
+  by id: their owner, the heartbeat, writing and resizing, and closing.
+- `ContainerShells` (`#libs/docker`, bound with the `docker` instance in `#libs/docker/server`) starts a
+  shell in a container and hands it over as a `TerminalShell`: its TTY stream, how to resize it, how to end
+  it.
+
+The route opening a shell goes through `terminalStream` (`src/app/api`): the size checked, the shell
+started, the session opened, its TTY streamed.
 
 - **Open.** The container is looked up within the project, as for the logs, so an id from another app
   reads as missing. Then `exec` with `Tty`, stdin attached, `TERM=xterm-256color`, the initial
@@ -61,8 +70,8 @@ A class holding the live sessions by id, bound with the `docker` instance in `#l
 - **Close.** When the reader goes away (the request signal aborts) or the shell exits.
 
   Closing the hijacked socket does **not** end the shell — verified against Docker 29: `sh`, and a `vi`
-  started from it, keep running in the container after both `end()` and `destroy()`. Every session's
-  exec therefore carries `HANGAR_TERMINAL=<id>` in its environment, which its children inherit, and
+  started from it, keep running in the container after both `end()` and `destroy()`. Every shell's
+  exec therefore carries `HANGAR_TERMINAL=<marker>`, a random id, in its environment, which its children inherit, and
   closing runs a second exec that sends `SIGHUP` to every process of the container carrying it (read
   from `/proc/*/environ`, with nothing but `sh` and `cat`). A container that stopped meanwhile has
   nothing left to kill; that failure is logged, not thrown.
@@ -73,7 +82,9 @@ A class holding the live sessions by id, bound with the `docker` instance in `#l
 
 - A running container's row opens a `ContainerConsoleSheet` (`modules/apps`), whose trigger reads
   "Console": two tabs, **Logs** and **Terminal**. A stopped container keeps the plain `LogsSheet`:
-  Docker runs no exec in it. Both sheets share `LogsPanel` (`modules/common`).
+  Docker runs no exec in it. Both sheets share `LogsPanel` (`modules/common`). The terminal's client
+  half (`TerminalPanel`, `useTerminal`, `TerminalView`, `TerminalOutbox`) sits in `modules/common` too,
+  for any page to open a shell.
 - The shell opens the first time the Terminal tab is selected, and lives until the sheet closes: both
   tabs stay mounted, so a glance at the logs does not kill a running command, and coming back to them
   does not reload the tail. The fit addon skips a hidden element (its size reads `auto`), and refits
@@ -98,9 +109,11 @@ project and container.
 
 ## Tests
 
-- `ContainerTerminals`, against a fake Dockerode: opening scopes the container to its project, a session
-  answers its owner only, writing and resizing reach the exec, an idle stream gets its heartbeat,
-  closing runs the kill exec and forgets the session, the shell exiting forgets it too.
+- `TerminalSessions`, against a fake shell: a session answers its owner only, writing and resizing reach
+  the shell, an idle stream gets its heartbeat, the client leaving (even while the shell started) ends the
+  shell and forgets the session, the shell exiting forgets it too.
+- `ContainerShells`, against a fake Dockerode: opening scopes the container to its project, resizing
+  reaches the exec, ending runs the kill exec with the shell's marker.
 - Both routes: 401 before anything opens, 404 for a missing container or session, the stream with its
   id header and the request signal handed down, 400 for a body out of bounds.
 - `TerminalOutbox`: one request in flight at a time, what is typed meanwhile sent together and in order,

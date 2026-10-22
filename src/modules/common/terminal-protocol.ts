@@ -1,4 +1,4 @@
-import type { TerminalSize } from "#libs/docker";
+import type { TerminalSize } from "#libs/terminals";
 
 /** One message to an open session: keystrokes, or the terminal's new size. */
 export type TerminalMessage = { input: string } | TerminalSize;
@@ -13,6 +13,6 @@ export class TerminalProtocol {
 
   /** Where an open session takes its messages. */
   static sessionEndpoint(id: string): string {
-    return `/api/docker/terminals/${encodeURIComponent(id)}`;
+    return `/api/terminals/${encodeURIComponent(id)}`;
   }
 }

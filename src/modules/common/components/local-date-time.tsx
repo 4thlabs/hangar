@@ -1,8 +1,8 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useInBrowser } from "#modules/common/hooks/use-in-browser.ts";
 
-/** How a moment is written, and whether the browser writes it yet. */
+/** How a moment is written. */
 class LocalTime {
   /** Spelled out: the browser's default and the server's, which names its zone, would differ otherwise */
   static readonly Fields: Intl.DateTimeFormatOptions = {
@@ -13,19 +13,6 @@ class LocalTime {
     minute: "2-digit",
     second: "2-digit",
   };
-
-  /** Nothing to listen to: whether the browser renders only changes once, at hydration. */
-  static subscribe() {
-    return () => {};
-  }
-
-  static inBrowser() {
-    return true;
-  }
-
-  static onServer() {
-    return false;
-  }
 }
 
 /**
@@ -34,7 +21,7 @@ class LocalTime {
  * @param value `null` writes a dash
  */
 export function LocalDateTime({ value }: { value: Date | string | null }) {
-  const inBrowser = useSyncExternalStore(LocalTime.subscribe, LocalTime.inBrowser, LocalTime.onServer);
+  const inBrowser = useInBrowser();
 
   if (value === null) {
     return "—";

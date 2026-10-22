@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "#modules/common/ui/tab
 
 // Fetched with xterm and its stylesheet when the Terminal tab is first opened, not with every app page.
 const TerminalPanel = lazy(() =>
-  import("#modules/apps/components/terminal-panel.tsx").then(module => ({ default: module.TerminalPanel })),
+  import("#modules/common/components/terminal-panel.tsx").then(module => ({ default: module.TerminalPanel })),
 );
 
 type ContainerConsoleSheetProps = {

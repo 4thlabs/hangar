@@ -5,20 +5,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // test files included, which breaks the build.
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
+  containerShells: { open: vi.fn() },
   terminals: { open: vi.fn(), write: vi.fn(), resize: vi.fn() },
   logger: { error: vi.fn() },
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("#libs/auth/server", () => ({ sessions: { get: mocks.getSession } }));
-vi.mock("#libs/docker/server", () => ({ terminals: mocks.terminals }));
+vi.mock("#libs/docker/server", () => ({ containerShells: mocks.containerShells }));
+vi.mock("#libs/terminals/server", () => ({ terminals: mocks.terminals }));
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
 
 const { DockerNotFoundError } = await import("#libs/docker");
+const { TerminalNotFoundError } = await import("#libs/terminals");
 const { POST: open } = await import("#app/pages/_api/api/docker/apps/[project]/containers/[container]/terminal.ts");
-const { POST: send } = await import("#app/pages/_api/api/docker/terminals/[terminal].ts");
+const { POST: send } = await import("#app/pages/_api/api/terminals/[terminal].ts");
 
 const CONTAINER_ID = "a".repeat(64);
+
+/** What `ContainerShells.open` hands the sessions; the test only checks it gets there. */
+const SHELL = { target: { container: CONTAINER_ID } };
 
 /** A JSON `POST`, as the terminal sends them. */
 const post = (body: unknown) =>
@@ -33,7 +39,8 @@ describe("POST a container terminal", () => {
   const context = { params: { project: "alpha", container: CONTAINER_ID } };
 
   beforeEach(() => {
-    mocks.terminals.open.mockResolvedValue({ id: "session-1", output: Readable.from([Buffer.from("/ # ")]) });
+    mocks.containerShells.open.mockResolvedValue(SHELL);
+    mocks.terminals.open.mockReturnValue({ id: "session-1", output: Readable.from([Buffer.from("/ # ")]) });
   });
 
   it("returns 401 before opening a shell", async () => {
@@ -42,7 +49,7 @@ describe("POST a container terminal", () => {
     const response = await open(post({ cols: 80, rows: 24 }), context);
 
     expect(response.status).toBe(401);
-    expect(mocks.terminals.open).not.toHaveBeenCalled();
+    expect(mocks.containerShells.open).not.toHaveBeenCalled();
   });
 
   it("streams the shell with its session id, handing the request signal down", async () => {
@@ -53,21 +60,22 @@ describe("POST a container terminal", () => {
     expect(response.headers.get("x-terminal-id")).toBe("session-1");
     expect(response.headers.get("content-type")).toBe("application/octet-stream");
     expect(await response.text()).toBe("/ # ");
-    // The signal is what closes the session when the client disconnects.
-    expect(mocks.terminals.open).toHaveBeenCalledWith(
-      { owner: "user-1", project: "alpha", containerId: CONTAINER_ID },
+    expect(mocks.containerShells.open).toHaveBeenCalledWith(
+      { project: "alpha", containerId: CONTAINER_ID },
       { cols: 80, rows: 24 },
-      request.signal,
     );
+
+    // The signal is what closes the session when the client disconnects.
+    expect(mocks.terminals.open).toHaveBeenCalledWith("user-1", SHELL, request.signal);
   });
 
   it("returns 400 for a size out of bounds", async () => {
     await expect(open(post({ cols: 0, rows: 24 }), context)).resolves.toMatchObject({ status: 400 });
-    expect(mocks.terminals.open).not.toHaveBeenCalled();
+    expect(mocks.containerShells.open).not.toHaveBeenCalled();
   });
 
   it("returns 404 when the container is absent or belongs to another project", async () => {
-    mocks.terminals.open.mockRejectedValue(new DockerNotFoundError("test subject"));
+    mocks.containerShells.open.mockRejectedValue(new DockerNotFoundError("test subject"));
 
     await expect(open(post({ cols: 80, rows: 24 }), context)).resolves.toMatchObject({ status: 404 });
   });
@@ -103,7 +111,7 @@ describe("POST to a terminal session", () => {
 
   it("returns 404 once the session is gone", async () => {
     mocks.terminals.write.mockImplementation(() => {
-      throw new DockerNotFoundError("terminal session-1");
+      throw new TerminalNotFoundError("session-1");
     });
 
     await expect(send(post({ input: "ls\r" }), context)).resolves.toMatchObject({ status: 404 });

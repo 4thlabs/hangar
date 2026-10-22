@@ -1,12 +1,13 @@
 "use client";
 
 import "@xterm/xterm/css/xterm.css";
-import { useTerminal } from "#modules/apps/hooks/use-terminal.ts";
 import { StreamReconnectButton, StreamStatusBadge } from "#modules/common/components/stream-output.tsx";
+import { useTerminal } from "#modules/common/hooks/use-terminal.ts";
 
 /**
- * A shell in a container, filling the rest of its sheet; it closes when the panel unmounts. Loaded lazily
+ * A shell, filling the rest of its parent, a flex column; it closes when the panel unmounts. Loaded lazily
  * (see `ContainerConsoleSheet`), with xterm and its stylesheet.
+ * @param endpoint The route opening the shell
  */
 export function TerminalPanel({ endpoint }: { endpoint: string }) {
   const { elementRef, status, error, reconnect } = useTerminal(endpoint);
