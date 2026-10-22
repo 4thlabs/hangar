@@ -58,10 +58,15 @@ jobs:
             git show --pretty= --name-only "$c" \
               | grep -qvE '^(\.github/|FORK_PATCHES\.md$)' && PATCHES="$PATCHES $c"
           done
-          [ -n "$PATCHES" ] || { echo "no patches to apply"; exit 1; }
 
-          echo "applying:"; git log --oneline --no-walk $PATCHES
-          git cherry-pick $PATCHES
+          # Once every patch is upstreamed, publish the release unchanged rather
+          # than fail: consumers keep pulling the same image whatever the count.
+          if [ -n "$PATCHES" ]; then
+            echo "applying:"; git log --oneline --no-walk $PATCHES
+            git cherry-pick $PATCHES
+          else
+            echo "no patches to apply, building $TAG unchanged"
+          fi
           echo "REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       # <<< COPY FROM UPSTREAM'S RELEASE WORKFLOW: toolchain setup + test run.
