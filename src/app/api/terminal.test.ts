@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   containerShells: { open: vi.fn() },
+  hostShells: { open: vi.fn() } as { open: ReturnType<typeof vi.fn> } | null,
   terminals: { open: vi.fn(), write: vi.fn(), resize: vi.fn() },
   logger: { error: vi.fn() },
 }));
@@ -14,10 +15,17 @@ vi.mock("server-only", () => ({}));
 vi.mock("#libs/auth/server", () => ({ sessions: { get: mocks.getSession } }));
 vi.mock("#libs/docker/server", () => ({ containerShells: mocks.containerShells }));
 vi.mock("#libs/terminals/server", () => ({ terminals: mocks.terminals }));
+vi.mock("#libs/ssh/server", () => ({
+  get hostShells() {
+    return mocks.hostShells;
+  },
+}));
+
 vi.mock("#libs/logs", () => ({ logger: mocks.logger }));
 
 const { DockerNotFoundError } = await import("#libs/docker");
 const { TerminalNotFoundError } = await import("#libs/terminals");
+const { POST: openHost } = await import("#app/pages/_api/api/host/terminal.ts");
 const { POST: open } = await import("#app/pages/_api/api/docker/apps/[project]/containers/[container]/terminal.ts");
 const { POST: send } = await import("#app/pages/_api/api/terminals/[terminal].ts");
 
@@ -78,6 +86,43 @@ describe("POST a container terminal", () => {
     mocks.containerShells.open.mockRejectedValue(new DockerNotFoundError("test subject"));
 
     await expect(open(post({ cols: 80, rows: 24 }), context)).resolves.toMatchObject({ status: 404 });
+  });
+});
+
+describe("POST the host terminal", () => {
+  const hostShells = mocks.hostShells;
+
+  beforeEach(() => {
+    mocks.hostShells = hostShells;
+    mocks.hostShells?.open.mockResolvedValue(SHELL);
+    mocks.terminals.open.mockReturnValue({ id: "session-1", output: Readable.from([Buffer.from("Connexion…")]) });
+  });
+
+  it("returns 401 before reaching the host", async () => {
+    mocks.getSession.mockResolvedValue(null);
+
+    await expect(openHost(post({ cols: 80, rows: 24 }))).resolves.toMatchObject({ status: 401 });
+    expect(mocks.hostShells?.open).not.toHaveBeenCalled();
+  });
+
+  it("streams a terminal on the host, sized to the client's", async () => {
+    const request = post({ cols: 80, rows: 24 });
+
+    const response = await openHost(request);
+
+    expect(response.headers.get("x-terminal-id")).toBe("session-1");
+    expect(await response.text()).toBe("Connexion…");
+    expect(mocks.hostShells?.open).toHaveBeenCalledWith({ cols: 80, rows: 24 });
+    expect(mocks.terminals.open).toHaveBeenCalledWith("user-1", SHELL, request.signal);
+  });
+
+  it("returns 404 while no host is configured", async () => {
+    mocks.hostShells = null;
+
+    const response = await openHost(post({ cols: 80, rows: 24 }));
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { message: expect.stringContaining("HANGAR_SSH_HOST") } });
   });
 });
 

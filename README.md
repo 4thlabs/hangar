@@ -40,6 +40,8 @@ Compose files in a git repository you own — and adds what is tedious to do by 
   streamed as they run.
 - **A terminal in each container.** A shell in any running container, beside its logs, without an
   SSH session and a `docker exec -it`.
+- **A terminal on the server.** The Terminal page opens a shell on the host over SSH, asking for
+  the password in the terminal, or signing in with a key you import.
 - **Image updates.** Every four hours Hangar asks the registries whether a newer image exists
   for what you run, and every night it can pull and recreate the outdated apps for you.
 - **One global environment.** Hangar scans the installed stacks for the `${VARIABLES}` they

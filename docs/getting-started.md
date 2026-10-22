@@ -67,6 +67,9 @@ A health check polls `/login` every 30 seconds.
 | `BETTER_AUTH_URL`    |          | The public URL Hangar is reached at, used by the sign-in flow.                                    |
 | `BETTER_AUTH_SECRET` |          | At least 32 characters; signs the sessions. Generate one with `openssl rand -base64 32`.          |
 | `GITHUB_TOKEN`       |          | Raises the GitHub API rate limit for the [GitHub releases widget](widgets.md#github-releases).    |
+| `HANGAR_SSH_HOST`    |          | The host the [Terminal page](#terminal-on-the-host) signs in to over SSH.                         |
+| `HANGAR_SSH_USER`    |          | The account it signs in as. The page needs both this and `HANGAR_SSH_HOST`.                       |
+| `HANGAR_SSH_PORT`    |          | The SSH port, `22` by default.                                                                    |
 | `PUID` / `PGID`      |          | User and group id (default `1000`), inherited by the stacks' compose environment.                 |
 
 Every variable is validated at startup: a missing or malformed one stops the server with its name
@@ -88,7 +91,9 @@ Everything Hangar keeps sits under `HANGAR_DATA_DIR`:
 ├── app-installed/              # one symlink per installed app, plus the shared files
 │   └── <app> -> ../app-store/store/<app>
 └── app-data/                   # APP_DATA_DIR: where stacks keep their volumes
-    └── hangar/hangar.db        # Hangar's own database (users, notifications, jobs)
+    └── hangar/
+        ├── hangar.db           # Hangar's own database (users, notifications, jobs)
+        └── ssh/                # the Terminal page's imported key, and the host keys it trusts
 ```
 
 Installing an app is creating its symlink in `app-installed/`; uninstalling stops the stack, then
@@ -109,6 +114,43 @@ removes the link. The store clone itself is never touched by an install.
 > Registration is open to anyone who can reach the sign-up page, and an account can run
 > `docker compose` on your host. Keep Hangar on a trusted network or behind an authenticating
 > proxy.
+
+## Terminal on the host
+
+The **Terminal** page opens a shell on the host, over SSH: Hangar runs in a container, so a shell
+of its own would be the container's. Name the host and the account, then recreate Hangar's
+container:
+
+```yaml
+services:
+  hangar:
+    environment:
+      - HANGAR_SSH_HOST=host.docker.internal
+      - HANGAR_SSH_USER=you
+    extra_hosts:
+      - host.docker.internal:host-gateway
+```
+
+`host.docker.internal` is the machine Docker runs on, provided its `sshd` listens on the Docker
+bridge too (the default `ListenAddress` covers every interface). Any other address works.
+
+The terminal signs in the way `ssh` does, asking in the terminal itself:
+
+- **A key**, when you imported one with **Clé SSH**: the private key of a pair the account's
+  `~/.ssh/authorized_keys` lists. Hangar keeps it in `app-data/hangar/ssh/id_key`, readable by
+  its owner only. A key with a passphrase asks for it at each connection.
+- **The password** otherwise, or when the host refuses the key: three tries, as `ssh` gives.
+  Hosts that only take `keyboard-interactive` work too, a one-time code included. What you type
+  there is never stored nor logged.
+
+On the first connection, Hangar records the host's key in `app-data/hangar/ssh/known_hosts` and
+refuses a different one afterwards, as `ssh` does; **Clé SSH** shows its fingerprint. Once the host
+is reinstalled, delete its line from that file.
+
+> [!WARNING]
+> Like the container terminals, the page is open to every signed-in user: Hangar has no roles.
+> Without an imported key, only someone who knows the account's password gets a shell; with one,
+> anyone signed in to Hangar does.
 
 ## Background jobs
 

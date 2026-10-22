@@ -51,7 +51,7 @@ Two routes, both behind `apiRoute` (a session is required):
 
 ## Server
 
-Two classes, so the sessions serve any shell:
+Two classes, so the sessions serve any shell (see [the host terminal](host-terminal.md)):
 
 - `TerminalSessions` (`#libs/terminals`, its instance in `#libs/terminals/server`) holds the live sessions
   by id: their owner, the heartbeat, writing and resizing, and closing.
@@ -84,7 +84,7 @@ started, the session opened, its TTY streamed.
   "Console": two tabs, **Logs** and **Terminal**. A stopped container keeps the plain `LogsSheet`:
   Docker runs no exec in it. Both sheets share `LogsPanel` (`modules/common`). The terminal's client
   half (`TerminalPanel`, `useTerminal`, `TerminalView`, `TerminalOutbox`) sits in `modules/common` too,
-  for any page to open a shell.
+  shared with the host's terminal page.
 - The shell opens the first time the Terminal tab is selected, and lives until the sheet closes: both
   tabs stay mounted, so a glance at the logs does not kill a running command, and coming back to them
   does not reload the tail. The fit addon skips a hidden element (its size reads `auto`), and refits

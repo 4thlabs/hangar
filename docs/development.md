@@ -48,8 +48,8 @@ adds under `src/drizzle/`. The container applies pending migrations on every sta
 ```
 src/
 ├── app/        # what Waku needs: thin pages, middleware, API routes, styles
-├── modules/    # one per page domain: apps, store, settings, auth, notifications, widgets, common
-├── libs/       # framework-free libraries: hangar, docker, db, jobs, backups, env, notifications, …
+├── modules/    # one per page domain: apps, store, terminal, settings, auth, notifications, widgets, common
+├── libs/       # framework-free libraries: hangar, docker, ssh, terminals, db, jobs, backups, env, …
 ├── cli/        # the commander CLI
 └── drizzle/    # generated migrations
 ```
@@ -59,7 +59,9 @@ src/
   store clone, the links and the compose calls; `HangarConfig` reads `hangar.yml`; `HangarEnv`
   manages `.env.global`; `Docker` wraps the daemon and caches its answers, refreshed by its events;
   `AppBackups` zips an app's data folder, which the `BackupApp` job runs on the schedules
-  `BackupJobs` keeps in step with `hangar.yml`.
+  `BackupJobs` keeps in step with `hangar.yml`. `TerminalSessions` keeps the open terminals, whose
+  shells `ContainerShells` starts in a container and `HostShells` on the host, over SSH, signing in
+  from the terminal itself (`SshSignIn`, `SshTerminal`).
   Slow reads go through the one `Cache` (`#libs/cache`, see [ADR 0001](adr/0001-cache.md)).
 - **`modules`** hold each page's server actions, components and hooks. The pages in `src/app` only
   compose them.
