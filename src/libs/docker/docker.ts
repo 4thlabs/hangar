@@ -1,3 +1,4 @@
+import { addAbortListener } from "node:events";
 import { PassThrough, type Readable } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
 import type Dockerode from "dockerode";
@@ -373,6 +374,27 @@ export class Docker {
   }
 
   /**
+   * One container of `project`. Looked up within the project, so an id from another project reads as
+   * missing: no cross-project probing.
+   * @param project The Compose project the container is expected to belong to
+   * @param containerId The container id; must match {@link Docker.ContainerId} or it's treated as not found
+   * @throws {DockerNotFoundError} if the id is malformed, missing, or belongs to another project
+   */
+  async projectContainer(project: string, containerId: string): Promise<ComposeContainerSource> {
+    if (!Docker.ContainerId.test(containerId)) {
+      throw new DockerNotFoundError(`container ${containerId}`);
+    }
+
+    const container = new ComposeProjects(await this.containers(), project).find(containerId);
+
+    if (!container) {
+      throw new DockerNotFoundError(`container ${containerId}`);
+    }
+
+    return container;
+  }
+
+  /**
    * Opens a following log stream for one container, after verifying it belongs to `project`
    * (so a caller can't read logs from a container outside the project they're authorized for).
    * @param project The Compose project the container is expected to belong to
@@ -381,18 +403,7 @@ export class Docker {
    * @throws {DockerNotFoundError} if the id is malformed, missing, or belongs to another project
    */
   async openLogs(project: string, containerId: string, signal: AbortSignal): Promise<Readable> {
-    if (!Docker.ContainerId.test(containerId)) {
-      throw new DockerNotFoundError(`container ${containerId}`);
-    }
-
-    // Looked up within the project, so an id from another project reads as missing: no
-    // cross-project probing.
-    const compose = new ComposeProjects(await this.containers(), project);
-    const container = compose.find(containerId);
-
-    if (!container) {
-      throw new DockerNotFoundError(`container ${containerId}`);
-    }
+    const container = await this.projectContainer(project, containerId);
 
     // Typed as a bare readable because `follow` is only known to produce a stream at runtime.
     const logs = (await this.docker.getContainer(container.info.Id).logs({
@@ -419,13 +430,9 @@ export class Docker {
       output.end();
     });
 
-    // The client may have left while the stream was opening: that abort has already fired and never
-    // reaches a listener added now, so `docker logs -f` would follow forever.
-    if (signal.aborted) {
-      logs.destroy();
-    } else {
-      signal.addEventListener("abort", () => logs.destroy(), { once: true });
-    }
+    // Also called when the client left while the stream was opening, which a plain listener would miss:
+    // `docker logs -f` would follow forever.
+    addAbortListener(signal, () => logs.destroy());
 
     return output;
   }
