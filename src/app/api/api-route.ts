@@ -8,13 +8,21 @@ export function apiError(message: string, status: number): Response {
   return Response.json({ success: false, error: { message } }, { status });
 }
 
-/**
- * Streams a Node readable live, unbuffered end to end, or the output only shows up once the command is over.
- * @param contentType Defaults to plain text; the event-stream routes go through `sseStream`
- */
-export function apiStream(stream: Readable, contentType = "text/plain; charset=utf-8"): Response {
+type ApiStreamOptions = {
+  /** Defaults to plain text; the event-stream routes go through `sseStream`. */
+  contentType?: string;
+  /** Sent beside the ones that keep the stream unbuffered. */
+  headers?: Record<string, string>;
+};
+
+/** Streams a Node readable live, unbuffered end to end, or the output only shows up once the command is over. */
+export function apiStream(
+  stream: Readable,
+  { contentType = "text/plain; charset=utf-8", headers = {} }: ApiStreamOptions = {},
+): Response {
   return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
     headers: {
+      ...headers,
       "Cache-Control": "no-cache, no-store",
       "Content-Type": contentType,
       "X-Accel-Buffering": "no",
@@ -68,7 +76,9 @@ export const sseEvent = (payload: unknown): string => `data: ${JSON.stringify(pa
 export function sseStream(frames: AsyncIterable<string>): Response {
   // `objectMode: false` so the frames reach the response as bytes; the default would hand
   // `Response` raw strings, which it rejects.
-  return apiStream(Readable.from(frames, { objectMode: false }), "text/event-stream; charset=utf-8");
+  return apiStream(Readable.from(frames, { objectMode: false }), {
+    contentType: "text/event-stream; charset=utf-8",
+  });
 }
 
 type ApiRouteOptions = {
