@@ -10,8 +10,12 @@ import { Registration } from "./registration.ts";
  * see {@link Registration}.
  *
  * No import guard here: `server/server.ts`, which binds it, carries it (AGENTS.md).
+ * @param onSessionEnd Called with the user's id once one of their sessions is deleted: signed out, or revoked
  */
-export const createAuth = <TRelations extends AnyRelations>(db: BetterSQLite3Database<TRelations>) => {
+export const createAuth = <TRelations extends AnyRelations>(
+  db: BetterSQLite3Database<TRelations>,
+  onSessionEnd: (userId: string) => Promise<void> = async () => {},
+) => {
   const registration = new Registration(db);
 
   return betterAuth({
@@ -29,6 +33,13 @@ export const createAuth = <TRelations extends AnyRelations>(db: BetterSQLite3Dat
             if (!(await registration.isOpen())) {
               throw new APIError("FORBIDDEN", { message: Registration.ClosedMessage });
             }
+          },
+        },
+      },
+      session: {
+        delete: {
+          after: async session => {
+            await onSessionEnd(session.userId);
           },
         },
       },

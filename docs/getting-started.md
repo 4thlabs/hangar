@@ -67,8 +67,8 @@ A health check polls `/login` every 30 seconds.
 | `BETTER_AUTH_URL`    |          | The public URL Hangar is reached at, used by the sign-in flow.                                    |
 | `BETTER_AUTH_SECRET` |          | At least 32 characters; signs the sessions. Generate one with `openssl rand -base64 32`.          |
 | `GITHUB_TOKEN`       |          | Raises the GitHub API rate limit for the [GitHub releases widget](widgets.md#github-releases).    |
-| `HANGAR_SSH_HOST`    |          | The host the [Terminal page](#terminal-on-the-host) signs in to over SSH.                         |
-| `HANGAR_SSH_USER`    |          | The account it signs in as. The page needs both this and `HANGAR_SSH_HOST`.                       |
+| `HANGAR_SSH_HOST`    |          | The host the [header's terminal](#terminal-on-the-host) signs in to over SSH.                     |
+| `HANGAR_SSH_USER`    |          | The account it signs in as. The terminal needs both this and `HANGAR_SSH_HOST`.                   |
 | `HANGAR_SSH_PORT`    |          | The SSH port, `22` by default.                                                                    |
 | `PUID` / `PGID`      |          | User and group id (default `1000`), inherited by the stacks' compose environment.                 |
 
@@ -93,7 +93,7 @@ Everything Hangar keeps sits under `HANGAR_DATA_DIR`:
 └── app-data/                   # APP_DATA_DIR: where stacks keep their volumes
     └── hangar/
         ├── hangar.db           # Hangar's own database (users, notifications, jobs)
-        └── ssh/                # the Terminal page's imported key, and the host keys it trusts
+        └── ssh/                # the host terminal's imported key, and the host keys it trusts
 ```
 
 Installing an app is creating its symlink in `app-installed/`; uninstalling stops the stack, then
@@ -118,8 +118,9 @@ removes the link. The store clone itself is never touched by an install.
 
 ## Terminal on the host
 
-The **Terminal** page opens a shell on the host, over SSH: Hangar runs in a container, so a shell
-of its own would be the container's. Name the account in `.env`, then recreate Hangar's container:
+The terminal button in the header, beside the notifications, opens a shell on the host, over SSH:
+Hangar runs in a container, so a shell of its own would be the container's. Name the account in
+`.env`, then recreate Hangar's container:
 
 ```sh
 HANGAR_SSH_USER="you"
@@ -144,8 +145,13 @@ On the first connection, Hangar records the host's key in `app-data/hangar/ssh/k
 refuses a different one afterwards, as `ssh` does; **Clé SSH** shows its fingerprint. Once the host
 is reinstalled, delete its line from that file.
 
+The shell stays open when you close its window, change pages or reload, as an SSH session in
+`tmux` would: reopening it, from the same tab or another one, finds it with its latest output. It
+ends with `exit`, after an hour without a keystroke or output, or when you sign out of Hangar. A
+container's shell, in contrast, ends when its sheet closes, or with its **Fermer la session** button.
+
 > [!WARNING]
-> Like the container terminals, the page is open to every signed-in user: Hangar has no roles.
+> Like the container terminals, the host terminal is open to every signed-in user: Hangar has no roles.
 > Without an imported key, only someone who knows the account's password gets a shell; with one,
 > anyone signed in to Hangar does.
 

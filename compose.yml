@@ -10,7 +10,7 @@ services:
       - HANGAR_STORE_URL=${HANGAR_STORE_URL?required}
       - BETTER_AUTH_URL=${BETTER_AUTH_URL?required}
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET?required}
-      # Terminal page; without a value, a key is left out rather than passed empty, which fails validation
+      # Host terminal; without a value, a key is left out rather than passed empty, which fails validation
       - HANGAR_SSH_HOST=${HANGAR_SSH_HOST:-host.docker.internal}
       - HANGAR_SSH_USER
       - HANGAR_SSH_PORT

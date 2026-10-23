@@ -76,7 +76,7 @@ function ConsoleTabs({ endpoint }: { endpoint: string }) {
       <TabsContent value="terminal" keepMounted className="flex min-h-0 flex-col gap-3">
         {terminalOpened && (
           <Suspense fallback={<Spinner />}>
-            <TerminalPanel endpoint={`${endpoint}/terminal`} />
+            <TerminalPanel endpoint={`${endpoint}/terminal`} closable />
           </Suspense>
         )}
       </TabsContent>

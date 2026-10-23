@@ -35,6 +35,7 @@ Two routes, both behind `apiRoute` (a session is required):
 | ----------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------- |
 | `POST /api/docker/apps/[project]/containers/[container]/terminal` | `{ cols, rows }`                | The raw TTY output, streamed; the session id in `X-Terminal-Id` |
 | `POST /api/terminals/[terminal]`                                  | `{ input }` or `{ cols, rows }` | `204`; `404` once the session is gone                           |
+| `DELETE /api/terminals/[terminal]`                                | —                               | `204`, the shell ended; `404` once the session is gone          |
 
 - The output is `application/octet-stream`: bytes go straight into `Terminal.write`, which decodes
   UTF-8 across chunk boundaries itself. It is not compressed (not a compressible type), and
@@ -54,20 +55,24 @@ Two routes, both behind `apiRoute` (a session is required):
 Two classes, so the sessions serve any shell (see [the host terminal](host-terminal.md)):
 
 - `TerminalSessions` (`#libs/terminals`, its instance in `#libs/terminals/server`) holds the live sessions
-  by id: their owner, the heartbeat, writing and resizing, and closing.
+  by id: their owner, the heartbeat, writing and resizing, and closing. A container's goes through `open`,
+  and ends with its client; the host's goes through `attach`, and is kept for the next one (see
+  [the host terminal](host-terminal.md#session)).
 - `ContainerShells` (`#libs/docker`, bound with the `docker` instance in `#libs/docker/server`) starts a
   shell in a container and hands it over as a `TerminalShell`: its TTY stream, how to resize it, how to end
   it.
 
-The route opening a shell goes through `terminalStream` (`src/app/api`): the size checked, the shell
-started, the session opened, its TTY streamed.
+The route opening a shell goes through `terminalStream` (`src/app/api`): the size checked, the session
+opened as the route says (the shell started, then `terminals.open` or `terminals.attach`), its TTY
+streamed.
 
 - **Open.** The container is looked up within the project, as for the logs, so an id from another app
   reads as missing. Then `exec` with `Tty`, stdin attached, `TERM=xterm-256color`, the initial
   `ConsoleSize`, and `sh -c 'command -v bash >/dev/null && exec bash || exec sh'`: bash when the image
   has it. A container with no `sh` (distroless) prints Docker's error in the terminal and the stream
   ends.
-- **Close.** When the reader goes away (the request signal aborts) or the shell exits.
+- **Close.** When the reader goes away (the request signal aborts), the shell exits, or **Fermer la
+  session** asks for it.
 
   Closing the hijacked socket does **not** end the shell — verified against Docker 29: `sh`, and a `vi`
   started from it, keep running in the container after both `end()` and `destroy()`. Every shell's
@@ -84,13 +89,14 @@ started, the session opened, its TTY streamed.
   "Console": two tabs, **Logs** and **Terminal**. A stopped container keeps the plain `LogsSheet`:
   Docker runs no exec in it. Both sheets share `LogsPanel` (`modules/common`). The terminal's client
   half (`TerminalPanel`, `useTerminal`, `TerminalView`, `TerminalOutbox`) sits in `modules/common` too,
-  shared with the host's terminal page.
+  shared with the host's terminal.
 - The shell opens the first time the Terminal tab is selected, and lives until the sheet closes: both
   tabs stay mounted, so a glance at the logs does not kill a running command, and coming back to them
   does not reload the tail. The fit addon skips a hidden element (its size reads `auto`), and refits
   on return.
-- The terminal panel: a status badge (the logs' labels), a **Reconnecter** button, and the terminal
-  filling the rest of the sheet, refitted by a `ResizeObserver`; each new size is sent to the session.
+- The terminal panel: a status badge (the logs' labels), a **Reconnecter** button, a **Fermer la
+  session** button while connected, and the terminal filling the rest of the sheet, refitted by a
+  `ResizeObserver`; each new size is sent to the session.
 - `TerminalPanel` is a `React.lazy` chunk, fetched when the tab first opens: xterm, its stylesheet and
   the client half of the protocol stay off every app page, and off the server render (xterm touches
   `window` on load). The client half (`TerminalProtocol`: header name, session URL, input limit) is
@@ -115,6 +121,7 @@ project and container.
 - `ContainerShells`, against a fake Dockerode: opening scopes the container to its project, resizing
   reaches the exec, ending runs the kill exec with the shell's marker.
 - Both routes: 401 before anything opens, 404 for a missing container or session, the stream with its
-  id header and the request signal handed down, 400 for a body out of bounds.
+  id header and the request signal handed down, 400 for a body out of bounds. `DELETE` closes a session
+  as its owner.
 - `TerminalOutbox`: one request in flight at a time, what is typed meanwhile sent together and in order,
   only the latest size, a large paste cut outside surrogate pairs.

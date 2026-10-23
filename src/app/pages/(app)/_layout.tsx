@@ -3,6 +3,7 @@ import { sessions } from "#libs/auth/server";
 import { notifications as centre } from "#libs/notifications/server";
 import { MobileTabBar } from "#modules/common/components/navbar-mobile.tsx";
 import { AppNavbar } from "#modules/common/components/navbar.tsx";
+import { HostTerminalContent } from "#modules/terminal/components/host-terminal-content.tsx";
 
 type AppLayoutProps = { children: ReactNode };
 
@@ -12,7 +13,7 @@ export default async function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
-      <AppNavbar user={user} notifications={notifications} />
+      <AppNavbar user={user} notifications={notifications} terminal={<HostTerminalContent />} />
       <div className="flex flex-1 flex-col p-6 [&>main]:flex [&>main]:flex-1 [&>main]:flex-col [&>main]:gap-6">
         {children}
       </div>
