@@ -9,7 +9,8 @@ import { TerminalView } from "#modules/common/terminal-view.ts";
 
 /**
  * A terminal in the returned element, wired to a shell the endpoint opens: its output streamed in, the
- * keystrokes and resizes posted to the session. Unmounting, or `reconnect`, closes the session.
+ * keystrokes and resizes posted to the session. Unmounting, or `reconnect`, leaves the session: the route
+ * decides whether it ends then (a container's) or waits for the next client (the host's).
  * @param endpoint The route opening the shell (`POST`, with the terminal's size)
  */
 export function useTerminal(endpoint: string) {
@@ -18,6 +19,8 @@ export function useTerminal(endpoint: string) {
   const [error, setError] = useState<string | null>(null);
   // Bumped to force the effect to open a new session.
   const [generation, setGeneration] = useState(0);
+  // Where the session open now takes its messages; `close` ends it there.
+  const sessionEndpointRef = useRef<string | null>(null);
 
   useEffect(() => {
     const element = elementRef.current;
@@ -82,7 +85,12 @@ export function useTerminal(endpoint: string) {
         throw new Error("Le serveur n’a ouvert aucun terminal.");
       }
 
+      // Absent or malformed, nothing is held back: the terminal's own input stays on.
+      const replayedBytes = Number(response.headers.get(TerminalProtocol.ReplayHeader)) || 0;
       const sessionEndpoint = TerminalProtocol.sessionEndpoint(id);
+
+      sessionEndpointRef.current = sessionEndpoint;
+
       const outbox = new TerminalOutbox(message => send(sessionEndpoint, message));
       const typing = terminal.onData(data => outbox.type(data));
       const resizing = terminal.onResize(size => outbox.resize(size));
@@ -93,10 +101,11 @@ export function useTerminal(endpoint: string) {
 
       terminal.focus();
       setStatus("connected");
-      await TerminalView.follow(terminal, response.body, signal);
+      await TerminalView.follow(terminal, response.body, signal, replayedBytes);
       // The shell is gone: what is typed from now on has no session to go to.
       typing.dispose();
       resizing.dispose();
+      sessionEndpointRef.current = null;
 
       if (!signal.aborted) {
         setStatus("ended");
@@ -105,14 +114,37 @@ export function useTerminal(endpoint: string) {
 
     connect(element).catch(fail);
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      sessionEndpointRef.current = null;
+    };
   }, [endpoint, generation]);
+
+  /** Ends the session and its shell; its output then ends, which the status shows. */
+  async function close() {
+    const sessionEndpoint = sessionEndpointRef.current;
+
+    if (!sessionEndpoint) {
+      return;
+    }
+
+    try {
+      const response = await fetch(sessionEndpoint, { method: "DELETE" });
+
+      if (!response.ok) {
+        setError((await ApiResponse.error(response, "Impossible de fermer la session.")).message);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Impossible de fermer la session.");
+    }
+  }
 
   return {
     elementRef,
     status,
     error,
-    /** Closes the session and opens a new one in a fresh terminal */
+    /** Leaves the session and opens the terminal again: the same session when the route keeps it */
     reconnect: () => setGeneration(current => current + 1),
+    close,
   };
 }

@@ -51,9 +51,22 @@ export class TerminalView {
     return terminal;
   }
 
-  /** Writes a session's output until it ends. Bytes, not text: xterm decodes UTF-8 across chunks itself. */
-  static async follow(terminal: Terminal, output: ReadableStream<Uint8Array>, signal: AbortSignal): Promise<void> {
+  /**
+   * Writes a session's output until it ends. Bytes, not text: xterm decodes UTF-8 across chunks itself.
+   * @param replayedBytes How many bytes the output starts with that the shell sent to an earlier client.
+   *   The terminal takes them with its input off: the queries they hold (a cursor position, the terminal's
+   *   kind) were answered then, and an answer now would reach the shell as keystrokes.
+   */
+  static async follow(
+    terminal: Terminal,
+    output: ReadableStream<Uint8Array>,
+    signal: AbortSignal,
+    replayedBytes: number,
+  ): Promise<void> {
     const reader = output.getReader();
+    let replayLeft = replayedBytes;
+
+    terminal.options.disableStdin = replayLeft > 0;
 
     while (!signal.aborted) {
       const { done, value } = await reader.read();
@@ -62,7 +75,24 @@ export class TerminalView {
         return;
       }
 
-      terminal.write(value);
+      const replayed = value.subarray(0, replayLeft);
+      const live = value.subarray(replayed.length);
+
+      replayLeft -= replayed.length;
+
+      if (replayed.length > 0) {
+        // The callback runs once xterm has parsed the end of the replay, before anything written after it.
+        terminal.write(replayed, replayLeft === 0 ? () => TerminalView.listen(terminal) : undefined);
+      }
+
+      if (live.length > 0) {
+        terminal.write(live);
+      }
     }
+  }
+
+  /** Turns the terminal's input back on, the replay parsed. */
+  private static listen(terminal: Terminal): void {
+    terminal.options.disableStdin = false;
   }
 }

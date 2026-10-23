@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { logger } from "#libs/logs";
 import { hostShells, sshKeys, sshKnownHosts } from "#libs/ssh/server";
+import { HostTerminalDialog } from "#modules/terminal/components/host-terminal-dialog.tsx";
 import { HostTerminalSetup } from "#modules/terminal/components/host-terminal-setup.tsx";
 import { HostTerminal } from "#modules/terminal/components/host-terminal.tsx";
 import { SshKeyDialog } from "#modules/terminal/components/ssh-key-dialog.tsx";
@@ -29,25 +31,34 @@ class HostTerminalReads {
   }
 }
 
-/** /terminal: a shell on the host once it is configured, how to configure it until then. */
-export async function HostTerminalContent() {
-  const importedKey = await HostTerminalReads.importedKey();
-  const hostFingerprint = hostShells ? await HostTerminalReads.hostFingerprint(hostShells.address) : null;
-
+/** The navbar's terminal: a shell on the host once it is configured, how to configure it until then. */
+export function HostTerminalContent() {
   return (
-    <>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Terminal</h1>
-          <p className="text-sm text-muted-foreground">
-            {hostShells
-              ? `Un shell sur ${hostShells.target.host}, en tant que ${hostShells.target.username}, par SSH.`
-              : "Aucun serveur n’est configuré."}
-          </p>
-        </div>
-        <SshKeyDialog importedKey={importedKey} hostFingerprint={hostFingerprint} />
-      </div>
+    <HostTerminalDialog
+      description={
+        hostShells
+          ? `Un shell sur ${hostShells.target.host}, en tant que ${hostShells.target.username}, par SSH. Il reste ouvert quand vous fermez la fenêtre ou rechargez la page, jusqu’à une heure d’inactivité.`
+          : "Aucun serveur n’est configuré."
+      }
+      // The layout renders it on every page: what it reads streams in, rather than holding the page back.
+      sshKey={
+        <Suspense fallback={null}>
+          <SshKeyContent />
+        </Suspense>
+      }
+    >
       {hostShells ? <HostTerminal /> : <HostTerminalSetup />}
-    </>
+    </HostTerminalDialog>
   );
+}
+
+/** The **Clé SSH** dialog, with what it shows of Hangar's SSH folder. */
+async function SshKeyContent() {
+  // Neither read waits for the other.
+  const [importedKey, hostFingerprint] = await Promise.all([
+    HostTerminalReads.importedKey(),
+    hostShells ? HostTerminalReads.hostFingerprint(hostShells.address) : null,
+  ]);
+
+  return <SshKeyDialog importedKey={importedKey} hostFingerprint={hostFingerprint} />;
 }

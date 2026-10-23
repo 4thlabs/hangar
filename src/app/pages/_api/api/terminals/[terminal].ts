@@ -26,3 +26,17 @@ export const POST = apiRoute<ApiContext<"/api/terminals/[terminal]">>(
     return new Response(null, { status: 204 });
   },
 );
+
+/** Ends a terminal and its shell, from a container's **Fermer la session**. */
+export const DELETE = apiRoute<ApiContext<"/api/terminals/[terminal]">>(
+  {
+    log: "Failed to close a terminal",
+    unavailable: "Le terminal est indisponible.",
+    notFound: "Ce terminal est fermé.",
+  },
+  async (_request, { params }, session) => {
+    await terminals.close(params.terminal, session.user.id);
+
+    return new Response(null, { status: 204 });
+  },
+);

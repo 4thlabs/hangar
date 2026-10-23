@@ -13,7 +13,8 @@ vi.mock("waku/router/server", () => ({ unstable_getRequest: mocks.getRequest, un
 // A real better-auth on an in-memory SQLite: `createAuth` takes its database by injection, so the
 // session checks run against real rows instead of a stubbed `auth.api`.
 const database = drizzle({ client: migrateDb(":memory:").$client, relations: { ...authRelations } });
-const auth = createAuth(database);
+const sessionEnded = vi.fn<(userId: string) => Promise<void>>().mockResolvedValue(undefined);
+const auth = createAuth(database, sessionEnded);
 const sessions = new Sessions(auth);
 
 /** Turns `Set-Cookie` values into the `Cookie` header a browser would send back. */
@@ -35,6 +36,7 @@ describe("Sessions", () => {
   beforeEach(() => {
     mocks.getRequest.mockReset();
     mocks.redirect.mockReset();
+    sessionEnded.mockClear();
     database.run(sql`delete from session`);
     database.run(sql`delete from account`);
     database.run(sql`delete from user`);
@@ -66,6 +68,15 @@ describe("Sessions", () => {
     await sessions.require();
 
     expect(mocks.redirect).toHaveBeenCalledWith("/login");
+  });
+
+  it("tells who signed out, so their terminals end", async () => {
+    const request = await signUp();
+    const session = await sessions.get(request);
+
+    await auth.api.signOut({ headers: request.headers });
+
+    expect(sessionEnded).toHaveBeenCalledWith(session?.user.id);
   });
 
   it("hands a signed-in request its session without redirecting", async () => {

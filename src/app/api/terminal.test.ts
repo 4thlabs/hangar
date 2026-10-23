@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   containerShells: { open: vi.fn() },
-  hostShells: { open: vi.fn() } as { open: ReturnType<typeof vi.fn> } | null,
-  terminals: { open: vi.fn(), write: vi.fn(), resize: vi.fn() },
+  hostShells: { address: "server.lan:22", open: vi.fn() } as { address: string; open: ReturnType<typeof vi.fn> } | null,
+  terminals: { open: vi.fn(), attach: vi.fn(), write: vi.fn(), resize: vi.fn(), close: vi.fn() },
   logger: { error: vi.fn() },
 }));
 
@@ -27,7 +27,7 @@ const { DockerNotFoundError } = await import("#libs/docker");
 const { TerminalNotFoundError } = await import("#libs/terminals");
 const { POST: openHost } = await import("#app/pages/_api/api/host/terminal.ts");
 const { POST: open } = await import("#app/pages/_api/api/docker/apps/[project]/containers/[container]/terminal.ts");
-const { POST: send } = await import("#app/pages/_api/api/terminals/[terminal].ts");
+const { POST: send, DELETE: close } = await import("#app/pages/_api/api/terminals/[terminal].ts");
 
 const CONTAINER_ID = "a".repeat(64);
 
@@ -48,7 +48,11 @@ describe("POST a container terminal", () => {
 
   beforeEach(() => {
     mocks.containerShells.open.mockResolvedValue(SHELL);
-    mocks.terminals.open.mockReturnValue({ id: "session-1", output: Readable.from([Buffer.from("/ # ")]) });
+    mocks.terminals.open.mockReturnValue({
+      id: "session-1",
+      output: Readable.from([Buffer.from("/ # ")]),
+      replayedBytes: 0,
+    });
   });
 
   it("returns 401 before opening a shell", async () => {
@@ -95,7 +99,11 @@ describe("POST the host terminal", () => {
   beforeEach(() => {
     mocks.hostShells = hostShells;
     mocks.hostShells?.open.mockResolvedValue(SHELL);
-    mocks.terminals.open.mockReturnValue({ id: "session-1", output: Readable.from([Buffer.from("Connexion…")]) });
+    mocks.terminals.attach.mockResolvedValue({
+      id: "session-1",
+      output: Readable.from([Buffer.from("Connexion…")]),
+      replayedBytes: 12,
+    });
   });
 
   it("returns 401 before reaching the host", async () => {
@@ -105,15 +113,31 @@ describe("POST the host terminal", () => {
     expect(mocks.hostShells?.open).not.toHaveBeenCalled();
   });
 
-  it("streams a terminal on the host, sized to the client's", async () => {
+  it("streams the user's session on the host, kept under the host's address", async () => {
     const request = post({ cols: 80, rows: 24 });
 
     const response = await openHost(request);
 
     expect(response.headers.get("x-terminal-id")).toBe("session-1");
+    expect(response.headers.get("x-terminal-replay")).toBe("12");
     expect(await response.text()).toBe("Connexion…");
+    expect(mocks.terminals.open).not.toHaveBeenCalled();
+    expect(mocks.terminals.attach).toHaveBeenCalledWith(
+      "user-1",
+      "server.lan:22",
+      { cols: 80, rows: 24 },
+      expect.any(Function),
+      request.signal,
+    );
+  });
+
+  it("starts the shell the session needs at the client's size", async () => {
+    await openHost(post({ cols: 80, rows: 24 }));
+
+    const start = mocks.terminals.attach.mock.calls[0]![3] as () => Promise<unknown>;
+
+    await expect(start()).resolves.toBe(SHELL);
     expect(mocks.hostShells?.open).toHaveBeenCalledWith({ cols: 80, rows: 24 });
-    expect(mocks.terminals.open).toHaveBeenCalledWith("user-1", SHELL, request.signal);
   });
 
   it("returns 404 while no host is configured", async () => {
@@ -160,5 +184,30 @@ describe("POST to a terminal session", () => {
     });
 
     await expect(send(post({ input: "ls\r" }), context)).resolves.toMatchObject({ status: 404 });
+  });
+});
+
+describe("DELETE a terminal session", () => {
+  const context = { params: { terminal: "session-1" } };
+  const remove = () => new Request("http://localhost/terminal", { method: "DELETE" });
+
+  it("returns 401 before reaching the session", async () => {
+    mocks.getSession.mockResolvedValue(null);
+
+    await expect(close(remove(), context)).resolves.toMatchObject({ status: 401 });
+    expect(mocks.terminals.close).not.toHaveBeenCalled();
+  });
+
+  it("ends the session as the signed-in user", async () => {
+    const response = await close(remove(), context);
+
+    expect(response.status).toBe(204);
+    expect(mocks.terminals.close).toHaveBeenCalledWith("session-1", "user-1");
+  });
+
+  it("returns 404 once the session is gone", async () => {
+    mocks.terminals.close.mockRejectedValue(new TerminalNotFoundError("session-1"));
+
+    await expect(close(remove(), context)).resolves.toMatchObject({ status: 404 });
   });
 });

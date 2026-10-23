@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDownIcon, LogOutIcon, SettingsIcon } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useRouter } from "waku";
 import { authClient } from "#libs/auth/client";
 import type { NotificationPayload } from "#libs/notifications";
@@ -28,6 +28,8 @@ import { NotificationsMenu } from "#modules/notifications/components/notificatio
 type AppNavbarProps = {
   user: AvatarUser;
   notifications: NotificationPayload[];
+  /** The host terminal's button and dialog, rendered on the server. */
+  terminal: ReactNode;
 };
 
 function Brand() {
@@ -187,7 +189,7 @@ function UserMenu({ user }: { user: AvatarUser }) {
   );
 }
 
-export function AppNavbar({ user, notifications }: AppNavbarProps) {
+export function AppNavbar({ user, notifications, terminal }: AppNavbarProps) {
   return (
     <header className="shrink-0 border-b border-sidebar-border bg-sidebar text-sidebar-foreground [--background:var(--sidebar)] [--foreground:var(--sidebar-foreground)] [--input:var(--sidebar-border)] [--muted:var(--sidebar-accent)] [--ring:var(--sidebar-ring)] [--secondary:var(--sidebar-accent)] [--secondary-foreground:var(--sidebar-accent-foreground)]">
       {/*
@@ -208,6 +210,7 @@ export function AppNavbar({ user, notifications }: AppNavbarProps) {
         </div>
 
         <div className="col-start-3 flex items-center justify-end gap-2">
+          {terminal}
           <NotificationsMenu initial={notifications} />
           <SettingsButton />
           <UserMenu user={user} />

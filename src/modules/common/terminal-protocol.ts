@@ -8,6 +8,12 @@ export class TerminalProtocol {
   /** The response header carrying the id of the session a terminal stream belongs to. */
   static readonly IdHeader = "X-Terminal-Id";
 
+  /**
+   * The response header giving how many bytes of earlier output the stream starts with, replayed from a kept
+   * session: the terminal answers none of the queries they hold, already answered once.
+   */
+  static readonly ReplayHeader = "X-Terminal-Replay";
+
   /** A large paste; what is typed while a request is in flight goes in the next one. */
   static readonly MaxInputLength = 64 * 1_024;
 
