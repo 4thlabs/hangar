@@ -350,7 +350,7 @@ Uninstalling the app from the store takes down both its compose project and its 
 
 A Windows machine can join the swarm through WSL 2 with `networkingMode=mirrored` in
 `%UserProfile%\.wslconfig`: WSL then shares the Windows host's address on the LAN, and the node
-advertises it. Three things break that worked under the default NAT mode.
+advertises it. Three things then need care.
 
 ### The Hyper-V firewall blocks the swarm ports
 
@@ -397,42 +397,181 @@ The server must accept unprivileged ports, as it already does if the node mounte
 where Windows rewrote the port. A volume keeps the options it was created with: remove it on the WSL
 node (`docker volume rm <stack>_<volume>`) before deploying again.
 
-### The overlay needs TX checksum offload off
+### The overlay does not reach the WSL node
 
 The task runs, but a reverse proxy on another node answers **Gateway Timeout**: the overlay carries
-nothing between the WSL node and the others. The kernel leaves the outer UDP checksum of VXLAN packets
-to the NIC, the mirrored virtual NIC does not fill it in, and the peer drops them. Compute it in the
-kernel instead:
+nothing back to the WSL node. Its VXLAN packets leave and the peers answer, but the replies stay in
+Windows. Mirrored mode forwards an inbound port to Linux only once a Linux process has tried to bind
+it, and the VXLAN socket on UDP 4789 is opened by the kernel, which WSL never sees. Every Docker
+restart recreates that socket, so the overlay breaks again each time.
 
-```bash
-sudo ethtool -K eth0 tx off
+Under NAT the overlay never worked either: the node advertised WSL's internal address, which the other
+nodes cannot reach. Deploying still worked, because the worker opens every connection to the manager
+itself. Making NAT carry the overlay takes a UDP mapping on Windows (`netsh portproxy` is TCP only) that
+follows WSL's address, which changes at every start: no simpler than the options below.
+
+WSL has no setting to force the forwarding. `ignoredPorts` does the opposite: it keeps a port's traffic
+inside Linux. Two ways around it.
+
+#### Option 1: keep the WSL services off the overlay
+
+A port that Docker publishes is bound by `docker-proxy`, a userspace process, so Windows forwards it.
+Publish the service on the node itself, and let the proxy reach it at the node's address rather than
+through the overlay:
+
+```yaml
+# store/llama-cpp/compose.swarm.yml
+services:
+  llama-cpp:
+    ports:
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: host
 ```
 
-The setting does not survive `wsl --shutdown`. With `systemd=true` in `/etc/wsl.conf`, a unit applies
-it before Docker starts:
+Open the port in the Hyper-V firewall, like the swarm ports above:
+
+```powershell
+New-NetFirewallHyperVRule -Name 'Swarm-8080-TCP' -DisplayName 'llama-cpp' -Direction Inbound `
+  -VMCreatorId '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -Protocol TCP -LocalPorts 8080 -Action Allow
+```
+
+Traefik's Swarm provider routes to overlay addresses, so declare the route with the file provider
+instead, and remove the service's `traefik.*` labels so that the Swarm provider does not add a second
+one:
+
+```yaml
+# traefik dynamic configuration
+http:
+  routers:
+    llama-cpp:
+      rule: Host(`llama.example.lan`)
+      service: llama-cpp
+  services:
+    llama-cpp:
+      loadBalancer:
+        servers:
+          - url: http://<wsl-node-address>:8080
+```
+
+No script, and nothing to redo after a restart. The cost: the WSL node's services are not on the
+overlay, the proxy has their address written in, and a `mode: host` port allows one replica per node.
+Fits a single GPU node.
+
+#### Option 2: register the VXLAN port
+
+A bind attempt from userspace on UDP 4789 is enough for Windows to forward it, even though it fails
+while the kernel holds the port. A small service makes that attempt whenever Docker starts or changes
+a network, and every minute in case it missed an event. It only tries while the kernel holds the port,
+so it never takes the port from Docker. The whole overlay then works, for every service on the node.
+
+The script, `/usr/local/sbin/wsl-vxlan-port`:
+
+```python
+#!/usr/bin/python3
+"""Make WSL's mirrored networking deliver inbound VXLAN traffic to Linux.
+
+Mirrored mode forwards a port from Windows to Linux once a Linux process tries to
+bind it. The VXLAN socket is opened by the kernel, which WSL never sees, so the
+overlay replies stay in Windows. A userspace bind attempt on the port registers
+it. The attempt is only made while the kernel holds the port, so it always fails
+and can never take the port from Docker.
+
+The kernel socket is recreated whenever Docker restarts or an overlay network
+comes up on the node: register again on every Docker network event, and every
+minute in case an event was missed.
+"""
+
+import errno
+import select
+import socket
+import subprocess
+import sys
+import time
+
+VXLAN_PORT = 4789
+PROC_NET_UDP = "/proc/net/udp"
+FALLBACK_SECONDS = 60
+# Docker creates the VXLAN socket shortly after the network event.
+SETTLE_SECONDS = 2
+
+
+def kernel_holds_vxlan_port():
+    port_hex = f"{VXLAN_PORT:04X}"
+    with open(PROC_NET_UDP) as table:
+        next(table)
+        for line in table:
+            local_address = line.split()[1]
+            if local_address.endswith(f":{port_hex}"):
+                return True
+
+    return False
+
+
+def register_vxlan_port():
+    if not kernel_holds_vxlan_port():
+        return
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.bind(("0.0.0.0", VXLAN_PORT))
+    except OSError as error:
+        if error.errno != errno.EADDRINUSE:
+            raise
+    finally:
+        probe.close()
+
+
+def main():
+    register_vxlan_port()
+    events = subprocess.Popen(
+        ["docker", "events", "--filter", "type=network", "--format", "{{.Action}}"],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    while True:
+        ready, _, _ = select.select([events.stdout], [], [], FALLBACK_SECONDS)
+        if ready:
+            if not events.stdout.readline():
+                sys.exit("docker events stopped")
+
+            time.sleep(SETTLE_SECONDS)
+
+        register_vxlan_port()
+
+
+main()
+```
+
+The unit, `/etc/systemd/system/wsl-vxlan-port.service`, starts and restarts with Docker:
 
 ```ini
-# /etc/systemd/system/eth0-tx-off.service
 [Unit]
-Description=Disable TX checksum offload on eth0 (VXLAN in mirrored mode)
-Before=docker.service
-After=network-online.target
+Description=Register the VXLAN port with WSL mirrored networking
+After=docker.service
+PartOf=docker.service
 
 [Service]
-Type=oneshot
-ExecStart=/usr/sbin/ethtool -K eth0 tx off
+ExecStart=/usr/local/sbin/wsl-vxlan-port
+Restart=always
+RestartSec=5
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=docker.service
 ```
+
+Install it, with `systemd=true` in `/etc/wsl.conf`:
 
 ```bash
-sudo systemctl enable eth0-tx-off.service
+sudo install -m 755 wsl-vxlan-port /usr/local/sbin/
+sudo install -m 644 wsl-vxlan-port.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now wsl-vxlan-port.service
 ```
 
-Traffic did not flow back at once: the peer's replies reached Windows and were forwarded to WSL
-without a drop, but only started reaching `eth0` about three minutes after the change. The cause of
-that delay is not known; give it a few minutes before looking elsewhere.
+`systemctl status wsl-vxlan-port` shows it running. After `sudo systemctl restart docker`, the overlay
+comes back once the tasks are up, about two seconds after Docker creates the network.
 
 ### Diagnose a WSL node
 
@@ -443,7 +582,7 @@ Which node to look from, and what each command tells:
 | A manager    | `docker service ps --no-trunc <stack>_<service>`            | Each task's node, state and error (a mount that timed out)    |
 | The WSL node | `journalctl -u docker -f`                                   | Gossip (`Bulk sync … timed out`), raft and mount errors       |
 | The WSL node | `docker ps -a --filter label=com.docker.swarm.service.name` | The tasks that landed there; one stuck in `Created` never ran |
-| The WSL node | `ethtool -k eth0 \| grep tx-checksumming`                   | `off` once the overlay fix applies                            |
+| The WSL node | `systemctl status wsl-vxlan-port`                           | Option 2 of the overlay runs                                  |
 | Windows      | `Get-NetFirewallHyperVRule -VMCreatorId $wsl`               | The swarm rules are there                                     |
 
 `docker service logs` stays empty for a task that never started: the manager asks the node for the
@@ -464,11 +603,11 @@ docker run --rm --net=host --cap-add NET_ADMIN --cap-add NET_RAW nicolaka/netsho
   timeout 15 tcpdump -ni any -vv 'udp port 4789'
 ```
 
-| What the captures show                                          | Where it breaks                                       |
-| --------------------------------------------------------------- | ----------------------------------------------------- |
-| Packets leave WSL, none reach the peer                          | Windows, on the way out                               |
-| The peer receives them with `bad udp cksum`, and does not reply | The checksum: turn TX offload off                     |
-| The peer replies, nothing comes back on WSL's `eth0`            | Windows, on the way in: trace it with `pktmon`, below |
+| What the captures show                                          | Where it breaks                                   |
+| --------------------------------------------------------------- | ------------------------------------------------- |
+| Packets leave WSL, none reach the peer                          | Windows, on the way out                           |
+| The peer receives them with `bad udp cksum`, and does not reply | The checksum: try `sudo ethtool -K eth0 tx off`   |
+| The peer replies, nothing comes back on WSL's `eth0`            | The VXLAN port is not registered: see the overlay |
 
 A `bad udp cksum` on the sending side alone means nothing: with offload on, the capture sees the packet
 before the NIC fills the checksum in.
@@ -486,8 +625,8 @@ pktmon etl2txt "$env:TEMP\vxlan.etl" --out "$env:TEMP\vxlan.txt"
 pktmon filter remove
 ```
 
-A packet that reaches WSL ends on the `vmswitch.sys` component of WSL's virtual switch; a dropped one
-logs a drop with its reason.
+A dropped packet logs a drop with its reason. A reply that ends on the `vmswitch.sys` component of
+WSL's virtual switch with no drop, yet never shows on `eth0`, is the unregistered VXLAN port.
 
 ## Not covered yet
 
