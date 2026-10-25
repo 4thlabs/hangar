@@ -29,12 +29,12 @@ export interface FinnhubProfile {
 /** Resolution for the chart endpoint. */
 export type ChartResolution = "1" | "5" | "15" | "30" | "60" | "D" | "W" | "M";
 
-/** Talks to one Finnhub instance. API is at `/api/v1/…` and takes `X-API-Key`. */
+/** Talks to one Finnhub instance. API is at `/api/v1/…` and takes `X-Finnhub-Token`. */
 export class FinnhubClient extends ServiceClient {
   static async connect(service: WidgetService): Promise<FinnhubClient> {
     return new FinnhubClient(
       await ServiceClient.client(service, {
-        apiKeyHeader: "X-API-Key",
+        apiKeyHeader: "X-Finnhub-Token",
         prefix: "/api/v1",
       }),
     );
@@ -46,19 +46,22 @@ export class FinnhubClient extends ServiceClient {
     return response as FinnhubQuote;
   }
 
-  async getChart(
-    ticker: string,
-    resolution: ChartResolution = "D",
-    from: number,
-    to: number,
-  ): Promise<FinnhubChartPoint[]> {
+  /**
+   * Fetches one ticker's price history.
+   * @param resolution — kept for API compatibility; always "D" in practice
+   */
+  async getChart(ticker: string, resolution: ChartResolution, from: number, to: number): Promise<FinnhubChartPoint[]> {
     const response = await this.http
       .get("/stock/candle", {
         searchParams: { symbol: ticker, resolution, from: String(from), to: String(to) },
       })
       .json();
 
-    const { c: prices, t: timestamps } = response as { c: number[]; t: number[] };
+    const { c: prices, t: timestamps } = response as { c?: number[]; t?: number[] };
+
+    if (!prices || !timestamps) {
+      return [];
+    }
 
     return prices
       .map((price, index) => ({ x: timestamps[index], y: price }))
@@ -68,6 +71,6 @@ export class FinnhubClient extends ServiceClient {
   async getProfile(ticker: string): Promise<FinnhubProfile | undefined> {
     const profiles = await this.http.get("/stock/profile2", { searchParams: { symbol: ticker } }).json();
 
-    return (profiles as FinnhubProfile[])[0];
+    return (profiles as FinnhubProfile[] | undefined)?.[0];
   }
 }
