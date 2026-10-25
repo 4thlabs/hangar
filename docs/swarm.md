@@ -289,7 +289,7 @@ Uninstalling the app from the store takes down both its compose project and its 
 
 A Windows machine can join the swarm through WSL 2 with `networkingMode=mirrored` in
 `%UserProfile%\.wslconfig`: WSL then shares the Windows host's address on the LAN, and the node
-advertises it. Two things break that worked under the default NAT mode.
+advertises it. Three things break that worked under the default NAT mode.
 
 ### The Hyper-V firewall blocks the swarm ports
 
@@ -335,6 +335,98 @@ volumes:
 The server must accept unprivileged ports, as it already does if the node mounted the share under NAT,
 where Windows rewrote the port. A volume keeps the options it was created with: remove it on the WSL
 node (`docker volume rm <stack>_<volume>`) before deploying again.
+
+### The overlay needs TX checksum offload off
+
+The task runs, but a reverse proxy on another node answers **Gateway Timeout**: the overlay carries
+nothing between the WSL node and the others. The kernel leaves the outer UDP checksum of VXLAN packets
+to the NIC, the mirrored virtual NIC does not fill it in, and the peer drops them. Compute it in the
+kernel instead:
+
+```bash
+sudo ethtool -K eth0 tx off
+```
+
+The setting does not survive `wsl --shutdown`. With `systemd=true` in `/etc/wsl.conf`, a unit applies
+it before Docker starts:
+
+```ini
+# /etc/systemd/system/eth0-tx-off.service
+[Unit]
+Description=Disable TX checksum offload on eth0 (VXLAN in mirrored mode)
+Before=docker.service
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ethtool -K eth0 tx off
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable eth0-tx-off.service
+```
+
+Traffic did not flow back at once: the peer's replies reached Windows and were forwarded to WSL
+without a drop, but only started reaching `eth0` about three minutes after the change. The cause of
+that delay is not known; give it a few minutes before looking elsewhere.
+
+### Diagnose a WSL node
+
+Which node to look from, and what each command tells:
+
+| Where        | Command                                                     | Tells                                                         |
+| ------------ | ----------------------------------------------------------- | ------------------------------------------------------------- |
+| A manager    | `docker service ps --no-trunc <stack>_<service>`            | Each task's node, state and error (a mount that timed out)    |
+| The WSL node | `journalctl -u docker -f`                                   | Gossip (`Bulk sync … timed out`), raft and mount errors       |
+| The WSL node | `docker ps -a --filter label=com.docker.swarm.service.name` | The tasks that landed there; one stuck in `Created` never ran |
+| The WSL node | `ethtool -k eth0 \| grep tx-checksumming`                   | `off` once the overlay fix applies                            |
+| Windows      | `Get-NetFirewallHyperVRule -VMCreatorId $wsl`               | The swarm rules are there                                     |
+
+`docker service logs` stays empty for a task that never started: the manager asks the node for the
+logs of a container that has none.
+
+**Is the overlay up?** Ping a container on another node from a throwaway container on the WSL node, on
+an attachable overlay network:
+
+```bash
+docker run --rm --network <overlay> busybox:1.36 sh -c 'nslookup <service> 127.0.0.11; ping -c 3 <service>'
+```
+
+**Where are the VXLAN packets lost?** Capture UDP 4789 on both ends while that ping runs. No need to
+install tcpdump, the `netshoot` image carries it:
+
+```bash
+docker run --rm --net=host --cap-add NET_ADMIN --cap-add NET_RAW nicolaka/netshoot:v0.13 \
+  timeout 15 tcpdump -ni any -vv 'udp port 4789'
+```
+
+| What the captures show                                          | Where it breaks                                       |
+| --------------------------------------------------------------- | ----------------------------------------------------- |
+| Packets leave WSL, none reach the peer                          | Windows, on the way out                               |
+| The peer receives them with `bad udp cksum`, and does not reply | The checksum: turn TX offload off                     |
+| The peer replies, nothing comes back on WSL's `eth0`            | Windows, on the way in: trace it with `pktmon`, below |
+
+A `bad udp cksum` on the sending side alone means nothing: with offload on, the capture sees the packet
+before the NIC fills the checksum in.
+
+**What does Windows do with them?** `pktmon` follows a packet through every Windows network component
+and records drops. From an elevated PowerShell:
+
+```powershell
+pktmon filter remove
+pktmon filter add VXLAN -t UDP -p 4789
+pktmon start --capture --pkt-size 0 --file-name "$env:TEMP\vxlan.etl"
+Start-Sleep -Seconds 10
+pktmon stop
+pktmon etl2txt "$env:TEMP\vxlan.etl" --out "$env:TEMP\vxlan.txt"
+pktmon filter remove
+```
+
+A packet that reaches WSL ends on the `vmswitch.sys` component of WSL's virtual switch; a dropped one
+logs a drop with its reason.
 
 ## Not covered yet
 
