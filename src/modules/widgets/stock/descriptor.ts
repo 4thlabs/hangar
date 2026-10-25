@@ -10,7 +10,11 @@ const currencyCode = z.string().regex(/^[A-Z]{3}$/, "must be a 3-letter ISO 4217
 /** Stock prices tracked via Finnhub: current quotes and 30-day sparklines. */
 export const stockPricesDescriptor = describeWidget({
   schema: WidgetSchema.service("stock-prices").extend({
-    tickers: z.array(tickerSymbol).min(1).max(10),
+    tickers: z
+      .array(tickerSymbol)
+      .min(1)
+      .max(10)
+      .refine(tickers => new Set(tickers).size === tickers.length, "ticker symbols must be unique"),
     currency: currencyCode.default("USD"),
   }),
   app: "finnhub",
