@@ -231,6 +231,8 @@ result with `node bin/cli.js swarm miniflux config` (see [the CLI](cli.md#swarm-
   Swarm counterpart.
 - **No `--env-file`.** `docker stack deploy` takes `${VAR}` from its own environment: Hangar hands it
   `.env.global`. By hand, load it first: `set -a; . <data>/.env.global; set +a`.
+- **No `deploy.resources.reservations.devices`.** Swarm ignores compose's GPU syntax: reserve a GPU as
+  a generic resource instead, see [GPUs](#gpus).
 
 The store editor checks both files with `docker stack config` before it writes either of them, so a
 `compose.yml` edit that would break the stack is refused too.
@@ -267,6 +269,65 @@ Every node then needs the NFS client (`nfs-common`). A database on NFS is sensit
 
 If the app also runs with compose, both copies see the same bind mounts. Two databases writing the same
 directory corrupt it: give the Swarm copy its own volume, or run only one at a time.
+
+### GPUs
+
+A Swarm service cannot ask for a GPU the way a compose container does. The node advertises its GPUs as
+generic resources, the service reserves one, and the NVIDIA runtime turns the reservation into a device
+in the container. Three steps, the first two on every GPU node.
+
+**1. Advertise the GPU** in `/etc/docker/daemon.json`. Swarm cannot pick a service's runtime, so
+`nvidia` becomes the default:
+
+```json
+{
+  "runtimes": {
+    "nvidia": { "args": [], "path": "nvidia-container-runtime" }
+  },
+  "default-runtime": "nvidia",
+  "node-generic-resources": ["NVIDIA-GPU=GPU-<uuid>"]
+}
+```
+
+One `NVIDIA-GPU=<uuid>` entry per card; `nvidia-smi --query-gpu=name,uuid --format=csv` lists them.
+
+**2. Let the runtime read the reservation.** Swarm hands the reserved GPU to the container as
+`DOCKER_RESOURCE_<KIND>`, the kind in upper case. In `/etc/nvidia-container-runtime/config.toml`:
+
+```toml
+swarm-resource = "DOCKER_RESOURCE_NVIDIA-GPU"
+```
+
+Then `sudo systemctl restart docker`, which restarts the node's containers.
+
+**3. Reserve it** in `compose.swarm.yml`:
+
+```yaml
+# store/llama-cpp/compose.swarm.yml
+services:
+  llama-cpp:
+    deploy:
+      resources:
+        reservations:
+          generic_resources:
+            - discrete_resource_spec:
+                kind: NVIDIA-GPU
+                value: 1
+```
+
+The reservation is a placement rule too: Swarm schedules the task only on a node with a free GPU, so no
+constraint is needed.
+
+To check it:
+
+| Where        | Command                                                                                  | Expect                             |
+| ------------ | ---------------------------------------------------------------------------------------- | ---------------------------------- |
+| A manager    | `docker node inspect <node> --format '{{json .Description.Resources.GenericResources}}'` | The GPU's `NVIDIA-GPU` entry       |
+| The GPU node | `docker exec <container> env \| grep DOCKER_RESOURCE`                                    | `DOCKER_RESOURCE_NVIDIA-GPU=GPU-…` |
+| The GPU node | `docker exec <container> nvidia-smi`                                                     | The card                           |
+
+If the variable is there but `nvidia-smi` finds no GPU, `swarm-resource` does not match its name: copy
+the name `env` prints.
 
 ### Deploy it
 
