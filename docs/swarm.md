@@ -285,6 +285,57 @@ soon as the services are updated.
 
 Uninstalling the app from the store takes down both its compose project and its stack.
 
+## A node on WSL
+
+A Windows machine can join the swarm through WSL 2 with `networkingMode=mirrored` in
+`%UserProfile%\.wslconfig`: WSL then shares the Windows host's address on the LAN, and the node
+advertises it. Two things break that worked under the default NAT mode.
+
+### The Hyper-V firewall blocks the swarm ports
+
+In mirrored mode the Hyper-V firewall filters inbound traffic to WSL, and blocks it by default
+(`DefaultInboundAction: Block`). The node still reaches the managers, so it joins, but they cannot
+reach it back: `journalctl -u docker` on WSL logs `Bulk sync to node … timed out` every 30 seconds,
+and its tasks never start. Open the swarm ports from an elevated PowerShell on Windows:
+
+```powershell
+$wsl = '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' # WSL's VMCreatorId
+$rules = @(
+  @{ Name = 'Swarm-2377-TCP'; DisplayName = 'Swarm manager TCP';   Protocol = 'TCP'; LocalPorts = 2377 },
+  @{ Name = 'Swarm-7946-TCP'; DisplayName = 'Swarm gossip TCP';    Protocol = 'TCP'; LocalPorts = 7946 },
+  @{ Name = 'Swarm-7946-UDP'; DisplayName = 'Swarm gossip UDP';    Protocol = 'UDP'; LocalPorts = 7946 },
+  @{ Name = 'Swarm-4789-UDP'; DisplayName = 'Swarm overlay VXLAN'; Protocol = 'UDP'; LocalPorts = 4789 }
+)
+foreach ($rule in $rules) {
+  Remove-NetFirewallHyperVRule -Name $rule.Name -ErrorAction SilentlyContinue
+  New-NetFirewallHyperVRule @rule -Direction Inbound -VMCreatorId $wsl -Action Allow | Out-Null
+}
+```
+
+The script can run again: it replaces the rules. Port 2377 only matters once the node is promoted to
+manager. `Get-NetFirewallHyperVRule -VMCreatorId $wsl` lists the rules, without elevation.
+
+### NFS volumes need `noresvport`
+
+The kernel's NFS client connects from a reserved source port (below 1024) by default, and in mirrored
+mode those connections do not get out. The task then stays in **Starting**, and
+`docker service ps --no-trunc <stack>_<service>` on a manager reads
+`failed to mount local volume: … connection timed out`. Add `noresvport` to the volume's options:
+
+```yaml
+volumes:
+  miniflux-db:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${NFS_SERVER},nfsvers=4,rw,noresvport
+      device: :/export/miniflux/db
+```
+
+The server must accept unprivileged ports, as it already does if the node mounted the share under NAT,
+where Windows rewrote the port. A volume keeps the options it was created with: remove it on the WSL
+node (`docker volume rm <stack>_<volume>`) before deploying again.
+
 ## Not covered yet
 
 - The image update check and the nightly auto-update cover compose apps only. Update a stack with
