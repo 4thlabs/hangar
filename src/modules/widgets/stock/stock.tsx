@@ -86,6 +86,25 @@ function TickerSparkline({ history }: { history: FinnhubChartPoint[] }) {
   );
 }
 
+/** The period the sparkline covers, in days. */
+const SPARKLINE_DAYS = 30;
+
+/** The resolution for a 30-day sparkline. */
+const SPARKLINE_RESOLUTION: ChartResolution = "D";
+
+/** The arrow shown for a positive, negative, or flat price change. */
+function changeArrow(dp: number): string {
+  if (dp > 0) {
+    return "▲";
+  }
+
+  if (dp < 0) {
+    return "▼";
+  }
+
+  return "—";
+}
+
 /** The color class for a price change. */
 function changeColor(quote: FinnhubQuote): string {
   if (quote.dp > 0) {
@@ -122,29 +141,10 @@ function TickerCard({ data, currency }: { data: TickerData; currency: string }) 
       <WidgetMetadata>
         <span>H {quote.h.toFixed(2)}</span>
         <span>L {quote.l.toFixed(2)}</span>
-        <span>V {VolumeFormat.format(quote.o)}</span>
+        <span>O {quote.o.toFixed(2)}</span>
       </WidgetMetadata>
     </div>
   );
-}
-
-/** The period the sparkline covers, in days. */
-const SPARKLINE_DAYS = 30;
-
-/** The resolution for a 30-day sparkline. */
-const SPARKLINE_RESOLUTION: ChartResolution = "D";
-
-/** The arrow shown for a positive, negative, or flat price change. */
-function changeArrow(dp: number): string {
-  if (dp > 0) {
-    return "▲";
-  }
-
-  if (dp < 0) {
-    return "▼";
-  }
-
-  return "—";
 }
 
 /** The widget's card, showing all tickers. */
@@ -225,19 +225,20 @@ export const stockWidget = (
     const now = Math.floor(Date.now() / 1_000);
     const from = now - SPARKLINE_DAYS * 24 * 60 * 60;
 
-    const results = await Promise.all(
-      tickers.map(async ticker => {
-        const [quote, profile, history] = await Promise.all([
-          client.getQuote(ticker),
-          client.getProfile(ticker),
-          client.getChart(ticker, SPARKLINE_RESOLUTION, from, now),
-        ]);
-
-        return { ticker, quote, profile, history };
-      }),
+    const results = await Promise.allSettled(
+      tickers.map(async ticker => ({
+        ticker,
+        quote: await client.getQuote(ticker),
+        profile: await client.getProfile(ticker),
+        history: await client.getChart(ticker, SPARKLINE_RESOLUTION, from, now),
+      })),
     );
 
-    return results;
+    return results
+      .filter((r): r is PromiseFulfilledResult<Awaited<typeof r>> => r.status === "fulfilled")
+      .map(r => r.value);
   },
-  render: tickers => <StockWidgetCard tickers={tickers} currency={currency} serviceUrl={service.link} />,
+  render: (tickers, _placementKey) => (
+    <StockWidgetCard tickers={tickers} currency={currency} serviceUrl={service.link} />
+  ),
 });
