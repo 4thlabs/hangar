@@ -235,7 +235,16 @@ export const stockWidget = (
     );
 
     return results
-      .filter((r): r is PromiseFulfilledResult<{ ticker: string; quote: FinnhubQuote; profile: FinnhubProfile | undefined; history: FinnhubChartPoint[] }> => r.status === "fulfilled")
+      .filter(
+        (
+          r,
+        ): r is PromiseFulfilledResult<{
+          ticker: string;
+          quote: FinnhubQuote;
+          profile: FinnhubProfile | undefined;
+          history: FinnhubChartPoint[];
+        }> => r.status === "fulfilled",
+      )
       .map(r => r.value);
   },
   render: (tickers, _placementKey) => (
