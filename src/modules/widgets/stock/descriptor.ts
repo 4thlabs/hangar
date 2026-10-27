@@ -1,23 +1,26 @@
 import * as z from "zod";
-import { describeWidget, WidgetIcon, WidgetSchema } from "../config/config.ts";
+import { columnSchema, describeWidget, ttlField, WidgetIcon } from "../config/config.ts";
 
-/** A stock ticker symbol: uppercase letters and digits, 1–5 chars. */
-const tickerSymbol = z.string().regex(/^[A-Z0-9]{1,5}$/, "must be 1–5 uppercase letters or digits");
+/**
+ * A symbol as Finnhub writes it: `AAPL`, a share class `BRK.B`, or a listing outside the US with its exchange suffix,
+ * `AIR.PA` or `005930.KS`.
+ */
+const symbolSchema = z
+  .string()
+  .regex(/^[A-Z0-9][A-Z0-9.-]{0,19}$/, "must be an uppercase symbol, such as AAPL, BRK.B or AIR.PA");
 
-/** A currency code: three uppercase letters (ISO 4217). */
-const currencyCode = z.string().regex(/^[A-Z]{3}$/, "must be a 3-letter ISO 4217 code (e.g. USD, EUR)");
-
-/** Stock prices tracked via Finnhub: current quotes and 30-day sparklines. */
+/** Reads the public Finnhub API, not a store app: no service to declare, the key is `FINNHUB_API_KEY`. */
 export const stockPricesDescriptor = describeWidget({
-  schema: WidgetSchema.service("stock-prices").extend({
+  schema: z.object({
+    type: z.literal("stock-prices"),
+    column: columnSchema,
+    ...ttlField,
     tickers: z
-      .array(tickerSymbol)
+      .array(symbolSchema)
       .min(1)
       .max(10)
       .refine(tickers => new Set(tickers).size === tickers.length, "ticker symbols must be unique"),
-    currency: currencyCode.default("USD"),
   }),
-  app: "finnhub",
   appearance: {
     title: "Stocks",
     icon: new WidgetIcon("/images/widgets/stock.svg"),
@@ -25,5 +28,5 @@ export const stockPricesDescriptor = describeWidget({
     errorDescription: "The stock prices could not be loaded.",
   },
   module: () => import("./stock.tsx"),
-  create: ({ stockWidget }, config, service) => stockWidget(service(), config),
+  create: ({ stockPrices }, config) => stockPrices(config.tickers),
 });

@@ -67,6 +67,7 @@ A health check polls `/login` every 30 seconds.
 | `BETTER_AUTH_URL`    |          | The public URL Hangar is reached at, used by the sign-in flow.                                    |
 | `BETTER_AUTH_SECRET` |          | At least 32 characters; signs the sessions. Generate one with `openssl rand -base64 32`.          |
 | `GITHUB_TOKEN`       |          | Raises the GitHub API rate limit for the [GitHub releases widget](widgets.md#github-releases).    |
+| `FINNHUB_API_KEY`    |          | The Finnhub API key the [stock prices widget](widgets.md#stock-prices) needs.                     |
 | `HANGAR_SSH_HOST`    |          | The host the [header's terminal](#terminal-on-the-host) signs in to over SSH.                     |
 | `HANGAR_SSH_USER`    |          | The account it signs in as. The terminal needs both this and `HANGAR_SSH_HOST`.                   |
 | `HANGAR_SSH_PORT`    |          | The SSH port, `22` by default.                                                                    |
