@@ -9,10 +9,10 @@ import {
   WidgetList,
   WidgetListItem,
   WidgetMetadata,
+  WidgetSparkline,
 } from "../shared/index.ts";
 import { CardImageId, TcgCollectorClient, type CardImageRef, type TcgCard, type TcgDailyPrices } from "./api/index.ts";
 import { tcgCollectorCardsDescriptor } from "./descriptor.ts";
-import { Sparkline } from "./sparkline.ts";
 
 const { appearance } = tcgCollectorCardsDescriptor;
 
@@ -21,9 +21,6 @@ const GAME_NAMES: ReadonlyMap<number, string> = new Map([
   [1, "Magic"],
   [21, "Star Wars Unlimited"],
 ]);
-
-/** The sparkline's `viewBox`, stretched to its frame: only the proportions of the curve matter. */
-const SPARKLINE_BOX = { width: 100, height: 24 };
 
 const Euros = new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR" });
 
@@ -130,38 +127,11 @@ export class PriceCurve {
   }
 }
 
-/** The price curve of one card, stroked in the text color so it follows the theme. Nothing when it has no price. */
+/** The price curve of one card. Nothing when it has no price. */
 function PriceSparkline({ history, priceWindow }: { history: readonly TcgDailyPrices[]; priceWindow: PriceWindow }) {
   const series = PriceCurve.series(history, priceWindow);
-  const polylines = Sparkline.polylines(series.prices, SPARKLINE_BOX);
 
-  if (polylines.length === 0) {
-    return null;
-  }
-
-  // The stroke keeps its width however the box is stretched, and spills past it rather than being clipped.
-  return (
-    <svg
-      role="img"
-      aria-label={PriceCurve.describe(series)}
-      viewBox={`0 0 ${SPARKLINE_BOX.width} ${SPARKLINE_BOX.height}`}
-      preserveAspectRatio="none"
-      className="h-6 w-16 shrink-0 overflow-visible text-primary"
-    >
-      {polylines.map(points => (
-        <polyline
-          key={points}
-          points={points}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      ))}
-    </svg>
-  );
+  return <WidgetSparkline prices={series.prices} label={PriceCurve.describe(series)} />;
 }
 
 /** The frame a card's image sits in, kept when there is no image, so every name starts on the same column. */
