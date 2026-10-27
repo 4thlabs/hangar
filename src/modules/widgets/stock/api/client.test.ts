@@ -163,6 +163,7 @@ describe("getStocks", () => {
     const fetcher = respond({
       AAPL: { quote: quote(230, 1.5), "stock/profile2": {}, "stock/candle": { s: "ok", c: [] } },
     });
+
     const calls = (endpoint: string) =>
       fetcher.mock.calls.filter(([input]) => urlOf(input).pathname === `/api/v1/${endpoint}`).length;
 
