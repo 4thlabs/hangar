@@ -14,6 +14,7 @@ const envVariables = z.object({
   HANGAR_DB_HOST: z.string().min(1),
   DOMAIN: z.string().min(1),
   GITHUB_TOKEN: z.string().min(1).optional(),
+  FINNHUB_API_KEY: z.string().min(1).optional(),
   BETTER_AUTH_URL: z.url().optional(),
   BETTER_AUTH_SECRET: z.string().min(32).optional(),
   // The host the Terminal page signs in to; the page explains how to set it up while these are missing.

@@ -57,6 +57,7 @@ to 15 minutes.
 | [`miniflux-entries`](#miniflux-entries)         | Newest feed entries and the unread count        | `url`, `link`, `ttl`                  |
 | [`tcg-collector-cards`](#tcg-collector-cards)   | Trading card prices and their recent curves     | `cards`, `days`, `url`, `link`, `ttl` |
 | [`github-releases`](#github-releases)           | Latest release of each repository               | `repositories`, `ttl`                 |
+| [`stock-prices`](#stock-prices)                 | Stock quotes, the day's moves and their curves  | `tickers`, `ttl`                      |
 
 ### `clock`
 
@@ -153,3 +154,28 @@ The latest release of each repository, newest first.
 
 `repositories` is **required**, at least one, each written `owner/repo`. Anonymous calls to the
 GitHub API are limited to 60 an hour; set `GITHUB_TOKEN` in Hangar's own environment to lift that.
+
+### `stock-prices`
+
+Up to ten stocks from [Finnhub](https://finnhub.io), in the order they are listed: the symbol, the
+company's name, the last price in the currency the stock is quoted in, the change since the
+previous close, the day's high, low and open, and a curve of the closes over the last month. Above
+them, the day's best and worst change and how many stocks rose. Prices are not converted: a card
+that mixes `AAPL` and `AIR.PA` shows dollars next to euros.
+
+```yaml
+- type: stock-prices
+  column: 3
+  tickers: [AAPL, MSFT, BRK.B, AIR.PA]
+```
+
+`tickers` is **required**: one to ten distinct symbols, written as Finnhub writes them, in capitals.
+A listing outside the US carries its exchange suffix (`AIR.PA` for Paris, `SHOP.TO` for Toronto).
+A symbol Finnhub does not know is left out of the card and named in the logs; the other stocks
+still show.
+
+The widget reads the public Finnhub API, not a store app: no `url` or `link`. Set
+`FINNHUB_API_KEY` in Hangar's own environment, a key from a free Finnhub account; without one the
+card shows an error. The free plan allows 60 calls a minute, which the widget spares by keeping
+each quote 30 seconds, each company profile a day and each curve an hour. It does not include the
+daily closes: on that plan the card shows no curves.
