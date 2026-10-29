@@ -208,6 +208,7 @@ describe("HangarStore", () => {
           icon: "alpha.svg",
           installed: true,
           swarmReady: false,
+          routed: false,
           containerName: "alpha-app",
         },
         {
@@ -216,6 +217,7 @@ describe("HangarStore", () => {
           icon: "beta.svg",
           installed: false,
           swarmReady: false,
+          routed: false,
           containerName: "beta-app",
         },
       ]),
@@ -283,6 +285,7 @@ describe("HangarStore", () => {
           icon: "good.svg",
           installed: false,
           swarmReady: false,
+          routed: false,
           containerName: "good-app",
         },
         {
@@ -291,6 +294,7 @@ describe("HangarStore", () => {
           icon: undefined,
           installed: false,
           swarmReady: false,
+          routed: false,
           containerName: "no-metadata-app",
         },
       ]),
@@ -308,6 +312,7 @@ describe("HangarStore", () => {
       icon: "old.svg",
       installed: true,
       swarmReady: false,
+      routed: false,
       containerName: "old",
     });
 
@@ -334,6 +339,32 @@ describe("HangarStore", () => {
     expect(store.app("both-app")?.name).toBe("Both");
     expect(store.app("top-app")?.name).toBe("Top");
     expect(store.app("plain-app")?.name).toBe("Plain-app");
+  });
+
+  it("knows which apps Traefik serves, from either label syntax on the main service", async () => {
+    const store = await createStore(dataDir, createRuntime());
+    const app = (id: string) => path.join(store.storePath, "store", id);
+
+    await mkdir(path.join(store.storePath, ".git"), { recursive: true });
+    await mkdir(store.installedPath, { recursive: true });
+    await Promise.all(["list-app", "map-app", "db-app"].map(id => mkdir(app(id), { recursive: true })));
+    await Promise.all([
+      writeFile(
+        path.join(app("list-app"), "compose.yml"),
+        "services:\n  web:\n    labels:\n      - traefik.enable=true\n",
+      ),
+      writeFile(
+        path.join(app("map-app"), "compose.yml"),
+        "services:\n  web:\n    labels:\n      traefik.enable: true\n",
+      ),
+      writeFile(path.join(app("db-app"), "compose.yml"), "services:\n  db:\n    image: postgres\n"),
+    ]);
+
+    await store.refresh();
+
+    expect(store.app("list-app")?.routed).toBe(true);
+    expect(store.app("map-app")?.routed).toBe(true);
+    expect(store.app("db-app")?.routed).toBe(false);
   });
 
   it("tells which apps can run in the swarm, and which do", async () => {
@@ -364,6 +395,7 @@ describe("HangarStore", () => {
       icon: undefined,
       installed: true,
       swarmReady: false,
+      routed: false,
       containerName: "a",
     });
 
@@ -373,6 +405,7 @@ describe("HangarStore", () => {
       icon: undefined,
       installed: false,
       swarmReady: false,
+      routed: false,
       containerName: "b",
     });
 
@@ -388,6 +421,7 @@ describe("HangarStore", () => {
       icon: undefined,
       installed: true,
       swarmReady: false,
+      routed: false,
       containerName: "a",
     });
 
