@@ -8,7 +8,7 @@ import { ComposeConfirmDialog } from "#modules/apps/components/compose-operation
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
-import type { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
+import type { StoreActionResult } from "#modules/settings/actions/store-action-result.ts";
 
 /** What the button looks like in each state. Uninstalling keeps its wording and only spins. */
 const FACES = {

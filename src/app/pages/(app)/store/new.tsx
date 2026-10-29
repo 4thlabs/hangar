@@ -1,5 +1,5 @@
-import { createApp } from "#modules/store/actions/manage-app.ts";
-import { NewAppEditor } from "#modules/store/components/new-app-editor.tsx";
+import { createApp } from "#modules/apps/actions/manage-app.ts";
+import { NewAppEditor } from "#modules/apps/components/new-app-editor.tsx";
 
 /** What a store app needs for Hangar to list it: a name, an icon, a service with its container. */
 const TEMPLATE = `name: Mon app

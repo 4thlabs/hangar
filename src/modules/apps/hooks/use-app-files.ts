@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import type { AppFileResult, SaveAppFileResult } from "#modules/apps/actions/manage-app.ts";
 import type { ActionResult } from "#modules/common/actions/action-result.ts";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
-import type { AppFileResult, SaveAppFileResult } from "#modules/store/actions/manage-app.ts";
 
 const SAVE_TITLES = { success: "Fichier enregistré", error: "Fichier refusé" };
 const CREATE_TITLES = { success: "Fichier créé", error: "Fichier refusé" };

@@ -2,10 +2,10 @@ import type { PageProps } from "waku/router";
 import { unstable_notFound } from "waku/router/server";
 import { HangarError, type AppFiles } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
+import { createAppFile, readAppFile, saveAppFile } from "#modules/apps/actions/manage-app.ts";
+import { AppEditor } from "#modules/apps/components/app-editor.tsx";
+import { COMPOSE_FILE } from "#modules/apps/compose-file.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
-import { createAppFile, readAppFile, saveAppFile } from "#modules/store/actions/manage-app.ts";
-import { AppEditor } from "#modules/store/components/app-editor.tsx";
-import { COMPOSE_FILE } from "#modules/store/compose-file.ts";
 
 export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">) {
   const app = hangar.store.app(id);

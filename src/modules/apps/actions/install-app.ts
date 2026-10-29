@@ -3,9 +3,9 @@
 import { sessions } from "#libs/auth/server";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
+import { AppStacks } from "#modules/apps/app-stacks.ts";
 import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
-import { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
-import { AppStacks } from "#modules/store/app-stacks.ts";
+import { StoreActionResult } from "#modules/settings/actions/store-action-result.ts";
 
 const UNKNOWN_APP = "Cette application n’existe pas dans le store.";
 

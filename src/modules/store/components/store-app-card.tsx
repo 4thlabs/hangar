@@ -4,7 +4,7 @@ import { type HangarApp } from "#libs/hangar";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardTitle } from "#modules/common/ui/card.tsx";
-import type { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
+import type { StoreActionResult } from "#modules/settings/actions/store-action-result.ts";
 import { StoreAppButton } from "#modules/store/components/store-app-button.tsx";
 
 type StoreAppCardProps = {

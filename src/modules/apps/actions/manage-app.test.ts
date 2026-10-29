@@ -21,7 +21,7 @@ vi.mock("#libs/hangar/server", async () => {
 });
 
 const { hangar } = await import("#libs/hangar/server");
-const { saveAppFile } = await import("#modules/store/actions/manage-app.ts");
+const { saveAppFile } = await import("#modules/apps/actions/manage-app.ts");
 
 describe("saveAppFile", () => {
   const folder = () => path.join(hangar.store.storePath, "store", "delta-app");

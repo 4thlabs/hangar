@@ -28,7 +28,7 @@ vi.mock("#libs/hangar/server", async () => {
 });
 
 const { hangar } = await import("#libs/hangar/server");
-const { uninstallApp } = await import("#modules/store/actions/store-apps.ts");
+const { uninstallApp } = await import("#modules/apps/actions/install-app.ts");
 
 const CONFIG = "# The store\ncategories:\n  - name: Web\n    color: blue\n    stacks: [whoami, ready]\n";
 

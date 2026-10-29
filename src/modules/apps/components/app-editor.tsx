@@ -2,11 +2,11 @@
 
 import { SaveIcon } from "lucide-react";
 import { useRouter } from "waku";
+import { AppFileTree } from "#modules/apps/components/app-file-tree.tsx";
+import { useAppFiles, type AppFilesOptions } from "#modules/apps/hooks/use-app-files.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { CodeEditor } from "#modules/common/ui/code-editor.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
-import { AppFileTree } from "#modules/store/components/app-file-tree.tsx";
-import { useAppFiles, type AppFilesOptions } from "#modules/store/hooks/use-app-files.ts";
 
 type AppEditorProps = Omit<AppFilesOptions, "onSaved">;
 
