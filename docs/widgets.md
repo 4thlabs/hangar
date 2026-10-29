@@ -51,6 +51,7 @@ to 15 minutes.
 | [`arcane-general-stats`](#arcane-general-stats) | Arcane's view of the Docker host                | `url`, `link`, `ttl`                  |
 | [`backrest-summary`](#backrest-summary)         | Backrest repositories and their last backups    | `url`, `link`, `ttl`                  |
 | [`beszel-server-stats`](#beszel-server-stats)   | CPU, memory and disk of every Beszel system     | `url`, `link`, `ttl`                  |
+| [`forgejo-ci`](#forgejo-ci)                     | What Forgejo Actions runs, repos updated last   | `owners`, `url`, `link`, `ttl`        |
 | [`frigate-events`](#frigate-events)             | Latest camera events with thumbnails            | `url`, `link`, `ttl`                  |
 | [`gluetun-vpn-status`](#gluetun-vpn-status)     | Whether the VPN tunnel is up and where it exits | `url`, `link`, `ttl`                  |
 | [`jellyfin-latest`](#jellyfin-latest)           | Recently added movies, episodes and albums      | `user`, `url`, `link`, `ttl`          |
@@ -83,6 +84,25 @@ Key: `BACKREST_API_KEY`, sent as `X-API-Key`.
 
 Every system a [Beszel](https://beszel.dev) hub monitors, with its CPU, memory and disk usage.
 Key: a Beszel API token in `BESZEL_API_KEY`, sent as `Authorization`.
+
+### `forgejo-ci`
+
+How many repositories [Forgejo](https://forgejo.org) holds, every Actions run that is running or
+queued, and the three repositories updated last (archived ones left out). Forgejo has no
+instance-wide list of runs, so Hangar asks each repository that has Actions enabled (archived and
+empty ones excluded): one call per repository per refresh. A repository whose runs cannot be
+listed is skipped and logged.
+
+```yaml
+- { type: forgejo-ci, column: 2, url: http://forgejo:3000, owners: [thomas, 4thlabs] }
+```
+
+`owners` limits the card to the repositories of these users and organizations. Without it, the
+card covers every repository the key can see, other people's public ones included. An owner the
+key cannot see is skipped and logged.
+
+Key: a Forgejo access token in `FORGEJO_API_KEY`, sent as `Authorization: token …`, with the
+`read:repository` scope. Without one, only public repositories are counted and listed.
 
 ### `frigate-events`
 
