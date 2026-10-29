@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "waku";
 import type { SwarmStackTask } from "#libs/docker";
 import { RelativeTime } from "#libs/format";
+import { EditAppLink } from "#modules/apps/components/edit-app-link.tsx";
 import { readStackTasks, removeStack } from "#modules/cluster/actions/manage-stacks.ts";
 import { StackDeployOutput } from "#modules/cluster/components/stack-deploy-output.tsx";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
@@ -128,6 +129,7 @@ export function StackSheet({ stack, manageable, deployed, onClose }: StackSheetP
                 {deployLabel}
               </PendingButton>
             )}
+            {manageable && stack && <EditAppLink app={stack} size="sm" />}
             {manageable && deployed && (
               <Button
                 type="button"
