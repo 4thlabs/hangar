@@ -89,4 +89,21 @@ describe("HostTerminalDialog", () => {
     expect(document.querySelector('[role="dialog"]')?.hasAttribute("hidden")).toBe(false);
     expect(lifetime).toEqual({ mounts: 1, unmounts: 0 });
   });
+
+  it("opens and closes on Ctrl+J, mounting the terminal once", async () => {
+    const pressCtrlJ = () =>
+      act(async () => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "j", code: "KeyJ", ctrlKey: true, cancelable: true }));
+      });
+
+    await pressCtrlJ();
+
+    expect(document.querySelector('[role="dialog"]')?.hasAttribute("hidden")).toBe(false);
+    expect(probe()).not.toBeNull();
+
+    await pressCtrlJ();
+
+    expect(document.querySelector('[role="dialog"]')?.hasAttribute("hidden")).toBe(true);
+    expect(lifetime).toEqual({ mounts: 1, unmounts: 0 });
+  });
 });
