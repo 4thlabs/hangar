@@ -74,6 +74,15 @@ describe("filterProjects", () => {
     expect(filterProjects(projects, search({ q: "next", status: ["stopped"] }))).toEqual([]);
   });
 
+  it("leaves an app that is not installed out of the status and update filters, having neither", () => {
+    const uninstalled = { ...project("zulu", "stopped"), containerIds: [], installed: false };
+    const listed = [...projects, uninstalled];
+
+    expect(filterProjects(listed, search({ status: ["stopped"] })).map(p => p.name)).toEqual(["gitea"]);
+    expect(filterProjects(listed, search({ update: ["current"] })).map(p => p.name)).not.toContain("zulu");
+    expect(filterProjects(listed, search()).map(p => p.name)).toContain("zulu");
+  });
+
   it("leaves the caller's array untouched", () => {
     const original = [...projects];
 

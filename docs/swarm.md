@@ -102,7 +102,9 @@ deploy:
 The table lists every stack of the swarm, deployed by Hangar or not: its health, its running and
 desired replicas, and the nodes its tasks run on, with how many on each. A stack whose tasks run
 nowhere stays listed, so you can see why. Every installed app that has a `compose.swarm.yml` is listed
-too, as **Non déployée** (◌) until it runs in the swarm, as `/apps` lists an app never started.
+too, as **Non déployée** (◌) until it runs in the swarm, as `/apps` lists an app never started. With
+**Non installées** turned on, the store apps with a `compose.swarm.yml` that are not installed get a row
+as well, marked **Non installée**, with **Installer** at its end.
 
 As on `/apps`, the navbar search finds a stack by name, the column headers sort, and three menus
 filter: **Origine** (the stacks of your store apps, or the others), **Nœud** and **Santé**. The filters
@@ -333,8 +335,8 @@ the name `env` prints.
 
 Three ways, all naming the stack after the app id:
 
-- **From the Cluster page.** Install the app from the store as any other (its card shows a **Swarm**
-  badge): it then shows in the stack table as **Non déployée**. Its sheet's **Déployer** runs
+- **From the Cluster page.** Turn on **Non installées** and click **Installer** on the app's row: it
+  then shows in the stack table as **Non déployée**. Its sheet's **Déployer** runs
   `docker stack deploy` and streams its output. Its compose project, if any, is left as it is.
 - **From the CLI**, against a manager: `node bin/cli.js swarm miniflux deploy`, or `swarm deploy` for every
   app that has a `compose.swarm.yml`, in category order. See [the CLI](cli.md#swarm-target-verb-args).
@@ -344,7 +346,8 @@ Hangar's deploy waits for the services to run (`--detach=false`): it ends once e
 pulls on every node make it take a while. From the CLI, `swarm miniflux deploy --detach=true` returns as
 soon as the services are updated.
 
-Uninstalling the app from the store takes down both its compose project and its stack.
+Uninstalling the app (**Désinstaller** in its row's menu, on Apps or Cluster) takes down both its compose
+project and its stack.
 
 ## A node on WSL
 

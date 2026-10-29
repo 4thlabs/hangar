@@ -25,6 +25,11 @@ export type ComposeProjectSummary = {
   icon?: string | undefined;
   /** Category the stack belongs to in `hangar.yml`. Set by the page, like `icon`. */
   category?: { name: string; color: string } | undefined;
+  /**
+   * `false` for a store app that is not installed: a row with no container and no Docker state, its counts at zero
+   * and its status a placeholder. Set by the page, like `icon`.
+   */
+  installed?: boolean;
 };
 
 /** Response body for the "list all projects" endpoint. */

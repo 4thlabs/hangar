@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SwarmStack } from "#libs/docker";
+import { AppInstallation } from "#modules/apps/installation.ts";
 import { ClusterStacks, type ClusterStack } from "./cluster-stacks.ts";
 import { ClusterSearch, type ClusterSearchState } from "./search.ts";
 import { StackFilter } from "./stack-filter.ts";
@@ -37,6 +38,22 @@ describe("ClusterStacks.list", () => {
     expect(names(rows)).toEqual(["adguard", "broken", "kuma", "miniflux"]);
     expect(rows[0]).toEqual({ name: "adguard", health: "undeployed", running: 0, desired: 0, placement: [] });
     expect(rows.filter(ClusterStacks.isDeployed)).toHaveLength(3);
+  });
+
+  it("adds the swarm-ready store apps that are not installed, unless a stack already has their name", () => {
+    const rows = ClusterStacks.list(stacks, [], ["vault", "kuma"]);
+
+    expect(names(rows)).toEqual(["broken", "kuma", "miniflux", "vault"]);
+    expect(rows.filter(row => !AppInstallation.isInstalled(row)).map(row => row.name)).toEqual(["vault"]);
+    expect(StackFilter.origin(rows.at(-1)!, [])).toBe("hangar");
+    expect(ClusterStacks.notInstalled(stacks, ["vault", "kuma"])).toEqual(["vault"]);
+  });
+
+  it("leaves a store app that is not installed out of the health filter and its counts, having no stack", () => {
+    const rows = ClusterStacks.list(stacks, ["adguard"], ["vault"]);
+
+    expect(names(StackFilter.apply(rows, search({ health: ["undeployed"] }), ["adguard"]))).toEqual(["adguard"]);
+    expect(StackFilter.counts(rows, ["adguard"]).health.undeployed).toBe(1);
   });
 });
 

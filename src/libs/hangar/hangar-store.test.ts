@@ -409,6 +409,17 @@ describe("HangarStore", () => {
     expect(store.app("beta-app")).toMatchObject({ swarmReady: false });
   });
 
+  it("lists the apps that are not installed apart from the installed ones", async () => {
+    const store = await createStore(dataDir, createRuntime());
+    const app = { name: "", icon: undefined, swarmReady: false, routed: false, containerName: "" };
+
+    store.apps.add({ ...app, id: "a", installed: true });
+    store.apps.add({ ...app, id: "b", installed: false });
+
+    expect(store.uninstalledApps().map(entry => entry.id)).toEqual(["b"]);
+    expect(store.installedApps().map(entry => entry.id)).toEqual(["a"]);
+  });
+
   it("returns only installed app ids", async () => {
     const store = await createStore(dataDir, createRuntime());
 

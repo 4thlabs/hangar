@@ -1,10 +1,13 @@
 import { Suspense } from "react";
 import type { PageProps } from "waku/router";
+import { userPreferences } from "#libs/preferences/server";
 import { AppsContent } from "#modules/apps/components/apps-content.tsx";
 import { appsSearchCodec } from "#modules/apps/search-codec.ts";
 import { PageSpinner } from "#modules/common/components/page-spinner.tsx";
 
 export default function AppsPage({ search }: PageProps<"/apps">) {
+  const { showUninstalled } = userPreferences.get();
+
   return (
     <main>
       {/* Outside the boundary, so the tab title changes on click rather than when Docker replies. */}
@@ -12,7 +15,7 @@ export default function AppsPage({ search }: PageProps<"/apps">) {
       {/* Keyed, or Waku's unkeyed route slot reuses one boundary across routes. Constant, so a search-param change
           does not remount the boundary and flash it. Warm, the content renders inline and the spinner never shows. */}
       <Suspense key="apps" fallback={<PageSpinner />}>
-        <AppsContent search={search} />
+        <AppsContent search={search} showUninstalled={showUninstalled} />
       </Suspense>
     </main>
   );

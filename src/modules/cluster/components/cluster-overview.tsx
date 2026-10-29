@@ -5,6 +5,9 @@ import { useState, type ComponentProps } from "react";
 import { useSetSearch_UNSTABLE } from "waku/router/client";
 import type { SwarmCluster } from "#libs/docker";
 import { SwarmRules } from "#libs/docker/swarm-rules";
+import { NewAppLink } from "#modules/apps/components/new-app-link.tsx";
+import { UninstalledToggle } from "#modules/apps/components/uninstalled-toggle.tsx";
+import { useShowUninstalled } from "#modules/apps/hooks/use-show-uninstalled.ts";
 import { ClusterStacks } from "#modules/cluster/cluster-stacks.ts";
 import { ClusterEmpty } from "#modules/cluster/components/cluster-empty.tsx";
 import { NodeCard } from "#modules/cluster/components/node-card.tsx";
@@ -24,11 +27,17 @@ import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/commo
 import { Button } from "#modules/common/ui/button.tsx";
 
 /** The swarm as read, or why it could not be, and how the stack table is filtered and sorted. */
-type ClusterOverviewProps = { search: ClusterSearchState } & (
+type ClusterOverviewProps = {
+  search: ClusterSearchState;
+  /** Whether the store apps that are not installed are listed, as the server read the user's choice. */
+  showUninstalled: boolean;
+} & (
   | {
       cluster: SwarmCluster;
       /** The installed store apps with a compose.swarm.yml: Hangar deploys them, and lists them until it has. */
       manageableStacks: string[];
+      /** The store apps with a compose.swarm.yml that are not installed, listed when the user asks. */
+      uninstalledStacks: string[];
     }
   | { error: string }
 );
@@ -39,7 +48,10 @@ export function ClusterOverview(props: ClusterOverviewProps) {
   const cluster = "cluster" in props ? props.cluster : null;
   const manager = cluster?.state === "manager" ? cluster : null;
   const manageableStacks = "manageableStacks" in props ? props.manageableStacks : [];
-  const stacks = manager ? ClusterStacks.list(manager.stacks, manageableStacks) : [];
+  const uninstalledStacks = "uninstalledStacks" in props ? props.uninstalledStacks : [];
+  const [uninstalledShown, setUninstalledShown] = useShowUninstalled(props.showUninstalled);
+  const listedUninstalled = uninstalledShown ? uninstalledStacks : [];
+  const stacks = manager ? ClusterStacks.list(manager.stacks, manageableStacks, listedUninstalled) : [];
   const openRow = stacks.find(stack => stack.name === openStack);
   const setSearch = useSetSearch_UNSTABLE({ from: "/cluster" });
   const onSort = (column: StackSortColumn) => void setSearch({ sort: TableSort.next(props.search.sort, column) });
@@ -56,6 +68,7 @@ export function ClusterOverview(props: ClusterOverviewProps) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <NewAppLink />
           {manager && <TokensDialog />}
           <PendingButton
             type="button"
@@ -95,6 +108,11 @@ export function ClusterOverview(props: ClusterOverviewProps) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Stacks</h2>
             <div className="flex flex-wrap items-center gap-2">
+              <UninstalledToggle
+                shown={uninstalledShown}
+                count={ClusterStacks.notInstalled(manager.stacks, uninstalledStacks).length}
+                onChange={setUninstalledShown}
+              />
               <StackFilters nodes={manager.nodes} counts={StackFilter.counts(stacks, manageableStacks)} />
             </div>
           </div>

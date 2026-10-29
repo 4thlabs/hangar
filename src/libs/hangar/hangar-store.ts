@@ -552,6 +552,11 @@ export class HangarStore {
     return path.join(this.storePath, "store", id);
   }
 
+  /** The store apps that are not installed. */
+  uninstalledApps(): HangarApp[] {
+    return [...this.apps].filter(app => !app.installed);
+  }
+
   /** The installed apps. */
   installedApps(): HangarApp[] {
     return [...this.apps].filter(app => app.installed);

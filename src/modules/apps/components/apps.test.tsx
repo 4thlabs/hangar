@@ -13,6 +13,8 @@ vi.mock("waku/router/client", () => ({
   useSetSearch_UNSTABLE: () => () => {},
 }));
 
+vi.mock("#modules/apps/actions/install-app.ts", () => ({ installApp: vi.fn(), uninstallApp: vi.fn() }));
+
 const noSearch = { q: "", status: [], category: [], update: [], sort: null };
 
 const { AppsTable } = await import("./apps-table.tsx");
@@ -31,6 +33,17 @@ const snapshot: ComposeProjectsSnapshot = {
     },
   ],
 };
+
+/** A store app that is not installed, as the page lists it. */
+const zulu = {
+  name: "zulu",
+  status: "stopped",
+  serviceCount: 0,
+  runningCount: 0,
+  unhealthyCount: 0,
+  containerIds: [],
+  installed: false,
+} as const satisfies ComposeProjectsSnapshot["projects"][number];
 
 const container: ComposeContainer = {
   id: "a".repeat(64),
@@ -109,9 +122,49 @@ describe("Docker apps views", () => {
     expect(html.match(/<th[^>]*aria-sort[^>]*><button/g)).toHaveLength(6);
   });
 
+  it("lists the store apps that are not installed only when asked, without counting them as Docker's", () => {
+    const hidden = renderToStaticMarkup(
+      <AppsOverview snapshot={snapshot} uninstalled={[zulu]} error={null} search={noSearch} showUninstalled={false} />,
+    );
+
+    const shown = renderToStaticMarkup(
+      <AppsOverview snapshot={snapshot} uninstalled={[zulu]} error={null} search={noSearch} showUninstalled />,
+    );
+
+    expect(hidden).not.toContain("zulu");
+    expect(hidden).toContain('aria-pressed="false"');
+    expect(shown).toContain("zulu");
+    expect(shown).toContain("Non installée");
+    expect(shown).toContain("Installer");
+    // Only alpha can be picked for a compose run.
+    expect(shown).not.toContain("Sélectionner zulu");
+  });
+
+  it("still lists the store apps that are not installed when Docker is down, to install one", () => {
+    const html = renderToStaticMarkup(
+      <AppsOverview
+        snapshot={null}
+        uninstalled={[zulu]}
+        error="Socket inaccessible"
+        search={noSearch}
+        showUninstalled
+      />,
+    );
+
+    expect(html).toContain("Docker indisponible");
+    expect(html).toContain("zulu");
+    expect(html).toContain("Installer");
+  });
+
   it("renders the empty Compose inventory state", () => {
     const html = renderToStaticMarkup(
-      <AppsOverview snapshot={{ ...snapshot, projects: [] }} error={null} search={noSearch} />,
+      <AppsOverview
+        snapshot={{ ...snapshot, projects: [] }}
+        uninstalled={[]}
+        error={null}
+        search={noSearch}
+        showUninstalled={false}
+      />,
     );
 
     expect(html).toContain("Aucune application installée");
@@ -119,7 +172,15 @@ describe("Docker apps views", () => {
   });
 
   it("renders daemon errors without inventing project data", () => {
-    const html = renderToStaticMarkup(<AppsOverview snapshot={null} error="Socket inaccessible" search={noSearch} />);
+    const html = renderToStaticMarkup(
+      <AppsOverview
+        snapshot={null}
+        uninstalled={[]}
+        error="Socket inaccessible"
+        search={noSearch}
+        showUninstalled={false}
+      />,
+    );
 
     expect(html).toContain("Docker indisponible");
     expect(html).toContain("Socket inaccessible");

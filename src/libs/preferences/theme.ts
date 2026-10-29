@@ -34,9 +34,6 @@ export class Theme {
   /** The cookie holding the palette. */
   static readonly PaletteCookie = "theme_palette";
 
-  /** How long both cookies live, in seconds: a year. */
-  static readonly CookieMaxAge = 60 * 60 * 24 * 365;
-
   /**
    * Whether `value` names one of the {@link Theme.Palettes}.
    */

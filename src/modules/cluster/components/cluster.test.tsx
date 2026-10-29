@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { SwarmCluster } from "#libs/docker";
 
 vi.mock("waku", () => ({
+  Link: ({ children }: { children: ReactNode }) => <a href="/apps/new">{children}</a>,
   useRouter: () => ({ reload: async () => {} }),
 }));
 
@@ -17,12 +19,21 @@ const noSearch = { q: "", health: [], node: [], origin: [], sort: null };
 // Server actions are a module boundary the render never crosses.
 vi.mock("#modules/cluster/actions/manage-cluster.ts", () => ({}));
 vi.mock("#modules/cluster/actions/manage-stacks.ts", () => ({}));
+vi.mock("#modules/apps/actions/install-app.ts", () => ({}));
 
 const { managerView, swarmNodeView: node } = await import("#libs/docker/mock");
 const { ClusterOverview } = await import("./cluster-overview.tsx");
 
 const render = (cluster: SwarmCluster) =>
-  renderToStaticMarkup(<ClusterOverview cluster={cluster} manageableStacks={[]} search={noSearch} />);
+  renderToStaticMarkup(
+    <ClusterOverview
+      cluster={cluster}
+      manageableStacks={[]}
+      uninstalledStacks={[]}
+      search={noSearch}
+      showUninstalled={false}
+    />,
+  );
 
 const manager = managerView({
   managers: 2,
@@ -81,7 +92,13 @@ describe("ClusterOverview", () => {
 
   it("lists each stack once, with its replicas and where its tasks run, the idle ones included", () => {
     const html = renderToStaticMarkup(
-      <ClusterOverview cluster={manager} manageableStacks={["miniflux"]} search={noSearch} />,
+      <ClusterOverview
+        cluster={manager}
+        manageableStacks={["miniflux"]}
+        uninstalledStacks={[]}
+        search={noSearch}
+        showUninstalled={false}
+      />,
     );
 
     expect(html.match(/>miniflux</g)).toHaveLength(1);
@@ -95,12 +112,29 @@ describe("ClusterOverview", () => {
 
   it("lists an installed swarm-ready app no stack runs yet, to deploy it from its sheet", () => {
     const html = renderToStaticMarkup(
-      <ClusterOverview cluster={manager} manageableStacks={["miniflux", "adguard"]} search={noSearch} />,
+      <ClusterOverview
+        cluster={manager}
+        manageableStacks={["miniflux", "adguard"]}
+        uninstalledStacks={[]}
+        search={noSearch}
+        showUninstalled={false}
+      />,
     );
 
     expect(html).toContain(">adguard<");
     expect(html).toContain("◌");
     expect(html).toContain("Non déployée");
+  });
+
+  it("lists the swarm-ready store apps that are not installed only when asked, to install them", () => {
+    const props = { cluster: manager, manageableStacks: ["miniflux"], uninstalledStacks: ["vault"], search: noSearch };
+    const hidden = renderToStaticMarkup(<ClusterOverview {...props} showUninstalled={false} />);
+    const shown = renderToStaticMarkup(<ClusterOverview {...props} showUninstalled />);
+
+    expect(hidden).not.toContain("vault");
+    expect(shown).toContain("vault");
+    expect(shown).toContain("Non installée");
+    expect(shown).toContain("Installer");
   });
 
   it("shows an unreachable, drained worker for what it is", () => {
@@ -160,14 +194,22 @@ describe("ClusterOverview", () => {
 
   it("says so when the filters keep no stack", () => {
     const html = renderToStaticMarkup(
-      <ClusterOverview cluster={manager} manageableStacks={[]} search={{ ...noSearch, health: ["running"] }} />,
+      <ClusterOverview
+        cluster={manager}
+        manageableStacks={[]}
+        uninstalledStacks={[]}
+        search={{ ...noSearch, health: ["running"] }}
+        showUninstalled={false}
+      />,
     );
 
     expect(html).toContain("Aucune stack ne correspond à ces filtres.");
   });
 
   it("offers a retry when the daemon fails", () => {
-    const html = renderToStaticMarkup(<ClusterOverview error="Le daemon Docker ne répond pas." search={noSearch} />);
+    const html = renderToStaticMarkup(
+      <ClusterOverview error="Le daemon Docker ne répond pas." search={noSearch} showUninstalled={false} />,
+    );
 
     expect(html).toContain("Swarm indisponible");
     expect(html).toContain("Réessayer");

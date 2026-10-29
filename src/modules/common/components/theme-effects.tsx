@@ -4,12 +4,7 @@ import { useAtomValue } from "jotai";
 import { useLayoutEffect } from "react";
 import { Theme, type ColorMode } from "#libs/preferences";
 import { colorModeAtom, themePaletteAtom } from "#modules/common/atoms/theme.ts";
-
-function persistPreference(name: string, value: string) {
-  const secure = window.location.protocol === "https:" ? "; secure" : "";
-
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${Theme.CookieMaxAge}; samesite=lax${secure}`;
-}
+import { PreferenceCookie } from "#modules/common/preference-cookie.ts";
 
 function applyColorMode(mode: ColorMode, prefersDark: boolean) {
   const root = document.documentElement;
@@ -25,7 +20,7 @@ export function ThemeEffects() {
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = palette;
-    persistPreference(Theme.PaletteCookie, palette);
+    PreferenceCookie.write(Theme.PaletteCookie, palette);
   }, [palette]);
 
   useLayoutEffect(() => {
@@ -33,7 +28,7 @@ export function ThemeEffects() {
     const applySystemPreference = () => applyColorMode(mode, colorScheme.matches);
 
     applySystemPreference();
-    persistPreference(Theme.ColorModeCookie, mode);
+    PreferenceCookie.write(Theme.ColorModeCookie, mode);
 
     if (mode !== "system") {
       return;

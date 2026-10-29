@@ -10,9 +10,23 @@ import { AppsSnapshot } from "#modules/apps/snapshots.ts";
  * the cached read rather than awaiting it: warm, React renders it at once. Errors render in AppsOverview (with
  * retry), not the route error boundary.
  */
-export function AppsContent({ search }: { search: AppsSearch }): Promise<ReactNode> {
+type AppsContentProps = {
+  search: AppsSearch;
+  /** Whether the store apps that are not installed are listed, as the user last chose. */
+  showUninstalled: boolean;
+};
+
+export function AppsContent({ search, showUninstalled }: AppsContentProps): Promise<ReactNode> {
+  const uninstalled = AppsSnapshot.uninstalled();
+
   const overview = map(AppsSnapshot.load(), snapshot => (
-    <AppsOverview snapshot={snapshot} error={null} search={search} />
+    <AppsOverview
+      snapshot={snapshot}
+      uninstalled={uninstalled}
+      error={null}
+      search={search}
+      showUninstalled={showUninstalled}
+    />
   ));
 
   return recover(overview, (error: unknown) => {
@@ -21,8 +35,10 @@ export function AppsContent({ search }: { search: AppsSearch }): Promise<ReactNo
     return (
       <AppsOverview
         snapshot={null}
+        uninstalled={uninstalled}
         error="Le daemon Docker est indisponible. Vérifiez le socket et ses permissions."
         search={search}
+        showUninstalled={showUninstalled}
       />
     );
   });

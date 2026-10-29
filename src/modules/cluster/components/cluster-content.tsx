@@ -11,9 +11,26 @@ import type { ClusterSearchState } from "#modules/cluster/search.ts";
  * than awaiting it, as `AppsContent` does. A manager that lost its quorum fails the read: that renders in
  * ClusterOverview, with retry.
  */
-export function ClusterContent({ search }: { search: ClusterSearchState }): Promise<ReactNode> {
+type ClusterContentProps = {
+  search: ClusterSearchState;
+  /** Whether the store apps that are not installed are listed, as the user last chose. */
+  showUninstalled: boolean;
+};
+
+export function ClusterContent({ search, showUninstalled }: ClusterContentProps): Promise<ReactNode> {
+  const uninstalledStacks = hangar.store
+    .uninstalledApps()
+    .filter(app => app.swarmReady)
+    .map(app => app.id);
+
   const overview = map(swarm.cluster(), cluster => (
-    <ClusterOverview cluster={cluster} manageableStacks={hangar.store.manageableStacks()} search={search} />
+    <ClusterOverview
+      cluster={cluster}
+      manageableStacks={hangar.store.manageableStacks()}
+      uninstalledStacks={uninstalledStacks}
+      search={search}
+      showUninstalled={showUninstalled}
+    />
   ));
 
   return recover(overview, (error: unknown) => {
@@ -22,6 +39,7 @@ export function ClusterContent({ search }: { search: ClusterSearchState }): Prom
     return (
       <ClusterOverview
         search={search}
+        showUninstalled={showUninstalled}
         error="Le daemon Docker ne répond pas pour le swarm. Vérifiez le socket, ou que le cluster a encore un leader."
       />
     );

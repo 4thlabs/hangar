@@ -48,7 +48,7 @@ services:
 - **`x-hangar.name`** is only a label. The Compose project is always the app id (`-p <app>`), so the
   containers keep matching the installed app whatever the display name says. A top-level `name` still
   works, but Swarm rejects it: an app with a `compose.swarm.yml` must use `x-hangar.name`.
-- **`x-hangar.icon`** is the image shown in the store and on the Apps page.
+- **`x-hangar.icon`** is the image shown on the Apps page and in the search palette.
   [selfh.st/icons](https://selfh.st/icons) has one for most self-hosted software.
 - **`container_name`** of the main service is what Hangar links to (`https://<container>.<DOMAIN>`)
   and what widgets look up their API key under.
@@ -56,8 +56,11 @@ services:
 Every compose call passes `--env-file <data>/.env.global`, so the file can reference any variable
 defined there.
 
-You can also create and edit apps from the browser: **Store → Nouvelle app** starts from a template,
-and each app has an edit page. A file is written only once `docker compose config` accepts it.
+You can also create and edit apps from the browser: **Nouvelle app**, on the Apps and Cluster pages,
+starts from a template, and **Modifier**, in the menu of an app's row, opens its edit page
+(`/apps/<id>/edit`), installed or not. Turn on **Non installées** to see the apps you have not
+installed: their row offers **Installer**, and an installed app's menu offers **Désinstaller**. The
+toggle is remembered in a cookie, on Apps and Cluster alike. A file is written only once `docker compose config` accepts it.
 Edits land in your local clone; commit and push them from there if you want them in the remote.
 
 ## An app's `compose.swarm.yml`
@@ -98,8 +101,8 @@ What Swarm accepts in the `compose.yml` it merges over:
 - A bind mount (`${APP_DATA_DIR}/miniflux/db`) must exist on whichever node runs the task: pin the
   service with a placement constraint, mount the same share on every node, or use an `nfs` volume.
 
-The store card of such an app shows a **Swarm** badge. Once installed, the app shows on the Cluster
-page, which deploys its stack (see [Docker Swarm](swarm.md#deploy-it)). Compose and Swarm are independent: the app can run with compose
+Such an app shows on the Cluster page with **Non installées** turned on, to install it there. Once
+installed, it stays on the Cluster page, which deploys its stack (see [Docker Swarm](swarm.md#deploy-it)). Compose and Swarm are independent: the app can run with compose
 on Hangar's node and in the swarm at the same time, and deploying one never touches the other. Mind
 the volumes both copies would share. Uninstalling the app takes both down. Deploying by hand works as well, from the CLI (`swarm miniflux deploy`) or with
 `docker stack deploy`; the stack then shows on the Cluster page all the same. Hangar names the stack

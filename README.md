@@ -37,7 +37,8 @@ Compose files in a git repository you own — and adds what is tedious to do by 
   Hangar clones it, links the apps you install, and runs `docker compose` against them.
 - **Apps at a glance.** Status, containers, live logs and stats for every installed stack, with
   up (with pull and force-recreate as options), restart and down one click away and their output
-  streamed as they run.
+  streamed as they run. A toggle lists the store apps you have not installed, to install or edit them
+  from the same table.
 - **A terminal in each container.** A shell in any running container, beside its logs, without an
   SSH session and a `docker exec -it`.
 - **A terminal on the server.** The terminal in the header opens a shell on the host over SSH, asking for

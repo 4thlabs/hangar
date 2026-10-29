@@ -1,4 +1,5 @@
 import type { ComposeProjectSummary } from "#libs/docker";
+import { AppInstallation } from "#modules/apps/installation.ts";
 import {
   APP_STATUSES,
   type AppSortColumn,
@@ -27,6 +28,7 @@ export const updateState = (project: ComposeProjectSummary): AppUpdate =>
 /**
  * Narrows the app list to the selected categories, statuses and update states, then to the query.
  * An empty list means no filter on that dimension; a stack in no `hangar.yml` category only shows up unfiltered.
+ * An app that is not installed has no status nor image, so a status or an update filter leaves it out.
  */
 export function filterProjects(
   projects: ComposeProjectSummary[],
@@ -37,9 +39,15 @@ export function filterProjects(
       ? projects
       : projects.filter(project => project.category && category.includes(project.category.name));
 
-  const matching = status.length === 0 ? classified : classified.filter(project => status.includes(project.status));
+  const matching =
+    status.length === 0
+      ? classified
+      : classified.filter(project => AppInstallation.isInstalled(project) && status.includes(project.status));
 
-  const fresh = update.length === 0 ? matching : matching.filter(project => update.includes(updateState(project)));
+  const fresh =
+    update.length === 0
+      ? matching
+      : matching.filter(project => AppInstallation.isInstalled(project) && update.includes(updateState(project)));
 
   const found = searchByName(q, fresh);
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Theme } from "../theme.ts";
+import { UninstalledApps } from "../uninstalled-apps.ts";
 import { UserPreferencesStore } from "./user-preferences.ts";
 
 describe("UserPreferencesStore", () => {
@@ -7,6 +8,7 @@ describe("UserPreferencesStore", () => {
     expect(UserPreferencesStore.parse("")).toEqual({
       theme: "system",
       themePalette: "claude",
+      showUninstalled: false,
     });
   });
 
@@ -14,7 +16,14 @@ describe("UserPreferencesStore", () => {
     expect(UserPreferencesStore.parse("theme=dark; theme_palette=nord")).toEqual({
       theme: "dark",
       themePalette: "nord",
+      showUninstalled: false,
     });
+  });
+
+  it("reads whether the store apps that are not installed are shown", () => {
+    expect(UserPreferencesStore.parse("show_uninstalled=1").showUninstalled).toBe(true);
+    expect(UserPreferencesStore.parse("show_uninstalled=0").showUninstalled).toBe(false);
+    expect(UserPreferencesStore.parse("").showUninstalled).toBe(UninstalledApps.DefaultShown);
   });
 
   // Driven off the tuple so a new palette is covered without a new test.
@@ -30,11 +39,12 @@ describe("UserPreferencesStore", () => {
     expect(UserPreferencesStore.parse("theme=blue; theme_palette=unknown")).toEqual({
       theme: "system",
       themePalette: "claude",
+      showUninstalled: false,
     });
   });
 
   it("exposes preferences only within the intercepted request", async () => {
-    const preferences = { theme: "light", themePalette: "nord" } as const;
+    const preferences = { theme: "light", themePalette: "nord", showUninstalled: true } as const;
 
     const store = new UserPreferencesStore();
 
@@ -45,6 +55,7 @@ describe("UserPreferencesStore", () => {
     expect(store.get()).toEqual({
       theme: "system",
       themePalette: "claude",
+      showUninstalled: false,
     });
   });
 });

@@ -1,7 +1,9 @@
+import { AppInstallation } from "#modules/apps/installation.ts";
 import type { ClusterStack } from "#modules/cluster/cluster-stacks.ts";
 import {
   ClusterSearch,
   type ClusterSearchState,
+  type StackHealth,
   type StackOrigin,
   type StackSortColumn,
 } from "#modules/cluster/search.ts";
@@ -33,7 +35,7 @@ export class StackFilter {
   static apply(stacks: readonly ClusterStack[], search: ClusterSearchState, manageable: readonly string[]) {
     const kept = stacks.filter(
       stack =>
-        StackFilter.matches(search.health, stack.health) &&
+        StackFilter.matchesHealth(search.health, stack) &&
         StackFilter.runsOnAny(stack, search.node) &&
         StackFilter.matches(search.origin, StackFilter.origin(stack, manageable)),
     );
@@ -47,7 +49,7 @@ export class StackFilter {
   /** How many stacks fall under each option of each filter, over every stack. */
   static counts(stacks: readonly ClusterStack[], manageable: readonly string[]): StackFilterCounts {
     return {
-      health: countBy(stacks, stack => stack.health),
+      health: countBy(stacks.filter(AppInstallation.isInstalled), stack => stack.health),
       node: countBy(
         stacks.flatMap(stack => stack.placement),
         place => place.hostname,
@@ -56,8 +58,14 @@ export class StackFilter {
     };
   }
 
+  /** A store app comes from Hangar whether it is installed or not. */
   static origin(stack: ClusterStack, manageable: readonly string[]): StackOrigin {
-    return manageable.includes(stack.name) ? "hangar" : "other";
+    return !AppInstallation.isInstalled(stack) || manageable.includes(stack.name) ? "hangar" : "other";
+  }
+
+  /** A store app not installed has no health in the swarm, so a health filter leaves it out, as `/apps` does. */
+  private static matchesHealth(selected: readonly StackHealth[], stack: ClusterStack) {
+    return selected.length === 0 || (AppInstallation.isInstalled(stack) && selected.includes(stack.health));
   }
 
   /** An empty selection is no filter. */

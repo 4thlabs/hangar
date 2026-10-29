@@ -1,17 +1,20 @@
 import { Suspense } from "react";
 import type { PageProps } from "waku/router";
+import { userPreferences } from "#libs/preferences/server";
 import { ClusterContent } from "#modules/cluster/components/cluster-content.tsx";
 import { ClusterSearch } from "#modules/cluster/search.ts";
 import { PageSpinner } from "#modules/common/components/page-spinner.tsx";
 
 export default function ClusterPage({ search }: PageProps<"/cluster">) {
+  const { showUninstalled } = userPreferences.get();
+
   return (
     <main>
       {/* Outside the boundary, so the tab title changes on click rather than when Docker replies. */}
       <title>Cluster | Hangar</title>
       {/* Keyed, or Waku's unkeyed route slot reuses one boundary across routes. */}
       <Suspense key="cluster" fallback={<PageSpinner />}>
-        <ClusterContent search={search} />
+        <ClusterContent search={search} showUninstalled={showUninstalled} />
       </Suspense>
     </main>
   );

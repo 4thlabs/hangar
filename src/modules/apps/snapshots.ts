@@ -1,12 +1,23 @@
 import { all, map } from "#libs/cache";
-import { Docker, type ComposeProjectsSnapshot } from "#libs/docker";
+import { Docker, type ComposeProjectsSnapshot, type ComposeProjectSummary } from "#libs/docker";
 import { docker } from "#libs/docker/server";
 import type { Category } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
 import { imageCheckReport } from "#libs/jobs/server";
 
-/** What /apps shows of the Docker snapshot, once the store has added what only it knows. */
+/** What /apps shows: the Docker snapshot, once the store has added what only it knows, and the apps not installed. */
 export class AppsSnapshot {
+  /** What Docker would say of an app that is not installed: nothing runs, nothing to count. */
+  private static readonly Uninstalled = {
+    status: "stopped",
+    serviceCount: 0,
+    runningCount: 0,
+    unhealthyCount: 0,
+    containerIds: [],
+    updateAvailable: false,
+    installed: false,
+  } as const satisfies Partial<ComposeProjectSummary>;
+
   /**
    * Everything /apps renders.
    */
@@ -27,6 +38,21 @@ export class AppsSnapshot {
   }
 
   /**
+   * The store apps that are not installed, one row each with no Docker state. Read from the store alone, so they
+   * stay listed, and installable, while the daemon is down.
+   */
+  static uninstalled(): ComposeProjectSummary[] {
+    const categories = hangar.store.config.categories();
+
+    return hangar.store.uninstalledApps().map(app => ({
+      ...AppsSnapshot.Uninstalled,
+      name: app.id,
+      icon: app.icon,
+      category: AppsSnapshot.category(categories, app.id),
+    }));
+  }
+
+  /**
    * Decorates the Docker snapshot with what only the store knows: the update badge, the icon and
    * the category. Pure, because {@link AppsSnapshot.load} runs it on every read.
    */
@@ -39,6 +65,7 @@ export class AppsSnapshot {
         updateAvailable: outdated.has(project.name),
         icon: hangar.store.app(project.name)?.icon,
         category: AppsSnapshot.category(categories, project.name),
+        installed: true,
       })),
     };
   }

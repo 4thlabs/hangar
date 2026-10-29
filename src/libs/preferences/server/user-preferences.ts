@@ -1,10 +1,13 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import * as cookie from "cookie";
 import { Theme, type ColorMode, type ThemePalette } from "../theme.ts";
+import { UninstalledApps } from "../uninstalled-apps.ts";
 
 export type UserPreferences = {
   theme: ColorMode;
   themePalette: ThemePalette;
+  /** Whether Apps and Cluster list the store apps that are not installed. */
+  showUninstalled: boolean;
 };
 
 /**
@@ -16,6 +19,7 @@ export class UserPreferencesStore {
   private static readonly Defaults: UserPreferences = {
     theme: Theme.DefaultColorMode,
     themePalette: Theme.DefaultPalette,
+    showUninstalled: UninstalledApps.DefaultShown,
   };
 
   /** The preferences of the request in flight. */
@@ -33,6 +37,7 @@ export class UserPreferencesStore {
     return {
       theme: Theme.isColorMode(theme) ? theme : Theme.DefaultColorMode,
       themePalette: Theme.isPalette(themePalette) ? themePalette : Theme.DefaultPalette,
+      showUninstalled: UninstalledApps.parse(cookies[UninstalledApps.Cookie]),
     };
   }
 
