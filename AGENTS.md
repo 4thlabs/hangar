@@ -12,7 +12,7 @@
 
 ## Modules under `src/modules`
 
-- One module per page domain (`apps`, `store`, `settings`, `auth`, `notifications`, `widgets`
+- One module per page domain (`apps`, `cluster`, `settings`, `auth`, `notifications`, `widgets`
   for the dashboard), holding its `actions/`, `components/`, `hooks/` and plain `.ts` helpers at
   its root. Shared code and the app shell (shadcn `ui/`, navbar, providers, theme atoms) live in
   `common`. `spotlight` is the search palette: its engine and the list of its sources; each source

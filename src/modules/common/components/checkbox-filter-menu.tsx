@@ -27,7 +27,7 @@ type CheckboxFilterMenuProps = {
   onChange: (selected: string[]) => void;
 };
 
-/** A multi-select filter as a dropdown of checkboxes, shared by the apps and store filters; empty = no filter. */
+/** A multi-select filter as a dropdown of checkboxes, shared by the apps and cluster filters; empty = no filter. */
 export function CheckboxFilterMenu({ label, options, selected, onChange }: CheckboxFilterMenuProps) {
   const toggle = (value: string, checked: boolean) =>
     // Rebuilt from `options` so the selection keeps a stable order whatever the click order.
