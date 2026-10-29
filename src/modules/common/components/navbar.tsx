@@ -24,6 +24,8 @@ import { Tabs, TabsList, TabsTrigger } from "#modules/common/ui/tabs.tsx";
 import { toast } from "#modules/common/ui/toast.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
 import { NotificationsMenu } from "#modules/notifications/components/notifications-menu.tsx";
+import { SpotlightButton } from "#modules/spotlight/components/spotlight-button.tsx";
+import { SpotlightPalette } from "#modules/spotlight/components/spotlight-palette.tsx";
 
 type AppNavbarProps = {
   user: AvatarUser;
@@ -199,6 +201,9 @@ export function AppNavbar({ user, notifications, terminal }: AppNavbarProps) {
       <div className="relative grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 sm:grid-cols-[minmax(max-content,1fr)_minmax(0,32rem)_minmax(max-content,1fr)] sm:gap-4 sm:px-4">
         <div className="col-start-1 flex h-full items-center justify-start gap-2">
           <MobileSearch />
+          {/* On the left at every width: on a phone the right-hand cluster has no room left, the centred brand
+              would cover it. */}
+          <SpotlightButton />
           <Brand />
           <DesktopNavigation />
         </div>
@@ -216,6 +221,8 @@ export function AppNavbar({ user, notifications, terminal }: AppNavbarProps) {
           <UserMenu user={user} />
         </div>
       </div>
+      {/* Outside the grid, and in the one tree both layouts share: its shortcuts listen once. */}
+      <SpotlightPalette />
     </header>
   );
 }

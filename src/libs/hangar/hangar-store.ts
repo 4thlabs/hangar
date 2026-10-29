@@ -20,12 +20,20 @@ export type HangarApp = {
   swarmReady: boolean;
   /** The container the app's own service declares, which Traefik routes `<container>.<DOMAIN>` to. */
   containerName: string;
+  /** Whether that service sets `traefik.enable=true`, so `<container>.<DOMAIN>` actually serves it. */
+  routed: boolean;
 };
+
+/** The part of a compose service the store reads. `labels` comes as a list or as a map, as Compose allows both. */
+type ComposeService = { container_name?: string; labels?: string[] | Record<string, unknown> };
 
 /** The app store on disk: its stacks, the installed links, and the compose commands over them. */
 export class HangarStore {
   /** Run order per compose command: 1 in stack order, -1 in reverse, absent means parallel */
   static readonly CommandOrder: Record<string, number> = { up: 1, start: 1, restart: 1, down: -1, stop: -1 };
+
+  /** The label a service sets to `true` to be served at `<container>.<DOMAIN>`. */
+  private static readonly TraefikLabel = "traefik.enable";
 
   /** Commands that address the whole store instead of a single stack */
   static readonly GlobalCommand = ["up", "down", "pull"];
@@ -540,6 +548,11 @@ export class HangarStore {
     return path.join(this.storePath, "store", id);
   }
 
+  /** The installed apps. */
+  installedApps(): HangarApp[] {
+    return [...this.apps].filter(app => app.installed);
+  }
+
   /** The ids of the installed apps. */
   installedProjectIds(): Set<string> {
     return new Set([...this.apps].flatMap(app => (app.installed ? [app.id] : [])));
@@ -564,7 +577,7 @@ export class HangarStore {
             const source = await readFile(path.join(this.storePath, "store", app, AppFiles.ComposeFile), "utf8");
             const yaml = load(source, { filename: AppFiles.ComposeFile }) as Record<string, unknown> | undefined;
             const metadata = yaml?.["x-hangar"] as { name?: string; icon?: string } | undefined;
-            const services = (yaml?.["services"] ?? {}) as Record<string, { container_name?: string } | undefined>;
+            const services = (yaml?.["services"] ?? {}) as Record<string, ComposeService | undefined>;
 
             // The main service is the one named after the app, else the first declared.
             const service = services[app] ?? Object.values(services)[0];
@@ -577,6 +590,7 @@ export class HangarStore {
               installed: installed.indexOf(app) !== -1,
               swarmReady: await HangarStore.hasContent(path.join(this.storePath, "store", app, AppFiles.SwarmFile)),
               containerName: service?.container_name ?? app,
+              routed: HangarStore.isRouted(service),
             });
           } catch (error) {
             logger.warn("Skipping store app: its compose.yml could not be read", { error, app });
@@ -599,6 +613,17 @@ export class HangarStore {
   }
 
   /** Whether the compose args ask for detached mode. */
+  /** Whether a service opts in to Traefik, in either label syntax. */
+  private static isRouted(service: ComposeService | undefined) {
+    const labels = service?.labels;
+
+    if (Array.isArray(labels)) {
+      return labels.includes(`${HangarStore.TraefikLabel}=true`);
+    }
+
+    return String(labels?.[HangarStore.TraefikLabel]) === "true";
+  }
+
   private static detached(args: string[]) {
     return args.includes("-d") || args.includes("--detach");
   }

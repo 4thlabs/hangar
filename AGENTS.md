@@ -15,7 +15,8 @@
 - One module per page domain (`apps`, `store`, `settings`, `auth`, `notifications`, `widgets`
   for the dashboard), holding its `actions/`, `components/`, `hooks/` and plain `.ts` helpers at
   its root. Shared code and the app shell (shadcn `ui/`, navbar, providers, theme atoms) live in
-  `common`.
+  `common`. `spotlight` is the search palette: its engine and the list of its sources; each source
+  sits in the module of its domain (`apps/spotlight-source.ts`).
 - An action belongs to the module whose page calls it. A module may import another directly.
 - Import deeply through `#modules/…` (the existing `#*` rule), with the extension. No barrel: one
   re-exporting both `"use server"` and `"use client"` files drags server code into client bundles.
