@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { AppLink } from "#libs/hangar/link";
 import type { WidgetBody } from "../shared/define-widget.tsx";
 
 // What a widget descriptor is built from. No JSX: the CLI parses `hangar.yml` through the descriptors.
@@ -156,7 +157,7 @@ export class WidgetService {
     }
 
     const container = host.containerName(descriptor.app);
-    const link = config.link ?? `https://${container}.${host.domain}`;
+    const link = config.link ?? AppLink.url(container, host.domain);
 
     return new WidgetService({ link, api: config.url ?? link, apiKey: () => host.secret(container) });
   }
