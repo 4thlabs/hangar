@@ -8,6 +8,10 @@ import type { getConfig as File_AppApps_getConfig } from './pages/(app)/apps';
 // prettier-ignore
 import type { getConfig as File_AppAppsProject_getConfig } from './pages/(app)/apps/[project]';
 // prettier-ignore
+import type { getConfig as File_AppAppsProjectEdit_getConfig } from './pages/(app)/apps/[project]/edit';
+// prettier-ignore
+import type { getConfig as File_AppAppsNew_getConfig } from './pages/(app)/apps/new';
+// prettier-ignore
 import type { getConfig as File_AppCluster_getConfig } from './pages/(app)/cluster';
 // prettier-ignore
 import type { getConfig as File_AppIndex_getConfig } from './pages/(app)/index';
@@ -32,6 +36,8 @@ import type { getConfig as File_Root_getConfig } from './pages/_root';
 type Page =
 | ({ path: '/apps' } & GetConfigResponse<typeof File_AppApps_getConfig>)
 | ({ path: '/apps/[project]' } & GetConfigResponse<typeof File_AppAppsProject_getConfig>)
+| ({ path: '/apps/[project]/edit' } & GetConfigResponse<typeof File_AppAppsProjectEdit_getConfig>)
+| ({ path: '/apps/new' } & GetConfigResponse<typeof File_AppAppsNew_getConfig>)
 | ({ path: '/cluster' } & GetConfigResponse<typeof File_AppCluster_getConfig>)
 | ({ path: '/' } & GetConfigResponse<typeof File_AppIndex_getConfig>)
 | ({ path: '/settings' } & GetConfigResponse<typeof File_AppSettings_getConfig>)

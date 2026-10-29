@@ -3,6 +3,7 @@
 import { CpuIcon, HardDriveIcon, MemoryStickIcon, NetworkIcon } from "lucide-react";
 import { Link } from "waku";
 import type { ComposeProjectDetail } from "#libs/docker";
+import { EditAppLink } from "#modules/apps/components/edit-app-link.tsx";
 import { ProjectActions } from "#modules/apps/components/project-actions.tsx";
 import { ServiceCard } from "#modules/apps/components/service-card.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
@@ -71,7 +72,10 @@ export function AppDetail({ detail }: { detail: ComposeProjectDetail }) {
             conteneurs actifs
           </p>
         </div>
-        <ProjectActions project={detail.name} />
+        <div className="flex flex-wrap items-center gap-2">
+          <EditAppLink app={detail.name} />
+          <ProjectActions project={detail.name} />
+        </div>
       </div>
 
       <AppLiveStats detail={detail} />

@@ -25,7 +25,7 @@ export function NewAppEditor({ source, create }: NewAppEditorProps) {
     save: value => create(id, value),
     titles: { success: "Application enregistrée", error: "Application refusée" },
     // The new app gets its own editor, so a second save edits it instead of re-creating it.
-    onSaved: () => router.push(`/store/${id}/edit`),
+    onSaved: () => router.push({ to: "/apps/[project]/edit", params: { project: id } }),
     className: "h-[65vh]",
   });
 

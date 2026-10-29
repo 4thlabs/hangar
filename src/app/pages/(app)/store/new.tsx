@@ -1,25 +1,8 @@
-import { createApp } from "#modules/apps/actions/manage-app.ts";
-import { NewAppEditor } from "#modules/apps/components/new-app-editor.tsx";
+import { unstable_redirect } from "waku/router/server";
 
-/** What a store app needs for Hangar to list it: a name, an icon, a service with its container. */
-const TEMPLATE = `name: Mon app
-x-hangar:
-  icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/docker.webp
-services:
-  mon-app:
-    image: nginx:latest
-    container_name: mon-app
-    restart: unless-stopped
-`;
-
-export default function NewAppPage() {
-  return (
-    <main>
-      <title>Nouvelle app | Hangar</title>
-      <h1 className="text-2xl font-semibold">Nouvelle app</h1>
-      <NewAppEditor source={TEMPLATE} create={createApp} />
-    </main>
-  );
+/** The page moved to /apps/new with the Store page's removal; links and bookmarks still lead there. */
+export default function StoreNewAppRedirect() {
+  unstable_redirect("/apps/new", 308);
 }
 
 export const getConfig = async () => {

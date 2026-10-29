@@ -21,7 +21,7 @@ vi.mock("#libs/hangar/server", async () => {
 });
 
 const { hangar } = await import("#libs/hangar/server");
-const { saveAppFile } = await import("#modules/apps/actions/manage-app.ts");
+const { createApp, saveAppFile } = await import("#modules/apps/actions/manage-app.ts");
 
 describe("saveAppFile", () => {
   const folder = () => path.join(hangar.store.storePath, "store", "delta-app");
@@ -62,5 +62,12 @@ describe("saveAppFile", () => {
       success: false,
       composeChanged: false,
     });
+  });
+});
+
+describe("createApp", () => {
+  it("refuses the id of the page that creates apps, which would leave the app without a page", async () => {
+    await expect(createApp("new", "name: New\nservices: {}\n")).resolves.toMatchObject({ success: false });
+    await expect(hangar.store.files("new")).rejects.toThrow();
   });
 });

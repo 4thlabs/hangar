@@ -180,6 +180,29 @@ describe("HangarStore", () => {
     expect([...store.apps].map(app => app.id)).toEqual(["alpha-app"]);
   });
 
+  it("skips a folder whose name is reserved for a page, as `new` is for /apps/new", async () => {
+    const store = await createStore(dataDir, createRuntime());
+    const alphaApp = path.join(store.storePath, "store", "alpha-app");
+    const newApp = path.join(store.storePath, "store", "new");
+
+    await Promise.all([
+      mkdir(path.join(store.storePath, ".git"), { recursive: true }),
+      mkdir(alphaApp, { recursive: true }),
+      mkdir(newApp, { recursive: true }),
+      mkdir(store.installedPath, { recursive: true }),
+    ]);
+
+    await Promise.all([
+      writeFile(path.join(alphaApp, "compose.yml"), "services: {}\n"),
+      writeFile(path.join(newApp, "compose.yml"), "services: {}\n"),
+    ]);
+
+    await store.refresh();
+
+    expect([...store.apps].map(app => app.id)).toEqual(["alpha-app"]);
+    await expect(store.createApp("new", "services: {}\n")).rejects.toThrow("reserved");
+  });
+
   it("refreshes app metadata and installation state from disk", async () => {
     const store = await createStore(dataDir, createRuntime());
     const alphaApp = path.join(store.storePath, "store", "alpha-app");

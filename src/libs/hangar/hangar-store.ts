@@ -541,6 +541,10 @@ export class HangarStore {
 
   /** The folder of a store app, once its id is known not to escape `store/`. */
   private stackPath(id: string) {
+    if (AppId.isReserved(id)) {
+      throw new HangarError(`${id} is reserved: /apps/${id} is a page of Hangar, pick another id`);
+    }
+
     if (!AppId.isValid(id)) {
       throw new HangarError(`Invalid app id: ${id}`);
     }
@@ -558,6 +562,17 @@ export class HangarStore {
     return new Set([...this.apps].flatMap(app => (app.installed ? [app.id] : [])));
   }
 
+  /** Whether a folder under `store/` can be an app: a reserved or malformed name is skipped, with a warning. */
+  private isAppFolder(entry: string) {
+    if (AppId.isValid(entry)) {
+      return true;
+    }
+
+    logger.warn("Skipping store app: its folder name is not a valid app id", { app: entry, reserved: AppId.Reserved });
+
+    return false;
+  }
+
   /** Reloads `hangar.yml` and every app's compose file. */
   async refresh() {
     this.apps.clear();
@@ -567,7 +582,7 @@ export class HangarStore {
 
       const shared = this.config.shared();
       const entries = await readdir(path.join(this.storePath, "store"), { recursive: false });
-      const apps = entries.filter(entry => !shared.includes(entry));
+      const apps = entries.filter(entry => !shared.includes(entry) && this.isAppFolder(entry));
       const installed = await readdir(this.installedPath, { recursive: false });
 
       // One malformed app is skipped: a rejection here would fail the server's boot.
