@@ -4,6 +4,7 @@ import { backrestSummaryDescriptor } from "../backrest/descriptor.ts";
 import { beszelServerStatsDescriptor } from "../beszel/descriptor.ts";
 import { clockDescriptor } from "../clock/descriptor.ts";
 import { dockerGeneralStatsDescriptor } from "../docker/descriptor.ts";
+import { forgejoCiDescriptor } from "../forgejo/descriptor.ts";
 import { frigateEventsDescriptor } from "../frigate/descriptor.ts";
 import { githubReleasesDescriptor } from "../github/descriptor.ts";
 import { gluetunVpnStatusDescriptor } from "../gluetun/descriptor.ts";
@@ -23,6 +24,7 @@ const descriptors = [
   arcaneGeneralStatsDescriptor,
   backrestSummaryDescriptor,
   beszelServerStatsDescriptor,
+  forgejoCiDescriptor,
   frigateEventsDescriptor,
   gluetunVpnStatusDescriptor,
   minifluxEntriesDescriptor,
