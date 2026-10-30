@@ -1,4 +1,5 @@
 import { SettingsIcon, UserCogIcon } from "lucide-react";
+import type { Unstable_RouteHref } from "waku/router/client";
 import { navigations } from "#modules/common/navigations.ts";
 import { SettingsTab } from "#modules/settings/settings-tab.ts";
 import type { SpotlightAction, SpotlightItem, SpotlightSource } from "#modules/spotlight/spotlight.ts";
@@ -23,9 +24,9 @@ export class PagesSpotlightSource {
     ],
   };
 
-  private static item(to: string, label: string, icon: SpotlightItem["icon"]): SpotlightItem {
+  private static item(to: Unstable_RouteHref, label: string, icon: SpotlightItem["icon"]): SpotlightItem {
     const go: SpotlightAction = { kind: "navigate", label: PagesSpotlightSource.GoLabel, to };
 
-    return { id: to, label, icon, actions: [go] };
+    return { id: to, label, icon, actions: { enter: go } };
   }
 }

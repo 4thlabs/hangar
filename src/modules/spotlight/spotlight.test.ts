@@ -13,7 +13,7 @@ const item = (label: string, keywords?: string[]): SpotlightItem => ({
   id: label,
   label,
   ...(keywords && { keywords }),
-  actions: [{ kind: "navigate", label: "Voir", to: `/${label}` }],
+  actions: { enter: { kind: "navigate", label: "Voir", to: `/apps/${label}` } },
 });
 
 const keyEvent = (key: string, modifiers: Partial<KeyboardEvent> = {}) => ({
@@ -109,13 +109,39 @@ describe("Spotlight.filter", () => {
   });
 });
 
-describe("Spotlight.secondary", () => {
-  it("picks the second action, or the only one", () => {
-    const page = { kind: "navigate", label: "Voir la page", to: "/apps/jellyfin" } as const;
-    const open = { kind: "open", label: "Ouvrir", url: "https://jellyfin.example.com" } as const;
+describe("Spotlight.actionKey", () => {
+  it("reads ⌘ as mod on Apple devices, with Shift as modShift, and Shift alone as plain Enter", () => {
+    expect(Spotlight.actionKey(keyEvent("Enter"), "apple")).toBe("enter");
+    expect(Spotlight.actionKey(keyEvent("Enter", { shiftKey: true }), "apple")).toBe("enter");
+    expect(Spotlight.actionKey(keyEvent("Enter", { metaKey: true }), "apple")).toBe("mod");
+    expect(Spotlight.actionKey(keyEvent("Enter", { metaKey: true, shiftKey: true }), "apple")).toBe("modShift");
+  });
 
-    expect(Spotlight.secondary({ id: "a", label: "A", actions: [open, page] })).toBe(page);
-    expect(Spotlight.secondary({ id: "b", label: "B", actions: [page] })).toBe(page);
+  it("leaves Ctrl alone on Apple devices, and reads it as mod elsewhere", () => {
+    expect(Spotlight.actionKey(keyEvent("Enter", { ctrlKey: true, shiftKey: true }), "apple")).toBe("enter");
+    expect(Spotlight.actionKey(keyEvent("Enter", { ctrlKey: true, shiftKey: true }), "other")).toBe("modShift");
+    expect(Spotlight.actionKey(keyEvent("Enter", { metaKey: true }), "other")).toBe("enter");
+  });
+});
+
+describe("Spotlight.action", () => {
+  const page = { kind: "navigate", label: "Voir la page", to: "/apps/jellyfin" } as const;
+  const open = { kind: "open", label: "Ouvrir", url: "https://jellyfin.example.com" } as const;
+  const edit = { kind: "navigate", label: "Modifier", to: "/store/jellyfin/edit" } as const;
+
+  it("picks the action of the key", () => {
+    const routed: SpotlightItem = { id: "a", label: "A", actions: { enter: open, mod: page, modShift: edit } };
+
+    expect(Spotlight.action(routed, "enter")).toBe(open);
+    expect(Spotlight.action(routed, "mod")).toBe(page);
+    expect(Spotlight.action(routed, "modShift")).toBe(edit);
+  });
+
+  it("falls back to Enter's action for a key the item leaves out", () => {
+    const unrouted: SpotlightItem = { id: "b", label: "B", actions: { enter: page, modShift: edit } };
+
+    expect(Spotlight.action(unrouted, "mod")).toBe(page);
+    expect(Spotlight.action(item("Pages"), "modShift")).toEqual(item("Pages").actions.enter);
   });
 });
 

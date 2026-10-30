@@ -25,7 +25,7 @@ export class SettingsTab {
   }
 
   /** The link that opens the settings page on `tab`. */
-  static href(tab: SettingsTabId) {
+  static href(tab: SettingsTabId): `/settings#${SettingsTabId}` {
     return `/settings#${tab}`;
   }
 }

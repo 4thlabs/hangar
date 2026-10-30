@@ -59,21 +59,25 @@ describe("spotlightApps", () => {
     expect(items.map(item => item.label)).toEqual(["Jellyfin", "Vaultwarden"]);
   });
 
-  it("opens a routed app at its container's host first, then offers its page", async () => {
+  it("opens a routed app at its container's host first, then offers its page and its editor", async () => {
     const items = await spotlightApps();
     const vaultwarden = items.find(item => item.id === "vaultwarden");
 
     expect(vaultwarden).toMatchObject({ icon: "vw.svg", keywords: ["vaultwarden"] });
-    expect(vaultwarden?.actions).toEqual([
-      { kind: "open", label: "Ouvrir", url: "https://bitwarden.test.local" },
-      { kind: "navigate", label: "Voir la page", to: "/apps/vaultwarden" },
-    ]);
+    expect(vaultwarden?.actions).toEqual({
+      enter: { kind: "open", label: "Ouvrir", url: "https://bitwarden.test.local" },
+      mod: { kind: "navigate", label: "Voir la page", to: "/apps/vaultwarden" },
+      modShift: { kind: "navigate", label: "Modifier", to: "/store/vaultwarden/edit" },
+    });
   });
 
-  it("offers only the page of an app Traefik does not serve", async () => {
+  it("goes to the page of an app Traefik does not serve, and still offers its editor", async () => {
     const items = await spotlightApps();
     const jellyfin = items.find(item => item.id === "jellyfin");
 
-    expect(jellyfin?.actions).toEqual([{ kind: "navigate", label: "Voir la page", to: "/apps/jellyfin" }]);
+    expect(jellyfin?.actions).toEqual({
+      enter: { kind: "navigate", label: "Voir la page", to: "/apps/jellyfin" },
+      modShift: { kind: "navigate", label: "Modifier", to: "/store/jellyfin/edit" },
+    });
   });
 });
