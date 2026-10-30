@@ -81,21 +81,23 @@ export function SpotlightPalette() {
 
   function perform(action: SpotlightAction) {
     Spotlight.perform(action, {
-      // A source's path is a runtime string; the router only types its route literals.
-      push: to => router.push(to as never),
+      push: to => router.push(to),
       open: url => window.open(url, "_blank", "noopener"),
     });
 
     handleOpenChange(false);
   }
 
-  /** Ctrl/⌘ picks an item's second action. Base UI leaves modified keys alone, so Enter is read here. */
+  /**
+   * Base UI leaves Enter alone as soon as a modifier is held, so every modified Enter is read here: ⌘ (Ctrl off Apple
+   * devices), with or without Shift, picks another action, and any other modifier does what Enter does.
+   */
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    const isSecondaryEnter = event.key === "Enter" && (event.metaKey || event.ctrlKey);
+    const isModifiedEnter = event.key === "Enter" && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
 
-    if (isSecondaryEnter && highlighted) {
+    if (isModifiedEnter && highlighted) {
       event.preventDefault();
-      perform(Spotlight.secondary(highlighted));
+      perform(Spotlight.action(highlighted, Spotlight.actionKey(event, platform)));
 
       return;
     }
@@ -106,9 +108,7 @@ export function SpotlightPalette() {
   }
 
   function handleItemClick(item: SpotlightItem, event: MouseEvent) {
-    const isSecondary = event.metaKey || event.ctrlKey;
-
-    perform(isSecondary ? Spotlight.secondary(item) : item.actions[0]);
+    perform(Spotlight.action(item, Spotlight.actionKey(event, platform)));
   }
 
   return (
@@ -164,7 +164,7 @@ export function SpotlightPalette() {
                       >
                         <SpotlightIcon icon={item.icon} />
                         <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                        <span className="shrink-0 text-xs text-muted-foreground">{item.actions[0].label}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{item.actions.enter.label}</span>
                       </Autocomplete.Item>
                     )}
                   </Autocomplete.Collection>
@@ -202,22 +202,22 @@ type SpotlightFooterProps = {
   platform: SpotlightPlatform;
 };
 
-/** What Enter does on the highlighted item, and, before a scope is picked, how to pick one. */
+/** What each key does on the highlighted item, and, before a scope is picked, how to pick one. */
 function SpotlightFooter({ highlighted, scope, platform }: SpotlightFooterProps) {
-  const secondary = highlighted?.actions[1];
+  // Only the keys the item gives an action of its own: the others repeat Enter's.
+  const hints = Spotlight.ActionKeys.flatMap(({ name, shortcut }) => {
+    const action = highlighted?.actions[name];
+
+    return action ? [{ name, shortcut, action }] : [];
+  });
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-      {highlighted && (
-        <span>
-          <kbd>↵</kbd> {highlighted.actions[0].label}
+      {hints.map(({ name, shortcut, action }) => (
+        <span key={name}>
+          <kbd>{Spotlight.label(shortcut, platform)}</kbd> {action.label}
         </span>
-      )}
-      {secondary && (
-        <span>
-          <kbd>{Spotlight.label({ key: "↵", mod: true }, platform)}</kbd> {secondary.label}
-        </span>
-      )}
+      ))}
       {!scope && (
         <span className="ml-auto flex gap-3">
           {SpotlightSources.All.map(source => (

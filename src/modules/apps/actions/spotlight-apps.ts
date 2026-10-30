@@ -5,7 +5,7 @@ import { env } from "#libs/env";
 import type { HangarApp } from "#libs/hangar";
 import { AppLink } from "#libs/hangar/link";
 import { hangar } from "#libs/hangar/server";
-import type { SpotlightAction, SpotlightItem } from "#modules/spotlight/spotlight.ts";
+import type { SpotlightAction, SpotlightItem, SpotlightItemActions } from "#modules/spotlight/spotlight.ts";
 
 /**
  * The installed apps, as the palette lists them. Read from the store alone, so the palette opens even when Docker
@@ -29,16 +29,20 @@ export const spotlightApps = async (): Promise<SpotlightItem[]> => {
 /** What picking an app does. */
 class SpotlightAppActions {
   /**
-   * Opening the app first, since that is what a search for it is usually for, then its page. An app Traefik does not
-   * serve (a database, a VPN sidecar) has nothing to open: its page comes first, and alone.
+   * Opening the app first, since that is what a search for it is usually for, then its page, and its editor on
+   * Ctrl/⌘+Shift. An app Traefik does not serve (a database, a VPN sidecar) has nothing to open: Enter goes to its
+   * page.
    */
-  static create(app: HangarApp): [SpotlightAction, ...SpotlightAction[]] {
+  static create(app: HangarApp): SpotlightItemActions {
     const page: SpotlightAction = { kind: "navigate", label: "Voir la page", to: `/apps/${app.id}` };
+    const edit: SpotlightAction = { kind: "navigate", label: "Modifier", to: `/store/${app.id}/edit` };
 
     if (!app.routed) {
-      return [page];
+      return { enter: page, modShift: edit };
     }
 
-    return [{ kind: "open", label: "Ouvrir", url: AppLink.url(app.containerName, env.DOMAIN) }, page];
+    const open: SpotlightAction = { kind: "open", label: "Ouvrir", url: AppLink.url(app.containerName, env.DOMAIN) };
+
+    return { enter: open, mod: page, modShift: edit };
   }
 }

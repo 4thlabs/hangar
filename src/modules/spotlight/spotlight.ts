@@ -1,12 +1,19 @@
 import fuzzysort from "fuzzysort";
 import type { LucideIcon } from "lucide-react";
+import type { Unstable_RouteHref } from "waku/router/client";
 
 /**
  * What picking a result does. Data rather than a callback, so a source can send it from a server
  * action as it is; only the palette carries it out, in {@link Spotlight.perform}.
  */
 export type SpotlightAction =
-  { kind: "navigate"; label: string; to: string } | { kind: "open"; label: string; url: string };
+  { kind: "navigate"; label: string; to: Unstable_RouteHref } | { kind: "open"; label: string; url: string };
+
+/** The keys that pick an item's action: Enter alone, with Ctrl/⌘, with Ctrl/⌘ and Shift. */
+export type SpotlightActionKey = "enter" | "mod" | "modShift";
+
+/** What each key does on an item. A key with no action of its own does what Enter does. */
+export type SpotlightItemActions = { enter: SpotlightAction } & Partial<Record<SpotlightActionKey, SpotlightAction>>;
 
 /** One result of a source. */
 export type SpotlightItem = {
@@ -16,8 +23,7 @@ export type SpotlightItem = {
   keywords?: string[];
   /** An image URL, or a lucide icon for a source that runs in the browser. */
   icon?: string | LucideIcon | undefined;
-  /** The first runs on Enter, the second, if any, on Ctrl/⌘+Enter. */
-  actions: [SpotlightAction, ...SpotlightAction[]];
+  actions: SpotlightItemActions;
 };
 
 /** A key combination. `mod` is ⌘ on Apple devices and Ctrl elsewhere. */
@@ -53,6 +59,9 @@ export type SpotlightKeyboardLayout = { get: (code: string) => string | undefine
 
 type SpotlightKeyEvent = Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey">;
 
+/** A key press or a click, as far as picking an action goes. */
+type SpotlightPickEvent = Pick<KeyboardEvent, "metaKey" | "ctrlKey" | "shiftKey">;
+
 declare global {
   interface Navigator {
     /** The Keyboard API: no `@types` package carries it, and TypeScript's DOM types only hold what two engines ship. */
@@ -61,7 +70,7 @@ declare global {
 }
 
 type SpotlightNavigator = {
-  push: (to: string) => void;
+  push: (to: Unstable_RouteHref) => void;
   open: (url: string) => void;
 };
 
@@ -69,6 +78,13 @@ type SpotlightNavigator = {
 export class Spotlight {
   /** Opens the palette on every source. */
   static readonly Shortcut: SpotlightShortcut = { key: "k", mod: true };
+
+  /** The keys that pick an action, in the order the footer lists them, each as the platform spells it. */
+  static readonly ActionKeys: readonly { name: SpotlightActionKey; shortcut: SpotlightShortcut }[] = [
+    { name: "enter", shortcut: { key: "↵" } },
+    { name: "mod", shortcut: { key: "↵", mod: true } },
+    { name: "modShift", shortcut: { key: "↵", mod: true, shift: true } },
+  ];
 
   private static readonly AppleUserAgent = /Mac|iPhone|iPad|iPod/;
 
@@ -159,9 +175,23 @@ export class Spotlight {
     return fuzzysort.go(query, items, { keys, limit: 0, threshold: 0 }).map(result => result.obj);
   }
 
-  /** What Ctrl/⌘ picks on `item`: its second action, or its only one. */
-  static secondary(item: SpotlightItem) {
-    return item.actions[1] ?? item.actions[0];
+  /**
+   * The key a press or a click stands for: `mod` is ⌘ on Apple devices and Ctrl elsewhere, as for the shortcuts (on
+   * a Mac, Ctrl+click is a right click). Shift counts only with it; any other combination is plain Enter.
+   */
+  static actionKey(event: SpotlightPickEvent, platform: SpotlightPlatform): SpotlightActionKey {
+    const mod = platform === "apple" ? event.metaKey : event.ctrlKey;
+
+    if (!mod) {
+      return "enter";
+    }
+
+    return event.shiftKey ? "modShift" : "mod";
+  }
+
+  /** What `key` picks on `item`: its own action, or Enter's. */
+  static action(item: SpotlightItem, key: SpotlightActionKey) {
+    return item.actions[key] ?? item.actions.enter;
   }
 
   /** Carries out `action`. */
