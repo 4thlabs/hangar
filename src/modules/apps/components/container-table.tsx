@@ -1,25 +1,11 @@
-import type { ComposeContainer, ContainerHealth } from "#libs/docker";
-import { ContainerConsoleSheet } from "#modules/apps/components/container-console-sheet.tsx";
+import type { ComposeContainer } from "#libs/docker";
+import { ContainerStatus } from "#modules/apps/components/container-status.tsx";
+import { ContainerStreamButton } from "#modules/apps/components/container-stream-button.tsx";
 import { formatBytes, formatPercent } from "#modules/apps/format.ts";
 import { EMPTY_METRICS, type ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { LogsSheet } from "#modules/common/components/logs-sheet.tsx";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Progress } from "#modules/common/ui/progress.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
-
-const healthLabel: Record<ContainerHealth, string> = {
-  healthy: "Healthy",
-  unhealthy: "Unhealthy",
-  starting: "Démarrage",
-  none: "Sans healthcheck",
-};
-
-function ContainerStatus({ container }: { container: ComposeContainer }) {
-  const destructive = container.health === "unhealthy" || container.state === "dead";
-  const label = container.health === "none" ? container.state : healthLabel[container.health];
-
-  return <Badge variant={destructive ? "destructive" : "secondary"}>{label}</Badge>;
-}
 
 const formatPorts = (container: ComposeContainer) =>
   container.ports.length > 0
@@ -50,8 +36,6 @@ export function ContainerTable({ project, containers, stats }: ContainerTablePro
       <TableBody>
         {containers.map(container => {
           const metrics = stats[container.id] ?? EMPTY_METRICS;
-          const endpoint = `/api/docker/apps/${encodeURIComponent(project)}/containers/${encodeURIComponent(container.id)}`;
-          const context = `${project} · ${container.id.slice(0, 12)}`;
 
           return (
             <TableRow key={container.id}>
@@ -93,12 +77,7 @@ export function ContainerTable({ project, containers, stats }: ContainerTablePro
               </TableCell>
               <TableCell className="text-center tabular-nums">{container.restartCount ?? "—"}</TableCell>
               <TableCell>
-                {/* Docker only runs an exec in a running container. */}
-                {container.state === "running" ? (
-                  <ContainerConsoleSheet endpoint={endpoint} name={container.name} context={context} />
-                ) : (
-                  <LogsSheet endpoint={`${endpoint}/logs`} name={container.name} context={context} />
-                )}
+                <ContainerStreamButton project={project} container={container} />
               </TableCell>
             </TableRow>
           );

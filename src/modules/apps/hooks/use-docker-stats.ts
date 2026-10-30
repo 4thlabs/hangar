@@ -18,13 +18,20 @@ export const EMPTY_METRICS: ContainerMetrics = {
 };
 
 /**
- * Live stats over SSE, by container id, totalled over `containerIds`; closed while the tab is hidden.
+ * Live stats over SSE, by container id, totalled over `containerIds`; closed while the tab is hidden, and never
+ * opened without a container.
  * Each frame costs the daemon a stats call per running container, every second.
  */
 export function useDockerStats(containerIds: readonly string[]) {
   const [stats, setStats] = useState<ContainerStats>({});
+  // No container, nothing to total: the stream would only cost the daemon its stats calls.
+  const hasContainers = containerIds.length > 0;
 
   useEffect(() => {
+    if (!hasContainers) {
+      return;
+    }
+
     let source: EventSource | undefined;
 
     const open = () => {
@@ -46,7 +53,7 @@ export function useDockerStats(containerIds: readonly string[]) {
       document.removeEventListener("visibilitychange", sync);
       close();
     };
-  }, []);
+  }, [hasContainers]);
 
   const total = (pick: (metrics: ContainerMetrics) => number | null) => {
     const available = containerIds.map(id => (stats[id] ? pick(stats[id]) : null)).filter(value => value !== null);
