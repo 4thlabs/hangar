@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { basicSetup, EditorView } from "codemirror";
 import { yaml } from "@codemirror/lang-yaml";
 import { indentLess, indentMore } from "@codemirror/commands";
 import { HighlightStyle, indentUnit, syntaxHighlighting } from "@codemirror/language";
+import type { Extension } from "@codemirror/state";
 import { keymap, type Command } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { cn } from "cn";
@@ -47,10 +48,14 @@ type CodeEditorProps = {
   defaultValue: string;
   onChange: (value: string) => void;
   className?: string;
+  /** Added to the YAML setup, read once like `defaultValue` */
+  extensions?: Extension[];
+  /** Holds the view while it is mounted, for a caller that dispatches to it */
+  viewRef?: RefObject<EditorView | null>;
 };
 
 /** A YAML editor. Uncontrolled: remount it (a new `key`) to load another document. */
-export function CodeEditor({ defaultValue, onChange, className }: CodeEditorProps) {
+export function CodeEditor({ defaultValue, onChange, className, extensions = [], viewRef }: CodeEditorProps) {
   const parent = useRef<HTMLDivElement>(null);
   // Read through a ref: the view is built once, and must not keep the first render's callback.
   const change = useRef(onChange);
@@ -66,6 +71,7 @@ export function CodeEditor({ defaultValue, onChange, className }: CodeEditorProp
         yaml(),
         theme,
         syntaxHighlighting(highlight),
+        extensions,
         EditorView.updateListener.of(update => {
           if (update.docChanged) {
 change.current(update.state.doc.toString());
@@ -74,7 +80,17 @@ change.current(update.state.doc.toString());
       ],
     });
 
-    return () => view.destroy();
+    if (viewRef) {
+      viewRef.current = view;
+    }
+
+    return () => {
+      if (viewRef) {
+        viewRef.current = null;
+      }
+
+      view.destroy();
+    };
   }, []);
 
   return (

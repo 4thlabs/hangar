@@ -2,6 +2,7 @@ import type { PageProps } from "waku/router";
 import { unstable_notFound } from "waku/router/server";
 import { HangarError, type AppFiles } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
+import { ProjectActions } from "#modules/apps/components/project-actions.tsx";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { createAppFile, readAppFile, saveAppFile } from "#modules/store/actions/manage-app.ts";
 import { AppEditor } from "#modules/store/components/app-editor.tsx";
@@ -20,8 +21,12 @@ export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">)
   return (
     <main>
       <title>{`${app.name} | Hangar`}</title>
-      <div>
-        <h1 className="text-2xl font-semibold">{app.name}</h1>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold">{app.name}</h1>
+          {/* Compose runs over the installed apps only. */}
+          {app.installed && <ProjectActions project={app.id} />}
+        </div>
         <p className="text-sm text-muted-foreground">
           Les fichiers de l’app, chacun vérifié avant d’être écrit : le <code>compose.yml</code> par{" "}
           <code>docker compose config</code>, les autres <code>.yml</code> et <code>.yaml</code> et les{" "}
