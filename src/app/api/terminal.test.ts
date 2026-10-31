@@ -1,5 +1,6 @@
 import { Readable } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { TerminalMessages } from "#modules/terminal/messages.ts";
 
 // Lives here rather than beside the routes: waku turns every file under `src/app/pages/` into a route,
 // test files included, which breaks the build.
@@ -128,6 +129,7 @@ describe("POST the host terminal", () => {
       { cols: 80, rows: 24 },
       expect.any(Function),
       request.signal,
+      "Session taken over in another tab.",
     );
   });
 
@@ -137,7 +139,7 @@ describe("POST the host terminal", () => {
     const start = mocks.terminals.attach.mock.calls[0]![3] as () => Promise<unknown>;
 
     await expect(start()).resolves.toBe(SHELL);
-    expect(mocks.hostShells?.open).toHaveBeenCalledWith({ cols: 80, rows: 24 });
+    expect(mocks.hostShells?.open).toHaveBeenCalledWith({ cols: 80, rows: 24 }, TerminalMessages.en.shell);
   });
 
   it("returns 404 while no host is configured", async () => {

@@ -89,9 +89,6 @@ export class TerminalSessions {
   /** The output replayed to a reattaching client: a few full screens of a busy program, and then some. */
   private static readonly ScrollbackBytes = 256 * 1_024;
 
-  /** Shown to the client a kept session was taken from, before its output ends. */
-  private static readonly TakenOver = "\r\n\x1b[2mSession reprise dans un autre onglet.\x1b[0m\r\n";
-
   private readonly sessions = new Map<string, TerminalSession>();
 
   /** Kept sessions, by owner and name. */
@@ -117,6 +114,7 @@ export class TerminalSessions {
    * @param size The client's terminal: an existing shell is resized to it
    * @param start Starts the shell, sized to the client's terminal
    * @param signal Aborted when the client stops reading; the session then waits for the next one
+   * @param takenOver Shown to the client the session is taken from, before its output ends, in the reader's language
    */
   async attach(
     owner: string,
@@ -124,6 +122,7 @@ export class TerminalSessions {
     size: TerminalSize,
     start: () => Promise<TerminalShell>,
     signal: AbortSignal,
+    takenOver: string,
   ): Promise<OpenedTerminal> {
     const key = `${owner}\0${name}`;
     const existing = this.kept.get(key);
@@ -135,7 +134,7 @@ export class TerminalSessions {
     }
 
     // The shell may have exited meanwhile: the session is then gone, and the client gets a 404.
-    return this.connect(id, owner, signal);
+    return this.connect(id, owner, signal, takenOver);
   }
 
   /**
@@ -256,15 +255,18 @@ export class TerminalSessions {
     }
   }
 
-  /** Streams the session to a new client, replacing the one reading it, if any. */
-  private connect(id: string, owner: string, signal: AbortSignal): OpenedTerminal {
+  /**
+   * Streams the session to a new client, replacing the one reading it, if any.
+   * @param takenOver What the replaced client is told; a session `open` hands out is never taken over
+   */
+  private connect(id: string, owner: string, signal: AbortSignal, takenOver = ""): OpenedTerminal {
     const session = this.session(id, owner);
     const output = new PassThrough();
     const heartbeat = setInterval(() => output.write(TerminalSessions.Heartbeat), TerminalSessions.HeartbeatMs);
     const attachment = { output, heartbeat };
 
     if (session.attachment) {
-      session.attachment.output.write(TerminalSessions.TakenOver);
+      session.attachment.output.write(`\r\n\x1b[2m${takenOver}\x1b[0m\r\n`);
       TerminalSessions.release(session.attachment);
       // The previous client may have held the shell back: its output, ended, will never drain.
       session.shell.stream.resume();

@@ -5,6 +5,7 @@ import path from "node:path";
 import ssh2, { type AnyAuthMethod, type AuthHandlerMiddleware, type Client, type ConnectConfig } from "ssh2";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TerminalShell } from "#libs/terminals";
+import { TerminalMessages } from "#modules/terminal/messages.ts";
 import { HostShells } from "./host-shells.ts";
 import { SshKeyStore } from "./ssh-key-store.ts";
 import { SshKnownHosts } from "./ssh-known-hosts.ts";
@@ -135,6 +136,9 @@ class FakeClient extends EventEmitter {
   }
 }
 
+/** The words of the French UI, which these tests read the terminal in. */
+const WORDS = TerminalMessages.fr.shell;
+
 let directory: string;
 let client: FakeClient;
 
@@ -201,7 +205,7 @@ afterEach(async () => {
 
 describe("HostShells sign-in with a password", () => {
   it("asks for the password in the terminal, then opens the login shell", async () => {
-    const shell = await hostShells().open(SIZE);
+    const shell = await hostShells().open(SIZE, WORDS);
     const terminal = screen(shell);
 
     await terminal.shows("Mot de passe de thomas@server.lan : ");
@@ -215,7 +219,7 @@ describe("HostShells sign-in with a password", () => {
   });
 
   it("asks again after a wrong password, and gives up after three", async () => {
-    const terminal = screen(await hostShells().open(SIZE));
+    const terminal = screen(await hostShells().open(SIZE, WORDS));
 
     for (const attempt of [1, 2, 3]) {
       await vi.waitFor(() => expect(terminal.text.split("Mot de passe de").length - 1).toBe(attempt));
@@ -230,7 +234,7 @@ describe("HostShells sign-in with a password", () => {
 
   it("goes through keyboard-interactive when the host offers it", async () => {
     client.policy = { methods: ["keyboard-interactive", "password"] };
-    const terminal = screen(await hostShells().open(SIZE));
+    const terminal = screen(await hostShells().open(SIZE, WORDS));
 
     await terminal.shows("Password: ");
     terminal.type(`${PASSWORD}\r`);
@@ -241,7 +245,7 @@ describe("HostShells sign-in with a password", () => {
 
   it("asks for the password when keyboard-interactive asks nothing, as without PAM", async () => {
     client.policy = { methods: ["keyboard-interactive", "password"], keyboardPrompts: false };
-    const terminal = screen(await hostShells().open(SIZE));
+    const terminal = screen(await hostShells().open(SIZE, WORDS));
 
     await terminal.shows("Mot de passe de thomas@server.lan : ");
     terminal.type(`${PASSWORD}\r`);
@@ -252,7 +256,7 @@ describe("HostShells sign-in with a password", () => {
   });
 
   it("stops on Ctrl+C", async () => {
-    const terminal = screen(await hostShells().open(SIZE));
+    const terminal = screen(await hostShells().open(SIZE, WORDS));
 
     await terminal.shows("Mot de passe de");
     terminal.type("\x03");
@@ -268,7 +272,7 @@ describe("HostShells sign-in with an imported key", () => {
 
     await writeFile(path.join(directory, "id_key"), privateKey);
     client.policy = { methods: ["publickey", "password"], authorizedKey: publicKey };
-    const terminal = screen(await hostShells().open(SIZE));
+    const terminal = screen(await hostShells().open(SIZE, WORDS));
 
     await vi.waitFor(() => expect(client.shell).toHaveBeenCalled());
     expect(client.tried).toEqual(["publickey"]);
@@ -280,7 +284,7 @@ describe("HostShells sign-in with an imported key", () => {
 
     await writeFile(path.join(directory, "id_key"), privateKey);
     client.policy = { methods: ["publickey"], authorizedKey: publicKey };
-    const terminal = screen(await hostShells().open(SIZE));
+    const terminal = screen(await hostShells().open(SIZE, WORDS));
 
     await terminal.shows("Phrase de passe de la clé : ");
     terminal.type("nope\r");
@@ -292,7 +296,7 @@ describe("HostShells sign-in with an imported key", () => {
 
   it("falls back to the password when the host refuses the key", async () => {
     await writeFile(path.join(directory, "id_key"), keyPair().privateKey);
-    const terminal = screen(await hostShells().open(SIZE));
+    const terminal = screen(await hostShells().open(SIZE, WORDS));
 
     await terminal.shows("Mot de passe de");
     terminal.type(`${PASSWORD}\r`);
@@ -305,7 +309,7 @@ describe("HostShells sign-in with an imported key", () => {
 describe("HostShells failures", () => {
   it("refuses a host whose key changed since the first connection", async () => {
     await new SshKnownHosts(path.join(directory, "known_hosts")).verify("server.lan:22", Buffer.from("old key"));
-    const terminal = screen(await hostShells().open(SIZE));
+    const terminal = screen(await hostShells().open(SIZE, WORDS));
 
     await terminal.ends();
     expect(terminal.text).toContain("La clé de server.lan:22 a changé depuis la première connexion");
@@ -314,7 +318,7 @@ describe("HostShells failures", () => {
 
   it("says the host is out of reach, and survives ssh2's second error", async () => {
     client.socketError = new Error("connect ECONNREFUSED 10.0.0.2:22");
-    const terminal = screen(await hostShells().open(SIZE));
+    const terminal = screen(await hostShells().open(SIZE, WORDS));
 
     await terminal.ends();
     expect(terminal.text).toContain("Impossible de joindre server.lan:22 : connect ECONNREFUSED 10.0.0.2:22");
@@ -326,7 +330,7 @@ describe("HostShells failures", () => {
       "",
     );
 
-    const terminal = screen(await hostShells().open(SIZE));
+    const terminal = screen(await hostShells().open(SIZE, WORDS));
 
     await terminal.ends();
     expect(terminal.text).toContain(
@@ -337,7 +341,7 @@ describe("HostShells failures", () => {
 
 describe("HostShells shell", () => {
   it("resizes the TTY and ends by closing the connection", async () => {
-    const shell = await hostShells().open(SIZE);
+    const shell = await hostShells().open(SIZE, WORDS);
     const terminal = screen(shell);
 
     await terminal.shows("Mot de passe de");

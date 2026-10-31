@@ -7,6 +7,30 @@ export class TerminalMessages {
     description: ({ host, username }: { host: string; username: string }) =>
       `A shell on ${host}, as ${username}, over SSH. It stays open when you close the window or reload the page, until an hour of inactivity.`,
     notConfigured: "No server is configured.",
+    /** Shown in a terminal another tab took over. */
+    takenOver: "Session taken over in another tab.",
+    /** What Hangar says in the terminal while it signs in; the shell's own output is the host's. */
+    shell: {
+      connecting: ({ account }: { account: string }) => `Connecting to ${account}…`,
+      keyUnreadable: ({ file }: { file: string }) =>
+        `Could not read the imported key (${file}): check its permissions.`,
+      shellRefused: ({ reason }: { reason: string }) => `The server refused to open a shell: ${reason}`,
+      closed: "Connection closed.",
+      knownHostsUnreadable: ({ file }: { file: string }) =>
+        `Could not read ${file}, where Hangar keeps the server's key: check its permissions.`,
+      hostKeyChanged: ({ address, file }: { address: string; file: string }) =>
+        `The key of ${address} changed since the first connection: connection refused. If it was reinstalled, remove its line from ${file}, then connect again.`,
+      cancelled: "Connection cancelled.",
+      accessDenied: ({ username }: { username: string }) =>
+        `Access denied for ${username}: check the password, or import a key its ~/.ssh/authorized_keys allows.`,
+      unreachable: ({ address, reason }: { address: string; reason: string }) =>
+        `Could not reach ${address}: ${reason}`,
+      retry: "Access denied, try again.",
+      password: ({ account }: { account: string }) => `Password for ${account}: `,
+      importedKeyIgnored: "The imported key is unreadable: it is ignored.",
+      passphrase: "Key passphrase: ",
+      wrongPassphrase: "Wrong passphrase.",
+    },
     setup: {
       title: "Set up access to the server",
       description:
@@ -63,6 +87,26 @@ export class TerminalMessages {
     description: ({ host, username }) =>
       `Un shell sur ${host}, en tant que ${username}, par SSH. Il reste ouvert quand vous fermez la fenêtre ou rechargez la page, jusqu’à une heure d’inactivité.`,
     notConfigured: "Aucun serveur n’est configuré.",
+    takenOver: "Session reprise dans un autre onglet.",
+    shell: {
+      connecting: ({ account }) => `Connexion à ${account}…`,
+      keyUnreadable: ({ file }) => `Impossible de lire la clé importée (${file}) : vérifiez ses droits.`,
+      shellRefused: ({ reason }) => `Le serveur a refusé d’ouvrir un shell : ${reason}`,
+      closed: "Connexion fermée.",
+      knownHostsUnreadable: ({ file }) =>
+        `Impossible de lire ${file}, où Hangar garde la clé du serveur : vérifiez ses droits.`,
+      hostKeyChanged: ({ address, file }) =>
+        `La clé de ${address} a changé depuis la première connexion : connexion refusée. S’il a été réinstallé, retirez sa ligne de ${file}, puis reconnectez-vous.`,
+      cancelled: "Connexion annulée.",
+      accessDenied: ({ username }) =>
+        `Accès refusé pour ${username} : vérifiez le mot de passe, ou importez une clé que son ~/.ssh/authorized_keys autorise.`,
+      unreachable: ({ address, reason }) => `Impossible de joindre ${address} : ${reason}`,
+      retry: "Accès refusé, réessayez.",
+      password: ({ account }) => `Mot de passe de ${account} : `,
+      importedKeyIgnored: "La clé importée est illisible : elle est ignorée.",
+      passphrase: "Phrase de passe de la clé : ",
+      wrongPassphrase: "Phrase de passe incorrecte.",
+    },
     setup: {
       title: "Configurer l’accès au serveur",
       description:

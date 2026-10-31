@@ -4,6 +4,7 @@ import { terminals } from "#libs/terminals/server";
 import { apiError, apiRoute } from "#app/api/api-route.ts";
 import { ApiMessages } from "#app/api/messages.ts";
 import { terminalStream } from "#app/api/terminal-stream.ts";
+import { TerminalMessages } from "#modules/terminal/messages.ts";
 
 /**
  * Streams the user's terminal on the host, opening it the first time: it outlives the page, which finds it
@@ -23,8 +24,12 @@ export const POST = apiRoute(
       return apiError(ServerTranslation.get(ApiMessages).t("noHost"), 404);
     }
 
+    // The words of the language the terminal opens in: a session kept past a switch keeps the ones it began with.
+    const { t, locale } = ServerTranslation.get(TerminalMessages);
+    const words = TerminalMessages[locale].shell;
+
     return terminalStream(request, (size, signal) =>
-      terminals.attach(session.user.id, shells.address, size, () => shells.open(size), signal),
+      terminals.attach(session.user.id, shells.address, size, () => shells.open(size, words), signal, t("takenOver")),
     );
   },
 );
