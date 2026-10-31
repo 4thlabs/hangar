@@ -229,7 +229,7 @@ function TaskTable({ tasks }: { tasks: SwarmStackTask[] }) {
               {task.since && (
                 <span className="text-muted-foreground">
                   {" "}
-                  · {RelativeTime.format(Date.parse(task.since), Date.now(), Locale.intlTag(locale))}
+                  · {RelativeTime.format(Date.parse(task.since), Date.now(), locale)}
                 </span>
               )}
             </TableCell>

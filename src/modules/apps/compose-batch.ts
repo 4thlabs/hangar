@@ -2,10 +2,10 @@ import type { Writable } from "node:stream";
 import { docker } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
+import { Notifications } from "#libs/notifications";
 import { notifications } from "#libs/notifications/server";
 import { AppCommands, type AppCommand } from "#modules/apps/actions/app-operation.ts";
 import { CommandStream } from "#modules/common/command-stream.ts";
-import { NotificationText } from "#modules/notifications/notification-text.ts";
 
 type ComposeBatch = {
   command: AppCommand;
@@ -53,7 +53,7 @@ async function runOne(command: AppCommand, project: string, userId: string, outp
     await notifications.notify({
       userId,
       level: "error",
-      message: NotificationText.create("composeFailed", run),
+      message: Notifications.message("composeFailed", run),
       href,
     });
 
@@ -63,7 +63,7 @@ async function runOne(command: AppCommand, project: string, userId: string, outp
   await notifications.notify({
     userId,
     level: "success",
-    message: NotificationText.create("composeSucceeded", run),
+    message: Notifications.message("composeSucceeded", run),
     href,
   });
 

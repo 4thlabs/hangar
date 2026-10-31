@@ -1,10 +1,12 @@
+import { Plural } from "#libs/i18n";
+
 /** The Cluster page's words: nodes, stacks, the swarm setup and its actions. */
 export class ClusterMessages {
   static readonly en = {
     title: "Cluster",
     description: "The Swarm cluster this server belongs to.",
     summary: ({ id, nodes, managers, tolerance }: { id: string; nodes: number; managers: number; tolerance: number }) =>
-      `${id} · ${nodes === 1 ? "1 node" : `${nodes} nodes`} · ${managers === 1 ? "1 manager" : `${managers} managers`} (tolerates ${tolerance === 1 ? "1 failure" : `${tolerance} failures`})`,
+      `${id} · ${nodes} ${Plural.select("en", nodes, { one: "node", other: "nodes" })} · ${managers} ${Plural.select("en", managers, { one: "manager", other: "managers" })} (tolerates ${tolerance} ${Plural.select("en", tolerance, { one: "failure", other: "failures" })})`,
     refresh: "Refresh",
     retry: "Retry",
     unavailableTitle: "Swarm unavailable",
@@ -26,7 +28,8 @@ export class ClusterMessages {
     node: {
       current: "★ this node",
       noTasks: "No tasks",
-      tasks: ({ count }: { count: number }) => (count === 1 ? "1 task" : `${count} tasks`),
+      tasks: ({ count }: { count: number }) =>
+        `${count} ${Plural.select("en", count, { one: "task", other: "tasks" })}`,
       labels: "Labels",
     },
     nodeAction: {
@@ -48,7 +51,7 @@ export class ClusterMessages {
     confirm: {
       title: ({ action, hostname }: { action: string; hostname: string }) => `${action} ${hostname}?`,
       tolerance: ({ count }: { count: number }) =>
-        `The cluster will then tolerate ${count === 1 ? "1 manager failure" : `${count} manager failures`}.`,
+        `The cluster will then tolerate ${count} ${Plural.select("en", count, { one: "manager failure", other: "manager failures" })}.`,
       losesView: "Hangar runs on this node: as a worker, it will no longer see the cluster.",
       promote: ({ hostname }: { hostname: string }) =>
         `${hostname} will join the managers and take part in the quorum.`,
@@ -192,7 +195,7 @@ export class ClusterMessages {
     title: "Cluster",
     description: "Le cluster Swarm dont ce serveur fait partie.",
     summary: ({ id, nodes, managers, tolerance }) =>
-      `${id} · ${nodes > 1 ? `${nodes} nœuds` : `${nodes} nœud`} · ${managers > 1 ? `${managers} managers` : `${managers} manager`} (tolère ${tolerance > 1 ? `${tolerance} pannes` : `${tolerance} panne`})`,
+      `${id} · ${nodes} ${Plural.select("fr", nodes, { one: "nœud", other: "nœuds" })} · ${managers} ${Plural.select("fr", managers, { one: "manager", other: "managers" })} (tolère ${tolerance} ${Plural.select("fr", tolerance, { one: "panne", other: "pannes" })})`,
     refresh: "Actualiser",
     retry: "Réessayer",
     unavailableTitle: "Swarm indisponible",
@@ -212,7 +215,7 @@ export class ClusterMessages {
     node: {
       current: "★ ce nœud",
       noTasks: "Aucune tâche",
-      tasks: ({ count }) => (count > 1 ? `${count} tâches` : `${count} tâche`),
+      tasks: ({ count }) => `${count} ${Plural.select("fr", count, { one: "tâche", other: "tâches" })}`,
       labels: "Labels",
     },
     nodeAction: {
@@ -233,7 +236,7 @@ export class ClusterMessages {
     confirm: {
       title: ({ action, hostname }) => `${action} ${hostname} ?`,
       tolerance: ({ count }) =>
-        `Le cluster tolérera ensuite ${count > 1 ? `${count} pannes` : `${count} panne`} de manager.`,
+        `Le cluster tolérera ensuite ${count} ${Plural.select("fr", count, { one: "panne", other: "pannes" })} de manager.`,
       losesView: "Hangar tourne sur ce nœud : devenu worker, il ne verra plus le cluster.",
       promote: ({ hostname }) => `${hostname} rejoindra les managers et participera au quorum.`,
       demote: ({ hostname }) => `${hostname} redeviendra worker.`,

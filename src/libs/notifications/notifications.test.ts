@@ -22,6 +22,15 @@ describe("Notifications", () => {
     seedUser("bob");
   });
 
+  it("files a key and its parameters, in no language", () => {
+    expect(Notifications.message("updatesAvailable", { count: 2 })).toEqual({
+      key: "updatesAvailable",
+      params: { count: 2 },
+    });
+
+    expect(Notifications.message("storeInstalled")).toEqual({ key: "storeInstalled", params: {} });
+  });
+
   it("keeps the message's key and parameters for the reader's language to render", async () => {
     const message = { key: "backupFailed", params: { app: "immich", error: "disk full" } };
 

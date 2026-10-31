@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ApiResponse } from "#modules/common/api-response.ts";
+import { useLatest } from "#modules/common/hooks/use-latest.ts";
 import type { StreamStatus } from "#modules/common/hooks/use-stream-text.ts";
 import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { CommonMessages } from "#modules/common/messages.ts";
@@ -16,8 +17,9 @@ import { TerminalView } from "#modules/common/terminal-view.ts";
  * @param endpoint The route opening the shell (`POST`, with the terminal's size)
  */
 export function useTerminal(endpoint: string) {
-  // Read at failure time, not a dependency: switching language must not reopen the session.
   const { t } = useTranslation(CommonMessages);
+  // What the effect says when it fails, in the language of that moment: switching must not reopen the session.
+  const latestT = useLatest(t);
   const elementRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<StreamStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export function useTerminal(endpoint: string) {
       }
 
       setStatus("error");
-      setError(reason instanceof Error ? reason.message : t("terminal.interrupted"));
+      setError(reason instanceof Error ? reason.message : latestT.current("terminal.interrupted"));
     }
 
     async function post(url: string, body: unknown): Promise<Response> {
@@ -59,7 +61,7 @@ export function useTerminal(endpoint: string) {
         const response = await post(sessionEndpoint, message);
 
         if (!response.ok) {
-          fail(await ApiResponse.error(response, t("terminal.inputLost")));
+          fail(await ApiResponse.error(response, latestT.current("terminal.inputLost")));
         }
       } catch (reason) {
         fail(reason);
@@ -80,13 +82,13 @@ export function useTerminal(endpoint: string) {
       const response = await post(endpoint, openedSize);
 
       if (!response.ok) {
-        throw await ApiResponse.error(response, t("terminal.openFailed"));
+        throw await ApiResponse.error(response, latestT.current("terminal.openFailed"));
       }
 
       const id = response.headers.get(TerminalProtocol.IdHeader);
 
       if (!id || !response.body) {
-        throw new Error(t("terminal.noSession"));
+        throw new Error(latestT.current("terminal.noSession"));
       }
 
       // Absent or malformed, nothing is held back: the terminal's own input stays on.

@@ -69,7 +69,7 @@ export class FinnhubClient {
   /** The period the curve covers. */
   private static readonly ClosesDays = 30;
 
-  /** One entry per symbol and endpoint. The widget layer caches the rendered card; this caches each call. */
+  /** One entry per symbol and endpoint. The widget layer caches what the card loads; this caches each call. */
   private readonly cache: Cache;
 
   /** The ky client, bound to the API and the key; `undefined` without a key, which Finnhub always requires. */

@@ -1,9 +1,11 @@
+import { Plural } from "#libs/i18n";
+
 /** The Backrest card's words. */
 export class BackrestMessages {
   static readonly en = {
     title: "Backrest",
     errorDescription: "The backup status could not be loaded.",
-    repos: ({ count }: { count: number }) => (count === 1 ? "1 repo" : `${count} repos`),
+    repos: ({ count }: { count: number }) => `${count} ${Plural.select("en", count, { one: "repo", other: "repos" })}`,
     protected: ({ size }: { size: string }) => `${size} protected`,
     added: ({ size }: { size: string }) => `${size} added`,
     successes: ({ count }: { count: number }) => `${count} ok / 30d`,
@@ -15,7 +17,7 @@ export class BackrestMessages {
   static readonly fr: typeof BackrestMessages.en = {
     title: "Backrest",
     errorDescription: "L’état des sauvegardes n’a pas pu être chargé.",
-    repos: ({ count }) => (count > 1 ? `${count} dépôts` : `${count} dépôt`),
+    repos: ({ count }) => `${count} ${Plural.select("fr", count, { one: "dépôt", other: "dépôts" })}`,
     protected: ({ size }) => `${size} protégés`,
     added: ({ size }) => `${size} ajoutés`,
     successes: ({ count }) => `${count} ok / 30 j`,

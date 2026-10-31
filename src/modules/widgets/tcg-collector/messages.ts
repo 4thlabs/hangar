@@ -1,10 +1,12 @@
+import { Plural } from "#libs/i18n";
+
 /** The TCG Collector card's words. */
 export class TcgCollectorMessages {
   static readonly en = {
     title: "TCG Collector",
     errorDescription: "The card prices could not be loaded.",
-    cards: ({ count }: { count: number }) => (count === 1 ? "1 card" : `${count} cards`),
-    days: ({ count }: { count: number }) => (count === 1 ? "1 day" : `${count} days`),
+    cards: ({ count }: { count: number }) => `${count} ${Plural.select("en", count, { one: "card", other: "cards" })}`,
+    days: ({ count }: { count: number }) => `${count} ${Plural.select("en", count, { one: "day", other: "days" })}`,
     asOf: ({ day }: { day: string }) => `as of ${day}`,
     notFound: "Card not found",
     game: ({ id }: { id: number }) => `Game ${id}`,
@@ -19,8 +21,8 @@ export class TcgCollectorMessages {
   static readonly fr: typeof TcgCollectorMessages.en = {
     title: "TCG Collector",
     errorDescription: "Les prix des cartes n’ont pas pu être chargés.",
-    cards: ({ count }) => (count > 1 ? `${count} cartes` : `${count} carte`),
-    days: ({ count }) => (count > 1 ? `${count} jours` : `${count} jour`),
+    cards: ({ count }) => `${count} ${Plural.select("fr", count, { one: "carte", other: "cartes" })}`,
+    days: ({ count }) => `${count} ${Plural.select("fr", count, { one: "jour", other: "jours" })}`,
     asOf: ({ day }) => `au ${day}`,
     notFound: "Carte introuvable",
     game: ({ id }) => `Jeu ${id}`,

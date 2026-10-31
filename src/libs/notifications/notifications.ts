@@ -2,6 +2,7 @@ import { and, desc, eq, gte, inArray, isNull, notInArray, sql, type AnyRelations
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { notification, user, type Notification, type NotificationMessage } from "#libs/db";
 import { logger } from "#libs/logs";
+import type { NotificationArguments, NotificationKey } from "./notification-params.ts";
 
 export type NotificationLevel = Notification["level"];
 
@@ -64,6 +65,14 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
   private static readonly OldestFirst = [notification.createdAt, sql`rowid asc`];
 
   private readonly db: BetterSQLite3Database<TRelations>;
+
+  /**
+   * What a notification says, filed in no language: its key, and its parameters checked against
+   * `NotificationParams`. The browser renders it in the reader's language.
+   */
+  static message<Key extends NotificationKey>(key: Key, ...args: NotificationArguments<Key>): NotificationMessage {
+    return { key, params: args[0] ?? {} };
+  }
 
   constructor(db: BetterSQLite3Database<TRelations>) {
     this.db = db;

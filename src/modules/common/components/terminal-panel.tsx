@@ -11,7 +11,7 @@ import { Button } from "#modules/common/ui/button.tsx";
 type TerminalPanelProps = {
   /** The route opening the shell: a container's, or the host's */
   endpoint: string;
-  /** Offers **Fermer la session** while connected: a container's sheet does, the host's dialog does not. */
+  /** Offers **Close the session** while connected: a container's sheet does, the host's dialog does not. */
   closable?: boolean;
 };
 

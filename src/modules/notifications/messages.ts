@@ -1,38 +1,39 @@
 import { Plural, Translation } from "#libs/i18n";
+import type { ComposeRun, NotificationKey, NotificationParams } from "#libs/notifications";
 import { AppCommands } from "#modules/apps/actions/app-operation.ts";
 import { AppsMessages } from "#modules/apps/messages.ts";
 
 /** What a notification says once rendered. */
 export type NotificationWords = { title: string; description?: string };
 
-/** A compose run, as its notification carries it: `flags` comma-separated, as `AppCommands.query` writes them. */
-type ComposeRun = { project: string; operation: string; flags: string };
+/** The words of every notification, each built from the parameters `NotificationParams` gives its key. */
+type NotificationCatalog = { [Key in NotificationKey]: (params: NotificationParams[Key]) => NotificationWords };
 
 /**
- * Every notification Hangar files, by key, each a function of the parameters stored with it. Filed with
- * `NotificationText.create`, rendered with `NotificationText.render` in the reader's language.
+ * What every notification Hangar files says, by key. Filed with `Notifications.message`, rendered with
+ * `NotificationText.render` in the reader's language.
  */
 export class NotificationMessages {
-  static readonly en = {
-    updatesAvailable: ({ count }: { count: number }): NotificationWords => ({
+  static readonly en: NotificationCatalog = {
+    updatesAvailable: ({ count }) => ({
       title: "Updates available",
       description: `${count} ${Plural.select("en", count, { one: "app has", other: "apps have" })} a newer image in the registry.`,
     }),
-    autoUpdate: ({ updated, failed }: { updated: number; failed: string }): NotificationWords => ({
+    autoUpdate: ({ updated, failed }) => ({
       title: "Automatic update",
       description:
         `${updated} ${Plural.select("en", updated, { one: "app was", other: "apps were" })} updated.` +
         (failed ? ` Failed for: ${failed}.` : ""),
     }),
-    backupFailed: ({ app, error }: { app: string; error: string }): NotificationWords => ({
+    backupFailed: ({ app, error }) => ({
       title: "Backup failed",
       description: `The backup of ${app} failed: ${error}`,
     }),
-    backupRestartFailed: ({ app, services }: { app: string; services: string }): NotificationWords => ({
+    backupRestartFailed: ({ app, services }) => ({
       title: "App stopped",
       description: `${app} did not restart after its backup: ${services}.`,
     }),
-    composeSucceeded: (run: ComposeRun): NotificationWords => {
+    composeSucceeded: run => {
       const t = Translation.create(AppsMessages, "en");
       const command = NotificationMessages.command(run);
 
@@ -41,37 +42,37 @@ export class NotificationMessages {
         description: AppCommands.outcome(command, run.project, t),
       };
     },
-    composeFailed: (run: ComposeRun): NotificationWords => ({
+    composeFailed: run => ({
       title: `${AppCommands.label(NotificationMessages.command(run), Translation.create(AppsMessages, "en"))} failed`,
       description: `The Docker Compose command failed for ${run.project}. See the server logs.`,
     }),
-    stackDeployed: ({ stack }: { stack: string }): NotificationWords => ({
+    stackDeployed: ({ stack }) => ({
       title: "Deployment finished",
       description: `${stack} is deployed on the swarm.`,
     }),
-    stackDeployFailed: ({ stack }: { stack: string }): NotificationWords => ({
+    stackDeployFailed: ({ stack }) => ({
       title: "Deployment failed",
       description: `The deployment of ${stack} on the swarm failed. See the server logs.`,
     }),
-    storeInstalled: (): NotificationWords => ({
+    storeInstalled: () => ({
       title: "Store: installation finished",
       description: "The store was installed.",
     }),
-    storeUpdated: (): NotificationWords => ({
+    storeUpdated: () => ({
       title: "Store: update finished",
       description: "The store was updated.",
     }),
-    storeInstallFailed: (): NotificationWords => ({
+    storeInstallFailed: () => ({
       title: "Store: installation failed",
       description: "The installation of the store failed. See the server logs.",
     }),
-    storeUpdateFailed: (): NotificationWords => ({
+    storeUpdateFailed: () => ({
       title: "Store: update failed",
       description: "The update of the store failed. See the server logs.",
     }),
   };
 
-  static readonly fr: typeof NotificationMessages.en = {
+  static readonly fr: NotificationCatalog = {
     updatesAvailable: ({ count }) => ({
       title: "Mises à jour disponibles",
       description: `${count} ${Plural.select("fr", count, { one: "application a", other: "applications ont" })} une image plus récente en registre.`,

@@ -2,18 +2,17 @@
 
 import { cn } from "cn";
 import { useEffect, useState } from "react";
-import { Locale, type LocaleCode } from "#libs/preferences";
+import { IntlFormats } from "#libs/i18n";
+import type { LocaleCode } from "#libs/preferences";
 import { WidgetCard, WidgetContent } from "../shared/index.ts";
 
 /** How the clock writes the time, the month and the day, in the reader's language. */
 class ClockFormat {
   static create(locale: LocaleCode) {
-    const tag = Locale.intlTag(locale);
-
     return {
-      time: new Intl.DateTimeFormat(tag, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
-      month: new Intl.DateTimeFormat(tag, { month: "long" }),
-      weekday: new Intl.DateTimeFormat(tag, { weekday: "long" }),
+      time: IntlFormats.dateTime(locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
+      month: IntlFormats.dateTime(locale, { month: "long" }),
+      weekday: IntlFormats.dateTime(locale, { weekday: "long" }),
     };
   }
 }

@@ -31,6 +31,11 @@ describe("Translation", () => {
     );
   });
 
+  it("hands back the same `t` for a catalog and a language", () => {
+    expect(Translation.create(TestMessages, "fr")).toBe(Translation.create(TestMessages, "fr"));
+    expect(Translation.create(TestMessages, "fr")).not.toBe(Translation.create(TestMessages, "en"));
+  });
+
   it("throws on a path the catalog lacks, which only an unchecked one can reach", () => {
     const unchecked = Translation.create(TestMessages, "en") as (path: string) => string;
 

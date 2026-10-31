@@ -102,7 +102,11 @@ describe("ComposeServiceMarkers.create", () => {
 
     const markers = ComposeServiceMarkers.create({ state: "loaded", detail: loaded }, stats, "en");
 
-    expect(markers?.byService.get("server")).toEqual({ tone: "running", label: "2/2 · 4.0% · 2 KiB" });
+    expect(markers?.byService.get("server")).toEqual({
+      tone: "running",
+      label: "2/2 · 4.0% · 2 KiB",
+      action: "Show the server service",
+    });
   });
 
   it("shows the count alone before the first stats frame and for a stopped service", () => {
@@ -110,7 +114,7 @@ describe("ComposeServiceMarkers.create", () => {
 
     const markers = ComposeServiceMarkers.create({ state: "loaded", detail: loaded }, {}, "en");
 
-    expect(markers?.byService.get("db")).toEqual({ tone: "stopped", label: "0/1" });
+    expect(markers?.byService.get("db")).toEqual({ tone: "stopped", label: "0/1", action: "Show the db service" });
   });
 
   it("shows an unknown CPU as unknown, not as zero, as in a stream's first frame", () => {

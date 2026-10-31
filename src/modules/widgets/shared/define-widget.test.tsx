@@ -123,14 +123,14 @@ describe("defineWidget over a module", () => {
 });
 
 describe("defineWidget caching", () => {
-  it("keeps one card per language, the words being part of it", async () => {
+  it("loads once for every language, and writes each reader's card in theirs", async () => {
     const load = vi.fn(async () => "payload");
     const widget = warmWidget({ load, render: () => null });
 
     expect(renderToStaticMarkup(await widget.Widget({ locale: "en" }))).toContain("Test is unavailable");
     expect(renderToStaticMarkup(await widget.Widget({ locale: "fr" }))).toContain("Essai indisponible");
     expect(renderToStaticMarkup(await widget.Widget({ locale: "fr" }))).toContain("Chargement impossible.");
-    expect(load).toHaveBeenCalledTimes(2);
+    expect(load).toHaveBeenCalledTimes(1);
   });
 
   it("renders a second time from the cache rather than loading again", async () => {
@@ -155,15 +155,16 @@ describe("defineWidget caching", () => {
     expect(renderToStaticMarkup(await widget.Widget({ locale: "en" }))).toContain("payload");
   });
 
-  it("caches the rendered card, so a warm render runs neither the load nor render", async () => {
+  it("caches the loaded data, so a warm render runs no load but writes the card in the reader's language", async () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
     const render = vi.fn((data: string) => <p>{data}</p>);
     const widget = warmWidget({ load, render });
 
     await widget.Widget({ locale: "en" });
-    await widget.Widget({ locale: "en" });
+    await widget.Widget({ locale: "fr" });
 
-    expect(render).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(render).toHaveBeenLastCalledWith("payload", "test-widget", "fr");
   });
 });
 

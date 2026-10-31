@@ -35,7 +35,7 @@ export class GithubClient {
    */
   private static readonly Policy: CachePolicy = { ttl: 30 * 60 * 1_000, maxStale: 24 * 60 * 60 * 1_000 };
 
-  /** One entry per repository. The widget layer caches the rendered card; this caches each call. */
+  /** One entry per repository. The widget layer caches what the card loads; this caches each call. */
   private readonly cache: Cache;
 
   /** The ky client, bound to the API and to the token when there is one. */

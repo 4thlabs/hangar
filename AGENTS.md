@@ -73,14 +73,15 @@ definitions in `src/cli`.
 
 - Every word the UI shows sits in a catalog, a module's `messages.ts`:
   `class AppsMessages { static readonly en = {…}; static readonly fr: typeof AppsMessages.en = {…} }`. English
-  gives the shape, so a key missing in French is a type error. A message that interpolates or pluralizes is a
-  function of one object: `remove: ({ key }: { key: string }) => …`.
-- Read it with `t`, a dotted path checked by `tsc`: `useTranslation(Catalog)` in a client component,
-  `ServerTranslation.get(Catalog)` in a server component, an action or an API route, `Translation.create(Catalog,
-locale)` anywhere else. Each also hands back `locale`, for `Intl` (`Locale.intlTag`).
+  gives the shape, so a key missing in French is a type error. A message that interpolates is a function of one
+  object, `remove: ({ key }: { key: string }) => …`, and one that counts picks its form with `Plural.select`.
+- Read it with `t`, a dotted path checked by `tsc`. In a client component, `useTranslation(Catalog)`; in a server
+  component, an action or an API route, `ServerTranslation.get(Catalog)`; anywhere else,
+  `Translation.create(Catalog, locale)`. Each also hands back `locale`, for numbers and dates through `IntlFormats`.
 - What outlives the request is filed in no language: a notification stores a key and its parameters
-  (`NotificationText.create`) and is rendered where the reader is known.
-- Logs, the messages libraries throw, and the CLI stay in English.
+  (`Notifications.message`) and is rendered where the reader is known (`NotificationText.render`).
+- Logs, the messages libraries throw, and the CLI stay in English. A library that speaks to the user takes its words
+  from the caller, which reads them from a catalog: `HostShells.open(size, TerminalMessages[locale].shell)`.
 
 ## Responsive layouts
 

@@ -1,4 +1,5 @@
-import { Locale, type LocaleCode } from "#libs/preferences";
+import type { LocaleCode } from "#libs/preferences";
+import { IntlFormats } from "./intl-formats.ts";
 
 /** The two forms English and French tell apart. */
 export type PluralForms = {
@@ -11,24 +12,10 @@ export type PluralForms = {
  * "0 application", English "0 applications".
  */
 export class Plural {
-  /** One rule set per language, built on first use. */
-  private static readonly Rules = new Map<LocaleCode, Intl.PluralRules>();
-
   /**
    * The form of `forms` that `count` takes in `locale`.
    */
   static select(locale: LocaleCode, count: number, forms: PluralForms) {
-    return Plural.rules(locale).select(count) === "one" ? forms.one : forms.other;
-  }
-
-  private static rules(locale: LocaleCode) {
-    let rules = Plural.Rules.get(locale);
-
-    if (!rules) {
-      rules = new Intl.PluralRules(Locale.intlTag(locale));
-      Plural.Rules.set(locale, rules);
-    }
-
-    return rules;
+    return IntlFormats.pluralRules(locale).select(count) === "one" ? forms.one : forms.other;
   }
 }

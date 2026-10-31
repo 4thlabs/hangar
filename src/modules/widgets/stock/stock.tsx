@@ -1,5 +1,5 @@
-import { Translation } from "#libs/i18n";
-import { Locale, type LocaleCode } from "#libs/preferences";
+import { IntlFormats, Translation } from "#libs/i18n";
+import type { LocaleCode } from "#libs/preferences";
 import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
   WidgetCard,
@@ -27,25 +27,19 @@ export class StockFormat {
       return StockFormat.amount(price, locale);
     }
 
-    return new Intl.NumberFormat(Locale.intlTag(locale), {
-      style: "currency",
-      currency,
-      ...StockFormat.Decimals,
-    }).format(price);
+    return IntlFormats.number(locale, { style: "currency", currency, ...StockFormat.Decimals }).format(price);
   }
 
   /** A bare number, for a stock whose currency Finnhub does not say, and for the day's high, low and open. */
   static amount(amount: number, locale: LocaleCode) {
-    return new Intl.NumberFormat(Locale.intlTag(locale), StockFormat.Decimals).format(amount);
+    return IntlFormats.number(locale, StockFormat.Decimals).format(amount);
   }
 
   /** A change in percent, as Finnhub gives it: `1.5` is `+1.50%`. The sign spelled out, so a fall reads at a glance. */
   static change(changePercent: number, locale: LocaleCode) {
-    return new Intl.NumberFormat(Locale.intlTag(locale), {
-      style: "percent",
-      signDisplay: "exceptZero",
-      ...StockFormat.Decimals,
-    }).format(changePercent / 100);
+    return IntlFormats.number(locale, { style: "percent", signDisplay: "exceptZero", ...StockFormat.Decimals }).format(
+      changePercent / 100,
+    );
   }
 
   /** The color of a change: green up, red down, muted when flat. */
