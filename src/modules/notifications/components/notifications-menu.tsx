@@ -35,7 +35,7 @@ function NotificationItem({ notification }: { notification: NotificationPayload 
         </span>
         {description && <span className="text-muted-foreground">{description}</span>}
         <time className="text-xs text-muted-foreground" dateTime={new Date(notification.createdAt).toISOString()}>
-          {RelativeTime.format(notification.createdAt, Date.now(), Locale.intlTag(locale))}
+          {RelativeTime.format(notification.createdAt, Date.now(), locale)}
         </time>
       </span>
     </>

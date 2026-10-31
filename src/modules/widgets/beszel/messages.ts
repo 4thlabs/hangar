@@ -1,9 +1,12 @@
+import { Plural } from "#libs/i18n";
+
 /** The Beszel card's words. */
 export class BeszelMessages {
   static readonly en = {
     title: "Beszel",
     errorDescription: "The server stats could not be loaded.",
-    servers: ({ count }: { count: number }) => (count === 1 ? "1 server" : `${count} servers`),
+    servers: ({ count }: { count: number }) =>
+      `${count} ${Plural.select("en", count, { one: "server", other: "servers" })}`,
     down: ({ count }: { count: number }) => `${count} down`,
     uptime: ({ span }: { span: string }) => `${span} up`,
     empty: "No servers monitored.",
@@ -15,7 +18,7 @@ export class BeszelMessages {
   static readonly fr: typeof BeszelMessages.en = {
     title: "Beszel",
     errorDescription: "Les statistiques des serveurs n’ont pas pu être chargées.",
-    servers: ({ count }) => (count > 1 ? `${count} serveurs` : `${count} serveur`),
+    servers: ({ count }) => `${count} ${Plural.select("fr", count, { one: "serveur", other: "serveurs" })}`,
     down: ({ count }) => `${count} hors ligne`,
     uptime: ({ span }) => `en ligne depuis ${span}`,
     empty: "Aucun serveur surveillé.",

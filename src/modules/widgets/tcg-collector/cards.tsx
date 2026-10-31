@@ -1,5 +1,5 @@
-import { Translation, type Translate } from "#libs/i18n";
-import { Locale, type LocaleCode } from "#libs/preferences";
+import { IntlFormats, Translation, type Translate } from "#libs/i18n";
+import type { LocaleCode } from "#libs/preferences";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import type { WidgetService } from "../config/config.ts";
 import type { WidgetBody } from "../shared/define-widget.tsx";
@@ -38,7 +38,7 @@ class CardFormat {
       return "—";
     }
 
-    return new Intl.NumberFormat(Locale.intlTag(locale), { style: "currency", currency: "EUR" }).format(price);
+    return IntlFormats.number(locale, { style: "currency", currency: "EUR" }).format(price);
   }
 
   /**
@@ -46,12 +46,9 @@ class CardFormat {
    * zone moves them to the day before.
    */
   static day(day: string, locale: LocaleCode) {
-    return new Intl.DateTimeFormat(Locale.intlTag(locale), {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      timeZone: "UTC",
-    }).format(new Date(`${day}T00:00:00Z`));
+    return IntlFormats.dateTime(locale, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }).format(
+      new Date(`${day}T00:00:00Z`),
+    );
   }
 }
 

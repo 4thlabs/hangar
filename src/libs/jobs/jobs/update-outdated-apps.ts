@@ -1,6 +1,6 @@
 import { Job } from "sidequest";
 import { logger } from "#libs/logs";
-import { NotificationText } from "#modules/notifications/notification-text.ts";
+import { Notifications } from "#libs/notifications";
 import type { CreateJobServices } from "../services.ts";
 import { createWorkerServices } from "../worker.ts";
 
@@ -59,7 +59,7 @@ export class UpdateOutdatedApps extends Job {
     if (updated.length > 0 || failed.length > 0) {
       await notifications.notify({
         level: failed.length > 0 ? "error" : "success",
-        message: NotificationText.create("autoUpdate", { updated: updated.length, failed: failed.join(", ") }),
+        message: Notifications.message("autoUpdate", { updated: updated.length, failed: failed.join(", ") }),
         href: "/apps",
         dedupeKey: "auto-update",
       });

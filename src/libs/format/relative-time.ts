@@ -1,3 +1,4 @@
+import { IntlFormats } from "#libs/i18n";
 import type { LocaleCode } from "#libs/preferences";
 
 /** The units a compact moment is written in. */
@@ -30,19 +31,16 @@ export class RelativeTime {
     },
   };
 
-  /** One formatter per locale, built on first use. */
-  private static readonly Formatters = new Map<string, Intl.RelativeTimeFormat>();
-
   /**
    * A millisecond timestamp as a phrase: "2 minutes ago".
    *
-   * @param locale The BCP 47 tag of the reader's language, `Locale.intlTag` of their pick
+   * @param locale The reader's language
    */
-  static format(timestamp: number, now: number = Date.now(), locale = "en") {
+  static format(timestamp: number, now: number = Date.now(), locale: LocaleCode = "en") {
     const seconds = (timestamp - now) / 1_000;
     const { unit, divisor } = RelativeTime.unit(Math.abs(seconds));
 
-    return RelativeTime.formatter(locale).format(Math.round(seconds / divisor), unit);
+    return IntlFormats.relativeTime(locale, { numeric: "auto" }).format(Math.round(seconds / divisor), unit);
   }
 
   /**
@@ -67,22 +65,5 @@ export class RelativeTime {
     const [, unit] = RelativeTime.Units[index]!;
 
     return { unit, divisor: index === 0 ? 1 : RelativeTime.Units[index - 1]![0] };
-  }
-
-  /**
-   * The formatter for `locale`, cached: building one is not free and a page formats dozens.
-   */
-  private static formatter(locale: string) {
-    const cached = RelativeTime.Formatters.get(locale);
-
-    if (cached) {
-      return cached;
-    }
-
-    const formatter = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
-
-    RelativeTime.Formatters.set(locale, formatter);
-
-    return formatter;
   }
 }

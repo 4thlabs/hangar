@@ -157,8 +157,7 @@ type WidgetTimeProps = {
 
 /** A moment, as every widget's trailing column writes one. */
 export function WidgetTime({ at, style = "long", now = Date.now(), locale }: WidgetTimeProps) {
-  const text =
-    style === "compact" ? RelativeTime.compact(at, now, locale) : RelativeTime.format(at, now, Locale.intlTag(locale));
+  const text = style === "compact" ? RelativeTime.compact(at, now, locale) : RelativeTime.format(at, now, locale);
 
   return (
     <time dateTime={new Date(at).toISOString()} className="shrink-0 text-xs text-muted-foreground">

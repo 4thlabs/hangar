@@ -7,6 +7,8 @@ export class NotificationsMenuMessages {
     unreadMark: "Unread",
     emptyTitle: "No notifications",
     emptyDescription: "Commands run in the background will land here.",
+    /** A notification whose words this version no longer has. */
+    unknown: "Notification",
   };
 
   static readonly fr: typeof NotificationsMenuMessages.en = {
@@ -16,5 +18,6 @@ export class NotificationsMenuMessages {
     unreadMark: "Non lue",
     emptyTitle: "Aucune notification",
     emptyDescription: "Les commandes lancées en arrière-plan viendront se ranger ici.",
+    unknown: "Notification",
   };
 }

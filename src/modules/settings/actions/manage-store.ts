@@ -5,8 +5,8 @@ import { hangar } from "#libs/hangar/server";
 import { ServerTranslation } from "#libs/i18n/server";
 import { backupJobs } from "#libs/jobs/server";
 import { logger } from "#libs/logs";
+import { Notifications } from "#libs/notifications";
 import { notifications } from "#libs/notifications/server";
-import { NotificationText } from "#modules/notifications/notification-text.ts";
 import { SettingsMessages } from "#modules/settings/messages.ts";
 import { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
 
@@ -28,7 +28,7 @@ export const manageStore = async (): Promise<StoreActionResult> => {
       notifications.notify({
         userId: user.id,
         level: "success",
-        message: NotificationText.create(wasInstalled ? "storeUpdated" : "storeInstalled"),
+        message: Notifications.message(wasInstalled ? "storeUpdated" : "storeInstalled"),
         href: "/settings",
       }),
     )
@@ -38,7 +38,7 @@ export const manageStore = async (): Promise<StoreActionResult> => {
       return notifications.notify({
         userId: user.id,
         level: "error",
-        message: NotificationText.create(wasInstalled ? "storeUpdateFailed" : "storeInstallFailed"),
+        message: Notifications.message(wasInstalled ? "storeUpdateFailed" : "storeInstallFailed"),
         href: "/settings",
       });
     });

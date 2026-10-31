@@ -36,11 +36,33 @@ export type Translate<Messages> = <Path extends MessagePath<Messages>>(
 /** Builds the `t` of a catalog in one language, for the hook, the server and code that is neither. */
 export class Translation {
   /**
-   * The `t` of `catalog` in `locale`.
+   * One `t` per catalog and language, built once: a `t` keeps its identity across renders, so what React derives
+   * from it is memoized, and an effect may depend on it without restarting at every render.
+   */
+  private static readonly Built = new WeakMap<object, Map<LocaleCode, Translate<unknown>>>();
+
+  /**
+   * The `t` of `catalog` in `locale`, the same function each time it is asked for.
    */
   static create<Messages>(catalog: Catalog<Messages>, locale: LocaleCode): Translate<Messages> {
-    const messages = catalog[locale];
+    let byLocale = Translation.Built.get(catalog);
 
+    if (!byLocale) {
+      byLocale = new Map();
+      Translation.Built.set(catalog, byLocale);
+    }
+
+    let translate = byLocale.get(locale) as Translate<Messages> | undefined;
+
+    if (!translate) {
+      translate = Translation.build(catalog[locale]);
+      byLocale.set(locale, translate as Translate<unknown>);
+    }
+
+    return translate;
+  }
+
+  private static build<Messages>(messages: Messages): Translate<Messages> {
     return ((path: string, ...args: unknown[]) => {
       const message = Translation.lookUp(messages, path);
 
