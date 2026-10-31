@@ -1,4 +1,6 @@
 import { cn } from "cn";
+import { Translation } from "#libs/i18n";
+import type { LocaleCode } from "#libs/preferences";
 import type { WidgetService } from "../config/config.ts";
 import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
@@ -12,6 +14,7 @@ import {
 } from "../shared/index.ts";
 import { MinifluxClient, type MinifluxEntries, type MinifluxEntry } from "./api/client.ts";
 import { minifluxEntriesDescriptor } from "./descriptor.ts";
+import { MinifluxMessages } from "./messages.ts";
 
 const { appearance } = minifluxEntriesDescriptor;
 
@@ -19,26 +22,35 @@ type MinifluxEntriesCardProps = {
   entries: MinifluxEntry[];
   unread: number;
   serviceUrl: string;
+  locale: LocaleCode;
   now?: number;
 };
 
-export function MinifluxEntriesCard({ entries, unread, serviceUrl, now = Date.now() }: MinifluxEntriesCardProps) {
+export function MinifluxEntriesCard({
+  entries,
+  unread,
+  serviceUrl,
+  locale,
+  now = Date.now(),
+}: MinifluxEntriesCardProps) {
+  const t = Translation.create(MinifluxMessages, locale);
+
   return (
     <WidgetCard>
       <WidgetHeader
         href={serviceUrl}
         icon={appearance.icon}
-        title={appearance.title}
+        title={t("title")}
         bordered={entries.length > 0}
         description={
           <WidgetMetadata>
-            <span>{unread} unread</span>
+            <span>{t("unread", { count: unread })}</span>
           </WidgetMetadata>
         }
       />
 
       <WidgetContent>
-        <WidgetList empty="No entries.">
+        <WidgetList empty={t("empty")}>
           {entries.map(entry => {
             const isUnread = entry.status === "unread";
 
@@ -49,10 +61,10 @@ export function MinifluxEntriesCard({ entries, unread, serviceUrl, now = Date.no
                   // Kept when read, transparent, so every title starts on the same column.
                   <span
                     className={cn("size-2 shrink-0 rounded-full", isUnread && "bg-primary")}
-                    {...(isUnread ? { role: "img", "aria-label": "Unread" } : { "aria-hidden": true })}
+                    {...(isUnread ? { role: "img", "aria-label": t("unreadMark") } : { "aria-hidden": true })}
                   />
                 }
-                trailing={<WidgetTime style="compact" at={Date.parse(entry.published_at)} now={now} />}
+                trailing={<WidgetTime style="compact" at={Date.parse(entry.published_at)} now={now} locale={locale} />}
               >
                 <a
                   href={entry.url}
@@ -82,7 +94,7 @@ export const minifluxEntries = (service: WidgetService): WidgetBody<[MinifluxEnt
 
     return await Promise.all([client.getEntries(), client.getUnreadCount()]);
   },
-  render: ([{ entries }, unread]) => (
-    <MinifluxEntriesCard entries={entries} unread={unread} serviceUrl={service.link} />
+  render: ([{ entries }, unread], _placementKey, locale) => (
+    <MinifluxEntriesCard entries={entries} unread={unread} serviceUrl={service.link} locale={locale} />
   ),
 });

@@ -53,7 +53,12 @@ describe("displaySystem", () => {
 describe("BeszelServerStatsCard", () => {
   it("shows each host's uptime and its three gauges", () => {
     const html = renderToStaticMarkup(
-      <BeszelServerStatsCard servers={[displaySystem(nas)]} serviceUrl="https://beszel.test.local" now={NOW} />,
+      <BeszelServerStatsCard
+        locale="en"
+        servers={[displaySystem(nas)]}
+        serviceUrl="https://beszel.test.local"
+        now={NOW}
+      />,
     );
 
     expect(html).toContain("nas");
@@ -68,6 +73,7 @@ describe("BeszelServerStatsCard", () => {
   it("marks a saturated metric in colour as well as in figures", () => {
     const html = renderToStaticMarkup(
       <BeszelServerStatsCard
+        locale="en"
         servers={[displaySystem({ ...nas, info: { ...nas.info, mp: 93 } })]}
         serviceUrl="https://beszel.test.local"
         now={NOW}
@@ -81,6 +87,7 @@ describe("BeszelServerStatsCard", () => {
   it("draws no gauges for a host the hub is not hearing from, and counts it in the header", () => {
     const html = renderToStaticMarkup(
       <BeszelServerStatsCard
+        locale="en"
         servers={[displaySystem(nas), displaySystem({ ...nas, id: "sys3", name: "vps", status: "down" })]}
         serviceUrl="https://beszel.test.local"
         now={NOW}
@@ -95,7 +102,9 @@ describe("BeszelServerStatsCard", () => {
   });
 
   it("says so when the hub monitors nothing", () => {
-    const html = renderToStaticMarkup(<BeszelServerStatsCard servers={[]} serviceUrl="https://beszel.test.local" />);
+    const html = renderToStaticMarkup(
+      <BeszelServerStatsCard locale="en" servers={[]} serviceUrl="https://beszel.test.local" />,
+    );
 
     expect(html).toContain("No servers monitored.");
   });
@@ -114,7 +123,7 @@ describe("beszelServerStats", () => {
     });
 
     const html = renderToStaticMarkup(
-      <>{await aWidget(beszelServerStatsDescriptor, beszelServerStats(service)).Widget()}</>,
+      <>{await aWidget(beszelServerStatsDescriptor, beszelServerStats(service)).Widget({ locale: "en" })}</>,
     );
 
     expect(called).toHaveLength(1);
@@ -132,13 +141,17 @@ describe("beszelServerStats", () => {
     vi.stubGlobal("fetch", () => Promise.reject(new Error("ECONNREFUSED")));
 
     expect(
-      renderToStaticMarkup(<>{await aWidget(beszelServerStatsDescriptor, beszelServerStats(service)).Widget()}</>),
+      renderToStaticMarkup(
+        <>{await aWidget(beszelServerStatsDescriptor, beszelServerStats(service)).Widget({ locale: "en" })}</>,
+      ),
     ).toContain("unavailable");
   });
 
   it("exposes a titled skeleton through the widget definition", () => {
     expect(
-      renderToStaticMarkup(<>{aWidget(beszelServerStatsDescriptor, beszelServerStats(aService())).Skeleton()}</>),
+      renderToStaticMarkup(
+        <>{aWidget(beszelServerStatsDescriptor, beszelServerStats(aService())).Skeleton({ locale: "en" })}</>,
+      ),
     ).toContain("Beszel");
   });
 });

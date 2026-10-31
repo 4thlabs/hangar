@@ -1,4 +1,6 @@
 import { cn } from "cn";
+import { Translation } from "#libs/i18n";
+import type { LocaleCode } from "#libs/preferences";
 import type { WidgetService } from "../config/config.ts";
 import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
@@ -12,6 +14,7 @@ import {
 } from "../shared/index.ts";
 import { BeszelClient, type BeszelSystem } from "./api/client.ts";
 import { beszelServerStatsDescriptor } from "./descriptor.ts";
+import { BeszelMessages } from "./messages.ts";
 
 const { appearance } = beszelServerStatsDescriptor;
 
@@ -82,30 +85,30 @@ function Gauge({ label, value }: GaugeProps) {
 type BeszelServerStatsCardProps = {
   servers: ServerStats[];
   serviceUrl: string;
+  locale: LocaleCode;
   now?: number;
 };
 
-export function BeszelServerStatsCard({ servers, serviceUrl, now = Date.now() }: BeszelServerStatsCardProps) {
+export function BeszelServerStatsCard({ servers, serviceUrl, locale, now = Date.now() }: BeszelServerStatsCardProps) {
   const down = servers.filter(server => !server.up).length;
+  const t = Translation.create(BeszelMessages, locale);
 
   return (
     <WidgetCard className={appearance.className}>
       <WidgetHeader
         href={serviceUrl}
         icon={appearance.icon}
-        title={appearance.title}
+        title={t("title")}
         description={
           <WidgetMetadata>
-            <span>
-              {servers.length} {servers.length === 1 ? "server" : "servers"}
-            </span>
-            {down > 0 && <span className="text-destructive">{down} down</span>}
+            <span>{t("servers", { count: servers.length })}</span>
+            {down > 0 && <span className="text-destructive">{t("down", { count: down })}</span>}
           </WidgetMetadata>
         }
       />
 
       <WidgetContent>
-        <WidgetList empty="No servers monitored.">
+        <WidgetList empty={t("empty")}>
           {servers.map(server => (
             <WidgetListItem key={server.id} className="flex-col items-stretch gap-1">
               <div className="flex min-w-0 items-center gap-2">
@@ -118,7 +121,9 @@ export function BeszelServerStatsCard({ servers, serviceUrl, now = Date.now() }:
                 <p className="shrink-0 text-xs text-muted-foreground">
                   <WidgetMetadata>
                     {server.up && server.uptime !== undefined && (
-                      <span>{RelativeTime.compact(now - server.uptime * 1_000, now)} up</span>
+                      <span>
+                        {t("uptime", { span: RelativeTime.compact(now - server.uptime * 1_000, now, locale) })}
+                      </span>
                     )}
                     {server.temperature !== undefined && (
                       <span className={server.temperature >= 80 ? "text-destructive" : undefined}>
@@ -134,9 +139,9 @@ export function BeszelServerStatsCard({ servers, serviceUrl, now = Date.now() }:
                   be a bar claiming a dead server is at 4% CPU. */}
               {server.up && (
                 <div className="flex gap-3" title={server.cpuModel}>
-                  <Gauge label="CPU" value={server.cpu} />
-                  <Gauge label="RAM" value={server.memory} />
-                  <Gauge label="Disk" value={server.disk} />
+                  <Gauge label={t("cpu")} value={server.cpu} />
+                  <Gauge label={t("memory")} value={server.memory} />
+                  <Gauge label={t("disk")} value={server.disk} />
                 </div>
               )}
             </WidgetListItem>
@@ -153,5 +158,7 @@ export function BeszelServerStatsCard({ servers, serviceUrl, now = Date.now() }:
  */
 export const beszelServerStats = (service: WidgetService): WidgetBody<ServerStats[]> => ({
   load: async () => (await (await BeszelClient.connect(service)).listSystems()).items.map(displaySystem),
-  render: servers => <BeszelServerStatsCard servers={servers} serviceUrl={service.link} />,
+  render: (servers, _placementKey, locale) => (
+    <BeszelServerStatsCard servers={servers} serviceUrl={service.link} locale={locale} />
+  ),
 });

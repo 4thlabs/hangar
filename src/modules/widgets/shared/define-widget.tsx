@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { chain, fulfilled, map, recover } from "#libs/cache";
 import { cache } from "#libs/cache/server";
+import { Translation } from "#libs/i18n";
 import { logger } from "#libs/logs";
+import type { LocaleCode } from "#libs/preferences";
 import type { WidgetAppearance } from "../config/config.ts";
 import { WidgetError } from "./widget-error.tsx";
 import { WidgetSkeleton } from "./widget-skeleton.tsx";
@@ -11,8 +13,9 @@ export type WidgetBody<T = unknown> = {
   /**
    * Renders the loaded data. Return null to fall back to the error state. A method, so any body fits `WidgetBody`.
    * @param placementKey For anything addressed per placement, like a relayed image
+   * @param locale The reader's language, which the card is written in
    */
-  render(data: T, placementKey: string): ReactNode;
+  render(data: T, placementKey: string, locale: LocaleCode): ReactNode;
 } & (
   | {
       /** Fetches the data. Anything thrown here becomes the error state. */
@@ -48,10 +51,13 @@ export type Widget = {
   key: string;
   /** This widget, bound to one placement's key — a copy, so a shared widget is never mutated. */
   at: (key: string) => Widget;
-  /** The card, from the cache: rendered at once when warm, suspending only when cold. */
-  Widget: () => Promise<ReactNode>;
-  Skeleton: () => ReactNode;
+  /** The card in the reader's language, from the cache: rendered at once when warm, suspending only when cold. */
+  Widget: (props: WidgetProps) => Promise<ReactNode>;
+  Skeleton: (props: WidgetProps) => ReactNode;
 };
+
+/** What the dashboard hands every card: the language it is read in. */
+export type WidgetProps = { locale: LocaleCode };
 
 /**
  * How long a widget's data is fresh, when its `hangar.yml` entry does not say. The dashboard has no
@@ -62,7 +68,10 @@ const TTL = 60_000;
 /** How long a service that has stopped answering keeps rendering its last good card. */
 const GRACE = 900_000;
 
-/** Prefix of every cached card. The cache is process-global and keyed by placement: never put per-session data here. */
+/**
+ * Prefix of every cached card. The cache is process-global and keyed by language and placement: never put per-session
+ * data here.
+ */
 const KEY_PREFIX = "widget:";
 
 /** Drops every cached card. Tests only, so one test's data cannot leak into the next. */
@@ -73,50 +82,73 @@ export const clearWidgetCache = () => cache.clear(KEY_PREFIX);
  * render — degrades to its own card; the rest of the dashboard stands.
  */
 export function defineWidget({ id, appearance, body, ttl = TTL }: WidgetDefinition): Widget {
-  const { title, icon, className, errorDescription } = appearance;
+  const { messages, icon, className } = appearance;
+  // The logs read one language whoever renders the card.
+  const logTitle = messages.en.title;
 
-  const fallback = () => <WidgetError className={className} icon={icon} name={title} description={errorDescription} />;
-  const skeleton = () => <WidgetSkeleton className={className} icon={icon} title={title} />;
+  const fallback = (locale: LocaleCode) => {
+    const t = Translation.create(messages, locale);
+
+    return (
+      <WidgetError
+        className={className}
+        icon={icon}
+        name={t("title")}
+        description={t("errorDescription")}
+        locale={locale}
+      />
+    );
+  };
+
+  const skeleton = ({ locale }: WidgetProps) => (
+    <WidgetSkeleton
+      className={className}
+      icon={icon}
+      title={Translation.create(messages, locale)("title")}
+      locale={locale}
+    />
+  );
 
   const at = (key: string): Widget => {
-    const show = (widgetBody: WidgetBody) => (data: unknown) => {
+    const show = (widgetBody: WidgetBody, locale: LocaleCode) => (data: unknown) => {
       try {
-        return widgetBody.render(data, key) ?? fallback();
+        return widgetBody.render(data, key, locale) ?? fallback(locale);
       } catch (error: unknown) {
-        logger.error(`Failed to render the ${title} widget`, { error, placementKey: key });
+        logger.error(`Failed to render the ${logTitle} widget`, { error, placementKey: key });
 
-        return fallback();
+        return fallback(locale);
       }
     };
 
-    // The rendered card is what gets cached, so a warm widget costs neither the service call nor the render.
-    const card = () =>
+    // The rendered card is what gets cached, so a warm widget costs neither the service call nor the render; one
+    // card per language, the words being part of it.
+    const card = (locale: LocaleCode) =>
       chain(body(), widgetBody => {
         if ("source" in widgetBody) {
-          return map(widgetBody.source(), show(widgetBody));
+          return map(widgetBody.source(), show(widgetBody, locale));
         }
 
-        return cache.get(KEY_PREFIX + key, { ttl, maxStale: GRACE }, async () =>
-          show(widgetBody)(await widgetBody.load()),
+        return cache.get(`${KEY_PREFIX}${locale}:${key}`, { ttl, maxStale: GRACE }, async () =>
+          show(widgetBody, locale)(await widgetBody.load()),
         );
       });
 
-    const failed = (error: unknown) => {
-      logger.error(`Failed to load the ${title} widget`, { error, placementKey: key });
+    const failed = (locale: LocaleCode) => (error: unknown) => {
+      logger.error(`Failed to load the ${logTitle} widget`, { error, placementKey: key });
 
-      return fallback();
+      return fallback(locale);
     };
 
     return {
       id,
       key,
       at,
-      Widget: () => {
+      Widget: ({ locale }) => {
         // A body that throws before handing back a promise still degrades to this card, not the whole page.
         try {
-          return recover(card(), failed);
+          return recover(card(locale), failed(locale));
         } catch (error: unknown) {
-          return fulfilled(failed(error));
+          return fulfilled(failed(locale)(error));
         }
       },
       Skeleton: skeleton,

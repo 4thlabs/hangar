@@ -18,7 +18,7 @@ const connected: GluetunPublicIp = {
 
 describe("GluetunVpnStatusCard", () => {
   it("shows where the tunnel comes out when it is up", () => {
-    const html = renderToStaticMarkup(<GluetunVpnStatusCard publicIp={connected} />);
+    const html = renderToStaticMarkup(<GluetunVpnStatusCard locale="en" publicIp={connected} />);
 
     expect(html).toContain("Your VPN is connected!");
     expect(html).not.toContain("not connected");
@@ -29,7 +29,9 @@ describe("GluetunVpnStatusCard", () => {
   it("reads an empty address as a tunnel that is down", () => {
     // gluetun answers 200 with an empty public_ip rather than failing, so the card has to
     // recognise it: a 200 is not the same as a connection.
-    const html = renderToStaticMarkup(<GluetunVpnStatusCard publicIp={{ public_ip: "", city: "", country: "" }} />);
+    const html = renderToStaticMarkup(
+      <GluetunVpnStatusCard locale="en" publicIp={{ public_ip: "", city: "", country: "" }} />,
+    );
 
     expect(html).toContain("Your VPN is not connected!");
     expect(html).toContain("text-destructive");
@@ -37,7 +39,7 @@ describe("GluetunVpnStatusCard", () => {
 
   it("omits the location when gluetun does not report one", () => {
     const html = renderToStaticMarkup(
-      <GluetunVpnStatusCard publicIp={{ public_ip: "203.0.113.42", city: "", country: "" }} />,
+      <GluetunVpnStatusCard locale="en" publicIp={{ public_ip: "203.0.113.42", city: "", country: "" }} />,
     );
 
     // No trailing separator, and no stray comma from joining two blanks.
@@ -64,7 +66,7 @@ describe("GluetunVpnStatusCard", () => {
       }),
     );
 
-    const html = renderToStaticMarkup(<>{await Widget()}</>);
+    const html = renderToStaticMarkup(<>{await Widget({ locale: "en" })}</>);
 
     expect(called.map(request => request.url)).toEqual(["http://gluetun:8000/v1/publicip/ip"]);
     expect(called[0]?.headers.get("x-api-key")).toBe("s3cret");
@@ -74,7 +76,7 @@ describe("GluetunVpnStatusCard", () => {
 
   it("exposes a titled skeleton through the widget definition", () => {
     const { Skeleton } = aWidget(gluetunVpnStatusDescriptor, gluetunVpnStatus(aService()));
-    const html = renderToStaticMarkup(<Skeleton />);
+    const html = renderToStaticMarkup(<Skeleton locale="en" />);
 
     expect(html).toContain("Gluetun");
     expect(html).toContain('aria-busy="true"');

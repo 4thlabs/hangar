@@ -32,8 +32,8 @@ describe("widget primitives", () => {
         />
         <WidgetContent>
           <WidgetMetricGrid>
-            <WidgetMetric label="Healthy" value="2" />
-            <WidgetMetric label="Failed" value="1" detail="Needs attention" tone="destructive" />
+            <WidgetMetric locale="en" label="Healthy" value="2" />
+            <WidgetMetric locale="en" label="Failed" value="1" detail="Needs attention" tone="destructive" />
           </WidgetMetricGrid>
           <WidgetList>
             <WidgetListItem media={<span>Media</span>} trailing={<time dateTime="2025-01-01">Today</time>}>
@@ -66,8 +66,8 @@ describe("widget primitives", () => {
   it("formats a metric given a number, and leaves a string alone", () => {
     const html = renderToStaticMarkup(
       <WidgetMetricGrid>
-        <WidgetMetric label="Episodes" value={4512} />
-        <WidgetMetric label="Version" value="1.0.0" />
+        <WidgetMetric locale="en" label="Episodes" value={4512} />
+        <WidgetMetric locale="en" label="Version" value="1.0.0" />
       </WidgetMetricGrid>,
     );
 
@@ -84,7 +84,7 @@ describe("widget primitives", () => {
 
   it("writes a moment as a machine-readable date and a readable phrase", () => {
     const now = Date.UTC(2026, 8, 21, 12, 0, 0);
-    const html = renderToStaticMarkup(<WidgetTime at={now - 7_200_000} now={now} />);
+    const html = renderToStaticMarkup(<WidgetTime locale="en" at={now - 7_200_000} now={now} />);
 
     expect(html).toContain('dateTime="2026-09-21T10:00:00.000Z"');
     expect(html).toContain("2 hours ago");
@@ -93,6 +93,8 @@ describe("widget primitives", () => {
   it("writes the same moment short when the row cannot spare the words", () => {
     const now = Date.UTC(2026, 8, 21, 12, 0, 0);
 
-    expect(renderToStaticMarkup(<WidgetTime at={now - 7_200_000} now={now} style="compact" />)).toContain(">2h<");
+    expect(renderToStaticMarkup(<WidgetTime locale="en" at={now - 7_200_000} now={now} style="compact" />)).toContain(
+      ">2h<",
+    );
   });
 });

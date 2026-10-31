@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { describeWidget, WidgetIcon, WidgetSchema } from "../config/config.ts";
+import { TcgCollectorMessages } from "./messages.ts";
 
 /** A Cardmarket id as tcg-collector's API accepts one, `^\d{1,9}$`: a whole number of at most nine digits. */
 const cardmarketId = z.int().min(0).max(999_999_999);
@@ -28,10 +29,9 @@ export const tcgCollectorCardsDescriptor = describeWidget({
   }),
   app: "tcg-collector",
   appearance: {
-    title: "TCG Collector",
+    messages: TcgCollectorMessages,
     icon: new WidgetIcon("/images/widgets/tcg-collector.svg"),
     className: "min-h-48",
-    errorDescription: "The card prices could not be loaded.",
   },
   module: () => import("./cards.tsx"),
   create: ({ tcgCollectorCards }, config, service) => tcgCollectorCards(service(), config),

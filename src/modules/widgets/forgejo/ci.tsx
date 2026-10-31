@@ -1,5 +1,7 @@
 import { cn } from "cn";
+import { Translation } from "#libs/i18n";
 import { logger } from "#libs/logs";
+import type { LocaleCode } from "#libs/preferences";
 import type { WidgetService } from "../config/config.ts";
 import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
@@ -14,6 +16,7 @@ import {
 } from "../shared/index.ts";
 import { ForgejoClient, type ForgejoRepository, type ForgejoRun } from "./api/client.ts";
 import { forgejoCiDescriptor } from "./descriptor.ts";
+import { ForgejoMessages } from "./messages.ts";
 
 const { appearance } = forgejoCiDescriptor;
 
@@ -101,10 +104,12 @@ export class ForgejoCi {
 type ForgejoCiCardProps = {
   summary: ForgejoCiSummary;
   serviceUrl: string;
+  locale: LocaleCode;
   now?: number;
 };
 
-export function ForgejoCiCard({ summary, serviceUrl, now = Date.now() }: ForgejoCiCardProps) {
+export function ForgejoCiCard({ summary, serviceUrl, locale, now = Date.now() }: ForgejoCiCardProps) {
+  const t = Translation.create(ForgejoMessages, locale);
   const { repositoryCount, activeRuns, recentRepositories } = summary;
   const queued = activeRuns.filter(run => ForgejoCi.isQueued(run)).length;
   const running = activeRuns.length - queued;
@@ -114,20 +119,18 @@ export function ForgejoCiCard({ summary, serviceUrl, now = Date.now() }: Forgejo
       <WidgetHeader
         href={serviceUrl}
         icon={appearance.icon}
-        title={appearance.title}
+        title={t("title")}
         description={
           <WidgetMetadata>
-            <span>
-              {repositoryCount} {repositoryCount === 1 ? "repo" : "repos"}
-            </span>
-            {running > 0 && <span className="font-medium text-chart-4">{running} running</span>}
-            {queued > 0 && <span>{queued} queued</span>}
+            <span>{t("repos", { count: repositoryCount })}</span>
+            {running > 0 && <span className="font-medium text-chart-4">{t("running", { count: running })}</span>}
+            {queued > 0 && <span>{t("queued", { count: queued })}</span>}
           </WidgetMetadata>
         }
       />
 
       <WidgetContent>
-        <WidgetList empty="Nothing running.">
+        <WidgetList empty={t("empty")}>
           {activeRuns.map(run => (
             <WidgetListItem
               key={run.id}
@@ -142,7 +145,7 @@ export function ForgejoCiCard({ summary, serviceUrl, now = Date.now() }: Forgejo
                   )}
                 />
               }
-              trailing={<WidgetTime style="compact" at={ForgejoCi.moment(run)} now={now} />}
+              trailing={<WidgetTime style="compact" at={ForgejoCi.moment(run)} now={now} locale={locale} />}
             >
               <a
                 href={run.html_url}
@@ -166,12 +169,14 @@ export function ForgejoCiCard({ summary, serviceUrl, now = Date.now() }: Forgejo
       </WidgetContent>
 
       {recentRepositories.length > 0 && (
-        <WidgetFooter title="Recently updated">
+        <WidgetFooter title={t("recent")}>
           <WidgetList className="w-full gap-2">
             {recentRepositories.map(repository => (
               <WidgetListItem
                 key={repository.full_name}
-                trailing={<WidgetTime style="compact" at={Date.parse(repository.updated_at)} now={now} />}
+                trailing={
+                  <WidgetTime style="compact" at={Date.parse(repository.updated_at)} now={now} locale={locale} />
+                }
               >
                 <a
                   href={repository.html_url}
@@ -216,5 +221,7 @@ export const forgejoCi = (service: WidgetService, owners?: readonly string[]): W
 
     return ForgejoCi.summarize(repositories, activeRuns);
   },
-  render: summary => <ForgejoCiCard summary={summary} serviceUrl={service.link} />,
+  render: (summary, _placementKey, locale) => (
+    <ForgejoCiCard summary={summary} serviceUrl={service.link} locale={locale} />
+  ),
 });

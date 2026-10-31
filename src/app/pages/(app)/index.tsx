@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { hangar } from "#libs/hangar/server";
+import { userPreferences } from "#libs/preferences/server";
 import { type DashboardColumn } from "#modules/widgets/config/config.ts";
 import { widgetRegistry } from "#modules/widgets/server/server.ts";
 
@@ -15,6 +16,7 @@ const COLUMN_CLASSNAME: Record<DashboardColumn, string> = {
 function Dashboard() {
   // The store owns the dashboard: its hangar.yml says which widgets go where.
   const placements = widgetRegistry.resolve(hangar.store.config.widgets());
+  const { locale } = userPreferences.get();
 
   return (
     <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[1fr_3fr_1fr]">
@@ -30,8 +32,8 @@ function Dashboard() {
             {columnPlacements.map(({ widget: { key, Widget, Skeleton } }) => (
               // Cold: its own boundary, so it streams in instead of holding up the rest of the grid.
               // Warm, it renders inline and the skeleton never shows.
-              <Suspense key={key} fallback={<Skeleton />}>
-                <Widget />
+              <Suspense key={key} fallback={<Skeleton locale={locale} />}>
+                <Widget locale={locale} />
               </Suspense>
             ))}
           </div>

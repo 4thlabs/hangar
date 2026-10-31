@@ -1,3 +1,5 @@
+import { Translation } from "#libs/i18n";
+import type { LocaleCode } from "#libs/preferences";
 import { ScrollArea } from "#modules/common/ui/scroll-area.tsx";
 import type { WidgetService } from "../config/config.ts";
 import type { WidgetBody } from "../shared/define-widget.tsx";
@@ -12,6 +14,7 @@ import {
 } from "../shared/index.ts";
 import { JellyfinClient, type JellyfinCounts, type JellyfinItem } from "./api/client.ts";
 import { jellyfinLatestDescriptor } from "./descriptor.ts";
+import { JellyfinMessages } from "./messages.ts";
 
 const { appearance } = jellyfinLatestDescriptor;
 
@@ -63,22 +66,26 @@ type JellyfinLatestCardProps = {
   serviceUrl: string;
   /** The placement's key, which its relayed posters are addressed by. */
   placementKey: string;
+  locale: LocaleCode;
 };
 
-export function JellyfinLatestCard({ counts, items, serviceUrl, placementKey }: JellyfinLatestCardProps) {
+export function JellyfinLatestCard({ counts, items, serviceUrl, placementKey, locale }: JellyfinLatestCardProps) {
+  const t = Translation.create(JellyfinMessages, locale);
+  const integer = (value: number) => Units.integer(value, locale);
+
   return (
     <WidgetCard className={appearance.className}>
       {/* The server-wide totals label the row: they are what the posters are the newest of. */}
       <WidgetHeader
         href={serviceUrl}
         icon={appearance.icon}
-        title={appearance.title}
+        title={t("title")}
         description={
           <WidgetMetadata>
-            <span>{Units.Integer.format(counts.MovieCount)} movies</span>
-            <span>{Units.Integer.format(counts.SeriesCount)} shows</span>
-            <span>{Units.Integer.format(counts.EpisodeCount)} episodes</span>
-            <span>{Units.Integer.format(counts.SongCount)} songs</span>
+            <span>{t("movies", { count: integer(counts.MovieCount) })}</span>
+            <span>{t("shows", { count: integer(counts.SeriesCount) })}</span>
+            <span>{t("episodes", { count: integer(counts.EpisodeCount) })}</span>
+            <span>{t("songs", { count: integer(counts.SongCount) })}</span>
           </WidgetMetadata>
         }
       />
@@ -115,7 +122,7 @@ export function JellyfinLatestCard({ counts, items, serviceUrl, placementKey }: 
             </ul>
           </ScrollArea>
         ) : (
-          <WidgetEmptyState>No items found.</WidgetEmptyState>
+          <WidgetEmptyState>{t("empty")}</WidgetEmptyState>
         )}
       </WidgetContent>
     </WidgetCard>
@@ -143,7 +150,13 @@ export const jellyfinLatest = (
     // The client over-fetches, so trim here. Grouped responses can still repeat a series (unique React keys).
     return { counts, items: [...new Map(items.map(item => [item.id, item])).values()].slice(0, ITEM_COUNT) };
   },
-  render: ({ counts, items }, placementKey) => (
-    <JellyfinLatestCard counts={counts} items={items} serviceUrl={service.link} placementKey={placementKey} />
+  render: ({ counts, items }, placementKey, locale) => (
+    <JellyfinLatestCard
+      counts={counts}
+      items={items}
+      serviceUrl={service.link}
+      placementKey={placementKey}
+      locale={locale}
+    />
   ),
 });

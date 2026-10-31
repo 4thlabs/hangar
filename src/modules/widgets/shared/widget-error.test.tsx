@@ -7,6 +7,7 @@ describe("WidgetError", () => {
   it("renders a generic error while preserving the widget size class", () => {
     const html = renderToStaticMarkup(
       <WidgetError
+        locale="en"
         className="min-h-64"
         icon={new WidgetIcon("/icon.svg")}
         name="Service"
