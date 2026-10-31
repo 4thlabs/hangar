@@ -5,8 +5,8 @@ import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { notifications } from "#libs/notifications/server";
 import { RepeatedLineFilter } from "#modules/cluster/repeated-line-filter.ts";
-import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
 import { CommandStream } from "#modules/common/command-stream.ts";
+import { NotificationText } from "#modules/notifications/notification-text.ts";
 
 type StackDeploymentRun = {
   /** The app to deploy, already checked with `HangarStore.isStackManageable`. */
@@ -31,12 +31,8 @@ export class StackDeployment {
     const succeeded = await StackDeployment.deploy(stack, output);
 
     const outcome = succeeded
-      ? { level: "success" as const, title: "Déploiement terminé", description: `${stack} est déployée sur le swarm.` }
-      : {
-          level: "error" as const,
-          title: "Déploiement échoué",
-          description: `Le déploiement de ${stack} sur le swarm a échoué. ${SERVER_LOG_HINT}`,
-        };
+      ? { level: "success" as const, message: NotificationText.create("stackDeployed", { stack }) }
+      : { level: "error" as const, message: NotificationText.create("stackDeployFailed", { stack }) };
 
     await notifications.notify({ userId, href: StackDeployment.Href, ...outcome });
 

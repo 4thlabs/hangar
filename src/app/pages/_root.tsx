@@ -8,12 +8,12 @@ type RootProps = {
 };
 
 export default function Root({ children }: RootProps) {
-  const { theme, themePalette } = userPreferences.get();
+  const { theme, themePalette, locale } = userPreferences.get();
 
   return (
     <ErrorBoundary>
       <html
-        lang="fr"
+        lang={locale}
         className={theme === "dark" ? "dark" : undefined}
         data-theme={themePalette}
         data-color-mode={theme}
@@ -36,7 +36,7 @@ export default function Root({ children }: RootProps) {
   );
 }
 
-/** Dynamic: reads request-scoped theme preferences. */
+/** Dynamic: reads request-scoped theme and language preferences. */
 export const getConfig = async () => {
   return {
     render: "dynamic",

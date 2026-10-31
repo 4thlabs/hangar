@@ -100,31 +100,35 @@ describe("ComposeServiceMarkers.create", () => {
       b: { ...EMPTY_METRICS, cpuPercent: 2.5, memoryUsage: 1_024 },
     };
 
-    const markers = ComposeServiceMarkers.create({ state: "loaded", detail: loaded }, stats);
+    const markers = ComposeServiceMarkers.create({ state: "loaded", detail: loaded }, stats, "en");
 
-    expect(markers?.get("server")).toEqual({ tone: "running", label: "2/2 · 4.0 % · 2 KiB" });
+    expect(markers?.byService.get("server")).toEqual({ tone: "running", label: "2/2 · 4.0% · 2 KiB" });
   });
 
   it("shows the count alone before the first stats frame and for a stopped service", () => {
     const loaded = detail([service("db", [container("c", "exited")])]);
 
-    const markers = ComposeServiceMarkers.create({ state: "loaded", detail: loaded }, {});
+    const markers = ComposeServiceMarkers.create({ state: "loaded", detail: loaded }, {}, "en");
 
-    expect(markers?.get("db")).toEqual({ tone: "stopped", label: "0/1" });
+    expect(markers?.byService.get("db")).toEqual({ tone: "stopped", label: "0/1" });
   });
 
   it("shows an unknown CPU as unknown, not as zero, as in a stream's first frame", () => {
     const loaded = detail([service("server", [container("a")])]);
     const stats = { a: { ...EMPTY_METRICS, memoryUsage: 1_024 } };
 
-    const markers = ComposeServiceMarkers.create({ state: "loaded", detail: loaded }, stats);
+    const markers = ComposeServiceMarkers.create({ state: "loaded", detail: loaded }, stats, "en");
 
-    expect(markers?.get("server")?.label).toBe("1/1 · — · 1 KiB");
+    expect(markers?.byService.get("server")?.label).toBe("1/1 · — · 1 KiB");
   });
 
   it("knows no service of an app without container, and nothing before Docker answers or while it cannot", () => {
-    expect(ComposeServiceMarkers.create({ state: "absent" }, {})).toEqual(new Map());
-    expect(ComposeServiceMarkers.create({ state: "unavailable" }, {})).toBeNull();
-    expect(ComposeServiceMarkers.create(null, {})).toBeNull();
+    expect(ComposeServiceMarkers.create({ state: "absent" }, {}, "fr")).toEqual({
+      byService: new Map(),
+      missing: { tone: "missing", label: "non créé" },
+    });
+
+    expect(ComposeServiceMarkers.create({ state: "unavailable" }, {}, "en")).toBeNull();
+    expect(ComposeServiceMarkers.create(null, {}, "en")).toBeNull();
   });
 });

@@ -2,6 +2,7 @@
 
 import { SquareTerminalIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   Dialog,
@@ -15,11 +16,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tool
 import { useSpotlightPlatform } from "#modules/spotlight/hooks/use-spotlight-platform.ts";
 import { Spotlight } from "#modules/spotlight/spotlight.ts";
 import { HostTerminal } from "#modules/terminal/host-terminal.ts";
+import { TerminalMessages } from "#modules/terminal/messages.ts";
 
 type HostTerminalDialogProps = {
   /** The host and account the shell signs in to, or that none is configured. */
   description: string;
-  /** The **Clé SSH** dialog, next to the title. */
+  /** The **SSH key** dialog, next to the title. */
   sshKey: ReactNode;
   /** The terminal, or how to configure it. */
   children: ReactNode;
@@ -34,6 +36,7 @@ export function HostTerminalDialog({ description, sshKey, children }: HostTermin
   const [open, setOpen] = useState(false);
   const [wasOpened, setWasOpened] = useState(false);
   const platform = useSpotlightPlatform();
+  const { t } = useTranslation(TerminalMessages);
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -65,16 +68,16 @@ export function HostTerminalDialog({ description, sshKey, children }: HostTermin
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <Tooltip>
         <TooltipTrigger
-          render={<DialogTrigger render={<Button variant="ghost" size="icon" aria-label="Terminal" />} />}
+          render={<DialogTrigger render={<Button variant="ghost" size="icon" aria-label={t("title")} />} />}
         >
           <SquareTerminalIcon />
         </TooltipTrigger>
-        <TooltipContent>Terminal ({Spotlight.label(HostTerminal.Shortcut, platform)})</TooltipContent>
+        <TooltipContent>{t("shortcut", { shortcut: Spotlight.label(HostTerminal.Shortcut, platform) })}</TooltipContent>
       </Tooltip>
       <DialogContent keepMounted className="flex max-h-[calc(100svh-2rem)] flex-col sm:max-w-6xl">
         <div className="flex flex-wrap items-end justify-between gap-4 pr-8">
           <DialogHeader>
-            <DialogTitle>Terminal</DialogTitle>
+            <DialogTitle>{t("title")}</DialogTitle>
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
           {sshKey}

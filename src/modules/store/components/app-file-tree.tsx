@@ -3,9 +3,11 @@
 import { cn } from "cn";
 import { ChevronDownIcon, ChevronRightIcon, FileIcon, FolderIcon, PlusIcon } from "lucide-react";
 import { useState, type ComponentProps, type FormEvent, type ReactNode } from "react";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
 import { buildFileTree, type FileTreeFolder, type FileTreeNode } from "#modules/store/file-tree.ts";
+import { StoreMessages } from "#modules/store/messages.ts";
 
 /** Indent per nesting level, in rem: a level must read as such at a glance in a narrow column. */
 const INDENT_REM = 0.875;
@@ -26,6 +28,7 @@ type AppFileTreeProps = {
  * tree folds behind a button naming the open file, and opening a file folds it again.
  */
 export function AppFileTree({ paths, selectedPath, unsavedPaths, onSelect, onCreate, isCreating }: AppFileTreeProps) {
+  const { t } = useTranslation(StoreMessages);
   const [isOpenOnMobile, setIsOpenOnMobile] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
 
@@ -65,7 +68,7 @@ export function AppFileTree({ paths, selectedPath, unsavedPaths, onSelect, onCre
     ));
 
   return (
-    <nav aria-label="Fichiers de l’app" className="flex flex-col gap-1 rounded-lg border border-input p-1.5">
+    <nav aria-label={t("editor.filesLabel")} className="flex flex-col gap-1 rounded-lg border border-input p-1.5">
       <Button
         type="button"
         variant="ghost"
@@ -80,7 +83,7 @@ export function AppFileTree({ paths, selectedPath, unsavedPaths, onSelect, onCre
         <ChevronDownIcon className={cn("transition-transform", isOpenOnMobile && "rotate-180")} />
       </Button>
       <div className={cn("flex-col gap-1", isOpenOnMobile ? "flex" : "hidden", "md:flex")}>
-        <p className="px-2 pt-1 text-xs font-medium text-muted-foreground">Fichiers</p>
+        <p className="px-2 pt-1 text-xs font-medium text-muted-foreground">{t("editor.files")}</p>
         <ul className="flex flex-col">{renderNodes(buildFileTree(paths), 0)}</ul>
         <NewFileForm onCreate={onCreate} isCreating={isCreating} />
       </div>
@@ -152,8 +155,10 @@ function TreeRow({ depth, className, style, ...props }: TreeRowProps) {
 }
 
 function UnsavedDot() {
+  const { t } = useTranslation(StoreMessages);
+
   return (
-    <span className="ml-auto pl-1.5 text-primary" role="img" aria-label="modifications non enregistrées">
+    <span className="ml-auto pl-1.5 text-primary" role="img" aria-label={t("editor.unsaved")}>
       ●
     </span>
   );
@@ -164,8 +169,9 @@ type NewFileFormProps = {
   isCreating: boolean;
 };
 
-/** "Nouveau fichier": a button, then a path input; Escape or an empty name puts the button back. */
+/** "New file": a button, then a path input; Escape or an empty name puts the button back. */
 function NewFileForm({ onCreate, isCreating }: NewFileFormProps) {
+  const { t } = useTranslation(StoreMessages);
   const [isEditing, setIsEditing] = useState(false);
   const [relativePath, setRelativePath] = useState("");
 
@@ -197,7 +203,7 @@ function NewFileForm({ onCreate, isCreating }: NewFileFormProps) {
         onClick={() => setIsEditing(true)}
       >
         <PlusIcon data-icon="inline-start" />
-        Nouveau fichier
+        {t("editor.newFile")}
       </Button>
     );
   }
@@ -206,7 +212,7 @@ function NewFileForm({ onCreate, isCreating }: NewFileFormProps) {
     <form onSubmit={handleSubmit}>
       <Input
         autoFocus
-        aria-label="Chemin du nouveau fichier"
+        aria-label={t("editor.newFilePath")}
         value={relativePath}
         placeholder="config/settings.yml"
         className="font-mono"

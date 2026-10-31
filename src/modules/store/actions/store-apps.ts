@@ -2,12 +2,12 @@
 
 import { sessions } from "#libs/auth/server";
 import { hangar } from "#libs/hangar/server";
+import { ServerTranslation } from "#libs/i18n/server";
 import { logger } from "#libs/logs";
-import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
+import { ActionFailure } from "#modules/common/actions/action-failure.ts";
 import { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
 import { AppStacks } from "#modules/store/app-stacks.ts";
-
-const UNKNOWN_APP = "Cette application n’existe pas dans le store.";
+import { StoreMessages } from "#modules/store/messages.ts";
 
 /** The store app behind `appId`, for a signed-in user; logs `rejected` when there is none. */
 async function findApp(appId: string, rejected: string) {
@@ -24,13 +24,14 @@ async function findApp(appId: string, rejected: string) {
 
 export const installApp = async (appId: string): Promise<StoreActionResult> => {
   const app = await findApp(appId, "App installation rejected: unknown app");
+  const { t } = ServerTranslation.get(StoreMessages);
 
   if (!app) {
-    return StoreActionResult.failure(UNKNOWN_APP);
+    return StoreActionResult.failure(t("actions.unknownApp"));
   }
 
   if (app.installed) {
-    return StoreActionResult.success(`${app.name} est déjà installée.`);
+    return StoreActionResult.success(t("actions.alreadyInstalled", { name: app.name }));
   }
 
   try {
@@ -42,24 +43,25 @@ export const installApp = async (appId: string): Promise<StoreActionResult> => {
     const installed = hangar.store.app(app.id)?.installed ?? false;
 
     return installed
-      ? StoreActionResult.success(`${app.name} a été installée.`)
-      : StoreActionResult.failure(`L’installation de ${app.name} n’a pas pu être confirmée.`);
+      ? StoreActionResult.success(t("actions.installed", { name: app.name }))
+      : StoreActionResult.failure(t("actions.installUnconfirmed", { name: app.name }));
   } catch (error) {
     logger.error("App installation failed", { error, appId: app.id });
 
-    return StoreActionResult.failure(`L’installation de ${app.name} a échoué. ${SERVER_LOG_HINT}`);
+    return StoreActionResult.failure(ActionFailure.withLogHint(t("actions.installFailed", { name: app.name })));
   }
 };
 
 export const uninstallApp = async (appId: string): Promise<StoreActionResult> => {
   const app = await findApp(appId, "App uninstallation rejected: unknown app");
+  const { t } = ServerTranslation.get(StoreMessages);
 
   if (!app) {
-    return StoreActionResult.failure(UNKNOWN_APP);
+    return StoreActionResult.failure(t("actions.unknownApp"));
   }
 
   if (!app.installed) {
-    return StoreActionResult.success(`${app.name} n’est pas installée.`, false);
+    return StoreActionResult.success(t("actions.notInstalled", { name: app.name }), false);
   }
 
   try {
@@ -75,16 +77,14 @@ export const uninstallApp = async (appId: string): Promise<StoreActionResult> =>
 
     const installed = hangar.store.app(app.id)?.installed ?? false;
 
-    const leftoverNote = stackLeftover
-      ? ` Sa stack n’a pas pu être supprimée (${stackLeftover}) : supprimez-la depuis un manager.`
-      : "";
+    const leftoverNote = stackLeftover ? ` ${t("actions.stackLeftover", { reason: stackLeftover })}` : "";
 
     return installed
-      ? StoreActionResult.failure(`La désinstallation de ${app.name} n’a pas pu être confirmée.`, true)
-      : StoreActionResult.success(`${app.name} a été désinstallée.${leftoverNote}`, false);
+      ? StoreActionResult.failure(t("actions.uninstallUnconfirmed", { name: app.name }), true)
+      : StoreActionResult.success(`${t("actions.uninstalled", { name: app.name })}${leftoverNote}`, false);
   } catch (error) {
     logger.error("App uninstallation failed", { error, appId: app.id });
 
-    return StoreActionResult.failure(`La désinstallation de ${app.name} a échoué. ${SERVER_LOG_HINT}`, true);
+    return StoreActionResult.failure(ActionFailure.withLogHint(t("actions.uninstallFailed", { name: app.name })), true);
   }
 };

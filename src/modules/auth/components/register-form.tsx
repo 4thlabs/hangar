@@ -4,11 +4,14 @@ import { useState, type SubmitEvent } from "react";
 import { useRouter } from "waku";
 import { authClient } from "#libs/auth/client";
 import { AuthEmailField, AuthFormCard, AuthPasswordField } from "#modules/auth/components/auth-form-card.tsx";
+import { AuthMessages } from "#modules/auth/messages.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Field, FieldError, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
 
 export function RegisterForm() {
   const router = useRouter();
+  const { t } = useTranslation(AuthMessages);
   const [error, setError] = useState<string | null>(null);
   const [passwordMismatch, setPasswordMismatch] = useState(false);
   const [isPending, setIsPending] = useState(false);
@@ -36,7 +39,7 @@ export function RegisterForm() {
       const result = await authClient.signUp.email({ name, email, password });
 
       if (result.error) {
-        setError(result.error.message ?? "Unable to create your account.");
+        setError(result.error.message ?? t("register.error"));
 
         return;
       }
@@ -44,7 +47,7 @@ export function RegisterForm() {
       router.replace("/");
     } catch (error) {
       console.error("Sign-up request failed", error);
-      setError("Unable to create your account. Please try again.");
+      setError(t("register.transportError"));
     } finally {
       setIsPending(false);
     }
@@ -52,24 +55,24 @@ export function RegisterForm() {
 
   return (
     <AuthFormCard
-      title="Create your Hangar account"
-      description="Enter your details to get started."
+      title={t("register.title")}
+      description={t("register.description")}
       error={error}
-      errorTitle="Registration failed"
+      errorTitle={t("register.failed")}
       isPending={isPending}
-      submitLabel="Create account"
-      pendingLabel="Creating account…"
-      alternate={{ prompt: "Already have an account?", href: "/login", label: "Sign in" }}
+      submitLabel={t("register.submit")}
+      pendingLabel={t("register.pending")}
+      alternate={{ prompt: t("register.haveAccount"), href: "/login", label: t("register.signIn") }}
       onSubmit={handleSubmit}
     >
       <Field>
-        <FieldLabel htmlFor="name">Name</FieldLabel>
+        <FieldLabel htmlFor="name">{t("register.name")}</FieldLabel>
         <Input id="name" name="name" type="text" autoComplete="name" required disabled={isPending} />
       </Field>
       <AuthEmailField disabled={isPending} />
       <AuthPasswordField disabled={isPending} autoComplete="new-password" />
       <Field data-invalid={passwordMismatch || undefined}>
-        <FieldLabel htmlFor="confirmPassword">Confirm password</FieldLabel>
+        <FieldLabel htmlFor="confirmPassword">{t("register.confirmPassword")}</FieldLabel>
         <Input
           id="confirmPassword"
           name="confirmPassword"
@@ -82,7 +85,7 @@ export function RegisterForm() {
           aria-invalid={passwordMismatch || undefined}
           aria-describedby={passwordMismatch ? "confirmPassword-error" : undefined}
         />
-        {passwordMismatch && <FieldError id="confirmPassword-error">Passwords do not match.</FieldError>}
+        {passwordMismatch && <FieldError id="confirmPassword-error">{t("register.mismatch")}</FieldError>}
       </Field>
     </AuthFormCard>
   );

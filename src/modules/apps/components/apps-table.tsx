@@ -5,11 +5,12 @@ import { Link } from "waku";
 import type { ComposeProjectSummary } from "#libs/docker";
 import { categoryBadgeClass } from "#modules/apps/category.ts";
 import { ComposeOperationButtons, ComposeRunDialogs } from "#modules/apps/components/compose-operations.tsx";
-import { plural, s } from "#modules/apps/format.ts";
 import { useComposeRun } from "#modules/apps/hooks/use-compose-run.ts";
+import { AppsMessages } from "#modules/apps/messages.ts";
 import type { AppSortColumn, AppsSort } from "#modules/apps/search-codec.ts";
-import { statusLabel, statusVariant } from "#modules/apps/status.ts";
+import { statusVariant } from "#modules/apps/status.ts";
 import { SortableHead } from "#modules/common/components/sortable-head.tsx";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { navigationPrefetch } from "#modules/common/navigations.ts";
 import { ToggledSet } from "#modules/common/toggled-set.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
@@ -22,6 +23,7 @@ type AppsTableProps = {
 };
 
 export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
+  const { t } = useTranslation(AppsMessages);
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
 
   // The list re-renders while a selection is held, so drop names that disappeared meanwhile.
@@ -36,9 +38,7 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground" aria-live="polite">
-          {selected.length > 0
-            ? `${plural(selected.length, "application")} sélectionnée${s(selected.length)}`
-            : "Aucune sélection"}
+          {selected.length > 0 ? t("table.selected", { count: selected.length }) : t("table.noSelection")}
         </span>
         <ComposeOperationButtons
           running={compose.running}
@@ -57,17 +57,17 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
               <input
                 type="checkbox"
                 className="size-4 accent-primary"
-                aria-label="Tout sélectionner"
+                aria-label={t("table.selectAll")}
                 checked={selected.length === projects.length && projects.length > 0}
                 onChange={event => setSelection(event.target.checked ? new Set(projects.map(p => p.name)) : new Set())}
               />
             </TableHead>
-            <SortableHead column="name" label="Application" sort={sort} onSort={onSort} />
-            <SortableHead column="category" label="Catégorie" sort={sort} onSort={onSort} />
-            <SortableHead column="status" label="Statut" sort={sort} onSort={onSort} />
-            <SortableHead column="services" label="Services" sort={sort} onSort={onSort} />
-            <SortableHead column="containers" label="Conteneurs" sort={sort} onSort={onSort} />
-            <SortableHead column="unhealthy" label="Unhealthy" sort={sort} onSort={onSort} />
+            <SortableHead column="name" label={t("table.app")} sort={sort} onSort={onSort} />
+            <SortableHead column="category" label={t("table.category")} sort={sort} onSort={onSort} />
+            <SortableHead column="status" label={t("table.status")} sort={sort} onSort={onSort} />
+            <SortableHead column="services" label={t("table.services")} sort={sort} onSort={onSort} />
+            <SortableHead column="containers" label={t("table.containers")} sort={sort} onSort={onSort} />
+            <SortableHead column="unhealthy" label={t("table.unhealthy")} sort={sort} onSort={onSort} />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -77,7 +77,7 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
                 <input
                   type="checkbox"
                   className="size-4 accent-primary"
-                  aria-label={`Sélectionner ${project.name}`}
+                  aria-label={t("table.select", { name: project.name })}
                   checked={selection.has(project.name)}
                   onChange={event => toggle(project.name, event.target.checked)}
                 />
@@ -92,7 +92,7 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
                   >
                     {project.name}
                   </Link>
-                  {project.updateAvailable && <Badge variant="outline">Mise à jour</Badge>}
+                  {project.updateAvailable && <Badge variant="outline">{t("update")}</Badge>}
                 </div>
               </TableCell>
               <TableCell>
@@ -105,7 +105,7 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
                 )}
               </TableCell>
               <TableCell>
-                <Badge variant={statusVariant(project.status)}>{statusLabel[project.status]}</Badge>
+                <Badge variant={statusVariant(project.status)}>{t(`status.${project.status}`)}</Badge>
               </TableCell>
               <TableCell className="tabular-nums">{project.serviceCount}</TableCell>
               <TableCell className="tabular-nums">
@@ -119,7 +119,7 @@ export function AppsTable({ projects, sort = null, onSort }: AppsTableProps) {
         </TableBody>
       </Table>
 
-      <ComposeRunDialogs compose={compose} subject={plural(selected.length, "application")} count={selected.length} />
+      <ComposeRunDialogs compose={compose} subject={t("apps", { count: selected.length })} count={selected.length} />
     </div>
   );
 }

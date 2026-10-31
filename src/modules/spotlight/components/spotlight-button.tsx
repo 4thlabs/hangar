@@ -2,10 +2,12 @@
 
 import { useSetAtom } from "jotai";
 import { TextSearchIcon } from "lucide-react";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
 import { spotlightAtom } from "#modules/spotlight/atoms/spotlight.ts";
 import { useSpotlightPlatform } from "#modules/spotlight/hooks/use-spotlight-platform.ts";
+import { SpotlightMessages } from "#modules/spotlight/messages.ts";
 import { Spotlight } from "#modules/spotlight/spotlight.ts";
 
 /**
@@ -15,6 +17,7 @@ import { Spotlight } from "#modules/spotlight/spotlight.ts";
 export function SpotlightButton() {
   const setSpotlight = useSetAtom(spotlightAtom);
   const platform = useSpotlightPlatform();
+  const { t } = useTranslation(SpotlightMessages);
 
   return (
     <Tooltip>
@@ -23,14 +26,16 @@ export function SpotlightButton() {
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Rechercher partout"
+            aria-label={t("searchEverywhere")}
             onClick={() => setSpotlight({ open: true, scope: null })}
           />
         }
       >
         <TextSearchIcon />
       </TooltipTrigger>
-      <TooltipContent>Rechercher partout ({Spotlight.label(Spotlight.Shortcut, platform)})</TooltipContent>
+      <TooltipContent>
+        {t("searchEverywhereShortcut", { shortcut: Spotlight.label(Spotlight.Shortcut, platform) })}
+      </TooltipContent>
     </Tooltip>
   );
 }

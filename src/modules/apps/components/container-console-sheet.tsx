@@ -2,7 +2,9 @@
 
 import { SquareTerminalIcon } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
+import { AppsMessages } from "#modules/apps/messages.ts";
 import { LogsPanel } from "#modules/common/components/logs-panel.tsx";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   Sheet,
@@ -30,13 +32,15 @@ type ContainerConsoleSheetProps = {
 
 /** A button opening a running container's console: its live logs, and a shell in a second tab. */
 export function ContainerConsoleSheet({ endpoint, name, context }: ContainerConsoleSheetProps) {
+  const { t } = useTranslation(AppsMessages);
+
   return (
     <Sheet>
       <SheetTrigger
         render={
-          <Button variant="outline" size="xs" aria-label={`Ouvrir la console de ${name}`}>
+          <Button variant="outline" size="xs" aria-label={t("container.openConsole", { name })}>
             <SquareTerminalIcon data-icon="inline-start" />
-            Console
+            {t("container.console")}
           </Button>
         }
       />
@@ -58,6 +62,7 @@ export function ContainerConsoleSheet({ endpoint, name, context }: ContainerCons
  * must not kill what the shell runs. The shell opens the first time its tab is selected.
  */
 function ConsoleTabs({ endpoint }: { endpoint: string }) {
+  const { t } = useTranslation(AppsMessages);
   const [terminalOpened, setTerminalOpened] = useState(false);
 
   return (
@@ -67,8 +72,8 @@ function ConsoleTabs({ endpoint }: { endpoint: string }) {
       className="min-h-0 flex-1 px-4 pb-4"
     >
       <TabsList>
-        <TabsTrigger value="logs">Logs</TabsTrigger>
-        <TabsTrigger value="terminal">Terminal</TabsTrigger>
+        <TabsTrigger value="logs">{t("container.logs")}</TabsTrigger>
+        <TabsTrigger value="terminal">{t("container.terminal")}</TabsTrigger>
       </TabsList>
       <TabsContent value="logs" keepMounted className="flex min-h-0 flex-col gap-3">
         <LogsPanel endpoint={`${endpoint}/logs`} />

@@ -4,18 +4,21 @@ import "../styles.css";
 import "@fontsource-variable/jetbrains-mono";
 import "@fontsource-variable/nunito";
 import type { ReactNode } from "react";
+import { ServerTranslation } from "#libs/i18n/server";
 import { userPreferences } from "#libs/preferences/server";
 import { AppProviders } from "#modules/common/components/app-providers.tsx";
+import { CommonMessages } from "#modules/common/messages.ts";
 
 type RootLayoutProps = { children: ReactNode };
 
 export default function RootLayout({ children }: RootLayoutProps) {
-  const { theme, themePalette } = userPreferences.get();
+  const { theme, themePalette, locale } = userPreferences.get();
+  const { t } = ServerTranslation.get(CommonMessages);
 
   return (
-    <AppProviders initialPalette={themePalette} initialMode={theme}>
+    <AppProviders initialPalette={themePalette} initialMode={theme} initialLocale={locale}>
       <div className="min-h-svh font-sans">
-        <meta name="description" content="Hangar — vos applications auto-hébergées." />
+        <meta name="description" content={t("metaDescription")} />
         <link rel="icon" type="image/png" href="/images/favicon.png" />
         <link rel="manifest" href="/manifest.webmanifest" />
         {/* iOS only reads the manifest icons since 17.4; before that this tag is all it looks at. */}

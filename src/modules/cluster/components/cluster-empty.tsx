@@ -1,5 +1,7 @@
 import type { SwarmLimitedView } from "#libs/docker";
 import { ClusterLabels } from "#modules/cluster/labels.ts";
+import { ClusterMessages } from "#modules/cluster/messages.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import {
   Empty,
   EmptyContent,
@@ -11,7 +13,8 @@ import {
 
 /** What /cluster shows when this node cannot describe the cluster, with the command that moves it on. */
 export function ClusterEmpty({ cluster }: { cluster: SwarmLimitedView }) {
-  const text = ClusterLabels.empty(cluster);
+  const { t } = useTranslation(ClusterMessages);
+  const text = ClusterLabels.empty(cluster, t);
 
   return (
     <Empty>

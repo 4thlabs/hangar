@@ -2,8 +2,10 @@
 
 import { ClusterStacks, type ClusterStack } from "#modules/cluster/cluster-stacks.ts";
 import { ClusterLabels } from "#modules/cluster/labels.ts";
+import { ClusterMessages } from "#modules/cluster/messages.ts";
 import type { StackSortColumn } from "#modules/cluster/search.ts";
 import { SortableHead } from "#modules/common/components/sortable-head.tsx";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import type { SortState } from "#modules/common/table-sort.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
@@ -23,14 +25,16 @@ type StackTableProps = {
  * yet, whose sheet deploys it. Its name opens the sheet.
  */
 export function StackTable({ stacks, manageableStacks, sort, onSort, onOpen }: StackTableProps) {
+  const { t } = useTranslation(ClusterMessages);
+
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <SortableHead column="name" label="Stack" sort={sort} onSort={onSort} />
-          <SortableHead column="health" label="Santé" sort={sort} onSort={onSort} />
-          <SortableHead column="replicas" label="Réplicas" sort={sort} onSort={onSort} />
-          <SortableHead column="nodes" label="Nœuds" sort={sort} onSort={onSort} />
+          <SortableHead column="name" label={t("table.stack")} sort={sort} onSort={onSort} />
+          <SortableHead column="health" label={t("table.health")} sort={sort} onSort={onSort} />
+          <SortableHead column="replicas" label={t("table.replicas")} sort={sort} onSort={onSort} />
+          <SortableHead column="nodes" label={t("table.nodes")} sort={sort} onSort={onSort} />
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -49,7 +53,7 @@ export function StackTable({ stacks, manageableStacks, sort, onSort, onOpen }: S
                 <span className={ClusterLabels.HealthClass[stack.health]} aria-hidden>
                   {ClusterLabels.HealthSymbol[stack.health]}
                 </span>
-                {ClusterLabels.HealthShort[stack.health]}
+                {t(`health.${stack.health}`)}
               </span>
             </TableCell>
             <TableCell className="tabular-nums">
@@ -67,12 +71,14 @@ export function StackTable({ stacks, manageableStacks, sort, onSort, onOpen }: S
 
 /** The nodes a stack's tasks run on, or why there are none. */
 function StackPlacement({ stack }: { stack: ClusterStack }) {
+  const { t } = useTranslation(ClusterMessages);
+
   if (!ClusterStacks.isDeployed(stack)) {
     return <span className="text-muted-foreground">—</span>;
   }
 
   if (stack.placement.length === 0) {
-    return <span className="text-muted-foreground">aucune tâche</span>;
+    return <span className="text-muted-foreground">{t("table.noTasks")}</span>;
   }
 
   return (

@@ -4,6 +4,8 @@ import { SearchIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "waku";
 import { useSearch_UNSTABLE, useSetSearch_UNSTABLE } from "waku/router/client";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
+import { CommonMessages } from "#modules/common/messages.ts";
 import { Field, FieldLabel } from "#modules/common/ui/field.tsx";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "#modules/common/ui/input-group.tsx";
 
@@ -26,6 +28,7 @@ function RouteSearchField({ id, autoFocus, from }: NavbarSearchProps & { from: s
   // `from` is a runtime path, not a route literal: the typed `search` only exists on the page itself.
   const search = useSearch_UNSTABLE({ from: from as never }) as { q?: string } | null;
   const setSearch = useSetSearch_UNSTABLE({ from: from as never });
+  const { t } = useTranslation(CommonMessages);
   const routeQuery = search?.q ?? "";
   const [value, setValue] = useState(routeQuery);
 
@@ -45,7 +48,7 @@ function RouteSearchField({ id, autoFocus, from }: NavbarSearchProps & { from: s
   return (
     <Field>
       <FieldLabel htmlFor={id} className="sr-only">
-        Rechercher
+        {t("search.label")}
       </FieldLabel>
       <InputGroup>
         <InputGroupAddon>
@@ -54,7 +57,7 @@ function RouteSearchField({ id, autoFocus, from }: NavbarSearchProps & { from: s
         <InputGroupInput
           id={id}
           type="search"
-          placeholder={unsupported ? "Recherche indisponible ici" : "Rechercher…"}
+          placeholder={unsupported ? t("search.unavailable") : t("search.placeholder")}
           autoFocus={autoFocus}
           disabled={unsupported}
           value={value}

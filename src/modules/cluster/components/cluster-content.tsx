@@ -2,8 +2,10 @@ import type { ReactNode } from "react";
 import { map, recover } from "#libs/cache";
 import { swarm } from "#libs/docker/server";
 import { hangar } from "#libs/hangar/server";
+import { ServerTranslation } from "#libs/i18n/server";
 import { logger } from "#libs/logs";
 import { ClusterOverview } from "#modules/cluster/components/cluster-overview.tsx";
+import { ClusterMessages } from "#modules/cluster/messages.ts";
 import type { ClusterSearchState } from "#modules/cluster/search.ts";
 
 /**
@@ -12,6 +14,8 @@ import type { ClusterSearchState } from "#modules/cluster/search.ts";
  * ClusterOverview, with retry.
  */
 export function ClusterContent({ search }: { search: ClusterSearchState }): Promise<ReactNode> {
+  const { t } = ServerTranslation.get(ClusterMessages);
+
   const overview = map(swarm.cluster(), cluster => (
     <ClusterOverview cluster={cluster} manageableStacks={hangar.store.manageableStacks()} search={search} />
   ));
@@ -19,11 +23,6 @@ export function ClusterContent({ search }: { search: ClusterSearchState }): Prom
   return recover(overview, (error: unknown) => {
     logger.error("Failed to read the Swarm cluster", { error });
 
-    return (
-      <ClusterOverview
-        search={search}
-        error="Le daemon Docker ne répond pas pour le swarm. Vérifiez le socket, ou que le cluster a encore un leader."
-      />
-    );
+    return <ClusterOverview search={search} error={t("daemonUnavailable")} />;
   });
 }

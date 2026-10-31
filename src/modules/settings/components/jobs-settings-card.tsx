@@ -6,20 +6,13 @@ import { useRouter } from "waku";
 import type { ActionResult } from "#modules/common/actions/action-result.ts";
 import { LocalDateTime } from "#modules/common/components/local-date-time.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#modules/common/ui/empty.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
-
-const stateLabel: Record<JobState, string> = {
-  waiting: "En attente",
-  claimed: "Réservé",
-  running: "En cours",
-  completed: "Terminé",
-  failed: "Échoué",
-  canceled: "Annulé",
-};
+import { SettingsMessages } from "#modules/settings/messages.ts";
 
 /** Only these can still be stopped; the others already reached a final state. */
 const cancellable: JobState[] = ["waiting", "claimed", "running"];
@@ -35,35 +28,36 @@ type JobsSettingsCardProps = {
 export function JobsSettingsCard({ jobs, runJob, cancelJob }: JobsSettingsCardProps) {
   const router = useRouter();
   const { run, isPending } = useServerAction();
+  const { t } = useTranslation(SettingsMessages);
 
   const handle = (action: () => Promise<ActionResult>, error: string) =>
-    run(action, { success: "Opération terminée", error }, () => router.reload());
+    run(action, { success: t("jobs.done"), error }, () => router.reload());
 
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>JOBS</CardTitle>
-        <CardDescription>Les 50 derniers jobs traités par Sidequest.</CardDescription>
+        <CardTitle>{t("jobs.title")}</CardTitle>
+        <CardDescription>{t("jobs.description")}</CardDescription>
       </CardHeader>
       <CardContent>
         {jobs.length === 0 ? (
           <Empty>
             <EmptyHeader>
-              <EmptyTitle>Aucun job</EmptyTitle>
-              <EmptyDescription>Aucun job n’a encore été mis en file.</EmptyDescription>
+              <EmptyTitle>{t("jobs.emptyTitle")}</EmptyTitle>
+              <EmptyDescription>{t("jobs.emptyDescription")}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Job</TableHead>
-                <TableHead>Queue</TableHead>
-                <TableHead>État</TableHead>
-                <TableHead>Tentatives</TableHead>
-                <TableHead>Créé</TableHead>
-                <TableHead>Terminé</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead>{t("jobs.columns.job")}</TableHead>
+                <TableHead>{t("jobs.columns.queue")}</TableHead>
+                <TableHead>{t("jobs.columns.state")}</TableHead>
+                <TableHead>{t("jobs.columns.attempts")}</TableHead>
+                <TableHead>{t("jobs.columns.created")}</TableHead>
+                <TableHead>{t("jobs.columns.ended")}</TableHead>
+                <TableHead>{t("jobs.columns.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -73,7 +67,7 @@ export function JobsSettingsCard({ jobs, runJob, cancelJob }: JobsSettingsCardPr
                   <TableCell>{job.queue}</TableCell>
                   <TableCell>
                     <Badge variant={job.state === "failed" ? "destructive" : "secondary"}>
-                      {stateLabel[job.state]}
+                      {t(`jobs.states.${job.state}`)}
                     </Badge>
                   </TableCell>
                   <TableCell className="tabular-nums">
@@ -91,10 +85,10 @@ export function JobsSettingsCard({ jobs, runJob, cancelJob }: JobsSettingsCardPr
                         type="button"
                         size="icon-sm"
                         variant="outline"
-                        title="Relancer"
-                        aria-label="Relancer le job"
+                        title={t("jobs.rerun")}
+                        aria-label={t("jobs.rerunLabel")}
                         disabled={isPending}
-                        onClick={() => handle(() => runJob(job.id), "Échec de la relance")}
+                        onClick={() => handle(() => runJob(job.id), t("jobs.rerunFailed"))}
                       >
                         <RotateCcwIcon />
                       </Button>
@@ -103,10 +97,10 @@ export function JobsSettingsCard({ jobs, runJob, cancelJob }: JobsSettingsCardPr
                           type="button"
                           size="icon-sm"
                           variant="ghost"
-                          title="Annuler"
-                          aria-label="Annuler le job"
+                          title={t("jobs.cancel")}
+                          aria-label={t("jobs.cancelLabel")}
                           disabled={isPending}
-                          onClick={() => handle(() => cancelJob(job.id), "Échec de l’annulation")}
+                          onClick={() => handle(() => cancelJob(job.id), t("jobs.cancelFailed"))}
                         >
                           <XIcon />
                         </Button>

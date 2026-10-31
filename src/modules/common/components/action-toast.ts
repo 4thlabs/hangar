@@ -7,9 +7,6 @@ type ActionToastTitles = {
 
 /** The toasts a server action ends with. */
 export class ActionToast {
-  /** What a toast or a panel says when a server action never returned. */
-  static readonly TransportErrorMessage = "Impossible de contacter le serveur. Réessayez.";
-
   /** The outcome of an action that returned, successful or not. */
   static create(result: ActionResult, titles: ActionToastTitles) {
     return {
@@ -19,8 +16,12 @@ export class ActionToast {
     };
   }
 
-  /** An action that never returned: the request itself failed. */
-  static transportError(title: string, description = ActionToast.TransportErrorMessage) {
+  /**
+   * An action that never returned: the request itself failed.
+   * @param description Why, in the reader's language: `CommonMessages` `actions.transportError` unless the action
+   * knows better
+   */
+  static transportError(title: string, description: string) {
     return {
       title,
       description,

@@ -5,12 +5,14 @@ import { useAtom } from "jotai";
 import { SearchIcon } from "lucide-react";
 import { useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useRouter } from "waku";
+import { useLocale, useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Dialog, DialogContent, DialogTitle } from "#modules/common/ui/dialog.tsx";
 import { spotlightAtom } from "#modules/spotlight/atoms/spotlight.ts";
 import { useSpotlightPlatform } from "#modules/spotlight/hooks/use-spotlight-platform.ts";
 import { useSpotlightResults } from "#modules/spotlight/hooks/use-spotlight-results.ts";
 import { useSpotlightShortcuts } from "#modules/spotlight/hooks/use-spotlight-shortcuts.ts";
+import { SpotlightMessages } from "#modules/spotlight/messages.ts";
 import { SpotlightSources } from "#modules/spotlight/sources.ts";
 import {
   Spotlight,
@@ -29,6 +31,7 @@ type SpotlightGroup = { source: SpotlightSource; items: SpotlightItem[] };
  */
 export function SpotlightPalette() {
   const [state, setState] = useAtom(spotlightAtom);
+  const { t, locale } = useTranslation(SpotlightMessages);
   const [input, setInput] = useState("");
   const [highlighted, setHighlighted] = useState<SpotlightItem | undefined>(undefined);
   const results = useSpotlightResults(state.open, state.scope);
@@ -117,7 +120,7 @@ export function SpotlightPalette() {
         showCloseButton={false}
         className="top-[15svh] flex max-h-[70svh] translate-y-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
       >
-        <DialogTitle className="sr-only">Rechercher</DialogTitle>
+        <DialogTitle className="sr-only">{t("search")}</DialogTitle>
         <Autocomplete.Root
           open
           inline
@@ -133,26 +136,24 @@ export function SpotlightPalette() {
         >
           <Autocomplete.InputGroup className="flex items-center gap-2 border-b px-3">
             <SearchIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            {scope && <Badge variant="secondary">{scope.label}</Badge>}
+            {scope && <Badge variant="secondary">{scope.label(locale)}</Badge>}
             <Autocomplete.Input
               className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              aria-label="Rechercher"
-              placeholder={scope ? `Rechercher dans ${scope.label}…` : "Rechercher une app, une page…"}
+              aria-label={t("search")}
+              placeholder={scope ? t("scopedPlaceholder", { source: scope.label(locale) }) : t("placeholder")}
               onKeyDown={handleKeyDown}
             />
           </Autocomplete.InputGroup>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
             <Autocomplete.Empty>
-              <p className="px-3 py-6 text-center text-muted-foreground">
-                {isLoading ? "Chargement…" : "Aucun résultat."}
-              </p>
+              <p className="px-3 py-6 text-center text-muted-foreground">{isLoading ? t("loading") : t("empty")}</p>
             </Autocomplete.Empty>
             <Autocomplete.List>
               {(group: SpotlightGroup) => (
                 <Autocomplete.Group key={group.source.id} items={group.items} className="not-last:mb-2">
                   <Autocomplete.GroupLabel className="px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                    {group.source.label}
+                    {group.source.label(locale)}
                   </Autocomplete.GroupLabel>
                   <Autocomplete.Collection>
                     {(item: SpotlightItem) => (
@@ -173,7 +174,7 @@ export function SpotlightPalette() {
             </Autocomplete.List>
             {failed.map(source => (
               <p key={source.id} role="alert" className="px-3 py-2 text-destructive">
-                {source.label} : chargement impossible.
+                {t("sourceFailed", { source: source.label(locale) })}
               </p>
             ))}
           </div>
@@ -204,6 +205,8 @@ type SpotlightFooterProps = {
 
 /** What each key does on the highlighted item, and, before a scope is picked, how to pick one. */
 function SpotlightFooter({ highlighted, scope, platform }: SpotlightFooterProps) {
+  const locale = useLocale();
+
   // Only the keys the item gives an action of its own: the others repeat Enter's.
   const hints = Spotlight.ActionKeys.flatMap(({ name, shortcut }) => {
     const action = highlighted?.actions[name];
@@ -222,7 +225,8 @@ function SpotlightFooter({ highlighted, scope, platform }: SpotlightFooterProps)
         <span className="ml-auto flex gap-3">
           {SpotlightSources.All.map(source => (
             <span key={source.id}>
-              <kbd>{source.prefix}</kbd> {source.label} · <kbd>{Spotlight.label(source.shortcut, platform)}</kbd>
+              <kbd>{source.prefix}</kbd> {source.label(locale)} ·{" "}
+              <kbd>{Spotlight.label(source.shortcut, platform)}</kbd>
             </span>
           ))}
         </span>

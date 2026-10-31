@@ -24,7 +24,7 @@ export class RelativeTime {
   /**
    * A millisecond timestamp as a phrase: "2 minutes ago".
    *
-   * @param locale Widgets read English; the notification centre passes "fr".
+   * @param locale The BCP 47 tag of the reader's language, `Locale.intlTag` of their pick
    */
   static format(timestamp: number, now: number = Date.now(), locale = "en") {
     const seconds = (timestamp - now) / 1_000;

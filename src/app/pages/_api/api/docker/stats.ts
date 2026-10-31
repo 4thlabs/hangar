@@ -42,7 +42,7 @@ async function* frames(first: Samples, signal: AbortSignal) {
 
 /** Live resource usage of every running Compose container over SSE, keyed by full container id. */
 export const GET = apiRoute(
-  { log: "Failed to stream Docker container statistics", unavailable: "Les statistiques Docker sont indisponibles." },
+  { log: "Failed to stream Docker container statistics", unavailable: "dockerStats" },
   async request => {
     // Sampled first so a dead daemon is a 503, not an empty 200.
     const first = await docker.sampleStats();

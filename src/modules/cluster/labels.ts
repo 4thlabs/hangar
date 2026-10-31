@@ -1,17 +1,18 @@
 import { LockIcon, NetworkIcon, ServerIcon, TriangleAlertIcon, type LucideIcon } from "lucide-react";
 import type {
-  SwarmJoinCommands,
   SwarmLimitedView,
   SwarmManagerView,
   SwarmNode,
-  SwarmNodeAction,
   SwarmNodeAvailability,
-  SwarmNodeRole,
   SwarmNodeStatus,
 } from "#libs/docker";
 import { SwarmRules } from "#libs/docker/swarm-rules";
-import { plural } from "#modules/apps/format.ts";
-import type { StackHealth, StackOrigin } from "#modules/cluster/search.ts";
+import type { Translate } from "#libs/i18n";
+import type { ClusterMessages } from "#modules/cluster/messages.ts";
+import type { StackHealth } from "#modules/cluster/search.ts";
+
+/** The words of /cluster, in the reader's language. */
+type ClusterTranslate = Translate<typeof ClusterMessages.en>;
 
 /** What /cluster shows when this node cannot describe the cluster. */
 export type ClusterEmptyText = {
@@ -22,53 +23,8 @@ export type ClusterEmptyText = {
   command?: string;
 };
 
-/** How /cluster words and marks the swarm: labels, symbols, badge variants and summaries. */
+/** How /cluster marks the swarm: symbols, badge variants, and the summaries built from `ClusterMessages`. */
 export class ClusterLabels {
-  static readonly Role: Record<SwarmNodeRole, string> = {
-    leader: "Leader",
-    manager: "Manager",
-    worker: "Worker",
-  };
-
-  /** A node promoted that never joined Raft: `docker node ls` gives it no manager status at all. */
-  static readonly OutsideRaft = "Manager hors Raft";
-
-  static readonly OutsideRaftHint =
-    "Promu, mais absent du groupe Raft des managers : il ne compte pas pour le quorum. Juste promu, il le rejoint dans un instant ; injoignable, retirez-le.";
-
-  static readonly NodeStatus: Record<SwarmNodeStatus, string> = {
-    ready: "Prêt",
-    down: "Injoignable",
-    unknown: "Inconnu",
-    disconnected: "Déconnecté",
-  };
-
-  static readonly Availability: Record<SwarmNodeAvailability, string> = {
-    active: "Actif",
-    pause: "En pause",
-    drain: "Drainé",
-  };
-
-  static readonly Health: Record<StackHealth, string> = {
-    running: "Tous les réplicas tournent",
-    partial: "Une partie des réplicas tourne",
-    stopped: "Aucun réplica ne tourne",
-    undeployed: "Installée, pas encore déployée sur le swarm",
-  };
-
-  /** The health in a word, for the table and its filter. */
-  static readonly HealthShort: Record<StackHealth, string> = {
-    running: "En cours",
-    partial: "Partielle",
-    stopped: "Arrêtée",
-    undeployed: "Non déployée",
-  };
-
-  static readonly Origin: Record<StackOrigin, string> = {
-    hangar: "Hangar",
-    other: "Autres",
-  };
-
   /** The dot before a stack: full, half or empty, as its replicas run, and dotted when it runs nowhere yet. */
   static readonly HealthSymbol: Record<StackHealth, string> = {
     running: "●",
@@ -84,39 +40,6 @@ export class ClusterLabels {
     undeployed: "text-muted-foreground",
   };
 
-  static readonly NodeAction: Record<SwarmNodeAction, string> = {
-    promote: "Promouvoir",
-    demote: "Rétrograder",
-    drain: "Drainer",
-    activate: "Réactiver",
-    remove: "Retirer",
-  };
-
-  /** What each node action did, for the success toast. */
-  static readonly NodeActionDone: Record<SwarmNodeAction, (hostname: string) => string> = {
-    promote: hostname => `${hostname} est maintenant manager.`,
-    demote: hostname => `${hostname} est maintenant worker.`,
-    drain: hostname => `${hostname} est drainé : ses tâches partent sur les autres nœuds.`,
-    activate: hostname => `${hostname} peut de nouveau recevoir des tâches.`,
-    remove: hostname => `${hostname} a été retiré du cluster.`,
-  };
-
-  static readonly JoinRoleTitle: Record<keyof SwarmJoinCommands, string> = {
-    worker: "Ajouter un worker",
-    manager: "Ajouter un manager",
-  };
-
-  /** What the daemon needs when the host has several addresses and cannot pick the one to advertise. */
-  static readonly AdvertiseHint =
-    "Facultatif. À préciser si le serveur a plusieurs adresses : une IP ou une interface (eth0).";
-
-  /** What sets an engine label, and why the page cannot change it. */
-  static readonly EngineLabelHint = "Label du moteur, défini dans le daemon.json de l’hôte";
-
-  /** Why a node label is refused, as the dialog shows it under the field and the action in its toast. */
-  static readonly InvalidLabel =
-    "Clé : lettres, chiffres, « . », « _ » et « - », sans espace. Valeur : une seule ligne, 255 caractères au plus.";
-
   /** How many characters of the cluster id the page shows, as the `docker` CLI shortens ids. */
   private static readonly ShortIdLength = 12;
 
@@ -126,12 +49,12 @@ export class ClusterLabels {
   }
 
   /** The node's role in a word, a manager outside Raft told apart from one the quorum counts. */
-  static role(node: Pick<SwarmNode, "role" | "isRaftMember">) {
+  static role(node: Pick<SwarmNode, "role" | "isRaftMember">, t: ClusterTranslate) {
     if (ClusterLabels.isOutsideRaft(node)) {
-      return ClusterLabels.OutsideRaft;
+      return t("outsideRaft");
     }
 
-    return ClusterLabels.Role[node.role];
+    return t(`role.${node.role}`);
   }
 
   /** Only the leader is filled: a plain manager would otherwise read as one at a glance. */
@@ -163,50 +86,42 @@ export class ClusterLabels {
   }
 
   /** The one line under the title: which cluster, how big, how much it can lose. */
-  static summary(cluster: SwarmManagerView) {
-    const tolerance = `tolère ${plural(SwarmRules.faultTolerance(cluster.managers), "panne")}`;
-
-    return [
-      cluster.clusterId.slice(0, ClusterLabels.ShortIdLength),
-      plural(cluster.nodes.length, "nœud"),
-      `${plural(cluster.managers, "manager")} (${tolerance})`,
-    ].join(" · ");
+  static summary(cluster: SwarmManagerView, t: ClusterTranslate) {
+    return t("summary", {
+      id: cluster.clusterId.slice(0, ClusterLabels.ShortIdLength),
+      nodes: cluster.nodes.length,
+      managers: cluster.managers,
+      tolerance: SwarmRules.faultTolerance(cluster.managers),
+    });
   }
 
   /** What /cluster says when this node cannot describe the cluster, with the command that moves it on. */
-  static empty(cluster: SwarmLimitedView): ClusterEmptyText {
+  static empty(cluster: SwarmLimitedView, t: ClusterTranslate): ClusterEmptyText {
     switch (cluster.state) {
       case "inactive":
-        return {
-          icon: NetworkIcon,
-          title: "Aucun swarm",
-          description: "Ce nœud ne fait partie d'aucun cluster Swarm : créez-en un, ou rejoignez-en un existant.",
-        };
+        return { icon: NetworkIcon, title: t("empty.inactiveTitle"), description: t("empty.inactiveDescription") };
       case "pending":
-        return {
-          icon: NetworkIcon,
-          title: "Connexion au swarm en cours",
-          description: "Ce nœud est en train de rejoindre un cluster. La page se mettra à jour d'elle-même.",
-        };
+        return { icon: NetworkIcon, title: t("empty.pendingTitle"), description: t("empty.pendingDescription") };
       case "locked":
         return {
           icon: LockIcon,
-          title: "Swarm verrouillé",
-          description:
-            "L'autolock est actif et ce manager a redémarré : il attend la clé de déverrouillage. Sur le serveur :",
+          title: t("empty.lockedTitle"),
+          description: t("empty.lockedDescription"),
           command: "docker swarm unlock",
         };
       case "error":
         return {
           icon: TriangleAlertIcon,
-          title: "Swarm en erreur",
-          description: cluster.error || "Le daemon signale une erreur Swarm sans la détailler.",
+          title: t("empty.errorTitle"),
+          description: cluster.error || t("empty.errorDescription"),
         };
       case "worker":
         return {
           icon: ServerIcon,
-          title: "Ce nœud est un worker",
-          description: `Seul un manager voit tout le cluster. Pour lister les nœuds, sur un manager (${cluster.managers.join(", ") || "adresse inconnue"}) :`,
+          title: t("empty.workerTitle"),
+          description: t("empty.workerDescription", {
+            managers: cluster.managers.join(", ") || t("empty.unknownAddress"),
+          }),
           command: "docker node ls",
         };
     }

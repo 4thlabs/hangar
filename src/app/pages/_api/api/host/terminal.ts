@@ -1,6 +1,8 @@
+import { ServerTranslation } from "#libs/i18n/server";
 import { hostShells } from "#libs/ssh/server";
 import { terminals } from "#libs/terminals/server";
 import { apiError, apiRoute } from "#app/api/api-route.ts";
+import { ApiMessages } from "#app/api/messages.ts";
 import { terminalStream } from "#app/api/terminal-stream.ts";
 
 /**
@@ -11,14 +13,14 @@ import { terminalStream } from "#app/api/terminal-stream.ts";
 export const POST = apiRoute(
   {
     log: "Failed to open the host terminal",
-    unavailable: "Le terminal est indisponible.",
+    unavailable: "terminal",
   },
   async (request, _context, session) => {
     // A local, so the check below narrows it in the callback too: TypeScript does not narrow an import there.
     const shells = hostShells;
 
     if (!shells) {
-      return apiError("Aucun serveur n’est configuré : renseignez HANGAR_SSH_HOST et HANGAR_SSH_USER.", 404);
+      return apiError(ServerTranslation.get(ApiMessages).t("noHost"), 404);
     }
 
     return terminalStream(request, (size, signal) =>

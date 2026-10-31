@@ -2,24 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { ApiResponse } from "#modules/common/api-response.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
+import { CommonMessages } from "#modules/common/messages.ts";
 
 const MAX_STREAM_CHARACTERS = 200_000;
 
 export type StreamStatus = "idle" | "connecting" | "connected" | "ended" | "error";
-
-export const streamStatusLabel: Record<StreamStatus, string> = {
-  idle: "Inactif",
-  connecting: "Connexion…",
-  connected: "En direct",
-  ended: "Flux terminé",
-  error: "Erreur",
-};
 
 /**
  * Streams a chunked text endpoint (container logs, compose output), keeping the last {@link MAX_STREAM_CHARACTERS}.
  * A `null` endpoint stays idle and keeps the last text; the request is aborted on unmount or endpoint change.
  */
 export function useStreamText(endpoint: string | null, method: "GET" | "POST" = "GET") {
+  // Read at failure time, not a dependency: switching language must not restart the stream.
+  const { t } = useTranslation(CommonMessages);
   const [text, setText] = useState("");
   const [status, setStatus] = useState<StreamStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -44,11 +40,11 @@ export function useStreamText(endpoint: string | null, method: "GET" | "POST" = 
         const response = await fetch(url, { method, signal: controller.signal });
 
         if (!response.ok) {
-          throw await ApiResponse.error(response, "Impossible de charger le flux.");
+          throw await ApiResponse.error(response, t("stream.loadFailed"));
         }
 
         if (!response.body) {
-          throw new Error("Le serveur n’a retourné aucun flux.");
+          throw new Error(t("stream.noBody"));
         }
 
         setStatus("connected");
@@ -82,7 +78,7 @@ export function useStreamText(endpoint: string | null, method: "GET" | "POST" = 
         }
 
         setStatus("error");
-        setError(reason instanceof Error ? reason.message : "Le flux a été interrompu.");
+        setError(reason instanceof Error ? reason.message : t("stream.interrupted"));
       }
     }
 

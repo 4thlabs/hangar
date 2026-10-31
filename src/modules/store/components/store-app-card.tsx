@@ -1,11 +1,13 @@
 import { PencilIcon } from "lucide-react";
 import { Link } from "waku";
 import { type HangarApp } from "#libs/hangar";
+import { ServerTranslation } from "#libs/i18n/server";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardTitle } from "#modules/common/ui/card.tsx";
 import type { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
 import { StoreAppButton } from "#modules/store/components/store-app-button.tsx";
+import { StoreMessages } from "#modules/store/messages.ts";
 
 type StoreAppCardProps = {
   app: HangarApp;
@@ -15,11 +17,13 @@ type StoreAppCardProps = {
 
 /** Server component: only the buttons below are interactive. */
 export function StoreAppCard({ app, installApp, uninstallApp }: StoreAppCardProps) {
+  const { t } = ServerTranslation.get(StoreMessages);
+
   return (
     <Card className="relative gap-2 py-3">
       <Link
         to={`/store/${app.id}/edit`}
-        aria-label={`Modifier ${app.name}`}
+        aria-label={t("card.edit", { name: app.name })}
         className={buttonVariants({
           variant: "ghost",
           size: "icon-xs",
@@ -36,11 +40,8 @@ export function StoreAppCard({ app, installApp, uninstallApp }: StoreAppCardProp
         )}
         <CardTitle className="line-clamp-2 text-base leading-tight">{app.name}</CardTitle>
         {app.swarmReady && (
-          <Badge
-            variant="outline"
-            title="A un compose.swarm.yml : une fois installée, elle se déploie depuis la page Cluster"
-          >
-            Swarm
+          <Badge variant="outline" title={t("card.swarmHint")}>
+            {t("card.swarm")}
           </Badge>
         )}
       </CardContent>

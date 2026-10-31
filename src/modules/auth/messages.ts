@@ -1,0 +1,78 @@
+/** The sign-in and sign-up pages' words. */
+export class AuthMessages {
+  static readonly en = {
+    email: "Email",
+    emailPlaceholder: "you@example.com",
+    password: "Password",
+    login: {
+      pageTitle: "Sign in",
+      title: "Sign in to Hangar",
+      description: "Enter your email and password to access your account.",
+      failed: "Sign in failed",
+      submit: "Sign in",
+      pending: "Signing in…",
+      noAccount: "Don't have an account?",
+      createOne: "Create one",
+      error: "Unable to sign in.",
+      transportError: "Unable to sign in. Please try again.",
+    },
+    register: {
+      pageTitle: "Create account",
+      title: "Create your Hangar account",
+      description: "Enter your details to get started.",
+      failed: "Registration failed",
+      submit: "Create account",
+      pending: "Creating account…",
+      haveAccount: "Already have an account?",
+      signIn: "Sign in",
+      name: "Name",
+      confirmPassword: "Confirm password",
+      mismatch: "Passwords do not match.",
+      error: "Unable to create your account.",
+      transportError: "Unable to create your account. Please try again.",
+    },
+    closed: {
+      title: "Registration is closed",
+      description: "This Hangar already has its account. Sign in with it instead.",
+      signIn: "Sign in",
+    },
+  };
+
+  static readonly fr: typeof AuthMessages.en = {
+    email: "E-mail",
+    emailPlaceholder: "vous@exemple.com",
+    password: "Mot de passe",
+    login: {
+      pageTitle: "Connexion",
+      title: "Se connecter à Hangar",
+      description: "Saisissez votre e-mail et votre mot de passe pour accéder à votre compte.",
+      failed: "Échec de la connexion",
+      submit: "Se connecter",
+      pending: "Connexion…",
+      noAccount: "Pas encore de compte ?",
+      createOne: "En créer un",
+      error: "Impossible de vous connecter.",
+      transportError: "Impossible de vous connecter. Réessayez.",
+    },
+    register: {
+      pageTitle: "Créer un compte",
+      title: "Créer votre compte Hangar",
+      description: "Renseignez vos informations pour commencer.",
+      failed: "Échec de l’inscription",
+      submit: "Créer le compte",
+      pending: "Création du compte…",
+      haveAccount: "Vous avez déjà un compte ?",
+      signIn: "Se connecter",
+      name: "Nom",
+      confirmPassword: "Confirmer le mot de passe",
+      mismatch: "Les mots de passe ne correspondent pas.",
+      error: "Impossible de créer votre compte.",
+      transportError: "Impossible de créer votre compte. Réessayez.",
+    },
+    closed: {
+      title: "Les inscriptions sont fermées",
+      description: "Ce Hangar a déjà son compte. Connectez-vous avec celui-ci.",
+      signIn: "Se connecter",
+    },
+  };
+}

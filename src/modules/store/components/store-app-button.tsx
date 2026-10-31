@@ -3,22 +3,31 @@
 import { DownloadIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "waku";
+import type { Translate } from "#libs/i18n";
 import { AppCommands } from "#modules/apps/actions/app-operation.ts";
 import { ComposeConfirmDialog } from "#modules/apps/components/compose-operations.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 import type { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
+import { StoreMessages } from "#modules/store/messages.ts";
 
 /** What the button looks like in each state. Uninstalling keeps its wording and only spins. */
-const FACES = {
-  available: { title: "Installer", label: (appName: string) => `Installer ${appName}`, icon: <DownloadIcon /> },
-  installing: { title: "Installation…", label: (appName: string) => `Installation de ${appName}`, icon: <Spinner /> },
-  installed: { title: "Désinstaller", label: (appName: string) => `Désinstaller ${appName}`, icon: <Trash2Icon /> },
-  uninstalling: { title: "Désinstaller", label: (appName: string) => `Désinstaller ${appName}`, icon: <Spinner /> },
-};
+class ButtonFaces {
+  static create(t: Translate<typeof StoreMessages.en>, appName: string) {
+    const name = { name: appName };
 
-function buttonState(installed: boolean, isPending: boolean): keyof typeof FACES {
+    return {
+      available: { title: t("button.install"), label: t("button.installApp", name), icon: <DownloadIcon /> },
+      installing: { title: t("button.installing"), label: t("button.installingApp", name), icon: <Spinner /> },
+      installed: { title: t("button.uninstall"), label: t("button.uninstallApp", name), icon: <Trash2Icon /> },
+      uninstalling: { title: t("button.uninstall"), label: t("button.uninstallApp", name), icon: <Spinner /> },
+    };
+  }
+}
+
+function buttonState(installed: boolean, isPending: boolean): keyof ReturnType<typeof ButtonFaces.create> {
   if (installed) {
     return isPending ? "uninstalling" : "installed";
   }
@@ -38,6 +47,7 @@ type StoreAppButtonProps = {
 export function StoreAppButton({ appId, appName, installed, installApp, uninstallApp }: StoreAppButtonProps) {
   const router = useRouter();
   const { run, isPending } = useServerAction();
+  const { t } = useTranslation(StoreMessages);
   const [confirming, setConfirming] = useState(false);
 
   const handle = (action: () => Promise<StoreActionResult>, success: string, error: string) =>
@@ -48,13 +58,13 @@ export function StoreAppButton({ appId, appName, installed, installApp, uninstal
       () => router.reload(),
     );
 
-  const install = () => handle(() => installApp(appId), "Application installée", "Échec de l’installation");
+  const install = () => handle(() => installApp(appId), t("button.installed"), t("button.installFailed"));
 
-  const face = FACES[buttonState(installed, isPending)];
+  const face = ButtonFaces.create(t, appName)[buttonState(installed, isPending)];
 
   const uninstall = () => {
     setConfirming(false);
-    handle(() => uninstallApp(appId), "Application désinstallée", "Échec de la désinstallation");
+    handle(() => uninstallApp(appId), t("button.uninstalled"), t("button.uninstallFailed"));
   };
 
   return (
@@ -66,7 +76,7 @@ export function StoreAppButton({ appId, appName, installed, installApp, uninstal
         className="absolute top-1.5 right-1.5"
         disabled={isPending}
         onClick={installed ? () => setConfirming(true) : install}
-        aria-label={face.label(appName)}
+        aria-label={face.label}
         title={face.title}
       >
         {face.icon}
@@ -74,8 +84,8 @@ export function StoreAppButton({ appId, appName, installed, installApp, uninstal
       {/* Reuses the apps confirmation: unlinking runs `docker compose down` first, same stakes. */}
       <ComposeConfirmDialog
         command={confirming ? AppCommands.create("down") : null}
-        title={`Désinstaller ${appName} ?`}
-        description="Les conteneurs de l’application sont arrêtés et supprimés, puis l’application est retirée des applications installées. Les volumes sont conservés."
+        title={t("button.confirmTitle", { name: appName })}
+        description={t("button.confirmDescription")}
         onConfirm={uninstall}
         onCancel={() => setConfirming(false)}
       />

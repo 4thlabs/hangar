@@ -12,6 +12,8 @@ vi.mock("waku", () => ({
 }));
 
 vi.mock("#libs/auth/client", () => ({ authClient: {} }));
+// The closed-registration card is a server component: it reads the request's language.
+vi.mock("server-only", () => ({}));
 
 const { LoginForm } = await import("./login-form.tsx");
 const { RegistrationClosed } = await import("./registration-closed.tsx");

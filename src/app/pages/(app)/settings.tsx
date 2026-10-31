@@ -1,5 +1,6 @@
 import { Sidequest } from "sidequest";
 import { hangar } from "#libs/hangar/server";
+import { ServerTranslation } from "#libs/i18n/server";
 import { TabsContent } from "#modules/common/ui/tabs.tsx";
 import { saveConfig } from "#modules/settings/actions/manage-config.ts";
 import { saveEnv } from "#modules/settings/actions/manage-env.ts";
@@ -12,6 +13,7 @@ import { HangarUpdateCard } from "#modules/settings/components/hangar-update-car
 import { JobsSettingsCard } from "#modules/settings/components/jobs-settings-card.tsx";
 import { SettingsTabs } from "#modules/settings/components/settings-tabs.tsx";
 import { StoreSettingsCard } from "#modules/settings/components/store-settings-card.tsx";
+import { SettingsMessages } from "#modules/settings/messages.ts";
 
 export default async function SettingsPage() {
   const installed = await hangar.store.isInstalled();
@@ -19,13 +21,14 @@ export default async function SettingsPage() {
   const variables = await hangar.store.env.read();
   const config = await hangar.store.config.source();
   const hangarImage = await readHangarImage();
+  const { t } = ServerTranslation.get(SettingsMessages);
 
   return (
     <main>
-      <title>Paramètres | Hangar</title>
+      <title>{`${t("page.title")} | Hangar`}</title>
       <div>
-        <h1 className="text-2xl font-semibold">Paramètres</h1>
-        <p className="text-sm text-muted-foreground">Gérez la configuration de votre installation Hangar.</p>
+        <h1 className="text-2xl font-semibold">{t("page.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("page.description")}</p>
       </div>
       <SettingsTabs>
         <TabsContent value="store">

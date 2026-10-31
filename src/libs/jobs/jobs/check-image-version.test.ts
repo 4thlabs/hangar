@@ -47,7 +47,7 @@ describe("CheckImageVersion", () => {
 
     expect(notify).toHaveBeenCalledTimes(1);
     expect(notify).toHaveBeenCalledWith(
-      expect.objectContaining({ description: "2 applications ont une image plus récente en registre." }),
+      expect.objectContaining({ message: { key: "updatesAvailable", params: { count: 2 } } }),
     );
   });
 

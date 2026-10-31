@@ -5,14 +5,17 @@ import { useEffect, useState } from "react";
 import { useRouter } from "waku";
 import type { SwarmStackTask } from "#libs/docker";
 import { RelativeTime } from "#libs/format";
+import { Locale } from "#libs/preferences";
 import { EditAppLink } from "#modules/apps/components/edit-app-link.tsx";
 import { readStackTasks, removeStack } from "#modules/cluster/actions/manage-stacks.ts";
 import { StackDeployOutput } from "#modules/cluster/components/stack-deploy-output.tsx";
+import { ClusterMessages } from "#modules/cluster/messages.ts";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import { LogsSheet } from "#modules/common/components/logs-sheet.tsx";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
 import { useServerRead } from "#modules/common/hooks/use-server-read.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Alert, AlertDescription } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "#modules/common/ui/sheet.tsx";
@@ -31,6 +34,7 @@ type StackSheetProps = {
 /** The tasks of one stack, per node, with the deploy and removal Hangar can do on its own apps. */
 export function StackSheet({ stack, manageable, deployed, onClose }: StackSheetProps) {
   const router = useRouter();
+  const { t } = useTranslation(ClusterMessages);
   const tasks = useServerRead<SwarmStackTask[]>();
   const operation = useServerAction();
   const [confirmingRemoval, setConfirmingRemoval] = useState(false);
@@ -38,7 +42,7 @@ export function StackSheet({ stack, manageable, deployed, onClose }: StackSheetP
   const [deployRun, setDeployRun] = useState(0);
   const [deploying, setDeploying] = useState(false);
   const { load, reset } = tasks;
-  const deployLabel = deployed ? "Mettre à jour" : "Déployer";
+  const deployLabel = deployed ? t("sheet.update") : t("sheet.deploy");
   const DeployIcon = deployed ? UploadIcon : RocketIcon;
 
   // Another stack, or a closed sheet, shows no earlier deploy.
@@ -78,7 +82,7 @@ export function StackSheet({ stack, manageable, deployed, onClose }: StackSheetP
     setConfirmingRemoval(false);
     operation.run(
       () => removeStack(name),
-      { success: "Stack retirée", error: "Échec du retrait" },
+      { success: t("sheet.removed"), error: t("sheet.removeFailed") },
       async () => {
         onClose();
         await router.reload();
@@ -94,9 +98,7 @@ export function StackSheet({ stack, manageable, deployed, onClose }: StackSheetP
         <SheetHeader>
           <SheetTitle>{stack}</SheetTitle>
           <SheetDescription>
-            {deployed
-              ? "Les tâches de la stack sur chaque nœud, avec les tentatives passées."
-              : "Une app installée, prête pour le swarm."}
+            {deployed ? t("sheet.deployedDescription") : t("sheet.undeployedDescription")}
           </SheetDescription>
         </SheetHeader>
 
@@ -108,11 +110,11 @@ export function StackSheet({ stack, manageable, deployed, onClose }: StackSheetP
                 size="sm"
                 variant="outline"
                 pending={tasks.isLoading}
-                pendingLabel="Actualiser"
+                pendingLabel={t("refresh")}
                 icon={<RefreshCwIcon data-icon="inline-start" />}
                 onClick={() => stack && load(() => readStackTasks(stack))}
               >
-                Actualiser
+                {t("refresh")}
               </PendingButton>
             )}
             {manageable && (
@@ -140,16 +142,12 @@ export function StackSheet({ stack, manageable, deployed, onClose }: StackSheetP
                 title="docker stack rm"
               >
                 <Trash2Icon data-icon="inline-start" />
-                Supprimer
+                {t("sheet.delete")}
               </Button>
             )}
           </div>
 
-          {!deployed && deployRun === 0 && (
-            <p className="text-sm text-muted-foreground">
-              Pas encore déployée : elle le sera avec son compose.yml et son compose.swarm.yml.
-            </p>
-          )}
+          {!deployed && deployRun === 0 && <p className="text-sm text-muted-foreground">{t("sheet.notDeployed")}</p>}
 
           {stack && deployRun > 0 && <StackDeployOutput key={deployRun} stack={stack} onFinished={deployFinished} />}
 
@@ -167,9 +165,9 @@ export function StackSheet({ stack, manageable, deployed, onClose }: StackSheetP
 
       <ConfirmDialog
         open={confirmingRemoval}
-        title={`Supprimer ${stack} du swarm ?`}
-        description="Ses services sont arrêtés sur tous les nœuds. L’app reste installée et ses volumes sont conservés."
-        confirmLabel="Supprimer"
+        title={t("sheet.confirmTitle", { stack: stack ?? "" })}
+        description={t("sheet.confirmDescription")}
+        confirmLabel={t("sheet.delete")}
         destructive
         onConfirm={() => stack && remove(stack)}
         onCancel={() => setConfirmingRemoval(false)}
@@ -180,6 +178,7 @@ export function StackSheet({ stack, manageable, deployed, onClose }: StackSheetP
 
 /** One logs button per service of the stack, each following every task of it, on every node. */
 function ServiceLogs({ stack, tasks }: { stack: string; tasks: SwarmStackTask[] }) {
+  const { t } = useTranslation(ClusterMessages);
   const services = [...new Set(tasks.map(task => task.service))].sort();
 
   if (services.length === 0) {
@@ -188,13 +187,13 @@ function ServiceLogs({ stack, tasks }: { stack: string; tasks: SwarmStackTask[] 
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm text-muted-foreground">Logs</span>
+      <span className="text-sm text-muted-foreground">{t("sheet.logs")}</span>
       {services.map(service => (
         <LogsSheet
           key={service}
           endpoint={`/api/docker/swarm/stacks/${encodeURIComponent(stack)}/services/${encodeURIComponent(service)}/logs`}
           name={service}
-          context={`${stack} · toutes ses tâches, sur chaque nœud`}
+          context={t("sheet.logsContext", { stack })}
           label={service}
         />
       ))}
@@ -204,18 +203,20 @@ function ServiceLogs({ stack, tasks }: { stack: string; tasks: SwarmStackTask[] 
 
 /** One row per task, the failed ones with Docker's reason. */
 function TaskTable({ tasks }: { tasks: SwarmStackTask[] }) {
+  const { t, locale } = useTranslation(ClusterMessages);
+
   if (tasks.length === 0) {
-    return <p className="text-sm text-muted-foreground">Aucune tâche.</p>;
+    return <p className="text-sm text-muted-foreground">{t("sheet.noTasks")}</p>;
   }
 
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Tâche</TableHead>
-          <TableHead>Nœud</TableHead>
-          <TableHead>État</TableHead>
-          <TableHead>Erreur</TableHead>
+          <TableHead>{t("sheet.task")}</TableHead>
+          <TableHead>{t("sheet.node")}</TableHead>
+          <TableHead>{t("sheet.state")}</TableHead>
+          <TableHead>{t("sheet.error")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -228,7 +229,7 @@ function TaskTable({ tasks }: { tasks: SwarmStackTask[] }) {
               {task.since && (
                 <span className="text-muted-foreground">
                   {" "}
-                  · {RelativeTime.format(Date.parse(task.since), Date.now(), "fr")}
+                  · {RelativeTime.format(Date.parse(task.since), Date.now(), Locale.intlTag(locale))}
                 </span>
               )}
             </TableCell>

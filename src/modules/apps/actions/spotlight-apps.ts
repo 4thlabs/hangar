@@ -5,6 +5,8 @@ import { env } from "#libs/env";
 import type { HangarApp } from "#libs/hangar";
 import { AppLink } from "#libs/hangar/link";
 import { hangar } from "#libs/hangar/server";
+import { ServerTranslation } from "#libs/i18n/server";
+import { AppsMessages } from "#modules/apps/messages.ts";
 import type { SpotlightAction, SpotlightItem, SpotlightItemActions } from "#modules/spotlight/spotlight.ts";
 
 /**
@@ -34,14 +36,19 @@ class SpotlightAppActions {
    * page.
    */
   static create(app: HangarApp): SpotlightItemActions {
-    const page: SpotlightAction = { kind: "navigate", label: "Voir la page", to: `/apps/${app.id}` };
-    const edit: SpotlightAction = { kind: "navigate", label: "Modifier", to: `/store/${app.id}/edit` };
+    const { t } = ServerTranslation.get(AppsMessages);
+    const page: SpotlightAction = { kind: "navigate", label: t("spotlight.viewPage"), to: `/apps/${app.id}` };
+    const edit: SpotlightAction = { kind: "navigate", label: t("spotlight.edit"), to: `/store/${app.id}/edit` };
 
     if (!app.routed) {
       return { enter: page, modShift: edit };
     }
 
-    const open: SpotlightAction = { kind: "open", label: "Ouvrir", url: AppLink.url(app.containerName, env.DOMAIN) };
+    const open: SpotlightAction = {
+      kind: "open",
+      label: t("spotlight.open"),
+      url: AppLink.url(app.containerName, env.DOMAIN),
+    };
 
     return { enter: open, mod: page, modShift: edit };
   }
