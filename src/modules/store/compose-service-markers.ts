@@ -11,8 +11,11 @@ import type { ProjectServices } from "#modules/apps/project-services.ts";
 import { StatusDot, type ServiceTone } from "#modules/apps/status.ts";
 import { StoreMessages } from "#modules/store/messages.ts";
 
-/** The status drawn at the end of a service's key line. */
-export type ServiceMarker = { tone: ServiceTone; label: string };
+/**
+ * The status drawn at the end of a service's key line, and what clicking it does, for a service that has containers
+ * to unfold.
+ */
+export type ServiceMarker = { tone: ServiceTone; label: string; action?: string };
 
 /**
  * The markers by service name, and the one of a service with no container, or `null` while Docker tells nothing:
@@ -45,7 +48,8 @@ class ServiceMarkerWidget extends WidgetType {
     return (
       other.service === this.service &&
       other.marker.tone === this.marker.tone &&
-      other.marker.label === this.marker.label
+      other.marker.label === this.marker.label &&
+      other.marker.action === this.marker.action
     );
   }
 
@@ -60,7 +64,7 @@ class ServiceMarkerWidget extends WidgetType {
 
     if (marker instanceof HTMLButtonElement) {
       marker.type = "button";
-      marker.title = `Voir le service ${this.service}`;
+      marker.title = this.marker.action ?? this.service;
       marker.addEventListener("click", () => this.onSelect(this.service));
     }
 
@@ -199,10 +203,11 @@ export class ComposeServiceMarkers {
   private static marker(service: ComposeService, stats: ContainerStats, locale: LocaleCode): ServiceMarker {
     const count = `${service.runningCount}/${service.containers.length}`;
     const metrics = service.containers.flatMap(container => stats[container.id] ?? []);
+    const action = Translation.create(StoreMessages, locale)("editor.viewService", { service: service.name });
 
     // Before the first stats frame, and for a stopped service, the count alone.
     if (metrics.length === 0) {
-      return { tone: service.status, label: count };
+      return { tone: service.status, label: count, action };
     }
 
     const cpu = ComposeServiceMarkers.sum(metrics.map(metric => metric.cpuPercent));
@@ -210,7 +215,7 @@ export class ComposeServiceMarkers {
 
     const metricsLabel = `${MetricFormat.percent(cpu, locale)} · ${MetricFormat.bytes(memory, locale)}`;
 
-    return { tone: service.status, label: `${count} · ${metricsLabel}` };
+    return { tone: service.status, label: `${count} · ${metricsLabel}`, action };
   }
 
   /**

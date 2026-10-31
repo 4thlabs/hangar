@@ -1,6 +1,6 @@
 "use client";
 
-import { Locale } from "#libs/preferences";
+import { IntlFormats } from "#libs/i18n";
 import { useInBrowser } from "#modules/common/hooks/use-in-browser.ts";
 import { useLocale } from "#modules/common/hooks/use-translation.ts";
 
@@ -35,7 +35,7 @@ export function LocalDateTime({ value }: { value: Date | string | null }) {
 
   return (
     <time dateTime={date.toISOString()}>
-      {date.toLocaleString(Locale.intlTag(locale), { ...LocalTime.Fields, ...zone })}
+      {IntlFormats.dateTime(locale, { ...LocalTime.Fields, ...zone }).format(date)}
     </time>
   );
 }

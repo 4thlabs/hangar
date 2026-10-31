@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ApiResponse } from "#modules/common/api-response.ts";
+import { useLatest } from "#modules/common/hooks/use-latest.ts";
 import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { CommonMessages } from "#modules/common/messages.ts";
 
@@ -14,8 +15,9 @@ export type StreamStatus = "idle" | "connecting" | "connected" | "ended" | "erro
  * A `null` endpoint stays idle and keeps the last text; the request is aborted on unmount or endpoint change.
  */
 export function useStreamText(endpoint: string | null, method: "GET" | "POST" = "GET") {
-  // Read at failure time, not a dependency: switching language must not restart the stream.
   const { t } = useTranslation(CommonMessages);
+  // What the effect says when it fails, in the language of that moment: switching must not restart the stream.
+  const latestT = useLatest(t);
   const [text, setText] = useState("");
   const [status, setStatus] = useState<StreamStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -40,11 +42,11 @@ export function useStreamText(endpoint: string | null, method: "GET" | "POST" = 
         const response = await fetch(url, { method, signal: controller.signal });
 
         if (!response.ok) {
-          throw await ApiResponse.error(response, t("stream.loadFailed"));
+          throw await ApiResponse.error(response, latestT.current("stream.loadFailed"));
         }
 
         if (!response.body) {
-          throw new Error(t("stream.noBody"));
+          throw new Error(latestT.current("stream.noBody"));
         }
 
         setStatus("connected");
@@ -78,7 +80,7 @@ export function useStreamText(endpoint: string | null, method: "GET" | "POST" = 
         }
 
         setStatus("error");
-        setError(reason instanceof Error ? reason.message : t("stream.interrupted"));
+        setError(reason instanceof Error ? reason.message : latestT.current("stream.interrupted"));
       }
     }
 

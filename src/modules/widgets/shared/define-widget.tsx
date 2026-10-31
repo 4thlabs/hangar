@@ -68,13 +68,10 @@ const TTL = 60_000;
 /** How long a service that has stopped answering keeps rendering its last good card. */
 const GRACE = 900_000;
 
-/**
- * Prefix of every cached card. The cache is process-global and keyed by language and placement: never put per-session
- * data here.
- */
+/** Prefix of every cached load. The cache is process-global and keyed by placement: never put per-session data here. */
 const KEY_PREFIX = "widget:";
 
-/** Drops every cached card. Tests only, so one test's data cannot leak into the next. */
+/** Drops every cached load. Tests only, so one test's data cannot leak into the next. */
 export const clearWidgetCache = () => cache.clear(KEY_PREFIX);
 
 /**
@@ -120,17 +117,16 @@ export function defineWidget({ id, appearance, body, ttl = TTL }: WidgetDefiniti
       }
     };
 
-    // The rendered card is what gets cached, so a warm widget costs neither the service call nor the render; one
-    // card per language, the words being part of it.
+    // The loaded data is what gets cached, once per placement whatever the language: a warm widget costs no service
+    // call, and each reader's card is rendered from it in their language.
     const card = (locale: LocaleCode) =>
       chain(body(), widgetBody => {
-        if ("source" in widgetBody) {
-          return map(widgetBody.source(), show(widgetBody, locale));
-        }
+        const data =
+          "source" in widgetBody
+            ? widgetBody.source()
+            : cache.get(KEY_PREFIX + key, { ttl, maxStale: GRACE }, () => widgetBody.load());
 
-        return cache.get(`${KEY_PREFIX}${locale}:${key}`, { ttl, maxStale: GRACE }, async () =>
-          show(widgetBody, locale)(await widgetBody.load()),
-        );
+        return map(data, show(widgetBody, locale));
       });
 
     const failed = (locale: LocaleCode) => (error: unknown) => {

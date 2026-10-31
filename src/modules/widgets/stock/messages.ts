@@ -1,9 +1,12 @@
+import { Plural } from "#libs/i18n";
+
 /** The stocks card's words. */
 export class StockMessages {
   static readonly en = {
     title: "Stocks",
     errorDescription: "The stock prices could not be loaded.",
-    tickers: ({ count }: { count: number }) => (count === 1 ? "1 ticker" : `${count} tickers`),
+    tickers: ({ count }: { count: number }) =>
+      `${count} ${Plural.select("en", count, { one: "ticker", other: "tickers" })}`,
     closes: ({ from, to }: { from: string; to: string }) => `Closes over the last month: from ${from} to ${to}`,
     best: "Best",
     worst: "Worst",
@@ -18,7 +21,7 @@ export class StockMessages {
   static readonly fr: typeof StockMessages.en = {
     title: "Bourse",
     errorDescription: "Les cours n’ont pas pu être chargés.",
-    tickers: ({ count }) => (count > 1 ? `${count} valeurs` : `${count} valeur`),
+    tickers: ({ count }) => `${count} ${Plural.select("fr", count, { one: "valeur", other: "valeurs" })}`,
     closes: ({ from, to }) => `Clôtures du dernier mois : de ${from} à ${to}`,
     best: "Meilleure",
     worst: "Pire",

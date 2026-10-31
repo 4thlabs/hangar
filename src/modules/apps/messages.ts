@@ -1,3 +1,5 @@
+import { Plural } from "#libs/i18n";
+
 /** The Apps pages' words: the list, an app's page, its compose commands and its backups. */
 export class AppsMessages {
   static readonly en = {
@@ -16,9 +18,9 @@ export class AppsMessages {
     updateAvailable: "Update available",
     update: "Update",
     edit: "Edit",
-    apps: ({ count }: { count: number }) => (count === 1 ? "1 app" : `${count} apps`),
+    apps: ({ count }: { count: number }) => `${count} ${Plural.select("en", count, { one: "app", other: "apps" })}`,
     detailSummary: ({ services, running, containers }: { services: number; running: number; containers: number }) =>
-      `${services} ${services === 1 ? "service" : "services"} · ${running}/${containers} containers running`,
+      `${services} ${Plural.select("en", services, { one: "service", other: "services" })} · ${running}/${containers} containers running`,
     status: {
       running: "Running",
       partial: "Partial",
@@ -51,7 +53,8 @@ export class AppsMessages {
       updates: { available: "Available", current: "Up to date" },
     },
     table: {
-      selected: ({ count }: { count: number }) => (count === 1 ? "1 app selected" : `${count} apps selected`),
+      selected: ({ count }: { count: number }) =>
+        `${count} ${Plural.select("en", count, { one: "app selected", other: "apps selected" })}`,
       noSelection: "No selection",
       selectAll: "Select all",
       select: ({ name }: { name: string }) => `Select ${name}`,
@@ -64,7 +67,7 @@ export class AppsMessages {
     },
     service: {
       containers: ({ running, total }: { running: number; total: number }) =>
-        `${running}/${total} ${total === 1 ? "container" : "containers"} running`,
+        `${running}/${total} ${Plural.select("en", total, { one: "container", other: "containers" })} running`,
       unhealthy: ({ count }: { count: number }) => `${count} unhealthy`,
       listLabel: "The app's services",
       list: "Services",
@@ -168,7 +171,8 @@ export class AppsMessages {
       undeclared: "hangar.yml no longer declares a backup for this app.",
       scheduled: ({ cron }: { cron: string }) => `Scheduled: ${cron}`,
       manualOnly: "Manual only",
-      kept: ({ count }: { count: number }) => (count === 1 ? "1 archive kept" : `${count} archives kept`),
+      kept: ({ count }: { count: number }) =>
+        `${count} ${Plural.select("en", count, { one: "archive kept", other: "archives kept" })}`,
       stopped: "stopped during the backup",
       notDeclared: ({ project }: { project: string }) => `hangar.yml declares no backup for ${project}.`,
       alreadyRunning: ({ project }: { project: string }) => `A backup of ${project} is already running.`,
@@ -202,9 +206,9 @@ export class AppsMessages {
     updateAvailable: "Mise à jour disponible",
     update: "Mise à jour",
     edit: "Modifier",
-    apps: ({ count }) => (count > 1 ? `${count} applications` : `${count} application`),
+    apps: ({ count }) => `${count} ${Plural.select("fr", count, { one: "application", other: "applications" })}`,
     detailSummary: ({ services, running, containers }) =>
-      `${services} service${services > 1 ? "s" : ""} · ${running}/${containers} conteneurs actifs`,
+      `${services} ${Plural.select("fr", services, { one: "service", other: "services" })} · ${running}/${containers} conteneurs actifs`,
     status: {
       running: "En cours",
       partial: "Partiel",
@@ -238,7 +242,7 @@ export class AppsMessages {
     },
     table: {
       selected: ({ count }) =>
-        count > 1 ? `${count} applications sélectionnées` : `${count} application sélectionnée`,
+        `${count} ${Plural.select("fr", count, { one: "application sélectionnée", other: "applications sélectionnées" })}`,
       noSelection: "Aucune sélection",
       selectAll: "Tout sélectionner",
       select: ({ name }) => `Sélectionner ${name}`,
@@ -251,7 +255,7 @@ export class AppsMessages {
     },
     service: {
       containers: ({ running, total }) =>
-        `${running}/${total} conteneur${total > 1 ? "s" : ""} actif${running > 1 ? "s" : ""}`,
+        `${running}/${total} ${Plural.select("fr", total, { one: "conteneur", other: "conteneurs" })} ${Plural.select("fr", running, { one: "actif", other: "actifs" })}`,
       unhealthy: ({ count }) => `${count} unhealthy`,
       listLabel: "Services de l’app",
       list: "Services",
@@ -347,7 +351,8 @@ export class AppsMessages {
       undeclared: "hangar.yml ne déclare plus de sauvegarde pour cette application.",
       scheduled: ({ cron }) => `Planifiée : ${cron}`,
       manualOnly: "Manuelle uniquement",
-      kept: ({ count }) => (count > 1 ? `${count} archives conservées` : `${count} archive conservée`),
+      kept: ({ count }) =>
+        `${count} ${Plural.select("fr", count, { one: "archive conservée", other: "archives conservées" })}`,
       stopped: "arrêtée pendant la sauvegarde",
       notDeclared: ({ project }) => `hangar.yml ne déclare aucune sauvegarde pour ${project}.`,
       alreadyRunning: ({ project }) => `Une sauvegarde de ${project} est déjà en cours.`,

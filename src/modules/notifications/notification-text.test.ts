@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import type { NotificationPayload } from "#libs/notifications";
+import { describe, expect, it, vi } from "vitest";
+import { Notifications, type NotificationPayload } from "#libs/notifications";
 import { NotificationText } from "./notification-text.ts";
 
 const payload = (overrides: Partial<NotificationPayload>): NotificationPayload => ({
@@ -16,17 +16,8 @@ const payload = (overrides: Partial<NotificationPayload>): NotificationPayload =
 });
 
 describe("NotificationText", () => {
-  it("files a key and its parameters, in no language", () => {
-    expect(NotificationText.create("updatesAvailable", { count: 2 })).toEqual({
-      key: "updatesAvailable",
-      params: { count: 2 },
-    });
-
-    expect(NotificationText.create("storeInstalled")).toEqual({ key: "storeInstalled", params: {} });
-  });
-
   it("renders the same notification in each language", () => {
-    const notification = payload({ message: NotificationText.create("updatesAvailable", { count: 1 }) });
+    const notification = payload({ message: Notifications.message("updatesAvailable", { count: 1 }) });
 
     expect(NotificationText.render(notification, "en")).toEqual({
       title: "Updates available",
@@ -40,7 +31,7 @@ describe("NotificationText", () => {
   });
 
   it("names a compose run after its command", () => {
-    const message = NotificationText.create("composeSucceeded", { project: "whoami", operation: "up", flags: "pull" });
+    const message = Notifications.message("composeSucceeded", { project: "whoami", operation: "up", flags: "pull" });
 
     expect(NotificationText.render(payload({ message }), "en")).toEqual({
       title: "Update finished",
@@ -54,9 +45,16 @@ describe("NotificationText", () => {
     expect(NotificationText.render(legacy, "en")).toEqual({ title: "Sauvegarde échouée", description: "Disque plein" });
   });
 
-  it("falls back on the stored words for a key the catalog no longer has", () => {
+  it("reads as a plain notification when this version no longer has its key", () => {
     const dropped = payload({ title: "gone", message: { key: "gone", params: {} } });
 
-    expect(NotificationText.render(dropped, "fr")).toEqual({ title: "gone" });
+    expect(NotificationText.render(dropped, "fr")).toEqual({ title: "Notification" });
+  });
+
+  it("reads as a plain notification rather than failing when its parameters no longer fit", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const malformed = payload({ message: { key: "composeSucceeded", params: { project: "whoami" } } });
+
+    expect(NotificationText.render(malformed, "en")).toEqual({ title: "Notification" });
   });
 });

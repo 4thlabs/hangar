@@ -4,7 +4,7 @@ import type { BackupSummary } from "#libs/backups";
 import type { Docker } from "#libs/docker";
 import { HangarError } from "#libs/hangar";
 import { logger } from "#libs/logs";
-import { NotificationText } from "#modules/notifications/notification-text.ts";
+import { Notifications } from "#libs/notifications";
 import type { CreateJobServices, JobServices } from "../services.ts";
 import { createWorkerServices } from "../worker.ts";
 
@@ -73,7 +73,7 @@ export class BackupApp extends Job {
 
       await services.notifications.notify({
         level: "error",
-        message: NotificationText.create("backupFailed", { app, error: (error as Error).message }),
+        message: Notifications.message("backupFailed", { app, error: (error as Error).message }),
         href: `/apps/${app}`,
         dedupeKey: `backup:${app}`,
       });
@@ -113,7 +113,7 @@ export class BackupApp extends Job {
 
       await notifications.notify({
         level: "error",
-        message: NotificationText.create("backupRestartFailed", { app, services: stopped.join(", ") }),
+        message: Notifications.message("backupRestartFailed", { app, services: stopped.join(", ") }),
         href: `/apps/${app}`,
         dedupeKey: `backup-restart:${app}`,
       });

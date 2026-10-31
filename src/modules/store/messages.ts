@@ -74,6 +74,7 @@ export class StoreMessages {
       newFilePath: "Path of the new file",
       /** The marker of a service Docker has no container for. */
       notCreated: "not created",
+      viewService: ({ service }: { service: string }) => `Show the ${service} service`,
     },
     actions: {
       unknownApp: "This app does not exist in the store.",
@@ -163,6 +164,7 @@ export class StoreMessages {
       newFile: "Nouveau fichier",
       newFilePath: "Chemin du nouveau fichier",
       notCreated: "non créé",
+      viewService: ({ service }) => `Voir le service ${service}`,
     },
     actions: {
       unknownApp: "Cette application n’existe pas dans le store.",
