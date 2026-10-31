@@ -26,15 +26,15 @@ describe("AppFileTree", () => {
 
     expect(rowLabels(html)).toEqual(["compose.yml", "miniflux.env", "config/", "settings.yml"]);
     expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain("Nouveau fichier");
+    expect(html).toContain("New file");
   });
 
   it("marks the open file and the unsaved ones", () => {
     const html = renderTree("config/settings.yml", ["miniflux.env"]);
 
     expect(html).toMatch(/aria-current="page"[^>]*>.*?settings\.yml/);
-    expect(html.match(/modifications non enregistrées/g)).toHaveLength(1);
-    expect(html).toMatch(/miniflux\.env<\/span><span[^>]*aria-label="modifications non enregistrées"/);
+    expect(html.match(/unsaved changes/g)).toHaveLength(1);
+    expect(html).toMatch(/miniflux\.env<\/span><span[^>]*aria-label="unsaved changes"/);
   });
 
   it("renders one tree, folded behind a toggle below md rather than duplicated", () => {

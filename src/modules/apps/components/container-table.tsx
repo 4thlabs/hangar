@@ -1,8 +1,10 @@
 import type { ComposeContainer } from "#libs/docker";
 import { ContainerStatus } from "#modules/apps/components/container-status.tsx";
 import { ContainerStreamButton } from "#modules/apps/components/container-stream-button.tsx";
-import { formatBytes, formatPercent } from "#modules/apps/format.ts";
+import { MetricFormat } from "#modules/apps/format.ts";
 import { EMPTY_METRICS, type ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
+import { AppsMessages } from "#modules/apps/messages.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Progress } from "#modules/common/ui/progress.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
@@ -17,20 +19,23 @@ const formatPorts = (container: ComposeContainer) =>
 type ContainerTableProps = { project: string; containers: ComposeContainer[]; stats: ContainerStats };
 
 export function ContainerTable({ project, containers, stats }: ContainerTableProps) {
+  const { t, locale } = useTranslation(AppsMessages);
+  const bytes = (value: number | null) => MetricFormat.bytes(value, locale);
+
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Conteneur</TableHead>
-          <TableHead>État</TableHead>
-          <TableHead>Image</TableHead>
-          <TableHead>Ports</TableHead>
-          <TableHead>CPU</TableHead>
-          <TableHead>Mémoire</TableHead>
-          <TableHead>Réseau</TableHead>
-          <TableHead>Disque</TableHead>
-          <TableHead>Redémarrages</TableHead>
-          <TableHead>Console</TableHead>
+          <TableHead>{t("container.container")}</TableHead>
+          <TableHead>{t("container.state")}</TableHead>
+          <TableHead>{t("container.image")}</TableHead>
+          <TableHead>{t("container.ports")}</TableHead>
+          <TableHead>{t("container.cpu")}</TableHead>
+          <TableHead>{t("container.memory")}</TableHead>
+          <TableHead>{t("container.network")}</TableHead>
+          <TableHead>{t("container.disk")}</TableHead>
+          <TableHead>{t("container.restarts")}</TableHead>
+          <TableHead>{t("container.console")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -54,26 +59,26 @@ export function ContainerTable({ project, containers, stats }: ContainerTablePro
               <TableCell className="max-w-72 truncate" title={formatPorts(container)}>
                 {formatPorts(container)}
               </TableCell>
-              <TableCell className="tabular-nums">{formatPercent(metrics.cpuPercent)}</TableCell>
+              <TableCell className="tabular-nums">{MetricFormat.percent(metrics.cpuPercent, locale)}</TableCell>
               <TableCell className="min-w-44">
                 {metrics.memoryUsage === null ? (
                   "—"
                 ) : (
                   <Progress
                     value={Math.min(metrics.memoryPercent ?? 0, 100)}
-                    aria-label={`Mémoire utilisée par ${container.name}`}
+                    aria-label={t("container.memoryUsed", { name: container.name })}
                   >
                     <span className="ml-auto text-sm text-muted-foreground tabular-nums">
-                      {formatBytes(metrics.memoryUsage)} / {formatBytes(metrics.memoryLimit)}
+                      {bytes(metrics.memoryUsage)} / {bytes(metrics.memoryLimit)}
                     </span>
                   </Progress>
                 )}
               </TableCell>
               <TableCell className="tabular-nums">
-                ↓ {formatBytes(metrics.networkRx)} · ↑ {formatBytes(metrics.networkTx)}
+                ↓ {bytes(metrics.networkRx)} · ↑ {bytes(metrics.networkTx)}
               </TableCell>
               <TableCell className="tabular-nums">
-                ↓ {formatBytes(metrics.blockRead)} · ↑ {formatBytes(metrics.blockWrite)}
+                ↓ {bytes(metrics.blockRead)} · ↑ {bytes(metrics.blockWrite)}
               </TableCell>
               <TableCell className="text-center tabular-nums">{container.restartCount ?? "—"}</TableCell>
               <TableCell>

@@ -55,7 +55,7 @@ async function* frames(userId: string, from: Date, signal: AbortSignal) {
 
 /** The signed-in user's notifications over SSE, from `?since=` (epoch ms of the newest one the client holds). */
 export const GET = apiRoute(
-  { log: "Failed to stream notifications", unavailable: "Les notifications sont indisponibles." },
+  { log: "Failed to stream notifications", unavailable: "notifications" },
   async (request, _context, session) => {
     const since = Number(new URL(request.url).searchParams.get("since"));
     const from = new Date(Number.isFinite(since) && since > 0 ? since : Date.now());

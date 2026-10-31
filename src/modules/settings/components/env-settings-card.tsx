@@ -6,11 +6,13 @@ import { useRouter } from "waku";
 import type { ActionResult } from "#modules/common/actions/action-result.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
 import type { EnvPayload } from "#modules/settings/actions/manage-env.ts";
+import { SettingsMessages } from "#modules/settings/messages.ts";
 
 type EnvSettingsCardProps = {
   variables: Record<string, string>;
@@ -24,6 +26,7 @@ const randomSecret = () =>
 export function EnvSettingsCard({ variables, saveEnv }: EnvSettingsCardProps) {
   const router = useRouter();
   const { run, isPending } = useServerAction();
+  const { t } = useTranslation(SettingsMessages);
   const [values, setValues] = useState(variables);
   const [removed, setRemoved] = useState<string[]>([]);
   const [newKey, setNewKey] = useState("");
@@ -51,7 +54,7 @@ export function EnvSettingsCard({ variables, saveEnv }: EnvSettingsCardProps) {
   const handleSave = () =>
     run(
       () => saveEnv({ updates: values, remove: removed }),
-      { success: "Environnement enregistré", error: "Échec de l’enregistrement" },
+      { success: t("env.saved"), error: t("env.saveFailed") },
       () => {
         setRemoved([]);
         router.reload();
@@ -61,10 +64,11 @@ export function EnvSettingsCard({ variables, saveEnv }: EnvSettingsCardProps) {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>ENVIRONNEMENT</CardTitle>
+        <CardTitle>{t("env.title")}</CardTitle>
         <CardDescription>
-          Les variables partagées par toutes les piles, écrites dans <code>.env.global</code>. Les variables ajoutées à
-          la main hors de cette page sont conservées.
+          {t("env.description.before")}
+          <code>.env.global</code>
+          {t("env.description.after")}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -77,14 +81,14 @@ export function EnvSettingsCard({ variables, saveEnv }: EnvSettingsCardProps) {
               <Input
                 id={`env-${key}`}
                 value={values[key]}
-                placeholder="à remplir"
+                placeholder={t("env.placeholder")}
                 onChange={event => setValues(previous => ({ ...previous, [key]: event.target.value }))}
               />
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={`Générer un secret pour ${key}`}
+                aria-label={t("env.generate", { key })}
                 onClick={() => setValues(previous => ({ ...previous, [key]: randomSecret() }))}
               >
                 <KeyRoundIcon />
@@ -93,7 +97,7 @@ export function EnvSettingsCard({ variables, saveEnv }: EnvSettingsCardProps) {
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={`Supprimer ${key}`}
+                aria-label={t("env.remove", { key })}
                 onClick={() => remove(key)}
               >
                 <Trash2Icon />
@@ -103,7 +107,7 @@ export function EnvSettingsCard({ variables, saveEnv }: EnvSettingsCardProps) {
           <Field orientation="horizontal">
             <Input
               value={newKey}
-              placeholder="NOUVELLE_VARIABLE"
+              placeholder={t("env.newVariable")}
               className="w-72 shrink-0 font-mono text-xs"
               onChange={event => setNewKey(event.target.value.toUpperCase())}
               onKeyDown={event => {
@@ -115,12 +119,13 @@ export function EnvSettingsCard({ variables, saveEnv }: EnvSettingsCardProps) {
             />
             <Button type="button" variant="outline" onClick={add} disabled={newKey.trim().length === 0}>
               <PlusIcon data-icon="inline-start" />
-              Ajouter
+              {t("env.add")}
             </Button>
           </Field>
           {removed.length > 0 && (
             <FieldDescription>
-              À supprimer à l’enregistrement : <span className="font-mono">{removed.join(", ")}</span>
+              {t("env.pendingRemoval")}
+              <span className="font-mono">{removed.join(", ")}</span>
             </FieldDescription>
           )}
         </FieldGroup>
@@ -129,11 +134,11 @@ export function EnvSettingsCard({ variables, saveEnv }: EnvSettingsCardProps) {
         <PendingButton
           type="button"
           pending={isPending}
-          pendingLabel="Enregistrement…"
+          pendingLabel={t("saving")}
           icon={<SaveIcon data-icon="inline-start" />}
           onClick={handleSave}
         >
-          Enregistrer
+          {t("save")}
         </PendingButton>
       </CardFooter>
     </Card>

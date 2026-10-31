@@ -11,8 +11,8 @@ import { apiRoute } from "#app/api/api-route.ts";
 export const GET = apiRoute<ApiContext<"/api/backups/[app]/[archive]">>(
   {
     log: "Failed to send a backup archive",
-    unavailable: "Les sauvegardes sont indisponibles.",
-    notFound: "Cette archive n’existe pas.",
+    unavailable: "backups",
+    notFound: "archive",
   },
   async (_request, { params }) => {
     const download = await backups.file(params.app, params.archive);

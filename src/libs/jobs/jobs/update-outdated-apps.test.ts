@@ -43,7 +43,13 @@ describe("UpdateOutdatedApps", () => {
 
     expect(compose).toHaveBeenCalledWith("immich", ["up", "-d", "--pull", "always"]);
     expect(report).toMatchObject({ updated: ["immich"], failed: ["nginx"] });
-    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ level: "error", dedupeKey: "auto-update" }));
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: "error",
+        dedupeKey: "auto-update",
+        message: { key: "autoUpdate", params: { updated: 1, failed: "nginx" } },
+      }),
+    );
   });
 
   it("touches nothing and notifies no one when every app is up to date", async () => {

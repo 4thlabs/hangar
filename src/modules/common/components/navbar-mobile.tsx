@@ -4,6 +4,8 @@ import { cn } from "cn";
 import { SearchIcon } from "lucide-react";
 import { Link, useRouter } from "waku";
 import { NavbarSearch } from "#modules/common/components/searchbar.tsx";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
+import { CommonMessages } from "#modules/common/messages.ts";
 import { isNavigationActive, navigationPrefetch, navigations } from "#modules/common/navigations.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
@@ -17,17 +19,17 @@ import {
 
 /** The magnifier and its sheet, which stand in for the search field until it fits at `md`. */
 export function MobileSearch() {
+  const { t } = useTranslation(CommonMessages);
+
   return (
     <Sheet>
-      <SheetTrigger
-        render={<Button variant="ghost" size="icon" className="md:hidden" aria-label="Ouvrir la recherche" />}
-      >
+      <SheetTrigger render={<Button variant="ghost" size="icon" className="md:hidden" aria-label={t("search.open")} />}>
         <SearchIcon />
       </SheetTrigger>
       <SheetContent side="top">
         <SheetHeader>
-          <SheetTitle>Recherche</SheetTitle>
-          <SheetDescription>Recherchez du contenu dans Hangar.</SheetDescription>
+          <SheetTitle>{t("search.title")}</SheetTitle>
+          <SheetDescription>{t("search.description")}</SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-4">
           <NavbarSearch id="navbar-search-mobile" autoFocus />
@@ -43,12 +45,13 @@ export function MobileSearch() {
  */
 export function MobileTabBar() {
   const router = useRouter();
+  const { t } = useTranslation(CommonMessages);
   const items = navigations.flatMap(category => category.items);
 
   return (
     <nav
       className="sticky bottom-0 z-40 flex h-16 shrink-0 border-t border-sidebar-border bg-sidebar text-sidebar-foreground sm:hidden"
-      aria-label="Navigation principale"
+      aria-label={t("navigation.label")}
     >
       {items.map(item => {
         const active = isNavigationActive(router.path, item.href);
@@ -68,7 +71,7 @@ export function MobileTabBar() {
             )}
           >
             <item.icon className="size-5" />
-            {item.label}
+            {t(`navigation.${item.label}`)}
           </Link>
         );
       })}

@@ -3,6 +3,15 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { user } from "./auth-schema.ts";
 
 /**
+ * A notification's words as a reference into the notification catalog, rendered in the reader's language when
+ * shown: whoever files it, a background job or a fan-out to every account, cannot know that language.
+ */
+export type NotificationMessage = {
+  key: string;
+  params: Record<string, string | number>;
+};
+
+/**
  * One row per recipient, not per event: a system-wide event fans out at insertion time, so
  * `seen_at` and `read_at` live on the row and no join table is needed to tell who read what.
  *
@@ -22,8 +31,11 @@ export const notification = sqliteTable(
     level: text("level", { enum: ["success", "error", "warning", "info"] })
       .notNull()
       .default("info"),
+    /** The words of a row filed before `message` existed; for a newer one, the message's key, for the logs. */
     title: text("title").notNull(),
     description: text("description"),
+    /** What the notification says, in no language yet. Absent on rows filed before it existed. */
+    message: text("message", { mode: "json" }).$type<NotificationMessage>(),
     /** Where the notification points, e.g. `/apps/immich`. */
     href: text("href"),
     /** Recurring notifications overwrite their previous row instead of stacking up. */

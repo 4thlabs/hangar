@@ -2,8 +2,10 @@
 
 import { useAtom } from "jotai";
 import { ChevronDownIcon } from "lucide-react";
-import { Theme } from "#libs/preferences";
+import { Locale, Theme } from "#libs/preferences";
 import { colorModeAtom, themePaletteAtom } from "#modules/common/atoms/theme.ts";
+import { useLocaleSwitch } from "#modules/common/hooks/use-locale-switch.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import {
@@ -14,8 +16,9 @@ import {
   DropdownMenuTrigger,
 } from "#modules/common/ui/dropdown-menu.tsx";
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
+import { SettingsMessages } from "#modules/settings/messages.ts";
 
-type ThemePreferenceFieldProps<T extends string> = {
+type PreferenceFieldProps<T extends string> = {
   id: string;
   label: string;
   description: string;
@@ -24,14 +27,14 @@ type ThemePreferenceFieldProps<T extends string> = {
   onValueChange: (value: unknown) => void;
 };
 
-function ThemePreferenceField<T extends string>({
+function PreferenceField<T extends string>({
   id,
   label,
   description,
   value,
   options,
   onValueChange,
-}: ThemePreferenceFieldProps<T>) {
+}: PreferenceFieldProps<T>) {
   const valueLabel = options.find(option => option.value === value)?.label ?? value;
 
   return (
@@ -61,9 +64,13 @@ function ThemePreferenceField<T extends string>({
   );
 }
 
-export function ThemeSettingsCard() {
+/** The look of the site and its language: remembered in cookies, applied at once. */
+export function AppearanceSettingsCard() {
+  const { t } = useTranslation(SettingsMessages);
   const [palette, setPalette] = useAtom(themePaletteAtom);
   const [mode, setMode] = useAtom(colorModeAtom);
+  const { locale, switchLocale } = useLocaleSwitch();
+  const modes = Theme.ColorModes.map(value => ({ value, label: t(`appearance.modes.${value}`) }));
 
   function handlePaletteChange(value: unknown) {
     if (typeof value !== "string" || !Theme.isPalette(value)) {
@@ -81,29 +88,45 @@ export function ThemeSettingsCard() {
     setMode(value);
   }
 
+  function handleLocaleChange(value: unknown) {
+    if (typeof value !== "string" || !Locale.isLocale(value)) {
+      return;
+    }
+
+    switchLocale(value);
+  }
+
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
-        <CardTitle>APPARENCE</CardTitle>
-        <CardDescription>Personnalisez les couleurs du site et leur adaptation à votre système.</CardDescription>
+        <CardTitle>{t("appearance.title")}</CardTitle>
+        <CardDescription>{t("appearance.description")}</CardDescription>
       </CardHeader>
       <CardContent>
         <FieldGroup>
-          <ThemePreferenceField
+          <PreferenceField
             id="theme-palette"
-            label="Palette"
-            description="Choisissez l’identité visuelle utilisée sur le site."
+            label={t("appearance.palette")}
+            description={t("appearance.paletteDescription")}
             value={palette}
             options={Theme.Palettes}
             onValueChange={handlePaletteChange}
           />
-          <ThemePreferenceField
+          <PreferenceField
             id="color-mode"
-            label="Mode"
-            description="Utilisez un affichage clair, sombre ou celui de votre système."
+            label={t("appearance.mode")}
+            description={t("appearance.modeDescription")}
             value={mode}
-            options={Theme.ColorModes}
+            options={modes}
             onValueChange={handleModeChange}
+          />
+          <PreferenceField
+            id="locale"
+            label={t("appearance.language")}
+            description={t("appearance.languageDescription")}
+            value={locale}
+            options={Locale.Locales}
+            onValueChange={handleLocaleChange}
           />
         </FieldGroup>
       </CardContent>

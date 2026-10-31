@@ -7,6 +7,7 @@ import { useRouter } from "waku";
 import { ServiceList } from "#modules/apps/components/service-list.tsx";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { CodeEditor } from "#modules/common/ui/code-editor.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 import { AppFileTree } from "#modules/store/components/app-file-tree.tsx";
@@ -14,6 +15,7 @@ import { COMPOSE_FILE } from "#modules/store/compose-file.ts";
 import { ComposeServiceMarkers } from "#modules/store/compose-service-markers.ts";
 import { useAppFiles, type AppFilesOptions } from "#modules/store/hooks/use-app-files.ts";
 import { useAppServices } from "#modules/store/hooks/use-app-services.ts";
+import { StoreMessages } from "#modules/store/messages.ts";
 
 type AppEditorProps = Omit<AppFilesOptions, "onSaved">;
 
@@ -23,6 +25,7 @@ type AppEditorProps = Omit<AppFilesOptions, "onSaved">;
  */
 export function AppEditor(props: AppEditorProps) {
   const router = useRouter();
+  const { t, locale } = useTranslation(StoreMessages);
   const viewRef = useRef<EditorView | null>(null);
   const [expandedService, setExpandedService] = useState<string | null>(null);
   // A service to scroll to once the compose file is open: a click from another file has to wait for its editor.
@@ -33,7 +36,8 @@ export function AppEditor(props: AppEditorProps) {
   const services = useAppServices(props.id);
   const containerIds = services?.state === "loaded" ? services.detail.containerIds : [];
   const { stats } = useDockerStats(containerIds);
-  const markers = useMemo(() => ComposeServiceMarkers.create(services, stats), [services, stats]);
+
+  const markers = useMemo(() => ComposeServiceMarkers.create(services, stats, locale), [services, stats, locale]);
 
   const files = useAppFiles({
     ...props,
@@ -121,12 +125,12 @@ export function AppEditor(props: AppEditorProps) {
           type="button"
           className="self-start"
           pending={files.isPending}
-          pendingLabel="Validation…"
+          pendingLabel={t("editor.validating")}
           icon={<SaveIcon data-icon="inline-start" />}
           disabled={files.selectedDraft === undefined}
           onClick={files.save}
         >
-          Enregistrer
+          {t("editor.save")}
         </PendingButton>
       </div>
     </div>

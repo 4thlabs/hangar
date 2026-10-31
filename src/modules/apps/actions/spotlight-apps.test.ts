@@ -65,9 +65,9 @@ describe("spotlightApps", () => {
 
     expect(vaultwarden).toMatchObject({ icon: "vw.svg", keywords: ["vaultwarden"] });
     expect(vaultwarden?.actions).toEqual({
-      enter: { kind: "open", label: "Ouvrir", url: "https://bitwarden.test.local" },
-      mod: { kind: "navigate", label: "Voir la page", to: "/apps/vaultwarden" },
-      modShift: { kind: "navigate", label: "Modifier", to: "/store/vaultwarden/edit" },
+      enter: { kind: "open", label: "Open", url: "https://bitwarden.test.local" },
+      mod: { kind: "navigate", label: "View the page", to: "/apps/vaultwarden" },
+      modShift: { kind: "navigate", label: "Edit", to: "/store/vaultwarden/edit" },
     });
   });
 
@@ -76,8 +76,8 @@ describe("spotlightApps", () => {
     const jellyfin = items.find(item => item.id === "jellyfin");
 
     expect(jellyfin?.actions).toEqual({
-      enter: { kind: "navigate", label: "Voir la page", to: "/apps/jellyfin" },
-      modShift: { kind: "navigate", label: "Modifier", to: "/store/jellyfin/edit" },
+      enter: { kind: "navigate", label: "View the page", to: "/apps/jellyfin" },
+      modShift: { kind: "navigate", label: "Edit", to: "/store/jellyfin/edit" },
     });
   });
 });

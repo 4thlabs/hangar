@@ -2,22 +2,28 @@
 
 import { RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, type UIEvent } from "react";
-import { streamStatusLabel, type StreamStatus } from "#modules/common/hooks/use-stream-text.ts";
+import type { StreamStatus } from "#modules/common/hooks/use-stream-text.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
+import { CommonMessages } from "#modules/common/messages.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 
 /** Where a `useStreamText` stream stands, for a sheet header. */
 export function StreamStatusBadge({ status }: { status: StreamStatus }) {
-  return <Badge variant={status === "error" ? "destructive" : "secondary"}>{streamStatusLabel[status]}</Badge>;
+  const { t } = useTranslation(CommonMessages);
+
+  return <Badge variant={status === "error" ? "destructive" : "secondary"}>{t(`stream.status.${status}`)}</Badge>;
 }
 
 /** Opens a stream again, spinning while it connects. */
 export function StreamReconnectButton({ status, onReconnect }: { status: StreamStatus; onReconnect: () => void }) {
+  const { t } = useTranslation(CommonMessages);
+
   return (
     <Button type="button" variant="outline" size="sm" onClick={onReconnect} disabled={status === "connecting"}>
       {status === "connecting" ? <Spinner /> : <RefreshCwIcon data-icon="inline-start" />}
-      Reconnecter
+      {t("stream.reconnect")}
     </Button>
   );
 }

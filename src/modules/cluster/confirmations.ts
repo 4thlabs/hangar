@@ -1,7 +1,10 @@
 import type { SwarmManagerView, SwarmNode, SwarmNodeAction } from "#libs/docker";
 import { SwarmRules } from "#libs/docker/swarm-rules";
-import { plural } from "#modules/apps/format.ts";
-import { ClusterLabels } from "#modules/cluster/labels.ts";
+import type { Translate } from "#libs/i18n";
+import type { ClusterMessages } from "#modules/cluster/messages.ts";
+
+/** The words of /cluster, in the reader's language. */
+type ClusterTranslate = Translate<typeof ClusterMessages.en>;
 
 /** What the confirmation of a node action says, before anything is sent to the daemon. */
 export type NodeActionConfirmation = { title: string; description: string; destructive: boolean };
@@ -21,50 +24,53 @@ export class NodeActionConfirmations {
    * The confirmation for a node action: what it does, and how many manager failures the cluster
    * tolerates afterwards. Demoting the node Hangar runs on also costs Hangar its view of the cluster.
    */
-  static create(cluster: SwarmManagerView, node: SwarmNode, action: SwarmNodeAction): NodeActionConfirmation {
+  static create(
+    cluster: SwarmManagerView,
+    node: SwarmNode,
+    action: SwarmNodeAction,
+    t: ClusterTranslate,
+  ): NodeActionConfirmation {
     const toleranceAfter = SwarmRules.faultTolerance(cluster.managers + NodeActionConfirmations.ManagerDelta[action]);
-    const tolerance = `Le cluster tolérera ensuite ${plural(toleranceAfter, "panne")} de manager.`;
-
-    const losesView =
-      action === "demote" && node.id === cluster.currentNodeId
-        ? " Hangar tourne sur ce nœud : devenu worker, il ne verra plus le cluster."
-        : "";
+    const tolerance = t("confirm.tolerance", { count: toleranceAfter });
+    const losesView = action === "demote" && node.id === cluster.currentNodeId ? ` ${t("confirm.losesView")}` : "";
 
     return {
-      title: `${ClusterLabels.NodeAction[action]} ${node.hostname} ?`,
-      description: `${NodeActionConfirmations.consequence(node, action)} ${tolerance}${losesView}`,
+      title: t("confirm.title", { action: t(`nodeAction.${action}`), hostname: node.hostname }),
+      description: `${NodeActionConfirmations.consequence(node, action, t)} ${tolerance}${losesView}`,
       destructive: action === "remove" || action === "demote",
     };
   }
 
   /** What `action` does to `node`, in a sentence. */
-  private static consequence(node: SwarmNode, action: SwarmNodeAction) {
+  private static consequence(node: SwarmNode, action: SwarmNodeAction, t: ClusterTranslate) {
+    const { hostname } = node;
+
     switch (action) {
       case "promote":
-        return `${node.hostname} rejoindra les managers et participera au quorum.`;
+        return t("confirm.promote", { hostname });
       case "demote":
-        return `${node.hostname} redeviendra worker.`;
+        return t("confirm.demote", { hostname });
       case "drain":
-        return `${NodeActionConfirmations.drainedTasks(node)} Aucune nouvelle tâche n'y sera planifiée.`;
+        return t("confirm.drain", { tasks: NodeActionConfirmations.drainedTasks(node, t) });
       case "activate":
-        return `${node.hostname} pourra de nouveau recevoir des tâches.`;
+        return t("confirm.activate", { hostname });
       case "remove":
-        return `${node.hostname} sera retiré du cluster. S'il redémarre, il devra le rejoindre à nouveau avec un token.`;
+        return t("confirm.remove", { hostname });
     }
   }
 
-  /** Where a drained node's tasks go, French agreeing in number. */
-  private static drainedTasks(node: SwarmNode) {
-    const { tasks } = node;
+  /** Where a drained node's tasks go, agreeing in number. */
+  private static drainedTasks(node: SwarmNode, t: ClusterTranslate) {
+    const { tasks, hostname } = node;
 
     if (tasks === 0) {
-      return `Aucune tâche ne tourne sur ${node.hostname}.`;
+      return t("confirm.drainNone", { hostname });
     }
 
     if (tasks === 1) {
-      return `La tâche de ${node.hostname} sera replacée sur un autre nœud.`;
+      return t("confirm.drainOne", { hostname });
     }
 
-    return `Les ${tasks} tâches de ${node.hostname} seront replacées sur les autres nœuds.`;
+    return t("confirm.drainMany", { hostname, count: tasks });
   }
 }

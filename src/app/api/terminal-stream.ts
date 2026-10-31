@@ -1,7 +1,9 @@
+import { ServerTranslation } from "#libs/i18n/server";
 import type { OpenedTerminal, TerminalSize } from "#libs/terminals";
 import { TerminalMessages } from "#modules/common/terminal-messages.ts";
 import { TerminalProtocol } from "#modules/common/terminal-protocol.ts";
 import { apiError, apiStream } from "./api-route.ts";
+import { ApiMessages } from "./messages.ts";
 
 /**
  * Opens a session sized to the terminal the request describes, and streams its TTY, the session id in a
@@ -17,7 +19,7 @@ export async function terminalStream(
   const size = TerminalMessages.size.safeParse(await request.json().catch(() => null));
 
   if (!size.success) {
-    return apiError("La taille du terminal est invalide.", 400);
+    return apiError(ServerTranslation.get(ApiMessages).t("invalidTerminalSize"), 400);
   }
 
   const { id, output, replayedBytes } = await open(size.data, request.signal);

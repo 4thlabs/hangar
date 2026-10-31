@@ -1,10 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import * as cookie from "cookie";
+import { Locale, type LocaleCode } from "../locale.ts";
 import { Theme, type ColorMode, type ThemePalette } from "../theme.ts";
 
 export type UserPreferences = {
   theme: ColorMode;
   themePalette: ThemePalette;
+  locale: LocaleCode;
 };
 
 /**
@@ -16,6 +18,7 @@ export class UserPreferencesStore {
   private static readonly Defaults: UserPreferences = {
     theme: Theme.DefaultColorMode,
     themePalette: Theme.DefaultPalette,
+    locale: Locale.Default,
   };
 
   /** The preferences of the request in flight. */
@@ -29,10 +32,12 @@ export class UserPreferencesStore {
     const cookies = cookie.parseCookie(cookieHeader);
     const theme = cookies[Theme.ColorModeCookie];
     const themePalette = cookies[Theme.PaletteCookie];
+    const locale = cookies[Locale.Cookie];
 
     return {
       theme: Theme.isColorMode(theme) ? theme : Theme.DefaultColorMode,
       themePalette: Theme.isPalette(themePalette) ? themePalette : Theme.DefaultPalette,
+      locale: Locale.isLocale(locale) ? locale : Locale.Default,
     };
   }
 

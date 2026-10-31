@@ -2,7 +2,9 @@
 
 import { lazy, Suspense } from "react";
 import { useInBrowser } from "#modules/common/hooks/use-in-browser.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
+import { TerminalMessages } from "#modules/terminal/messages.ts";
 
 // Fetched with xterm and its stylesheet once the page runs in the browser: xterm touches `window` on load,
 // so the server render must not import it.
@@ -13,9 +15,10 @@ const TerminalPanel = lazy(() =>
 /** The user's shell on the host, as tall as most of the screen, less on a short one; it outlives the page. */
 export function HostTerminal() {
   const inBrowser = useInBrowser();
+  const { t } = useTranslation(TerminalMessages);
 
   return (
-    <section className="flex h-[70svh] min-h-0 flex-col gap-3" aria-label="Terminal du serveur">
+    <section className="flex h-[70svh] min-h-0 flex-col gap-3" aria-label={t("panelLabel")}>
       {inBrowser ? (
         <Suspense fallback={<Spinner />}>
           <TerminalPanel endpoint="/api/host/terminal" />

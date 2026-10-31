@@ -3,7 +3,7 @@ import { Spotlight, type SpotlightItem, type SpotlightSource } from "./spotlight
 
 const source = (id: string, prefix: string): SpotlightSource => ({
   id,
-  label: id,
+  label: () => id,
   prefix,
   shortcut: { key: id[0]!, alt: true },
   load: async () => [],

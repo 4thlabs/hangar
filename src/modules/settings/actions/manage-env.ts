@@ -4,28 +4,35 @@ import * as z from "zod";
 import { sessions } from "#libs/auth/server";
 import { HangarEnv } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
+import type { Translate } from "#libs/i18n";
+import { ServerTranslation } from "#libs/i18n/server";
 import { logger } from "#libs/logs";
-import { ActionResult, SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
-
-const InvalidName = "nom de variable invalide";
-
-const variableName = z.string().refine(name => HangarEnv.isVariableName(name), InvalidName);
+import { ActionFailure } from "#modules/common/actions/action-failure.ts";
+import { ActionResult } from "#modules/common/actions/action-result.ts";
+import { SettingsMessages } from "#modules/settings/messages.ts";
 
 /**
  * What the browser may put in .env.global. Every container reads that file, so a stray newline in a value
- * would inject a variable.
+ * would inject a variable. Built per request: its messages are in the reader's language.
  */
-const payloadSchema = z.object({
-  updates: z.record(
-    variableName,
-    z.string().refine(value => !/[\r\n]/.test(value), "une valeur ne peut pas contenir de retour à la ligne"),
-    // A bad key surfaces as zod's generic `invalid_key` issue, wrapping the refine's message.
-    { error: issue => (issue.code === "invalid_key" ? InvalidName : undefined) },
-  ),
-  remove: z.array(variableName),
-});
+class EnvPayloadSchema {
+  static create(t: Translate<typeof SettingsMessages.en>) {
+    const invalidName = t("env.invalidName");
+    const variableName = z.string().refine(name => HangarEnv.isVariableName(name), invalidName);
 
-export type EnvPayload = z.infer<typeof payloadSchema>;
+    return z.object({
+      updates: z.record(
+        variableName,
+        z.string().refine(value => !/[\r\n]/.test(value), t("env.newlineInValue")),
+        // A bad key surfaces as zod's generic `invalid_key` issue, wrapping the refine's message.
+        { error: issue => (issue.code === "invalid_key" ? invalidName : undefined) },
+      ),
+      remove: z.array(variableName),
+    });
+  }
+}
+
+export type EnvPayload = z.infer<ReturnType<typeof EnvPayloadSchema.create>>;
 
 /**
  * Saves the global environment, reconciled with the file on disk: a variable added by hand since the page was
@@ -34,21 +41,22 @@ export type EnvPayload = z.infer<typeof payloadSchema>;
 export const saveEnv = async (payload: EnvPayload): Promise<ActionResult> => {
   await sessions.require();
 
-  const parsed = payloadSchema.safeParse(payload);
+  const { t } = ServerTranslation.get(SettingsMessages);
+  const parsed = EnvPayloadSchema.create(t).safeParse(payload);
 
   if (!parsed.success) {
     logger.warn("Global env save rejected", { issues: parsed.error.issues });
 
-    return ActionResult.failure(parsed.error.issues[0]?.message ?? "Variables invalides.");
+    return ActionResult.failure(parsed.error.issues[0]?.message ?? t("env.invalid"));
   }
 
   try {
     await hangar.store.env.write(parsed.data.updates, parsed.data.remove);
 
-    return ActionResult.success("L’environnement global a été enregistré.");
+    return ActionResult.success(t("env.savedMessage"));
   } catch (error) {
     logger.error("Global env save failed", { error });
 
-    return ActionResult.failure(`L’enregistrement de l’environnement a échoué. ${SERVER_LOG_HINT}`);
+    return ActionResult.failure(ActionFailure.withLogHint(t("env.saveError")));
   }
 };

@@ -18,12 +18,14 @@ import { AppsTable } from "#modules/apps/components/apps-table.tsx";
 import { AppsUpdateFilter } from "#modules/apps/components/apps-update-filter.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
 import { filterProjects, nextSort, updateState } from "#modules/apps/filter.ts";
-import { formatBytes, formatPercent } from "#modules/apps/format.ts";
+import { MetricFormat } from "#modules/apps/format.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
+import { AppsMessages } from "#modules/apps/messages.ts";
 import type { AppSortColumn, AppsSearch } from "#modules/apps/search-codec.ts";
 import { AutoReload } from "#modules/common/components/auto-reload.tsx";
 import { countBy } from "#modules/common/count-by.ts";
 import { useRouteRefresh } from "#modules/common/hooks/use-route-refresh.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#modules/common/ui/empty.tsx";
@@ -38,19 +40,26 @@ type AppsOverviewProps = {
 /** The CPU and memory cards; they own the stats subscription so a frame re-renders only them. */
 function LiveTotals({ containerIds }: { containerIds: readonly string[] }) {
   const { total } = useDockerStats(containerIds);
+  const { t, locale } = useTranslation(AppsMessages);
 
   return (
     <>
       <StatCard
-        title="CPU"
-        value={formatPercent(total(metrics => metrics.cpuPercent))}
-        detail="Toutes apps confondues"
+        title={t("stats.cpu")}
+        value={MetricFormat.percent(
+          total(metrics => metrics.cpuPercent),
+          locale,
+        )}
+        detail={t("stats.allApps")}
         icon={CpuIcon}
       />
       <StatCard
-        title="Mémoire"
-        value={formatBytes(total(metrics => metrics.memoryUsage))}
-        detail="Toutes apps confondues"
+        title={t("stats.memory")}
+        value={MetricFormat.bytes(
+          total(metrics => metrics.memoryUsage),
+          locale,
+        )}
+        detail={t("stats.allApps")}
         icon={MemoryStickIcon}
       />
     </>
@@ -59,6 +68,7 @@ function LiveTotals({ containerIds }: { containerIds: readonly string[] }) {
 
 export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
   const { refresh, isRefreshing } = useRouteRefresh();
+  const { t } = useTranslation(AppsMessages);
   const setSearch = useSetSearch_UNSTABLE({ from: "/apps" });
   const onSort = (column: AppSortColumn) => void setSearch({ sort: nextSort(search.sort, column) });
   const projects = snapshot?.projects ?? [];
@@ -81,8 +91,8 @@ export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
       <AutoReload />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Apps</h1>
-          <p className="text-sm text-muted-foreground">Applications installées par Hangar et leur état Docker.</p>
+          <h1 className="text-2xl font-semibold">{t("title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("description")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <AppsUpdateFilter counts={updateCounts} />
@@ -90,18 +100,18 @@ export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
           <AppsStatusFilter counts={counts} />
           <Button type="button" variant="outline" disabled={isRefreshing} onClick={() => void refresh()}>
             {isRefreshing ? <Spinner /> : <RefreshCwIcon data-icon="inline-start" />}
-            Actualiser
+            {t("refresh")}
           </Button>
         </div>
       </div>
 
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Docker indisponible</AlertTitle>
+          <AlertTitle>{t("dockerUnavailable")}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
           <AlertAction>
             <Button type="button" variant="outline" size="sm" onClick={() => void refresh()}>
-              Réessayer
+              {t("retry")}
             </Button>
           </AlertAction>
         </Alert>
@@ -110,10 +120,10 @@ export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
       {snapshot && (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            <StatCard title="Applications" value={projects.length} icon={BoxesIcon} />
-            <StatCard title="Services" value={totals.services} icon={LayersIcon} />
-            <StatCard title="Conteneurs actifs" value={totals.running} icon={PlayIcon} />
-            <StatCard title="Conteneurs arrêtés" value={totals.stopped} icon={SquareIcon} />
+            <StatCard title={t("stats.apps")} value={projects.length} icon={BoxesIcon} />
+            <StatCard title={t("stats.services")} value={totals.services} icon={LayersIcon} />
+            <StatCard title={t("stats.running")} value={totals.running} icon={PlayIcon} />
+            <StatCard title={t("stats.stopped")} value={totals.stopped} icon={SquareIcon} />
             {/* Every installed app's containers at once: the stats stream covers the whole host, so
                 the ids are what scopes the totals to Hangar's apps. */}
             <LiveTotals containerIds={projects.flatMap(project => project.containerIds)} />
@@ -129,15 +139,13 @@ export function AppsOverview({ snapshot, error, search }: AppsOverviewProps) {
                 </EmptyMedia>
                 {projects.length === 0 ? (
                   <>
-                    <EmptyTitle>Aucune application installée</EmptyTitle>
-                    <EmptyDescription>
-                      Installez une application depuis le store pour la retrouver ici.
-                    </EmptyDescription>
+                    <EmptyTitle>{t("empty.noAppsTitle")}</EmptyTitle>
+                    <EmptyDescription>{t("empty.noAppsDescription")}</EmptyDescription>
                   </>
                 ) : (
                   <>
-                    <EmptyTitle>Aucun résultat</EmptyTitle>
-                    <EmptyDescription>Aucune application ne correspond à cette recherche.</EmptyDescription>
+                    <EmptyTitle>{t("empty.noResultsTitle")}</EmptyTitle>
+                    <EmptyDescription>{t("empty.noResultsDescription")}</EmptyDescription>
                   </>
                 )}
               </EmptyHeader>

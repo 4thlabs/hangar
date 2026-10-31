@@ -4,8 +4,8 @@ import { hangar } from "#libs/hangar/server";
 import { logger } from "#libs/logs";
 import { notifications } from "#libs/notifications/server";
 import { AppCommands, type AppCommand } from "#modules/apps/actions/app-operation.ts";
-import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
 import { CommandStream } from "#modules/common/command-stream.ts";
+import { NotificationText } from "#modules/notifications/notification-text.ts";
 
 type ComposeBatch = {
   command: AppCommand;
@@ -37,8 +37,8 @@ export async function runComposeBatch({ command, projects, userId, output }: Com
 
 /** Runs the command on one app and notifies its outcome. Resolves to whether it succeeded. */
 async function runOne(command: AppCommand, project: string, userId: string, output: Writable) {
-  const label = AppCommands.label(command);
   const href = `/apps/${project}`;
+  const run = { project, operation: command.operation, flags: command.flags.join(",") };
 
   output.write(`\n$ ${AppCommands.commandLine(command)} — ${project}\n`);
 
@@ -53,8 +53,7 @@ async function runOne(command: AppCommand, project: string, userId: string, outp
     await notifications.notify({
       userId,
       level: "error",
-      title: `${label} échoué`,
-      description: `La commande Docker Compose a échoué pour ${project}. ${SERVER_LOG_HINT}`,
+      message: NotificationText.create("composeFailed", run),
       href,
     });
 
@@ -64,8 +63,7 @@ async function runOne(command: AppCommand, project: string, userId: string, outp
   await notifications.notify({
     userId,
     level: "success",
-    title: `${label} terminé`,
-    description: AppCommands.outcome(command, project),
+    message: NotificationText.create("composeSucceeded", run),
     href,
   });
 

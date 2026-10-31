@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
+import { CommonMessages } from "#modules/common/messages.ts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +17,7 @@ type ConfirmDialogProps = {
   open: boolean;
   title: string;
   description: string;
-  /** The confirm button's label. */
+  /** The confirm button's label; "Confirm" in the reader's language by default. */
   confirmLabel?: string;
   /** Whether the action destroys something, which the confirm button shows. */
   destructive?: boolean;
@@ -28,11 +30,13 @@ export function ConfirmDialog({
   open,
   title,
   description,
-  confirmLabel = "Confirmer",
+  confirmLabel,
   destructive = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation(CommonMessages);
+
   return (
     <AlertDialog open={open} onOpenChange={isOpen => !isOpen && onCancel()}>
       <AlertDialogContent>
@@ -41,9 +45,9 @@ export function ConfirmDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Annuler</AlertDialogCancel>
+          <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
           <AlertDialogAction variant={destructive ? "destructive" : "default"} onClick={onConfirm}>
-            {confirmLabel}
+            {confirmLabel ?? t("confirm.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

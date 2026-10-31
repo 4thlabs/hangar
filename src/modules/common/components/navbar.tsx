@@ -5,9 +5,12 @@ import { useState, type ReactNode } from "react";
 import { Link, useRouter } from "waku";
 import { authClient } from "#libs/auth/client";
 import type { NotificationPayload } from "#libs/notifications";
+import { LocaleMenu } from "#modules/common/components/locale-menu.tsx";
 import { MobileSearch } from "#modules/common/components/navbar-mobile.tsx";
 import { NavbarSearch } from "#modules/common/components/searchbar.tsx";
 import { UserAvatar, type AvatarUser } from "#modules/common/components/user-avatar.tsx";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
+import { CommonMessages } from "#modules/common/messages.ts";
 import { isNavigationActive, navigationPrefetch, navigations } from "#modules/common/navigations.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
@@ -35,6 +38,8 @@ type AppNavbarProps = {
 };
 
 function Brand() {
+  const { t } = useTranslation(CommonMessages);
+
   return (
     <Button
       variant="ghost"
@@ -43,7 +48,7 @@ function Brand() {
       // left-hand cluster from `sm` up. Cheaper than a second header laid out differently.
       className="absolute left-1/2 -translate-x-1/2 sm:static sm:translate-x-0"
       render={
-        <Link to="/" aria-label="Hangar — Dashboard">
+        <Link to="/" aria-label={t("navbar.home")}>
           <img src="/images/icon.png" alt="" className="size-7" />
           <span className="text-lg font-semibold">Hangar</span>
         </Link>
@@ -54,13 +59,14 @@ function Brand() {
 
 function DesktopNavigation() {
   const router = useRouter();
+  const { t } = useTranslation(CommonMessages);
   const items = navigations.filter(category => category.position !== "bottom").flatMap(category => category.items);
   // The tab strip matches on equality, so it is handed the active href rather than the raw path:
   // `/apps/alpha` must still light up Apps. No item matches on `/settings` — that one is a button.
   const active = items.find(item => isNavigationActive(router.path, item.href))?.href ?? "";
 
   return (
-    <nav className="hidden h-full sm:block" aria-label="Navigation principale">
+    <nav className="hidden h-full sm:block" aria-label={t("navigation.label")}>
       <Tabs value={active} className="h-full gap-0">
         <TabsList variant="line" className="h-full! gap-2 p-0">
           {items.map(item => (
@@ -74,7 +80,7 @@ function DesktopNavigation() {
                   aria-current={active === item.href ? "page" : undefined}
                   unstable_prefetchOnView={navigationPrefetch}
                 >
-                  {item.label}
+                  {t(`navigation.${item.label}`)}
                 </Link>
               }
             />
@@ -87,6 +93,7 @@ function DesktopNavigation() {
 
 function SettingsButton() {
   const router = useRouter();
+  const { t } = useTranslation(CommonMessages);
 
   return (
     <Tooltip>
@@ -97,27 +104,28 @@ function SettingsButton() {
             size="icon"
             className="hidden sm:inline-flex"
             render={
-              <Link to="/settings" aria-label="Paramètres" unstable_prefetchOnView={navigationPrefetch}>
+              <Link to="/settings" aria-label={t("navbar.settings")} unstable_prefetchOnView={navigationPrefetch}>
                 <SettingsIcon />
               </Link>
             }
           />
         }
       />
-      <TooltipContent>Paramètres</TooltipContent>
+      <TooltipContent>{t("navbar.settings")}</TooltipContent>
     </Tooltip>
   );
 }
 
-const SIGN_OUT_ERROR_TOAST = {
-  title: "Échec de la déconnexion",
-  description: "Impossible de vous déconnecter. Réessayez.",
-  type: "error" as const,
-};
-
 function UserMenu({ user }: { user: AvatarUser }) {
   const router = useRouter();
+  const { t } = useTranslation(CommonMessages);
   const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const signOutErrorToast = {
+    title: t("navbar.signOutFailed"),
+    description: t("navbar.signOutFailedDescription"),
+    type: "error" as const,
+  };
 
   async function handleSignOut() {
     setIsSigningOut(true);
@@ -126,7 +134,7 @@ function UserMenu({ user }: { user: AvatarUser }) {
       const result = await authClient.signOut();
 
       if (result.error) {
-        toast.add(SIGN_OUT_ERROR_TOAST);
+        toast.add(signOutErrorToast);
 
         return;
       }
@@ -134,7 +142,7 @@ function UserMenu({ user }: { user: AvatarUser }) {
       router.replace("/login");
     } catch (error) {
       console.error("Sign-out request failed", error);
-      toast.add(SIGN_OUT_ERROR_TOAST);
+      toast.add(signOutErrorToast);
     } finally {
       setIsSigningOut(false);
     }
@@ -148,7 +156,7 @@ function UserMenu({ user }: { user: AvatarUser }) {
             className="cursor-pointer lg:h-9 lg:w-auto lg:gap-1.5 lg:px-2.5"
             variant="ghost"
             size="icon"
-            aria-label={`Menu utilisateur de ${user.name}`}
+            aria-label={t("navbar.userMenu", { name: user.name })}
           />
         }
       >
@@ -174,16 +182,20 @@ function UserMenu({ user }: { user: AvatarUser }) {
             render={
               <Link to="/user/settings">
                 <SettingsIcon />
-                <span>Paramètres utilisateur</span>
+                <span>{t("navbar.userSettings")}</span>
               </Link>
             }
           />
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          <LocaleMenu />
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
           <DropdownMenuItem variant="destructive" disabled={isSigningOut} onClick={handleSignOut}>
             {isSigningOut ? <Spinner /> : <LogOutIcon />}
-            <span>{isSigningOut ? "Déconnexion…" : "Déconnexion"}</span>
+            <span>{isSigningOut ? t("navbar.signingOut") : t("navbar.signOut")}</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

@@ -5,28 +5,37 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "waku";
 import { RelativeTime } from "#libs/format";
 import type { NotificationPayload } from "#libs/notifications";
+import { Locale } from "#libs/preferences";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#modules/common/ui/empty.tsx";
 import { Popover, PopoverContent, PopoverTrigger } from "#modules/common/ui/popover.tsx";
 import { toast, ToastIcon } from "#modules/common/ui/toast.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
 import { markNotificationsRead, markNotificationsSeen } from "#modules/notifications/actions/manage-notifications.ts";
+import { NotificationsMenuMessages } from "#modules/notifications/menu-messages.ts";
+import { NotificationText } from "#modules/notifications/notification-text.ts";
 
 /** How many unseen notifications may toast at once; the rest wait in the bell. */
 const TOAST_LIMIT = 3;
 
 function NotificationItem({ notification }: { notification: NotificationPayload }) {
+  const { t, locale } = useTranslation(NotificationsMenuMessages);
+  const { title, description } = NotificationText.render(notification, locale);
+
   const body = (
     <>
       <ToastIcon type={notification.level} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-baseline gap-2">
-          <span className="min-w-0 flex-1 truncate font-medium">{notification.title}</span>
-          {!notification.read && <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-label="Non lue" />}
+          <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
+          {!notification.read && (
+            <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-label={t("unreadMark")} />
+          )}
         </span>
-        {notification.description && <span className="text-muted-foreground">{notification.description}</span>}
+        {description && <span className="text-muted-foreground">{description}</span>}
         <time className="text-xs text-muted-foreground" dateTime={new Date(notification.createdAt).toISOString()}>
-          {RelativeTime.format(notification.createdAt, Date.now(), "fr")}
+          {RelativeTime.format(notification.createdAt, Date.now(), Locale.intlTag(locale))}
         </time>
       </span>
     </>
@@ -51,6 +60,7 @@ function NotificationItem({ notification }: { notification: NotificationPayload 
  */
 export function NotificationsMenu({ initial }: { initial: NotificationPayload[] }) {
   const router = useRouter();
+  const { t, locale } = useTranslation(NotificationsMenuMessages);
   const [items, setItems] = useState(initial);
 
   // The stream's cursor is inclusive to the millisecond, so the same notification can come back
@@ -101,7 +111,7 @@ export function NotificationsMenu({ initial }: { initial: NotificationPayload[] 
     }
 
     for (const item of pending.slice(0, TOAST_LIMIT)) {
-      toast.add({ title: item.title, description: item.description ?? undefined, type: item.level });
+      toast.add({ ...NotificationText.render(item, locale), type: item.level });
     }
 
     // Every one of them, not just the toasted three: the others were deliberately withheld, and
@@ -132,7 +142,7 @@ export function NotificationsMenu({ initial }: { initial: NotificationPayload[] 
                   variant="ghost"
                   size="icon"
                   className="relative"
-                  aria-label={unread > 0 ? `Notifications, ${unread} non lues` : "Notifications"}
+                  aria-label={unread > 0 ? t("unreadLabel", { count: unread }) : t("title")}
                 >
                   <BellIcon />
                   {unread > 0 && (
@@ -145,13 +155,13 @@ export function NotificationsMenu({ initial }: { initial: NotificationPayload[] 
             />
           }
         />
-        <TooltipContent>Notifications</TooltipContent>
+        <TooltipContent>{t("title")}</TooltipContent>
       </Tooltip>
 
       <PopoverContent align="end" sideOffset={6} className="w-80 gap-0 p-0">
         <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-          <span className="text-sm font-medium">Notifications</span>
-          {unread > 0 && <span className="text-xs text-muted-foreground">{unread} non lues</span>}
+          <span className="text-sm font-medium">{t("title")}</span>
+          {unread > 0 && <span className="text-xs text-muted-foreground">{t("unread", { count: unread })}</span>}
         </div>
 
         {items.length === 0 ? (
@@ -160,8 +170,8 @@ export function NotificationsMenu({ initial }: { initial: NotificationPayload[] 
               <EmptyMedia variant="icon">
                 <BellIcon />
               </EmptyMedia>
-              <EmptyTitle>Aucune notification</EmptyTitle>
-              <EmptyDescription>Les commandes lancées en arrière-plan viendront se ranger ici.</EmptyDescription>
+              <EmptyTitle>{t("emptyTitle")}</EmptyTitle>
+              <EmptyDescription>{t("emptyDescription")}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (

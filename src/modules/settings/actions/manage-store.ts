@@ -2,17 +2,20 @@
 
 import { sessions } from "#libs/auth/server";
 import { hangar } from "#libs/hangar/server";
+import { ServerTranslation } from "#libs/i18n/server";
 import { backupJobs } from "#libs/jobs/server";
 import { logger } from "#libs/logs";
 import { notifications } from "#libs/notifications/server";
-import { SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
+import { NotificationText } from "#modules/notifications/notification-text.ts";
+import { SettingsMessages } from "#modules/settings/messages.ts";
 import { StoreActionResult } from "#modules/store/actions/store-action-result.ts";
 
 export const manageStore = async (): Promise<StoreActionResult> => {
   const { user } = await sessions.require();
 
+  const { t } = ServerTranslation.get(SettingsMessages);
   const wasInstalled = await hangar.store.isInstalled();
-  const operation = wasInstalled ? "mise à jour" : "installation";
+  const operation = wasInstalled ? "update" : "install";
 
   // Detached: a clone or a pull is as long as the network makes it, and holding the request open
   // for it only risks a timeout. The outcome comes back as a notification.
@@ -25,8 +28,7 @@ export const manageStore = async (): Promise<StoreActionResult> => {
       notifications.notify({
         userId: user.id,
         level: "success",
-        title: `Store : ${operation} terminée`,
-        description: wasInstalled ? "Le store a été mis à jour." : "Le store a été installé.",
+        message: NotificationText.create(wasInstalled ? "storeUpdated" : "storeInstalled"),
         href: "/settings",
       }),
     )
@@ -36,13 +38,12 @@ export const manageStore = async (): Promise<StoreActionResult> => {
       return notifications.notify({
         userId: user.id,
         level: "error",
-        title: `Store : ${operation} échouée`,
-        description: `La ${operation} du store a échoué. ${SERVER_LOG_HINT}`,
+        message: NotificationText.create(wasInstalled ? "storeUpdateFailed" : "storeInstallFailed"),
         href: "/settings",
       });
     });
 
   // `wasInstalled`, not the state to come: nothing has been synchronised yet, and the page
   // refreshes itself when the notification lands.
-  return StoreActionResult.success(`La ${operation} du store a été lancée.`, wasInstalled);
+  return StoreActionResult.success(t(wasInstalled ? "store.updateStarted" : "store.installStarted"), wasInstalled);
 };

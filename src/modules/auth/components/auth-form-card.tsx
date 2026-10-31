@@ -3,7 +3,9 @@
 import { CircleAlertIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { Link } from "waku";
+import { AuthMessages } from "#modules/auth/messages.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
@@ -79,14 +81,16 @@ export function AuthFormCard({
 }
 
 export function AuthEmailField({ disabled }: { disabled: boolean }) {
+  const { t } = useTranslation(AuthMessages);
+
   return (
     <Field>
-      <FieldLabel htmlFor="email">Email</FieldLabel>
+      <FieldLabel htmlFor="email">{t("email")}</FieldLabel>
       <Input
         id="email"
         name="email"
         type="email"
-        placeholder="you@example.com"
+        placeholder={t("emailPlaceholder")}
         autoComplete="email"
         required
         disabled={disabled}
@@ -102,9 +106,11 @@ export function AuthPasswordField({
   disabled: boolean;
   autoComplete: "current-password" | "new-password";
 }) {
+  const { t } = useTranslation(AuthMessages);
+
   return (
     <Field>
-      <FieldLabel htmlFor="password">Password</FieldLabel>
+      <FieldLabel htmlFor="password">{t("password")}</FieldLabel>
       <Input
         id="password"
         name="password"

@@ -64,7 +64,7 @@ describe("DockerSelfUpdate.target", () => {
   it("says Hangar was not started with Compose when the labels are missing", async () => {
     given({ ...hangarContainer, Config: { ...hangarContainer.Config, Labels: {} } });
 
-    await expect(selfUpdate().target()).rejects.toThrow("Hangar n’a pas été lancé avec Docker Compose.");
+    await expect(selfUpdate().target()).rejects.toMatchObject({ reason: "noCompose" });
   });
 
   it("passes on a daemon that cannot be reached instead of blaming the setup", async () => {
@@ -121,7 +121,7 @@ describe("DockerSelfUpdate.start", () => {
   it("refuses a second update while the first one still runs", async () => {
     given(hangarContainer, { State: { Running: true } });
 
-    await expect(selfUpdate().start()).rejects.toThrow("Une mise à jour de Hangar est déjà en cours.");
+    await expect(selfUpdate().start()).rejects.toMatchObject({ reason: "inProgress" });
     expect(dockerMock.removeContainer).not.toHaveBeenCalled();
     expect(dockerMock.createContainer).not.toHaveBeenCalled();
   });

@@ -1,9 +1,10 @@
 "use client";
 
 import { AppCommands, type AppCommand } from "#modules/apps/actions/app-operation.ts";
-import { plural } from "#modules/apps/format.ts";
+import { AppsMessages } from "#modules/apps/messages.ts";
 import { StreamOutput, StreamStatusBadge } from "#modules/common/components/stream-output.tsx";
 import { useCommandStream } from "#modules/common/hooks/use-command-stream.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "#modules/common/ui/sheet.tsx";
 
 type ComposeOutputSheetProps = {
@@ -17,7 +18,8 @@ type ComposeOutputSheetProps = {
 };
 
 export function ComposeOutputSheet({ projects, command, onClose, onFinished }: ComposeOutputSheetProps) {
-  const subject = projects.length === 1 ? projects[0] : plural(projects.length, "application");
+  const { t } = useTranslation(AppsMessages);
+  const subject = projects.length === 1 ? projects[0] : t("apps", { count: projects.length });
 
   const endpoint =
     command && projects.length > 0
@@ -32,18 +34,15 @@ export function ComposeOutputSheet({ projects, command, onClose, onFinished }: C
         <SheetHeader>
           <div className="flex flex-wrap items-center gap-2 pr-8">
             <SheetTitle>
-              {command ? AppCommands.label(command) : ""} · {subject}
+              {command ? AppCommands.label(command, t) : ""} · {subject}
             </SheetTitle>
             <StreamStatusBadge status={status} />
           </div>
-          <SheetDescription>
-            Sortie de Docker Compose en direct. Fermer ce panneau n’interrompt rien : les commandes vont à leur terme
-            côté serveur et chacune dépose une notification.
-          </SheetDescription>
+          <SheetDescription>{t("commands.output.description")}</SheetDescription>
         </SheetHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4">
-          <StreamOutput text={text} error={error} placeholder="Démarrage de la commande…" />
+          <StreamOutput text={text} error={error} placeholder={t("commands.output.starting")} />
         </div>
       </SheetContent>
     </Sheet>

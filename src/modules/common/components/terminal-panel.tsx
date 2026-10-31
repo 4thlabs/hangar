@@ -4,6 +4,8 @@ import "@xterm/xterm/css/xterm.css";
 import { XIcon } from "lucide-react";
 import { StreamReconnectButton, StreamStatusBadge } from "#modules/common/components/stream-output.tsx";
 import { useTerminal } from "#modules/common/hooks/use-terminal.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
+import { CommonMessages } from "#modules/common/messages.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 
 type TerminalPanelProps = {
@@ -19,6 +21,7 @@ type TerminalPanelProps = {
  * (see `ContainerConsoleSheet`), with xterm and its stylesheet.
  */
 export function TerminalPanel({ endpoint, closable = false }: TerminalPanelProps) {
+  const { t } = useTranslation(CommonMessages);
   const { elementRef, status, error, reconnect, close } = useTerminal(endpoint);
 
   return (
@@ -29,7 +32,7 @@ export function TerminalPanel({ endpoint, closable = false }: TerminalPanelProps
         {closable && status === "connected" && (
           <Button type="button" variant="outline" size="sm" onClick={() => void close()}>
             <XIcon data-icon="inline-start" />
-            Fermer la session
+            {t("terminal.close")}
           </Button>
         )}
       </div>

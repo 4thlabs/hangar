@@ -4,8 +4,12 @@ import * as z from "zod";
 import { sessions } from "#libs/auth/server";
 import { HangarError } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
+import type { Translate } from "#libs/i18n";
+import { ServerTranslation } from "#libs/i18n/server";
 import { logger } from "#libs/logs";
-import { ActionResult, SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
+import { ActionFailure } from "#modules/common/actions/action-failure.ts";
+import { ActionResult } from "#modules/common/actions/action-result.ts";
+import { StoreMessages } from "#modules/store/messages.ts";
 
 /** A read of one app file: its content when it succeeded, why not otherwise. */
 export type AppFileResult = { success: true; source: string } | { success: false; message: string };
@@ -26,7 +30,7 @@ export const createApp = async (id: string, source: string): Promise<ActionResul
     { id, source },
     {
       write: payload => hangar.store.createApp(payload.id, payload.source),
-      success: payload => `${payload.id} a été ajoutée au store.`,
+      success: (payload, t) => t("actions.appCreated", { id: payload.id }),
     },
   );
 };
@@ -47,7 +51,7 @@ export const saveAppFile = async (id: string, relativePath: string, source: stri
 
         ({ composeChanged } = await appFiles.write(payload.relativePath, payload.source));
       },
-      success: payload => `${payload.relativePath} a été enregistré.`,
+      success: (payload, t) => t("actions.fileSaved", { path: payload.relativePath }),
     },
   );
 
@@ -67,7 +71,7 @@ export const createAppFile = async (id: string, relativePath: string): Promise<A
 
         await appFiles.create(payload.relativePath);
       },
-      success: payload => `${payload.relativePath} a été créé.`,
+      success: (payload, t) => t("actions.fileCreated", { path: payload.relativePath }),
     },
   );
 };
@@ -76,12 +80,13 @@ export const createAppFile = async (id: string, relativePath: string): Promise<A
 export const readAppFile = async (id: string, relativePath: string): Promise<AppFileResult> => {
   await sessions.require();
 
+  const { t } = ServerTranslation.get(StoreMessages);
   const parsed = filePathSchema.safeParse({ id, relativePath });
 
   if (!parsed.success) {
     logger.warn("Store app file read rejected", { issues: parsed.error.issues });
 
-    return { success: false, message: "Requête invalide." };
+    return { success: false, message: t("actions.invalidRequest") };
   }
 
   try {
@@ -95,15 +100,18 @@ export const readAppFile = async (id: string, relativePath: string): Promise<App
 
     logger.error("Store app file read failed", { error, ...parsed.data });
 
-    return { success: false, message: `La lecture de ${parsed.data.relativePath} a échoué. ${SERVER_LOG_HINT}` };
+    return {
+      success: false,
+      message: ActionFailure.withLogHint(t("actions.readFailed", { path: parsed.data.relativePath })),
+    };
   }
 };
 
 type AppWrite<Payload> = {
   /** The store call that writes the validated payload. */
   write: (payload: Payload) => Promise<void>;
-  /** The message shown once it is written. */
-  success: (payload: Payload) => string;
+  /** The message shown once it is written, in the reader's language. */
+  success: (payload: Payload, t: Translate<typeof StoreMessages.en>) => string;
 };
 
 /**
@@ -116,18 +124,19 @@ async function writeApp<Payload extends { id: string }>(
   input: Payload,
   { write, success }: AppWrite<Payload>,
 ): Promise<ActionResult> {
+  const { t } = ServerTranslation.get(StoreMessages);
   const parsed = schema.safeParse(input);
 
   if (!parsed.success) {
     logger.warn("Store app save rejected", { issues: parsed.error.issues });
 
-    return ActionResult.failure("Requête invalide.");
+    return ActionResult.failure(t("actions.invalidRequest"));
   }
 
   try {
     await write(parsed.data);
 
-    return ActionResult.success(success(parsed.data));
+    return ActionResult.success(success(parsed.data, t));
   } catch (error) {
     if (error instanceof HangarError) {
       return ActionResult.failure(error.message);
@@ -135,6 +144,6 @@ async function writeApp<Payload extends { id: string }>(
 
     logger.error("Store app save failed", { error, id: parsed.data.id });
 
-    return ActionResult.failure(`L’enregistrement de ${parsed.data.id} a échoué. ${SERVER_LOG_HINT}`);
+    return ActionResult.failure(ActionFailure.withLogHint(t("actions.saveFailed", { id: parsed.data.id })));
   }
 }

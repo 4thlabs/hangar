@@ -1,6 +1,7 @@
 import fuzzysort from "fuzzysort";
 import type { LucideIcon } from "lucide-react";
 import type { Unstable_RouteHref } from "waku/router/client";
+import type { LocaleCode } from "#libs/preferences";
 
 /**
  * What picking a result does. Data rather than a callback, so a source can send it from a server
@@ -38,14 +39,17 @@ export type SpotlightShortcut = {
 /** Where results come from. Each one can be searched alone, by its shortcut or its prefix. */
 export type SpotlightSource = {
   id: string;
-  /** The heading of its group of results. */
-  label: string;
+  /** The heading of its group of results, in the reader's language. */
+  label: (locale: LocaleCode) => string;
   /** Typed first in the field, it narrows the search to this source. */
   prefix: string;
   /** Opens the palette narrowed to this source. */
   shortcut: SpotlightShortcut;
-  /** Called each time the palette opens. */
-  load: () => Promise<SpotlightItem[]>;
+  /**
+   * Called each time the palette opens, and when the reader switches language. A source the server answers reads
+   * the language from its cookie instead.
+   */
+  load: (locale: LocaleCode) => Promise<SpotlightItem[]>;
 };
 
 /** The keys a shortcut is spelled with, and the one `mod` stands for. */

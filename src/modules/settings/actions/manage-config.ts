@@ -3,13 +3,18 @@
 import { sessions } from "#libs/auth/server";
 import { HangarError } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
+import { ServerTranslation } from "#libs/i18n/server";
 import { backupJobs } from "#libs/jobs/server";
 import { logger } from "#libs/logs";
-import { ActionResult, SERVER_LOG_HINT } from "#modules/common/actions/action-result.ts";
+import { ActionFailure } from "#modules/common/actions/action-failure.ts";
+import { ActionResult } from "#modules/common/actions/action-result.ts";
+import { SettingsMessages } from "#modules/settings/messages.ts";
 
 /** Saves hangar.yml. The config validates it first: an invalid file is reported, never written. */
 export const saveConfig = async (source: string): Promise<ActionResult> => {
   await sessions.require();
+
+  const { t } = ServerTranslation.get(SettingsMessages);
 
   try {
     await hangar.store.saveConfig(source);
@@ -21,7 +26,7 @@ export const saveConfig = async (source: string): Promise<ActionResult> => {
 
     logger.error("Hangar config save failed", { error });
 
-    return ActionResult.failure(`L’enregistrement de la configuration a échoué. ${SERVER_LOG_HINT}`);
+    return ActionResult.failure(ActionFailure.withLogHint(t("config.saveFailed")));
   }
 
   // Apart: the file is saved by now, and only its schedules failed to follow.
@@ -30,10 +35,8 @@ export const saveConfig = async (source: string): Promise<ActionResult> => {
   } catch (error) {
     logger.error("Backup schedules update failed", { error });
 
-    return ActionResult.failure(
-      `La configuration a été enregistrée, mais les sauvegardes planifiées n’ont pas suivi. ${SERVER_LOG_HINT}`,
-    );
+    return ActionResult.failure(ActionFailure.withLogHint(t("config.schedulesFailed")));
   }
 
-  return ActionResult.success("La configuration a été enregistrée.");
+  return ActionResult.success(t("config.savedMessage"));
 };

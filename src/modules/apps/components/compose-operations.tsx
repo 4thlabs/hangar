@@ -9,10 +9,13 @@ import {
   Trash2Icon,
   type LucideIcon,
 } from "lucide-react";
+import type { Translate } from "#libs/i18n";
 import { AppCommands, type AppCommand, type UpFlag } from "#modules/apps/actions/app-operation.ts";
 import { ComposeOutputSheet } from "#modules/apps/components/compose-output-sheet.tsx";
 import type { useComposeRun } from "#modules/apps/hooks/use-compose-run.ts";
+import { AppsMessages } from "#modules/apps/messages.ts";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { ButtonGroup } from "#modules/common/ui/button-group.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
@@ -55,6 +58,8 @@ export function ComposeOperationButtons({
   onToggleFlag,
   onRequest,
 }: ComposeOperationButtonsProps) {
+  const { t } = useTranslation(AppsMessages);
+  const upLabel = t("commands.operation.up");
   const up = AppCommands.create("up", flags);
   const restart = AppCommands.create("restart");
   const down = AppCommands.create("down");
@@ -69,10 +74,10 @@ export function ComposeOperationButtons({
           onClick={() => onRequest(up)}
           title={AppCommands.commandLine(up)}
           // The count alone does not say which flags; the name gives the whole command.
-          aria-label={`${AppCommands.OperationLabel.up} : ${AppCommands.commandLine(up)}`}
+          aria-label={t("commands.named", { label: upLabel, commandLine: AppCommands.commandLine(up) })}
         >
           {running?.operation === "up" ? <Spinner /> : <PowerIcon data-icon="inline-start" />}
-          {AppCommands.OperationLabel.up}
+          {upLabel}
           {up.flags.length > 0 && <span className="opacity-70">· {up.flags.length}</span>}
         </Button>
         <DropdownMenu>
@@ -82,7 +87,7 @@ export function ComposeOperationButtons({
                 type="button"
                 size={size === "sm" ? "icon-sm" : "icon"}
                 disabled={disabled}
-                aria-label={`Options de ${AppCommands.OperationLabel.up}`}
+                aria-label={t("commands.options", { operation: upLabel })}
               />
             }
           >
@@ -100,7 +105,7 @@ export function ComposeOperationButtons({
                 >
                   <Icon />
                   <span className="flex flex-col">
-                    {AppCommands.Flags[flag].label}
+                    {t(`commands.flags.${flag}.label`)}
                     <span className="font-mono text-xs text-muted-foreground">
                       {AppCommands.Flags[flag].arguments.join(" ")}
                     </span>
@@ -120,7 +125,7 @@ export function ComposeOperationButtons({
         title={AppCommands.commandLine(restart)}
       >
         {running?.operation === "restart" ? <Spinner /> : <RotateCwIcon data-icon="inline-start" />}
-        {AppCommands.label(restart)}
+        {AppCommands.label(restart, t)}
       </Button>
       <Button
         type="button"
@@ -131,7 +136,7 @@ export function ComposeOperationButtons({
         title={AppCommands.commandLine(down)}
       >
         {running?.operation === "down" ? <Spinner /> : <Trash2Icon data-icon="inline-start" />}
-        {AppCommands.label(down)}
+        {AppCommands.label(down, t)}
       </Button>
     </>
   );
@@ -169,47 +174,43 @@ type ComposeRunDialogsProps = {
   count: number;
 };
 
-/** What a confirmation says before a compose command, French agreeing in number with the apps. */
+/** What a confirmation says before a compose command, agreeing in number with the apps. */
 class ComposeConfirmation {
-  static readonly TargetWording = {
-    one: { apps: "cette application", staysListed: "Elle restera listée" },
-    many: { apps: "ces applications", staysListed: "Elles resteront listées" },
-  };
-
-  static title(command: AppCommand, subject: string) {
+  static title(command: AppCommand, subject: string, t: Translate<typeof AppsMessages.en>) {
     if (command.operation === "down") {
-      return `Arrêter ${subject} ?`;
+      return t("commands.confirm.stopTitle", { subject });
     }
 
-    return `${AppCommands.label(command)} ${subject} ?`;
+    return t("commands.confirm.title", { label: AppCommands.label(command, t), subject });
   }
 
-  static description(command: AppCommand, count: number) {
-    const { apps, staysListed } =
-      count > 1 ? ComposeConfirmation.TargetWording.many : ComposeConfirmation.TargetWording.one;
+  static description(command: AppCommand, count: number, t: Translate<typeof AppsMessages.en>) {
+    const target = count > 1 ? "many" : "one";
+    const apps = t(`commands.confirm.target.${target}.apps`);
 
     if (command.operation === "down") {
-      return `Docker Compose supprimera les conteneurs et réseaux de ${apps}. ${staysListed}, à l’arrêt.`;
+      return t("commands.confirm.down", { apps, staysListed: t(`commands.confirm.target.${target}.staysListed`) });
     }
 
     if (command.operation === "restart") {
-      return `Les conteneurs de ${apps} seront redémarrés sans être recréés : une configuration modifiée ne sera pas prise en compte.`;
+      return t("commands.confirm.restart", { apps });
     }
 
-    return command.flags.map(flag => AppCommands.Flags[flag].consequence(apps)).join(" ");
+    return command.flags.map(flag => t(`commands.flags.${flag}.consequence`, { apps })).join(" ");
   }
 }
 
 /** The confirmation and the output sheet behind `ComposeOperationButtons`, for either caller. */
 export function ComposeRunDialogs({ compose, subject, count }: ComposeRunDialogsProps) {
   const { confirmation, cancel, running, targets, run, close, finished } = compose;
+  const { t } = useTranslation(AppsMessages);
 
   return (
     <>
       <ComposeConfirmDialog
         command={confirmation}
-        title={confirmation ? ComposeConfirmation.title(confirmation, subject) : ""}
-        description={confirmation ? ComposeConfirmation.description(confirmation, count) : ""}
+        title={confirmation ? ComposeConfirmation.title(confirmation, subject, t) : ""}
+        description={confirmation ? ComposeConfirmation.description(confirmation, count, t) : ""}
         onConfirm={run}
         onCancel={cancel}
       />

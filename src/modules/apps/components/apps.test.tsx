@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { ComposeContainer, ComposeProjectsSnapshot } from "#libs/docker";
+import { LocaleProvider } from "#modules/common/mock/locale-provider.tsx";
 
 vi.mock("waku", () => ({
   Link: ({ children }: { children: ReactNode }) => <a href="/apps/alpha">{children}</a>,
@@ -72,21 +73,33 @@ describe("Docker apps views", () => {
     const html = renderToStaticMarkup(<AppsTable projects={[...snapshot.projects, stopped]} />);
 
     expect(html).toContain("alpha");
-    expect(html).toContain("Partiel");
+    expect(html).toContain("Partial");
     expect(html).toContain("gamma");
-    expect(html).toContain("Arrêté");
-    expect(html).toContain('aria-label="Sélectionner gamma"');
-    expect(html).toContain('aria-label="Tout sélectionner"');
-    // The name is the link; there is no separate "Détails" button.
+    expect(html).toContain("Stopped");
+    expect(html).toContain('aria-label="Select gamma"');
+    expect(html).toContain('aria-label="Select all"');
+    // The name is the link; there is no separate "Details" button.
     expect(html).toContain('<a href="/apps/alpha">alpha</a>');
-    expect(html).not.toContain("Détails");
+    expect(html).not.toContain("Details");
+  });
+
+  it("speaks the reader's language", () => {
+    const html = renderToStaticMarkup(
+      <LocaleProvider locale="fr">
+        <AppsTable projects={snapshot.projects} />
+      </LocaleProvider>,
+    );
+
+    expect(html).toContain("Partiel");
+    expect(html).toContain('aria-label="Tout sélectionner"');
+    expect(html).toContain("Aucune sélection");
   });
 
   it("offers Up's flags in its menu, none ticked, instead of a button per variant", () => {
     const html = renderToStaticMarkup(<AppsTable projects={snapshot.projects} />);
 
     expect(html).toContain('title="docker compose up -d"');
-    expect(html).toContain('aria-label="Options de Up"');
+    expect(html).toContain('aria-label="Up options"');
     expect(html).toContain('title="docker compose restart"');
     expect(html).toContain('title="docker compose down"');
     // The menu renders its checkboxes only once opened.
@@ -114,14 +127,14 @@ describe("Docker apps views", () => {
       <AppsOverview snapshot={{ ...snapshot, projects: [] }} error={null} search={noSearch} />,
     );
 
-    expect(html).toContain("Aucune application installée");
-    expect(html).toContain("Conteneurs actifs");
+    expect(html).toContain("No apps installed");
+    expect(html).toContain("Running containers");
   });
 
   it("renders daemon errors without inventing project data", () => {
     const html = renderToStaticMarkup(<AppsOverview snapshot={null} error="Socket inaccessible" search={noSearch} />);
 
-    expect(html).toContain("Docker indisponible");
+    expect(html).toContain("Docker unavailable");
     expect(html).toContain("Socket inaccessible");
   });
 
@@ -131,22 +144,22 @@ describe("Docker apps views", () => {
     expect(html).toContain("alpha-web-1");
     expect(html).toContain("nginx:latest");
     expect(html).toContain("8080");
-    expect(html).toContain("12.5 %");
-    expect(html).toContain("Ouvrir la console de alpha-web-1");
+    expect(html).toContain("12.5%");
+    expect(html).toContain("Open the console of alpha-web-1");
   });
 
   it("offers only the logs of a container that is not running: Docker runs no exec in it", () => {
     const stopped = { ...container, state: "exited" };
     const html = renderToStaticMarkup(<ContainerTable stats={stats} project="alpha" containers={[stopped]} />);
 
-    expect(html).toContain("Voir les logs de alpha-web-1");
-    expect(html).not.toContain("Ouvrir la console");
+    expect(html).toContain("View the logs of alpha-web-1");
+    expect(html).not.toContain("Open the console");
   });
 
   it("shows dashes for a container the stats stream has no frame for", () => {
     const html = renderToStaticMarkup(<ContainerTable stats={{}} project="alpha" containers={[container]} />);
 
     expect(html).toContain("alpha-web-1");
-    expect(html).not.toContain("12.5 %");
+    expect(html).not.toContain("12.5%");
   });
 });

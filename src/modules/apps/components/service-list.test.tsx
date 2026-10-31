@@ -62,16 +62,16 @@ describe("ServiceList", () => {
 
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain("immich-server");
-    expect(html).toContain("Ouvrir la console de immich-server");
+    expect(html).toContain("Open the console of immich-server");
     expect(html).not.toContain("immich-db");
   });
 
   it("says Docker is being read until its first answer", () => {
-    expect(renderList(null)).toContain("Lecture de Docker…");
+    expect(renderList(null)).toContain("Reading Docker…");
   });
 
   it("says why there is nothing to list", () => {
-    expect(renderList({ state: "absent" })).toContain("l’app n’est pas démarrée");
-    expect(renderList({ state: "unavailable" })).toContain("Docker indisponible");
+    expect(renderList({ state: "absent" })).toContain("the app is not started");
+    expect(renderList({ state: "unavailable" })).toContain("Docker unavailable");
   });
 });

@@ -1,12 +1,15 @@
+import { Fragment } from "react";
 import type { PageProps } from "waku/router";
 import { unstable_notFound } from "waku/router/server";
 import { HangarError, type AppFiles } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
+import { ServerTranslation } from "#libs/i18n/server";
 import { ProjectActions } from "#modules/apps/components/project-actions.tsx";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { createAppFile, readAppFile, saveAppFile } from "#modules/store/actions/manage-app.ts";
 import { AppEditor } from "#modules/store/components/app-editor.tsx";
 import { COMPOSE_FILE } from "#modules/store/compose-file.ts";
+import { StoreMessages } from "#modules/store/messages.ts";
 
 export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">) {
   const app = hangar.store.app(id);
@@ -15,6 +18,7 @@ export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">)
     unstable_notFound();
   }
 
+  const { t } = ServerTranslation.get(StoreMessages);
   const appFiles = await hangar.store.files(app.id);
   const [files, compose] = await Promise.all([appFiles.list(), readComposeFile(appFiles)]);
 
@@ -28,16 +32,15 @@ export default async function EditAppPage({ id }: PageProps<"/store/[id]/edit">)
           {app.installed && <ProjectActions project={app.id} />}
         </div>
         <p className="text-sm text-muted-foreground">
-          Les fichiers de l’app, chacun vérifié avant d’être écrit : le <code>compose.yml</code> par{" "}
-          <code>docker compose config</code>, les autres <code>.yml</code> et <code>.yaml</code> et les{" "}
-          <code>.env</code> par une lecture de leur syntaxe. Ces autres fichiers sont modifiés sur place : un conteneur
-          qui les monte voit le nouveau contenu aussitôt. Les changements du <code>compose.yml</code> s’appliquent au
-          prochain démarrage de l’app.
+          {/* Indexed: the sentence is fixed, and the same file name comes up twice in it. */}
+          {t("editPage.description", text => <code>{text}</code>).map((part, index) => (
+            <Fragment key={index}>{part}</Fragment>
+          ))}
         </p>
       </div>
       {"refusal" in compose ? (
         <Alert variant="destructive">
-          <AlertTitle>Cette app ne peut pas être modifiée ici</AlertTitle>
+          <AlertTitle>{t("editPage.refusal")}</AlertTitle>
           <AlertDescription>{compose.refusal}</AlertDescription>
         </Alert>
       ) : (

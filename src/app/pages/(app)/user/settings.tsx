@@ -1,14 +1,18 @@
-import { ThemeSettingsCard } from "#modules/settings/components/theme-settings-card.tsx";
+import { ServerTranslation } from "#libs/i18n/server";
+import { AppearanceSettingsCard } from "#modules/settings/components/appearance-settings-card.tsx";
+import { SettingsMessages } from "#modules/settings/messages.ts";
 
 export default function UserSettingsPage() {
+  const { t } = ServerTranslation.get(SettingsMessages);
+
   return (
     <main>
-      <title>Paramètres utilisateur | Hangar</title>
+      <title>{`${t("userPage.title")} | Hangar`}</title>
       <div>
-        <h1 className="text-2xl font-semibold">Paramètres utilisateur</h1>
-        <p className="text-sm text-muted-foreground">Personnalisez votre expérience dans Hangar.</p>
+        <h1 className="text-2xl font-semibold">{t("userPage.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("userPage.description")}</p>
       </div>
-      <ThemeSettingsCard />
+      <AppearanceSettingsCard />
     </main>
   );
 }

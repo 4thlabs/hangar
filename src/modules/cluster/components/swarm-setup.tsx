@@ -4,9 +4,10 @@ import { LogInIcon, NetworkIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useRouter } from "waku";
 import { initSwarm, joinSwarm } from "#modules/cluster/actions/manage-cluster.ts";
-import { ClusterLabels } from "#modules/cluster/labels.ts";
+import { ClusterMessages } from "#modules/cluster/messages.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
@@ -14,6 +15,7 @@ import { Input } from "#modules/common/ui/input.tsx";
 /** Creating a swarm, or joining one: what /cluster offers a node that is in none. */
 export function SwarmSetup() {
   const router = useRouter();
+  const { t } = useTranslation(ClusterMessages);
   const creation = useServerAction();
   const joining = useServerAction();
   const isBusy = creation.isPending || joining.isPending;
@@ -28,7 +30,7 @@ export function SwarmSetup() {
 
     creation.run(
       () => initSwarm(text(form, "advertise")),
-      { success: "Cluster créé", error: "Création : échec" },
+      { success: t("setup.created"), error: t("setup.createFailed") },
       () => router.reload(),
     );
   }
@@ -40,7 +42,7 @@ export function SwarmSetup() {
 
     joining.run(
       () => joinSwarm(text(form, "manager"), text(form, "token"), text(form, "advertise")),
-      { success: "Cluster rejoint", error: "Jonction : échec" },
+      { success: t("setup.joined"), error: t("setup.joinFailed") },
       () => router.reload(),
     );
   }
@@ -49,25 +51,25 @@ export function SwarmSetup() {
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Créer le cluster</CardTitle>
-          <CardDescription>Ce nœud en deviendra le premier manager.</CardDescription>
+          <CardTitle>{t("setup.createTitle")}</CardTitle>
+          <CardDescription>{t("setup.createDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={create}>
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="init-advertise">Adresse annoncée</FieldLabel>
+                <FieldLabel htmlFor="init-advertise">{t("setup.advertise")}</FieldLabel>
                 <Input id="init-advertise" name="advertise" placeholder="192.168.1.10" disabled={isBusy} />
-                <FieldDescription>{ClusterLabels.AdvertiseHint}</FieldDescription>
+                <FieldDescription>{t("setup.advertiseHint")}</FieldDescription>
               </Field>
               <PendingButton
                 type="submit"
                 pending={creation.isPending}
-                pendingLabel="Création…"
+                pendingLabel={t("setup.creating")}
                 disabled={isBusy}
                 icon={<NetworkIcon data-icon="inline-start" />}
               >
-                Créer le cluster
+                {t("setup.createTitle")}
               </PendingButton>
             </FieldGroup>
           </form>
@@ -76,20 +78,22 @@ export function SwarmSetup() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Rejoindre un cluster</CardTitle>
+          <CardTitle>{t("setup.joinTitle")}</CardTitle>
           <CardDescription>
-            Le token et l&apos;adresse viennent de <code>docker swarm join-token worker</code> sur un manager.
+            {t("setup.joinDescription.before")}
+            <code>docker swarm join-token worker</code>
+            {t("setup.joinDescription.after")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={join}>
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="join-manager">Adresse d&apos;un manager</FieldLabel>
+                <FieldLabel htmlFor="join-manager">{t("setup.managerAddress")}</FieldLabel>
                 <Input id="join-manager" name="manager" placeholder="192.168.1.10:2377" required disabled={isBusy} />
               </Field>
               <Field>
-                <FieldLabel htmlFor="join-token">Token</FieldLabel>
+                <FieldLabel htmlFor="join-token">{t("setup.token")}</FieldLabel>
                 <Input
                   id="join-token"
                   name="token"
@@ -101,18 +105,18 @@ export function SwarmSetup() {
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="join-advertise">Adresse annoncée</FieldLabel>
+                <FieldLabel htmlFor="join-advertise">{t("setup.advertise")}</FieldLabel>
                 <Input id="join-advertise" name="advertise" placeholder="192.168.1.11" disabled={isBusy} />
-                <FieldDescription>{ClusterLabels.AdvertiseHint}</FieldDescription>
+                <FieldDescription>{t("setup.advertiseHint")}</FieldDescription>
               </Field>
               <PendingButton
                 type="submit"
                 pending={joining.isPending}
-                pendingLabel="Connexion…"
+                pendingLabel={t("setup.connecting")}
                 disabled={isBusy}
                 icon={<LogInIcon data-icon="inline-start" />}
               >
-                Rejoindre
+                {t("setup.join")}
               </PendingButton>
             </FieldGroup>
           </form>

@@ -13,11 +13,17 @@ export type SelfUpdateTarget = {
   configFiles: string[];
 };
 
-/** Why Hangar cannot update itself where it runs. Its message is for the user. */
+/** Why Hangar cannot update itself, as the settings page words it in the reader's language. */
+export type SelfUpdateUnavailableReason = "noContainer" | "noCompose" | "inProgress";
+
+/** Why Hangar cannot update itself where it runs. Its message is for the logs; the UI words its `reason`. */
 export class SelfUpdateUnavailableError extends Error {
-  constructor(message: string) {
+  readonly reason: SelfUpdateUnavailableReason;
+
+  constructor(reason: SelfUpdateUnavailableReason, message: string) {
     super(message);
     this.name = "SelfUpdateUnavailableError";
+    this.reason = reason;
   }
 }
 
@@ -117,7 +123,7 @@ export class DockerSelfUpdate {
     } catch (error) {
       // Outside a container, the hostname names no container. Any other failure is the daemon's.
       if ((error as { statusCode?: number }).statusCode === 404) {
-        throw new SelfUpdateUnavailableError("Hangar ne tourne pas dans un conteneur Docker.");
+        throw new SelfUpdateUnavailableError("noContainer", "Hangar does not run in a Docker container");
       }
 
       throw error;
@@ -133,7 +139,7 @@ export class DockerSelfUpdate {
     const configFiles = labels[DockerSelfUpdate.Label.configFiles];
 
     if (!project || !service || !workingDir || !configFiles) {
-      throw new SelfUpdateUnavailableError("Hangar n’a pas été lancé avec Docker Compose.");
+      throw new SelfUpdateUnavailableError("noCompose", "Hangar was not started with Docker Compose");
     }
 
     return { image: container.Config.Image, project, service, workingDir, configFiles: configFiles.split(",") };
@@ -157,7 +163,7 @@ export class DockerSelfUpdate {
     }
 
     if (previous.State.Running) {
-      throw new SelfUpdateUnavailableError("Une mise à jour de Hangar est déjà en cours.");
+      throw new SelfUpdateUnavailableError("inProgress", "A Hangar update is already running");
     }
 
     await relay.remove();

@@ -1,3 +1,6 @@
+import type { Translate } from "#libs/i18n";
+import type { AppsMessages } from "#modules/apps/messages.ts";
+
 /** The compose commands Hangar runs on an app. */
 export type AppOperation = "up" | "restart" | "down";
 
@@ -7,18 +10,13 @@ export type UpFlag = "pull" | "forceRecreate";
 /** One compose run: the operation, and for `up` the flags it carries, in {@link AppCommands.FlagOrder}. */
 export type AppCommand = { operation: AppOperation; flags: readonly UpFlag[] };
 
-/** How each Up flag reads and what it adds to the command. Adding a flag is adding an entry here. */
+/** What each Up flag adds to the command. Adding a flag is adding an entry here, and its words in `AppsMessages`. */
 type UpFlagSpec = {
   arguments: readonly string[];
-  /** The checkbox in Up's menu. */
-  label: string;
-  /** What the run is called with this flag, as a verb: "Mettre à jour", "Recréer". */
-  verb: string;
-  /** What it did to the app, completing "<app> a été …". */
-  outcome: string;
-  /** What confirming commits to, about `apps` ("cette application", "ces applications"). */
-  consequence: (apps: string) => string;
 };
+
+/** The words of the commands, in the reader's language. */
+type AppsTranslate = Translate<typeof AppsMessages.en>;
 
 /**
  * The compose commands of the Apps pages, shared by the client (labels, confirmations, the query it
@@ -37,34 +35,8 @@ export class AppCommands {
   };
 
   static readonly Flags: Record<UpFlag, UpFlagSpec> = {
-    pull: {
-      arguments: ["--pull", "always"],
-      label: "Mettre à jour les images",
-      verb: "Mettre à jour",
-      outcome: "mise à jour depuis son registre",
-      consequence: () => "Les images seront retirées du registre et les conteneurs recréés avec la nouvelle version.",
-    },
-    forceRecreate: {
-      arguments: ["--force-recreate"],
-      label: "Forcer la recréation",
-      verb: "Recréer",
-      outcome: "recréée",
-      consequence: apps => `Tous les conteneurs de ${apps} seront recréés, même si leur configuration n’a pas changé.`,
-    },
-  };
-
-  /** The name of each run without flags, for buttons, the output sheet and notifications. */
-  static readonly OperationLabel: Record<AppOperation, string> = {
-    up: "Up",
-    restart: "Redémarrer",
-    down: "Down",
-  };
-
-  /** What each run without flags did to an app, completing "<app> a été …". */
-  static readonly OperationOutcome: Record<AppOperation, string> = {
-    up: "démarrée ou mise à jour",
-    restart: "redémarrée",
-    down: "arrêtée et supprimée",
+    pull: { arguments: ["--pull", "always"] },
+    forceRecreate: { arguments: ["--force-recreate"] },
   };
 
   static create(operation: AppOperation, flags: Iterable<UpFlag> = []): AppCommand {
@@ -124,29 +96,32 @@ export class AppCommands {
     return command.operation !== "up" || command.flags.length > 0;
   }
 
-  /** "Up", "Mettre à jour", "Mettre à jour et recréer"…: the flags' verbs when there are some. */
-  static label(command: AppCommand) {
+  /** "Up", "Update", "Update and recreate"…: the flags' verbs when there are some. */
+  static label(command: AppCommand, t: AppsTranslate) {
     if (command.flags.length === 0) {
-      return AppCommands.OperationLabel[command.operation];
+      return t(`commands.operation.${command.operation}`);
     }
 
-    const clauses = AppCommands.joinClauses(command.flags.map(flag => AppCommands.Flags[flag].verb));
+    const clauses = AppCommands.joinClauses(
+      command.flags.map(flag => t(`commands.flags.${flag}.verb`)),
+      t,
+    );
 
     return clauses.charAt(0).toUpperCase() + clauses.slice(1);
   }
 
   /** What the run did to `project`, for the notification filed when it ends. */
-  static outcome(command: AppCommand, project: string) {
+  static outcome(command: AppCommand, project: string, t: AppsTranslate) {
     const outcomes =
       command.flags.length === 0
-        ? [AppCommands.OperationOutcome[command.operation]]
-        : command.flags.map(flag => AppCommands.Flags[flag].outcome);
+        ? [t(`commands.operationOutcome.${command.operation}`)]
+        : command.flags.map(flag => t(`commands.flags.${flag}.outcome`));
 
-    return `${project} a été ${AppCommands.joinClauses(outcomes)}.`;
+    return t("commands.outcome", { project, outcomes: AppCommands.joinClauses(outcomes, t) });
   }
 
-  /** "Mettre à jour" + "Recréer" → "mettre à jour et recréer", lowercase to sit inside a sentence. */
-  private static joinClauses(clauses: readonly string[]) {
-    return clauses.map(clause => clause.charAt(0).toLowerCase() + clause.slice(1)).join(" et ");
+  /** "Update" + "Recreate" → "update and recreate", lowercase to sit inside a sentence. */
+  private static joinClauses(clauses: readonly string[], t: AppsTranslate) {
+    return clauses.map(clause => clause.charAt(0).toLowerCase() + clause.slice(1)).join(` ${t("commands.and")} `);
   }
 }

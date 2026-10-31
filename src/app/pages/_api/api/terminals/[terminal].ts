@@ -1,20 +1,22 @@
 import type { ApiContext } from "waku/router";
+import { ServerTranslation } from "#libs/i18n/server";
 import { terminals } from "#libs/terminals/server";
 import { apiError, apiRoute } from "#app/api/api-route.ts";
+import { ApiMessages } from "#app/api/messages.ts";
 import { TerminalMessages } from "#modules/common/terminal-messages.ts";
 
 /** Types into an open terminal, or resizes it. */
 export const POST = apiRoute<ApiContext<"/api/terminals/[terminal]">>(
   {
     log: "Failed to reach a terminal",
-    unavailable: "Le terminal est indisponible.",
-    notFound: "Ce terminal est fermé.",
+    unavailable: "terminal",
+    notFound: "terminal",
   },
   async (request, { params }, session) => {
     const message = TerminalMessages.message.safeParse(await request.json().catch(() => null));
 
     if (!message.success) {
-      return apiError("Le message du terminal est invalide.", 400);
+      return apiError(ServerTranslation.get(ApiMessages).t("invalidTerminalMessage"), 400);
     }
 
     if ("input" in message.data) {
@@ -27,12 +29,12 @@ export const POST = apiRoute<ApiContext<"/api/terminals/[terminal]">>(
   },
 );
 
-/** Ends a terminal and its shell, from a container's **Fermer la session**. */
+/** Ends a terminal and its shell, from a container's **Close the session**. */
 export const DELETE = apiRoute<ApiContext<"/api/terminals/[terminal]">>(
   {
     log: "Failed to close a terminal",
-    unavailable: "Le terminal est indisponible.",
-    notFound: "Ce terminal est fermé.",
+    unavailable: "terminal",
+    notFound: "terminal",
   },
   async (_request, { params }, session) => {
     await terminals.close(params.terminal, session.user.id);

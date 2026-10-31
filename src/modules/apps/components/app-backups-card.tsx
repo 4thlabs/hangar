@@ -5,12 +5,14 @@ import { useState } from "react";
 import { useRouter } from "waku";
 import type { BackupArchive } from "#libs/backups";
 import { BackupsView, type BackupSchedule } from "#modules/apps/backups-view.ts";
-import { formatBytes } from "#modules/apps/format.ts";
+import { MetricFormat } from "#modules/apps/format.ts";
+import { AppsMessages } from "#modules/apps/messages.ts";
 import type { ActionResult } from "#modules/common/actions/action-result.ts";
 import { AutoReload } from "#modules/common/components/auto-reload.tsx";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import { LocalDateTime } from "#modules/common/components/local-date-time.tsx";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
@@ -31,12 +33,13 @@ type AppBackupsCardProps = {
 export function AppBackupsCard({ project, schedule, archives, running, backupApp, deleteBackup }: AppBackupsCardProps) {
   const router = useRouter();
   const { run, isPending } = useServerAction();
+  const { t, locale } = useTranslation(AppsMessages);
   const [archiveToDelete, setArchiveToDelete] = useState<string | null>(null);
 
   const startBackup = () =>
     run(
       () => backupApp(project),
-      { success: "Sauvegarde", error: "Échec de la sauvegarde" },
+      { success: t("backups.started"), error: t("backups.startFailed") },
       () => router.reload(),
     );
 
@@ -44,7 +47,7 @@ export function AppBackupsCard({ project, schedule, archives, running, backupApp
     setArchiveToDelete(null);
     run(
       () => deleteBackup(project, archive),
-      { success: "Archive supprimée", error: "Échec de la suppression" },
+      { success: t("backups.deleted"), error: t("backups.deleteFailed") },
       () => router.reload(),
     );
   };
@@ -52,25 +55,25 @@ export function AppBackupsCard({ project, schedule, archives, running, backupApp
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sauvegardes</CardTitle>
-        <CardDescription>{BackupsView.summary(schedule)}</CardDescription>
+        <CardTitle>{t("backups.title")}</CardTitle>
+        <CardDescription>{BackupsView.summary(schedule, t)}</CardDescription>
         <CardAction>
           <Button type="button" variant="outline" disabled={!schedule || running || isPending} onClick={startBackup}>
             {running ? <Spinner /> : <ArchiveIcon />}
-            {running ? "Sauvegarde en cours…" : "Sauvegarder maintenant"}
+            {running ? t("backups.running") : t("backups.backUpNow")}
           </Button>
         </CardAction>
       </CardHeader>
       <CardContent className={archives.length > 0 ? "px-0" : undefined}>
         {archives.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Aucune archive pour l’instant.</p>
+          <p className="text-sm text-muted-foreground">{t("backups.none")}</p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="pl-6">Date</TableHead>
-                <TableHead>Taille</TableHead>
-                <TableHead className="pr-6 text-right">Actions</TableHead>
+                <TableHead className="pl-6">{t("backups.date")}</TableHead>
+                <TableHead>{t("backups.size")}</TableHead>
+                <TableHead className="pr-6 text-right">{t("backups.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -79,14 +82,14 @@ export function AppBackupsCard({ project, schedule, archives, running, backupApp
                   <TableCell className="pl-6">
                     <LocalDateTime value={createdAt} />
                   </TableCell>
-                  <TableCell className="tabular-nums">{formatBytes(size)}</TableCell>
+                  <TableCell className="tabular-nums">{MetricFormat.bytes(size, locale)}</TableCell>
                   <TableCell className="pr-6">
                     <div className="flex justify-end gap-2">
                       <Button
                         size="icon-sm"
                         variant="outline"
-                        title="Télécharger"
-                        aria-label={`Télécharger l’archive ${archive}`}
+                        title={t("backups.download")}
+                        aria-label={t("backups.downloadArchive", { archive })}
                         render={<a href={`/api/backups/${project}/${archive}`} download />}
                       >
                         <DownloadIcon />
@@ -95,8 +98,8 @@ export function AppBackupsCard({ project, schedule, archives, running, backupApp
                         type="button"
                         size="icon-sm"
                         variant="ghost"
-                        title="Supprimer"
-                        aria-label={`Supprimer l’archive ${archive}`}
+                        title={t("backups.delete")}
+                        aria-label={t("backups.deleteArchive", { archive })}
                         disabled={isPending}
                         onClick={() => setArchiveToDelete(archive)}
                       >
@@ -113,9 +116,9 @@ export function AppBackupsCard({ project, schedule, archives, running, backupApp
 
       <ConfirmDialog
         open={archiveToDelete !== null}
-        title="Supprimer cette archive ?"
-        description="L’archive est supprimée du disque ; elle ne pourra plus être téléchargée ni restaurée."
-        confirmLabel="Supprimer"
+        title={t("backups.confirmTitle")}
+        description={t("backups.confirmDescription")}
+        confirmLabel={t("backups.delete")}
         destructive
         onConfirm={() => archiveToDelete && confirmDelete(archiveToDelete)}
         onCancel={() => setArchiveToDelete(null)}

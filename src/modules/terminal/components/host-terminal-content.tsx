@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { ServerTranslation } from "#libs/i18n/server";
 import { logger } from "#libs/logs";
 import { hostShells, sshKeys, sshKnownHosts } from "#libs/ssh/server";
 import { HostTerminalDialog } from "#modules/terminal/components/host-terminal-dialog.tsx";
@@ -6,6 +7,7 @@ import { HostTerminalSetup } from "#modules/terminal/components/host-terminal-se
 import { HostTerminal } from "#modules/terminal/components/host-terminal.tsx";
 import { SshKeyDialog } from "#modules/terminal/components/ssh-key-dialog.tsx";
 import type { ImportedKey } from "#modules/terminal/imported-key.ts";
+import { TerminalMessages } from "#modules/terminal/messages.ts";
 
 /** What the page reads of Hangar's SSH folder; a file it cannot read is logged and shown as such. */
 class HostTerminalReads {
@@ -33,12 +35,14 @@ class HostTerminalReads {
 
 /** The navbar's terminal: a shell on the host once it is configured, how to configure it until then. */
 export function HostTerminalContent() {
+  const { t } = ServerTranslation.get(TerminalMessages);
+
   return (
     <HostTerminalDialog
       description={
         hostShells
-          ? `Un shell sur ${hostShells.target.host}, en tant que ${hostShells.target.username}, par SSH. Il reste ouvert quand vous fermez la fenêtre ou rechargez la page, jusqu’à une heure d’inactivité.`
-          : "Aucun serveur n’est configuré."
+          ? t("description", { host: hostShells.target.host, username: hostShells.target.username })
+          : t("notConfigured")
       }
       // The layout renders it on every page: what it reads streams in, rather than holding the page back.
       sshKey={
@@ -52,7 +56,7 @@ export function HostTerminalContent() {
   );
 }
 
-/** The **Clé SSH** dialog, with what it shows of Hangar's SSH folder. */
+/** The **SSH key** dialog, with what it shows of Hangar's SSH folder. */
 async function SshKeyContent() {
   // Neither read waits for the other.
   const [importedKey, hostFingerprint] = await Promise.all([

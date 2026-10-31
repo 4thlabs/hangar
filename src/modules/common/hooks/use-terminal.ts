@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiResponse } from "#modules/common/api-response.ts";
 import type { StreamStatus } from "#modules/common/hooks/use-stream-text.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
+import { CommonMessages } from "#modules/common/messages.ts";
 import { TerminalOutbox } from "#modules/common/terminal-outbox.ts";
 import { TerminalProtocol, type TerminalMessage } from "#modules/common/terminal-protocol.ts";
 import { TerminalView } from "#modules/common/terminal-view.ts";
@@ -14,6 +16,8 @@ import { TerminalView } from "#modules/common/terminal-view.ts";
  * @param endpoint The route opening the shell (`POST`, with the terminal's size)
  */
 export function useTerminal(endpoint: string) {
+  // Read at failure time, not a dependency: switching language must not reopen the session.
+  const { t } = useTranslation(CommonMessages);
   const elementRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<StreamStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +42,7 @@ export function useTerminal(endpoint: string) {
       }
 
       setStatus("error");
-      setError(reason instanceof Error ? reason.message : "Le terminal a été interrompu.");
+      setError(reason instanceof Error ? reason.message : t("terminal.interrupted"));
     }
 
     async function post(url: string, body: unknown): Promise<Response> {
@@ -55,7 +59,7 @@ export function useTerminal(endpoint: string) {
         const response = await post(sessionEndpoint, message);
 
         if (!response.ok) {
-          fail(await ApiResponse.error(response, "Le terminal n’a pas reçu la saisie."));
+          fail(await ApiResponse.error(response, t("terminal.inputLost")));
         }
       } catch (reason) {
         fail(reason);
@@ -76,13 +80,13 @@ export function useTerminal(endpoint: string) {
       const response = await post(endpoint, openedSize);
 
       if (!response.ok) {
-        throw await ApiResponse.error(response, "Impossible d’ouvrir le terminal.");
+        throw await ApiResponse.error(response, t("terminal.openFailed"));
       }
 
       const id = response.headers.get(TerminalProtocol.IdHeader);
 
       if (!id || !response.body) {
-        throw new Error("Le serveur n’a ouvert aucun terminal.");
+        throw new Error(t("terminal.noSession"));
       }
 
       // Absent or malformed, nothing is held back: the terminal's own input stays on.
@@ -132,10 +136,10 @@ export function useTerminal(endpoint: string) {
       const response = await fetch(sessionEndpoint, { method: "DELETE" });
 
       if (!response.ok) {
-        setError((await ApiResponse.error(response, "Impossible de fermer la session.")).message);
+        setError((await ApiResponse.error(response, t("terminal.closeFailed"))).message);
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Impossible de fermer la session.");
+      setError(reason instanceof Error ? reason.message : t("terminal.closeFailed"));
     }
   }
 

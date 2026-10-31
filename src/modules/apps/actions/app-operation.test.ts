@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { Translation } from "#libs/i18n";
+import { AppsMessages } from "#modules/apps/messages.ts";
 import { AppCommands } from "./app-operation.ts";
 
 describe("AppCommands", () => {
@@ -36,11 +38,20 @@ describe("AppCommands", () => {
 
   it("names a run after its flags, and says what it did", () => {
     const both = AppCommands.create("up", ["pull", "forceRecreate"]);
+    const t = Translation.create(AppsMessages, "en");
 
-    expect(AppCommands.label(AppCommands.create("up"))).toBe("Up");
-    expect(AppCommands.label(AppCommands.create("up", ["pull"]))).toBe("Mettre à jour");
-    expect(AppCommands.label(both)).toBe("Mettre à jour et recréer");
-    expect(AppCommands.outcome(both, "whoami")).toBe("whoami a été mise à jour depuis son registre et recréée.");
-    expect(AppCommands.outcome(AppCommands.create("restart"), "whoami")).toBe("whoami a été redémarrée.");
+    expect(AppCommands.label(AppCommands.create("up"), t)).toBe("Up");
+    expect(AppCommands.label(AppCommands.create("up", ["pull"]), t)).toBe("Update");
+    expect(AppCommands.label(both, t)).toBe("Update and recreate");
+    expect(AppCommands.outcome(both, "whoami", t)).toBe("whoami was updated from its registry and recreated.");
+    expect(AppCommands.outcome(AppCommands.create("restart"), "whoami", t)).toBe("whoami was restarted.");
+  });
+
+  it("names a run and its outcome in French too", () => {
+    const both = AppCommands.create("up", ["pull", "forceRecreate"]);
+    const t = Translation.create(AppsMessages, "fr");
+
+    expect(AppCommands.label(both, t)).toBe("Mettre à jour et recréer");
+    expect(AppCommands.outcome(both, "whoami", t)).toBe("whoami a été mise à jour depuis son registre et recréée.");
   });
 });

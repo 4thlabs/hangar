@@ -1,6 +1,8 @@
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { SwarmCluster } from "#libs/docker";
+import { LocaleProvider } from "#modules/common/mock/locale-provider.tsx";
 
 vi.mock("waku", () => ({
   useRouter: () => ({ reload: async () => {} }),
@@ -21,8 +23,11 @@ vi.mock("#modules/cluster/actions/manage-stacks.ts", () => ({}));
 const { managerView, swarmNodeView: node } = await import("#libs/docker/mock");
 const { ClusterOverview } = await import("./cluster-overview.tsx");
 
+/** The page in French: its wording is what these tests read. */
+const renderInFrench = (node: ReactNode) => renderToStaticMarkup(<LocaleProvider locale="fr">{node}</LocaleProvider>);
+
 const render = (cluster: SwarmCluster) =>
-  renderToStaticMarkup(<ClusterOverview cluster={cluster} manageableStacks={[]} search={noSearch} />);
+  renderInFrench(<ClusterOverview cluster={cluster} manageableStacks={[]} search={noSearch} />);
 
 const manager = managerView({
   managers: 2,
@@ -55,6 +60,13 @@ describe("ClusterOverview", () => {
     expect(render(manager)).toContain("nhyx6n1b8b0a · 2 nœuds · 2 managers (tolère 0 panne)");
   });
 
+  it("speaks English to a reader who has not picked a language", () => {
+    const html = renderToStaticMarkup(<ClusterOverview cluster={manager} manageableStacks={[]} search={noSearch} />);
+
+    expect(html).toContain("nhyx6n1b8b0a · 2 nodes · 2 managers (tolerates 0 failures)");
+    expect(html).toContain("★ this node");
+  });
+
   it("draws one card per node, marking this one, with how many tasks it runs", () => {
     const html = render(manager);
 
@@ -80,7 +92,7 @@ describe("ClusterOverview", () => {
   });
 
   it("lists each stack once, with its replicas and where its tasks run, the idle ones included", () => {
-    const html = renderToStaticMarkup(
+    const html = renderInFrench(
       <ClusterOverview cluster={manager} manageableStacks={["miniflux"]} search={noSearch} />,
     );
 
@@ -94,7 +106,7 @@ describe("ClusterOverview", () => {
   });
 
   it("lists an installed swarm-ready app no stack runs yet, to deploy it from its sheet", () => {
-    const html = renderToStaticMarkup(
+    const html = renderInFrench(
       <ClusterOverview cluster={manager} manageableStacks={["miniflux", "adguard"]} search={noSearch} />,
     );
 
@@ -159,7 +171,7 @@ describe("ClusterOverview", () => {
   });
 
   it("says so when the filters keep no stack", () => {
-    const html = renderToStaticMarkup(
+    const html = renderInFrench(
       <ClusterOverview cluster={manager} manageableStacks={[]} search={{ ...noSearch, health: ["running"] }} />,
     );
 
@@ -167,7 +179,7 @@ describe("ClusterOverview", () => {
   });
 
   it("offers a retry when the daemon fails", () => {
-    const html = renderToStaticMarkup(<ClusterOverview error="Le daemon Docker ne répond pas." search={noSearch} />);
+    const html = renderInFrench(<ClusterOverview error="Le daemon Docker ne répond pas." search={noSearch} />);
 
     expect(html).toContain("Swarm indisponible");
     expect(html).toContain("Réessayer");
