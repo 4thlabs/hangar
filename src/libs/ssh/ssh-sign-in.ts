@@ -6,7 +6,11 @@ import ssh2, {
   type ParsedKey,
   type Prompt,
 } from "ssh2";
+import type { HostShellWords } from "./host-shell-words.ts";
 import type { SshTerminal } from "./ssh-terminal.ts";
+
+/** Who signs in, where, and with which key: `null` when none was imported. */
+export type SshAccount = { username: string; host: string; privateKey: string | null };
 
 /**
  * How Hangar signs in to the host, one step at a time as ssh2 asks for the next, the way `ssh` does: the
@@ -32,6 +36,8 @@ export class SshSignIn {
 
   private readonly privateKey: string | null;
 
+  private readonly words: HostShellWords;
+
   private keyTried = false;
 
   /** Rounds that asked the operator something (a password, a code), so far. */
@@ -47,13 +53,14 @@ export class SshSignIn {
   private keyboardInteractive = true;
 
   /**
-   * @param privateKey The imported key, `null` when none was
+   * @param words What Hangar says in the terminal while signing in, in the reader's language
    */
-  constructor(terminal: SshTerminal, username: string, host: string, privateKey: string | null) {
+  constructor(terminal: SshTerminal, { username, host, privateKey }: SshAccount, words: HostShellWords) {
     this.terminal = terminal;
     this.username = username;
     this.account = `${username}@${host}`;
     this.privateKey = privateKey;
+    this.words = words;
   }
 
   /** ssh2's `authHandler`: called first with no methods known, then after each refusal with those left. */
@@ -106,7 +113,7 @@ export class SshSignIn {
     }
 
     if (refused) {
-      this.terminal.print("Accès refusé, réessayez.\r\n");
+      this.terminal.print(`${this.words.retry}\r\n`);
     }
 
     if (this.keyboardInteractive && offered("keyboard-interactive")) {
@@ -127,7 +134,7 @@ export class SshSignIn {
     this.attempts += 1;
     this.asked = true;
 
-    const password = await this.terminal.ask(`Mot de passe de ${this.account} : `, false);
+    const password = await this.terminal.ask(this.words.password({ account: this.account }), false);
 
     if (password === null) {
       this.cancelled = true;
@@ -181,13 +188,13 @@ export class SshSignIn {
     }
 
     if (!SshSignIn.EncryptedMessage.test(plain.message)) {
-      this.terminal.print("La clé importée est illisible : elle est ignorée.\r\n");
+      this.terminal.print(`${this.words.importedKeyIgnored}\r\n`);
 
       return null;
     }
 
     for (let attempt = 0; attempt < SshSignIn.Attempts; attempt++) {
-      const passphrase = await this.terminal.ask("Phrase de passe de la clé : ", false);
+      const passphrase = await this.terminal.ask(this.words.passphrase, false);
 
       if (passphrase === null) {
         this.cancelled = true;
@@ -205,7 +212,7 @@ export class SshSignIn {
         return unlocked;
       }
 
-      this.terminal.print("Phrase de passe incorrecte.\r\n");
+      this.terminal.print(`${this.words.wrongPassphrase}\r\n`);
     }
 
     return null;

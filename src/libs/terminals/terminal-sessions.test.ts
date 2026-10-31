@@ -2,6 +2,9 @@ import { PassThrough, type Readable } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TerminalNotFoundError, TerminalSessions, type TerminalShell } from "./terminal-sessions.ts";
 
+/** What a client the session is taken from is told. */
+const TAKEN_OVER = "Session taken over in another tab.";
+
 const SIZE = { cols: 100, rows: 30 };
 
 /** A started shell over an in-memory TTY, its resize and end recorded. */
@@ -155,7 +158,14 @@ describe("TerminalSessions.attach", () => {
   it("starts the shell the first time, with nothing to replay", async () => {
     const subject = new TerminalSessions();
 
-    const { output, replayedBytes } = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal);
+    const { output, replayedBytes } = await subject.attach(
+      "user-1",
+      "host",
+      SIZE,
+      start,
+      new AbortController().signal,
+      TAKEN_OVER,
+    );
 
     shell.stream.write("$ ");
 
@@ -167,7 +177,7 @@ describe("TerminalSessions.attach", () => {
   it("keeps the shell once the client leaves, and replays its output to the next one, sized to it", async () => {
     const subject = new TerminalSessions();
     const first = new AbortController();
-    const opened = await subject.attach("user-1", "host", SIZE, start, first.signal);
+    const opened = await subject.attach("user-1", "host", SIZE, start, first.signal, TAKEN_OVER);
 
     shell.stream.write("$ ls\r\n");
     first.abort();
@@ -180,6 +190,7 @@ describe("TerminalSessions.attach", () => {
       { cols: 80, rows: 24 },
       start,
       new AbortController().signal,
+      TAKEN_OVER,
     );
 
     expect(start).toHaveBeenCalledOnce();
@@ -193,12 +204,12 @@ describe("TerminalSessions.attach", () => {
   it("lets the shell write again for a client taking over from one that held it back", async () => {
     const subject = new TerminalSessions();
 
-    await subject.attach("user-1", "host", SIZE, start, new AbortController().signal);
+    await subject.attach("user-1", "host", SIZE, start, new AbortController().signal, TAKEN_OVER);
     // Never read by the first client: its output fills up, and the shell is paused.
     shell.stream.write(Buffer.alloc(64 * 1_024, "x"));
     await settle();
 
-    const second = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal);
+    const second = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal, TAKEN_OVER);
 
     shell.stream.write("$ ");
     await settle();
@@ -208,18 +219,18 @@ describe("TerminalSessions.attach", () => {
 
   it("hands the session over to a second client, and tells the first", async () => {
     const subject = new TerminalSessions();
-    const first = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal);
+    const first = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal, TAKEN_OVER);
     const firstEnded = new Promise(resolve => first.output.once("end", resolve));
     const firstShown: Buffer[] = [];
 
     first.output.on("data", (chunk: Buffer) => firstShown.push(chunk));
 
-    const second = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal);
+    const second = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal, TAKEN_OVER);
 
     shell.stream.write("$ ");
 
     await firstEnded;
-    expect(Buffer.concat(firstShown).toString()).toContain("Session reprise dans un autre onglet.");
+    expect(Buffer.concat(firstShown).toString()).toContain(TAKEN_OVER);
     expect(shown(second.output)).toBe("$ ");
     expect(shell.end).not.toHaveBeenCalled();
   });
@@ -228,9 +239,9 @@ describe("TerminalSessions.attach", () => {
     const subject = new TerminalSessions();
     const first = new AbortController();
 
-    await subject.attach("user-1", "host", SIZE, start, first.signal);
+    await subject.attach("user-1", "host", SIZE, start, first.signal, TAKEN_OVER);
 
-    const second = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal);
+    const second = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal, TAKEN_OVER);
 
     first.abort();
     await settle();
@@ -243,8 +254,8 @@ describe("TerminalSessions.attach", () => {
     const subject = new TerminalSessions();
 
     const [first, second] = await Promise.all([
-      subject.attach("user-1", "host", SIZE, start, new AbortController().signal),
-      subject.attach("user-1", "host", SIZE, start, new AbortController().signal),
+      subject.attach("user-1", "host", SIZE, start, new AbortController().signal, TAKEN_OVER),
+      subject.attach("user-1", "host", SIZE, start, new AbortController().signal, TAKEN_OVER),
     ]);
 
     expect(start).toHaveBeenCalledOnce();
@@ -255,8 +266,16 @@ describe("TerminalSessions.attach", () => {
     const subject = new TerminalSessions();
     const otherShell = fakeShell();
 
-    const mine = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal);
-    const theirs = await subject.attach("user-2", "host", SIZE, async () => otherShell, new AbortController().signal);
+    const mine = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal, TAKEN_OVER);
+
+    const theirs = await subject.attach(
+      "user-2",
+      "host",
+      SIZE,
+      async () => otherShell,
+      new AbortController().signal,
+      TAKEN_OVER,
+    );
 
     expect(theirs.id).not.toBe(mine.id);
     expect(() => subject.write(mine.id, "user-2", "ls\r")).toThrow(TerminalNotFoundError);
@@ -267,7 +286,7 @@ describe("TerminalSessions.attach", () => {
 
     try {
       const subject = new TerminalSessions();
-      const { id } = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal);
+      const { id } = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal, TAKEN_OVER);
 
       await vi.advanceTimersByTimeAsync(59 * 60_000);
       expect(shell.end).not.toHaveBeenCalled();
@@ -287,7 +306,7 @@ describe("TerminalSessions.attach", () => {
       const subject = new TerminalSessions();
       const client = new AbortController();
 
-      await subject.attach("user-1", "host", SIZE, start, client.signal);
+      await subject.attach("user-1", "host", SIZE, start, client.signal, TAKEN_OVER);
       client.abort();
       await vi.advanceTimersByTimeAsync(59 * 60_000);
       expect(shell.end).not.toHaveBeenCalled();
@@ -305,7 +324,7 @@ describe("TerminalSessions.attach", () => {
     try {
       const subject = new TerminalSessions();
       const client = new AbortController();
-      const { id } = await subject.attach("user-1", "host", SIZE, start, client.signal);
+      const { id } = await subject.attach("user-1", "host", SIZE, start, client.signal, TAKEN_OVER);
       const almostAnHour = 59 * 60_000;
 
       await vi.advanceTimersByTimeAsync(almostAnHour);
@@ -316,7 +335,7 @@ describe("TerminalSessions.attach", () => {
       shell.stream.write("$ ");
       await vi.advanceTimersByTimeAsync(almostAnHour);
       client.abort();
-      await subject.attach("user-1", "host", SIZE, start, new AbortController().signal);
+      await subject.attach("user-1", "host", SIZE, start, new AbortController().signal, TAKEN_OVER);
       await vi.advanceTimersByTimeAsync(almostAnHour);
 
       expect(shell.end).not.toHaveBeenCalled();
@@ -330,7 +349,7 @@ describe("TerminalSessions.attach", () => {
 
     try {
       const subject = new TerminalSessions();
-      const { id } = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal);
+      const { id } = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal, TAKEN_OVER);
 
       await subject.close(id, "user-1");
       // Lets the streams' own end run.
@@ -359,7 +378,7 @@ describe("TerminalSessions.attach", () => {
   it("starts a new shell once the previous one exited", async () => {
     const subject = new TerminalSessions();
     const client = new AbortController();
-    const first = await subject.attach("user-1", "host", SIZE, start, client.signal);
+    const first = await subject.attach("user-1", "host", SIZE, start, client.signal, TAKEN_OVER);
 
     client.abort();
     await settle();
@@ -367,7 +386,15 @@ describe("TerminalSessions.attach", () => {
     await settle();
 
     const nextShell = fakeShell();
-    const next = await subject.attach("user-1", "host", SIZE, async () => nextShell, new AbortController().signal);
+
+    const next = await subject.attach(
+      "user-1",
+      "host",
+      SIZE,
+      async () => nextShell,
+      new AbortController().signal,
+      TAKEN_OVER,
+    );
 
     expect(next.id).not.toBe(first.id);
     expect(shell.end).toHaveBeenCalledOnce();
@@ -375,11 +402,18 @@ describe("TerminalSessions.attach", () => {
 
   it("starts a new shell once its owner closed the previous one", async () => {
     const subject = new TerminalSessions();
-    const first = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal);
+    const first = await subject.attach("user-1", "host", SIZE, start, new AbortController().signal, TAKEN_OVER);
 
     await subject.close(first.id, "user-1");
 
-    const next = await subject.attach("user-1", "host", SIZE, async () => fakeShell(), new AbortController().signal);
+    const next = await subject.attach(
+      "user-1",
+      "host",
+      SIZE,
+      async () => fakeShell(),
+      new AbortController().signal,
+      TAKEN_OVER,
+    );
 
     expect(next.id).not.toBe(first.id);
   });
@@ -391,7 +425,7 @@ describe("TerminalSessions.closeAll", () => {
     const containerShell = fakeShell();
     const otherShell = fakeShell();
 
-    await subject.attach("user-1", "host", SIZE, async () => shell, new AbortController().signal);
+    await subject.attach("user-1", "host", SIZE, async () => shell, new AbortController().signal, TAKEN_OVER);
     subject.open("user-1", containerShell, new AbortController().signal);
     subject.open("user-2", otherShell, new AbortController().signal);
 
@@ -404,11 +438,26 @@ describe("TerminalSessions.closeAll", () => {
 
   it("starts a new shell when the user comes back", async () => {
     const subject = new TerminalSessions();
-    const first = await subject.attach("user-1", "host", SIZE, async () => shell, new AbortController().signal);
+
+    const first = await subject.attach(
+      "user-1",
+      "host",
+      SIZE,
+      async () => shell,
+      new AbortController().signal,
+      TAKEN_OVER,
+    );
 
     await subject.closeAll("user-1");
 
-    const next = await subject.attach("user-1", "host", SIZE, async () => fakeShell(), new AbortController().signal);
+    const next = await subject.attach(
+      "user-1",
+      "host",
+      SIZE,
+      async () => fakeShell(),
+      new AbortController().signal,
+      TAKEN_OVER,
+    );
 
     expect(next.id).not.toBe(first.id);
   });
