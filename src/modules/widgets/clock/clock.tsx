@@ -5,5 +5,7 @@ import { clockDescriptor } from "./descriptor.ts";
 /** The date and time, ticking in the browser: the card loads nothing. */
 export const clockWidget: WidgetBody<null> = {
   load: () => Promise.resolve(null),
-  render: () => <ClockDisplay className={clockDescriptor.appearance.className} />,
+  render: (_data, _placementKey, locale) => (
+    <ClockDisplay className={clockDescriptor.appearance.className} locale={locale} />
+  ),
 };

@@ -23,7 +23,7 @@ const airbus = aStock({ symbol: "AIR.PA", name: "Airbus SE", currency: "EUR", pr
 
 describe("StocksCard", () => {
   it("prices each stock in the currency it is quoted in, with its signed change", () => {
-    const html = renderToStaticMarkup(<StocksCard stocks={[apple, airbus]} />);
+    const html = renderToStaticMarkup(<StocksCard locale="en" stocks={[apple, airbus]} />);
 
     expect(html).toContain("Apple Inc");
     expect(html).toContain("$230.00");
@@ -34,7 +34,7 @@ describe("StocksCard", () => {
   });
 
   it("names the best and worst stocks of the day, and adds no prices across currencies", () => {
-    const html = renderToStaticMarkup(<StocksCard stocks={[apple, airbus]} />);
+    const html = renderToStaticMarkup(<StocksCard locale="en" stocks={[apple, airbus]} />);
 
     expect(html).toMatch(/Best.*\+1\.50%.*AAPL/);
     expect(html).toMatch(/Worst.*-2\.00%.*AIR\.PA/);
@@ -42,21 +42,23 @@ describe("StocksCard", () => {
   });
 
   it("does not show a flat day as a loss", () => {
-    const html = renderToStaticMarkup(<StocksCard stocks={[aStock({ changePercent: 0 })]} />);
+    const html = renderToStaticMarkup(<StocksCard locale="en" stocks={[aStock({ changePercent: 0 })]} />);
 
     expect(html).toContain("0.00%");
     expect(html).not.toContain("text-destructive");
   });
 
   it("draws the curve of a stock that has closes, and none for one without", () => {
-    const html = renderToStaticMarkup(<StocksCard stocks={[apple, airbus]} />);
+    const html = renderToStaticMarkup(<StocksCard locale="en" stocks={[apple, airbus]} />);
 
     expect(html).toContain('aria-label="Closes over the last month: from $220.00 to $230.00"');
     expect(html.match(/<svg/g)).toHaveLength(1);
   });
 
   it("shows a bare price for a stock Finnhub has no profile for", () => {
-    const html = renderToStaticMarkup(<StocksCard stocks={[aStock({ name: undefined, currency: undefined })]} />);
+    const html = renderToStaticMarkup(
+      <StocksCard locale="en" stocks={[aStock({ name: undefined, currency: undefined })]} />,
+    );
 
     expect(html).toContain(">230.00<");
     expect(html).not.toContain("Apple Inc");
@@ -64,7 +66,7 @@ describe("StocksCard", () => {
 
   it("exposes a titled skeleton through the widget definition", () => {
     const { Skeleton } = aWidget(stockPricesDescriptor, stockPrices(["AAPL"]));
-    const html = renderToStaticMarkup(<Skeleton />);
+    const html = renderToStaticMarkup(<Skeleton locale="en" />);
 
     expect(html).toContain("Stocks");
     expect(html).toContain('aria-busy="true"');

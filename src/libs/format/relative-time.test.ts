@@ -17,6 +17,11 @@ describe("RelativeTime.compact", () => {
     expect(at(-7_776_000_000)).toBe("3mo");
   });
 
+  it("speaks French when asked", () => {
+    expect(RelativeTime.compact(NOW - 259_200_000, NOW, "fr")).toBe("3j");
+    expect(RelativeTime.compact(NOW + 79_200_000, NOW, "fr")).toBe("dans 22h");
+  });
+
   it("rounds at a boundary rather than falling back a unit", () => {
     // 59 minutes is still minutes; 61 is an hour, not "61m".
     expect(at(-3_540_000)).toBe("59m");

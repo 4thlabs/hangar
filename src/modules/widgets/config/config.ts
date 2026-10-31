@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { AppLink } from "#libs/hangar/link";
+import type { Catalog } from "#libs/i18n";
 import type { WidgetBody } from "../shared/define-widget.tsx";
 
 // What a widget descriptor is built from. No JSX: the CLI parses `hangar.yml` through the descriptors.
@@ -73,15 +74,21 @@ export class WidgetIcon {
   }
 }
 
-/** What identifies a widget on its card, its skeleton and its error state. */
-export type WidgetAppearance = {
+/** The words that name a widget, which its own catalog carries beside the rest of its card's. */
+export type WidgetAppearanceMessages = {
   /** Display name, shown in the header, skeleton and error state. */
   title: string;
+  /** Shown in the error state, after "<title> is unavailable". */
+  errorDescription: string;
+};
+
+/** What identifies a widget on its card, its skeleton and its error state. */
+export type WidgetAppearance = {
+  /** The widget's catalog, of which the appearance reads its title and its error description. */
+  messages: Catalog<WidgetAppearanceMessages>;
   icon: WidgetIcon;
   /** Size/layout classes for the card. */
   className?: string;
-  /** Shown in the error state, after "<title> is unavailable". */
-  errorDescription: string;
 };
 
 /**

@@ -24,7 +24,7 @@ const releases: GithubRelease[] = [
 
 describe("GithubReleasesCard", () => {
   it("renders every release with its tag, age and link", () => {
-    const html = renderToStaticMarkup(<GithubReleasesCard releases={releases} now={now} />);
+    const html = renderToStaticMarkup(<GithubReleasesCard locale="en" releases={releases} now={now} />);
 
     expect(html).toContain("glanceapp/glance");
     expect(html).toContain("v0.8.4");
@@ -36,7 +36,7 @@ describe("GithubReleasesCard", () => {
   });
 
   it("renders the empty state when no repository answered", () => {
-    const html = renderToStaticMarkup(<GithubReleasesCard releases={[]} now={now} />);
+    const html = renderToStaticMarkup(<GithubReleasesCard locale="en" releases={[]} now={now} />);
 
     expect(html).toContain("No releases found.");
     expect(html).not.toContain("github.com");
@@ -44,7 +44,7 @@ describe("GithubReleasesCard", () => {
 
   it("exposes a titled skeleton through the widget definition", () => {
     const { Skeleton } = aWidget(githubReleasesDescriptor, githubReleases(["glanceapp/glance"]));
-    const html = renderToStaticMarkup(<Skeleton />);
+    const html = renderToStaticMarkup(<Skeleton locale="en" />);
 
     expect(html).toContain("Releases");
     expect(html).toContain('aria-busy="true"');

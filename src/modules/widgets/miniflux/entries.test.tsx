@@ -33,7 +33,13 @@ const entries: MinifluxEntry[] = [
 describe("MinifluxEntriesCard", () => {
   it("marks only the unread entries and counts them in the header", () => {
     const html = renderToStaticMarkup(
-      <MinifluxEntriesCard entries={entries} unread={42} serviceUrl="https://miniflux.example.com" now={now} />,
+      <MinifluxEntriesCard
+        locale="en"
+        entries={entries}
+        unread={42}
+        serviceUrl="https://miniflux.example.com"
+        now={now}
+      />,
     );
 
     expect(html).toContain("42 unread");
@@ -45,7 +51,7 @@ describe("MinifluxEntriesCard", () => {
 
   it("renders the empty state when there are no entries", () => {
     const html = renderToStaticMarkup(
-      <MinifluxEntriesCard entries={[]} unread={0} serviceUrl="https://miniflux.example.com" now={now} />,
+      <MinifluxEntriesCard locale="en" entries={[]} unread={0} serviceUrl="https://miniflux.example.com" now={now} />,
     );
 
     expect(html).toContain("No entries.");
@@ -69,7 +75,7 @@ describe("MinifluxEntriesCard", () => {
       }),
     );
 
-    const html = renderToStaticMarkup(<>{await Widget()}</>);
+    const html = renderToStaticMarkup(<>{await Widget({ locale: "en" })}</>);
 
     expect(called.every(request => request.url.startsWith("http://miniflux:8080/v1/entries?"))).toBe(true);
     expect(called.map(request => request.headers.get("x-auth-token"))).toEqual(["s3cret", "s3cret"]);
@@ -90,7 +96,7 @@ describe("MinifluxEntriesCard", () => {
       }),
     );
 
-    const html = renderToStaticMarkup(<>{await Widget()}</>);
+    const html = renderToStaticMarkup(<>{await Widget({ locale: "en" })}</>);
 
     expect(html).toContain("unavailable");
   });

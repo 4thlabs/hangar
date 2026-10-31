@@ -4,11 +4,15 @@ import { Cache, fulfilled, peek } from "#libs/cache";
 import { WidgetIcon } from "../config/config.ts";
 import { clearWidgetCache, defineWidget, type WidgetBody } from "./define-widget.tsx";
 
+class TestMessages {
+  static readonly en = { title: "Test", errorDescription: "Could not load." };
+  static readonly fr: typeof TestMessages.en = { title: "Essai", errorDescription: "Chargement impossible." };
+}
+
 const appearance = {
-  title: "Test",
+  messages: TestMessages,
   icon: new WidgetIcon("/test.svg"),
   className: "min-h-10",
-  errorDescription: "Could not load.",
 };
 
 /** A widget over a body whose module is already loaded, as a warm dashboard has it. */
@@ -25,7 +29,7 @@ describe("defineWidget", () => {
       render: data => <p>{data}</p>,
     });
 
-    expect(renderToStaticMarkup(await widget.Widget())).toContain("payload");
+    expect(renderToStaticMarkup(await widget.Widget({ locale: "en" }))).toContain("payload");
   });
 
   it("falls back to the error card when load rejects", async () => {
@@ -36,7 +40,7 @@ describe("defineWidget", () => {
       render: () => <p>never</p>,
     });
 
-    const html = renderToStaticMarkup(await widget.Widget());
+    const html = renderToStaticMarkup(await widget.Widget({ locale: "en" }));
 
     expect(html).toContain("Test is unavailable");
     expect(html).toContain("Could not load.");
@@ -51,7 +55,7 @@ describe("defineWidget", () => {
       render: () => <p>never</p>,
     });
 
-    expect(renderToStaticMarkup(await widget.Widget())).not.toContain("secret");
+    expect(renderToStaticMarkup(await widget.Widget({ locale: "en" }))).not.toContain("secret");
   });
 
   it("falls back when render returns null", async () => {
@@ -60,7 +64,7 @@ describe("defineWidget", () => {
       render: () => null,
     });
 
-    expect(renderToStaticMarkup(await widget.Widget())).toContain("Test is unavailable");
+    expect(renderToStaticMarkup(await widget.Widget({ locale: "en" }))).toContain("Test is unavailable");
   });
 
   it("derives the skeleton from the same identity", () => {
@@ -69,7 +73,7 @@ describe("defineWidget", () => {
       render: () => <p>x</p>,
     });
 
-    const html = renderToStaticMarkup(<widget.Skeleton />);
+    const html = renderToStaticMarkup(<widget.Skeleton locale="en" />);
 
     expect(html).toContain("Test");
     expect(html).toContain("min-h-10");
@@ -85,7 +89,7 @@ describe("defineWidget over a module", () => {
       body: () => Promise.reject(new Error("chunk missing")),
     });
 
-    const html = renderToStaticMarkup(await widget.Widget());
+    const html = renderToStaticMarkup(await widget.Widget({ locale: "en" }));
 
     expect(html).toContain("Test is unavailable");
     expect(html).not.toContain("chunk missing");
@@ -100,7 +104,7 @@ describe("defineWidget over a module", () => {
       },
     });
 
-    expect(renderToStaticMarkup(await widget.Widget())).toContain("Test is unavailable");
+    expect(renderToStaticMarkup(await widget.Widget({ locale: "en" }))).toContain("Test is unavailable");
   });
 
   it("suspends only its own card while the module loads, behind a skeleton drawn from its appearance", async () => {
@@ -108,10 +112,10 @@ describe("defineWidget over a module", () => {
     const body = new Promise<WidgetBody>(resolve => (loaded = resolve));
     const widget = defineWidget({ id: "test-widget", appearance, body: () => body });
 
-    const card = widget.Widget();
+    const card = widget.Widget({ locale: "en" });
 
     expect(peek(card)).toBeUndefined();
-    expect(renderToStaticMarkup(<widget.Skeleton />)).toContain("Test");
+    expect(renderToStaticMarkup(<widget.Skeleton locale="en" />)).toContain("Test");
 
     loaded({ load: async () => "payload", render: data => <p>{String(data)}</p> });
     expect(renderToStaticMarkup(await card)).toContain("payload");
@@ -119,12 +123,22 @@ describe("defineWidget over a module", () => {
 });
 
 describe("defineWidget caching", () => {
+  it("keeps one card per language, the words being part of it", async () => {
+    const load = vi.fn(async () => "payload");
+    const widget = warmWidget({ load, render: () => null });
+
+    expect(renderToStaticMarkup(await widget.Widget({ locale: "en" }))).toContain("Test is unavailable");
+    expect(renderToStaticMarkup(await widget.Widget({ locale: "fr" }))).toContain("Essai indisponible");
+    expect(renderToStaticMarkup(await widget.Widget({ locale: "fr" }))).toContain("Chargement impossible.");
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
   it("renders a second time from the cache rather than loading again", async () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
     const widget = warmWidget({ load, render: data => <p>{data}</p> });
 
-    await widget.Widget();
-    await widget.Widget();
+    await widget.Widget({ locale: "en" });
+    await widget.Widget({ locale: "en" });
 
     expect(load).toHaveBeenCalledTimes(1);
   });
@@ -137,8 +151,8 @@ describe("defineWidget caching", () => {
 
     const widget = warmWidget({ load, render: data => <p>{data}</p> });
 
-    expect(renderToStaticMarkup(await widget.Widget())).toContain("Could not load.");
-    expect(renderToStaticMarkup(await widget.Widget())).toContain("payload");
+    expect(renderToStaticMarkup(await widget.Widget({ locale: "en" }))).toContain("Could not load.");
+    expect(renderToStaticMarkup(await widget.Widget({ locale: "en" }))).toContain("payload");
   });
 
   it("caches the rendered card, so a warm render runs neither the load nor render", async () => {
@@ -146,8 +160,8 @@ describe("defineWidget caching", () => {
     const render = vi.fn((data: string) => <p>{data}</p>);
     const widget = warmWidget({ load, render });
 
-    await widget.Widget();
-    await widget.Widget();
+    await widget.Widget({ locale: "en" });
+    await widget.Widget({ locale: "en" });
 
     expect(render).toHaveBeenCalledTimes(1);
   });
@@ -161,8 +175,8 @@ describe("defineWidget placements", () => {
     const first = make("first").at("test-widget-a");
     const second = make("second").at("test-widget-b");
 
-    expect(renderToStaticMarkup(await first.Widget())).toContain("first");
-    expect(renderToStaticMarkup(await second.Widget())).toContain("second");
+    expect(renderToStaticMarkup(await first.Widget({ locale: "en" }))).toContain("first");
+    expect(renderToStaticMarkup(await second.Widget({ locale: "en" }))).toContain("second");
   });
 
   it("binds a copy, leaving a shared widget as it was", () => {
@@ -175,7 +189,7 @@ describe("defineWidget placements", () => {
   it("hands its key to render, for whatever the card addresses per placement", async () => {
     const widget = warmWidget({ load: async () => "x", render: (_data, key) => <p>{key}</p> });
 
-    expect(renderToStaticMarkup(await widget.at("test-widget-a").Widget())).toContain("test-widget-a");
+    expect(renderToStaticMarkup(await widget.at("test-widget-a").Widget({ locale: "en" }))).toContain("test-widget-a");
   });
 });
 
@@ -189,9 +203,9 @@ describe("defineWidget freshness", () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
     const widget = warmWidget({ load, render: data => <p>{data}</p> }, 5_000);
 
-    await widget.Widget();
+    await widget.Widget({ locale: "en" });
     vi.setSystemTime(START + 6_000);
-    await widget.Widget();
+    await widget.Widget({ locale: "en" });
 
     expect(load).toHaveBeenCalledTimes(2);
   });
@@ -200,9 +214,9 @@ describe("defineWidget freshness", () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
     const widget = warmWidget({ load, render: data => <p>{data}</p> });
 
-    await widget.Widget();
+    await widget.Widget({ locale: "en" });
     vi.setSystemTime(START + 6_000);
-    await widget.Widget();
+    await widget.Widget({ locale: "en" });
 
     expect(load).toHaveBeenCalledTimes(1);
   });
@@ -213,9 +227,9 @@ describe("defineWidget rendering without suspending", () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
     const widget = warmWidget({ load, render: data => <p>{data}</p> });
 
-    await widget.Widget();
+    await widget.Widget({ locale: "en" });
 
-    const card = peek(widget.Widget());
+    const card = peek(widget.Widget({ locale: "en" }));
 
     expect(card).toBeDefined();
     expect(renderToStaticMarkup(card?.value as React.ReactElement)).toContain("payload");
@@ -225,7 +239,7 @@ describe("defineWidget rendering without suspending", () => {
     const load = vi.fn<() => Promise<string>>().mockResolvedValue("payload");
     const widget = warmWidget({ load, render: data => <p>{data}</p> });
 
-    expect(peek(widget.Widget())).toBeUndefined();
+    expect(peek(widget.Widget({ locale: "en" }))).toBeUndefined();
   });
 });
 
@@ -236,11 +250,13 @@ describe("defineWidget over a source", () => {
     const source = () => owner.get("source", { ttl: 60_000 }, load);
     const widget = warmWidget({ source, render: data => <p>{data}</p> });
 
-    expect(renderToStaticMarkup(await widget.Widget())).toContain("first");
+    expect(renderToStaticMarkup(await widget.Widget({ locale: "en" }))).toContain("first");
 
     // Whatever refreshes the owner's value shows here at once, with no widget TTL to outlive.
     await owner.refresh("source");
-    expect(renderToStaticMarkup(peek(widget.Widget())?.value as React.ReactElement)).toContain("second");
+    expect(renderToStaticMarkup(peek(widget.Widget({ locale: "en" }))?.value as React.ReactElement)).toContain(
+      "second",
+    );
   });
 
   it("falls back to the error card when the source cannot be read", async () => {
@@ -249,6 +265,6 @@ describe("defineWidget over a source", () => {
       render: () => <p>never</p>,
     });
 
-    expect(renderToStaticMarkup(await widget.Widget())).toContain("Test is unavailable");
+    expect(renderToStaticMarkup(await widget.Widget({ locale: "en" }))).toContain("Test is unavailable");
   });
 });

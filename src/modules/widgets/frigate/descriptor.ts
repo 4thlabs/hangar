@@ -1,14 +1,14 @@
 import { describeWidget, WidgetIcon, WidgetSchema } from "../config/config.ts";
+import { FrigateMessages } from "./messages.ts";
 
 /** The latest camera events, with their thumbnails relayed through Hangar. */
 export const frigateEventsDescriptor = describeWidget({
   schema: WidgetSchema.service("frigate-events"),
   app: "frigate",
   appearance: {
-    title: "Frigate",
+    messages: FrigateMessages,
     icon: WidgetIcon.dashboard("frigate", "frigate-light"),
     className: "min-h-88",
-    errorDescription: "The camera events could not be loaded.",
   },
   module: () => import("./events.tsx"),
   create: ({ frigateEvents }, _config, service) => frigateEvents(service()),

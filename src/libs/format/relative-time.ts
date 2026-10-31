@@ -1,3 +1,8 @@
+import type { LocaleCode } from "#libs/preferences";
+
+/** The units a compact moment is written in. */
+type CompactUnit = "second" | "minute" | "hour" | "day" | "month";
+
 /**
  * A moment as the distance from now: "2 minutes ago", or `2m` where a row has no room.
  *
@@ -6,17 +11,24 @@
  */
 export class RelativeTime {
   /** The unit ladder, largest threshold last: a moment is written in the biggest unit that fits. */
-  private static readonly Units: readonly (readonly [
-    seconds: number,
-    suffix: string,
-    unit: Intl.RelativeTimeFormatUnit,
-  ])[] = [
-    [60, "s", "second"],
-    [3_600, "m", "minute"],
-    [86_400, "h", "hour"],
-    [2_592_000, "d", "day"],
-    [Number.POSITIVE_INFINITY, "mo", "month"],
+  private static readonly Units: readonly (readonly [seconds: number, unit: CompactUnit])[] = [
+    [60, "second"],
+    [3_600, "minute"],
+    [86_400, "hour"],
+    [2_592_000, "day"],
+    [Number.POSITIVE_INFINITY, "month"],
   ];
+
+  /** How each language shortens a unit, and says a moment is ahead: `in 5h`, `dans 5h`. */
+  private static readonly Compact: Readonly<
+    Record<LocaleCode, { suffixes: Record<CompactUnit, string>; future: (span: string) => string }>
+  > = {
+    en: { suffixes: { second: "s", minute: "m", hour: "h", day: "d", month: "mo" }, future: span => `in ${span}` },
+    fr: {
+      suffixes: { second: "s", minute: "min", hour: "h", day: "j", month: "mois" },
+      future: span => `dans ${span}`,
+    },
+  };
 
   /** One formatter per locale, built on first use. */
   private static readonly Formatters = new Map<string, Intl.RelativeTimeFormat>();
@@ -37,13 +49,14 @@ export class RelativeTime {
    * The same moment as short as a dashboard row needs: `18h`, `in 5h`, `3d`. Intl's `narrow` style
    * still says "18 hr. ago".
    */
-  static compact(timestamp: number, now: number = Date.now()) {
+  static compact(timestamp: number, now: number = Date.now(), locale: LocaleCode = "en") {
     const seconds = (timestamp - now) / 1_000;
     const absoluteSeconds = Math.abs(seconds);
-    const { suffix, divisor } = RelativeTime.unit(absoluteSeconds);
-    const value = Math.round(absoluteSeconds / divisor);
+    const { unit, divisor } = RelativeTime.unit(absoluteSeconds);
+    const { suffixes, future } = RelativeTime.Compact[locale];
+    const span = `${Math.round(absoluteSeconds / divisor)}${suffixes[unit]}`;
 
-    return seconds < 0 ? `${value}${suffix}` : `in ${value}${suffix}`;
+    return seconds < 0 ? span : future(span);
   }
 
   /**
@@ -51,9 +64,9 @@ export class RelativeTime {
    */
   private static unit(absoluteSeconds: number) {
     const index = RelativeTime.Units.findIndex(([threshold]) => absoluteSeconds < threshold);
-    const [, suffix, unit] = RelativeTime.Units[index]!;
+    const [, unit] = RelativeTime.Units[index]!;
 
-    return { suffix, unit, divisor: index === 0 ? 1 : RelativeTime.Units[index - 1]![0] };
+    return { unit, divisor: index === 0 ? 1 : RelativeTime.Units[index - 1]![0] };
   }
 
   /**

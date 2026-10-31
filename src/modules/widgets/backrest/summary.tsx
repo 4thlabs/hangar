@@ -1,4 +1,6 @@
 import { cn } from "cn";
+import { Translation } from "#libs/i18n";
+import type { LocaleCode } from "#libs/preferences";
 import type { WidgetService } from "../config/config.ts";
 import type { WidgetBody } from "../shared/define-widget.tsx";
 import {
@@ -14,6 +16,7 @@ import {
 } from "../shared/index.ts";
 import { BackrestClient, type BackrestRepoSummary } from "./api/client.ts";
 import { backrestSummaryDescriptor } from "./descriptor.ts";
+import { BackrestMessages } from "./messages.ts";
 
 const { appearance } = backrestSummaryDescriptor;
 
@@ -89,30 +92,31 @@ const HEALTH_DOT_CLASS: Record<RepoHealth, string> = {
 type BackrestSummaryCardProps = {
   repos: RepoBackup[];
   serviceUrl: string;
+  locale: LocaleCode;
   now?: number;
 };
 
-export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: BackrestSummaryCardProps) {
+export function BackrestSummaryCard({ repos, serviceUrl, locale, now = Date.now() }: BackrestSummaryCardProps) {
   const protectedBytes = repos.reduce((total, repo) => total + repo.protectedBytes, 0);
+  const t = Translation.create(BackrestMessages, locale);
+  const bytes = (value: number) => Units.bytes(value, locale);
 
   return (
     <WidgetCard className={appearance.className}>
       <WidgetHeader
         href={serviceUrl}
         icon={appearance.icon}
-        title={appearance.title}
+        title={t("title")}
         description={
           <WidgetMetadata>
-            <span>
-              {repos.length} {repos.length === 1 ? "repo" : "repos"}
-            </span>
-            <span>{Units.bytes(protectedBytes)} protected</span>
+            <span>{t("repos", { count: repos.length })}</span>
+            <span>{t("protected", { size: bytes(protectedBytes) })}</span>
           </WidgetMetadata>
         }
       />
 
       <WidgetContent>
-        <WidgetList empty="No repositories configured.">
+        <WidgetList empty={t("empty")}>
           {repos.map(repo => (
             <WidgetListItem
               key={repo.id}
@@ -124,7 +128,11 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
                   className={cn("mt-1.5 size-2 shrink-0 rounded-full", HEALTH_DOT_CLASS[repo.health])}
                 />
               }
-              trailing={repo.lastRunAt !== undefined && <WidgetTime at={repo.lastRunAt} now={now} style="compact" />}
+              trailing={
+                repo.lastRunAt !== undefined && (
+                  <WidgetTime at={repo.lastRunAt} now={now} style="compact" locale={locale} />
+                )
+              }
             >
               <p className="truncate font-medium text-primary">{repo.id}</p>
 
@@ -132,12 +140,14 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
               <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                 <WidgetMetadata>
                   <span className={repo.health === "failed" ? "text-destructive" : undefined}>
-                    {repo.status ?? "No backup yet"}
+                    {repo.status ?? t("noBackup")}
                   </span>
-                  <span>{repo.successes} ok / 30d</span>
-                  <span>{Units.bytes(repo.bytesAdded)} added</span>
-                  <span>{Units.bytes(repo.protectedBytes)} protected</span>
-                  {repo.nextBackupAt !== undefined && <span>next {RelativeTime.compact(repo.nextBackupAt, now)}</span>}
+                  <span>{t("successes", { count: repo.successes })}</span>
+                  <span>{t("added", { size: bytes(repo.bytesAdded) })}</span>
+                  <span>{t("protected", { size: bytes(repo.protectedBytes) })}</span>
+                  {repo.nextBackupAt !== undefined && (
+                    <span>{t("next", { when: RelativeTime.compact(repo.nextBackupAt, now, locale) })}</span>
+                  )}
                 </WidgetMetadata>
               </p>
             </WidgetListItem>
@@ -152,5 +162,7 @@ export function BackrestSummaryCard({ repos, serviceUrl, now = Date.now() }: Bac
 export const backrestSummary = (service: WidgetService): WidgetBody<RepoBackup[]> => ({
   load: async () =>
     ((await (await BackrestClient.connect(service)).getSummary()).repoSummaries ?? []).map(BackrestRepo.display),
-  render: repos => <BackrestSummaryCard repos={repos} serviceUrl={service.link} />,
+  render: (repos, _placementKey, locale) => (
+    <BackrestSummaryCard repos={repos} serviceUrl={service.link} locale={locale} />
+  ),
 });

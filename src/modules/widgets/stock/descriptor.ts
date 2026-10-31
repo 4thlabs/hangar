@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { columnSchema, describeWidget, ttlField, WidgetIcon } from "../config/config.ts";
+import { StockMessages } from "./messages.ts";
 
 /**
  * A symbol as Finnhub writes it: `AAPL`, a share class `BRK.B`, or a listing outside the US with its exchange suffix,
@@ -22,10 +23,9 @@ export const stockPricesDescriptor = describeWidget({
       .refine(tickers => new Set(tickers).size === tickers.length, "ticker symbols must be unique"),
   }),
   appearance: {
-    title: "Stocks",
+    messages: StockMessages,
     icon: new WidgetIcon("/images/widgets/stock.svg"),
     className: "min-h-64",
-    errorDescription: "The stock prices could not be loaded.",
   },
   module: () => import("./stock.tsx"),
   create: ({ stockPrices }, config) => stockPrices(config.tickers),
