@@ -36,6 +36,11 @@ export class CommonMessages {
       confirm: "Confirm",
       cancel: "Cancel",
     },
+    /** What the shared primitives say to a screen reader. */
+    ui: {
+      close: "Close",
+      closeToast: "Close the notification",
+    },
     logs: {
       trigger: "Logs",
       view: ({ name }: { name: string }) => `View the logs of ${name}`,
@@ -112,6 +117,10 @@ export class CommonMessages {
     confirm: {
       confirm: "Confirmer",
       cancel: "Annuler",
+    },
+    ui: {
+      close: "Fermer",
+      closeToast: "Fermer la notification",
     },
     logs: {
       trigger: "Logs",

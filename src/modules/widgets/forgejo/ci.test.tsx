@@ -148,7 +148,7 @@ describe("ForgejoCiCard", () => {
 
   it("renders the repository count, what runs, what waits and what was updated last", () => {
     const html = renderToStaticMarkup(
-      <ForgejoCiCard summary={summary} serviceUrl="https://forgejo.example.com" now={NOW} />,
+      <ForgejoCiCard locale="en" summary={summary} serviceUrl="https://forgejo.example.com" now={NOW} />,
     );
 
     expect(html).toContain("18 repos");
@@ -163,7 +163,7 @@ describe("ForgejoCiCard", () => {
 
   it("says so when nothing is running", () => {
     const html = renderToStaticMarkup(
-      <ForgejoCiCard summary={{ ...summary, activeRuns: [] }} serviceUrl="" now={NOW} />,
+      <ForgejoCiCard locale="en" summary={{ ...summary, activeRuns: [] }} serviceUrl="" now={NOW} />,
     );
 
     expect(html).toContain("Nothing running.");
@@ -173,7 +173,7 @@ describe("ForgejoCiCard", () => {
 
   it("exposes a titled skeleton through the widget definition", () => {
     const { Skeleton } = aWidget(forgejoCiDescriptor, forgejoCi(aService()));
-    const html = renderToStaticMarkup(<Skeleton />);
+    const html = renderToStaticMarkup(<Skeleton locale="en" />);
 
     expect(html).toContain("Forgejo");
     expect(html).toContain('aria-busy="true"');

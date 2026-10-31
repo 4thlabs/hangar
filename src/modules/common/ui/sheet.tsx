@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from "#modules/common/hooks/use-translation.ts"
+import { CommonMessages } from "#modules/common/messages.ts"
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
 import { cn } from "cn"
 
@@ -72,7 +74,7 @@ function SheetContent({
           >
             <XIcon
             />
-            <span className="sr-only">Close</span>
+            <CloseLabel />
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Popup>
@@ -135,4 +137,11 @@ export {
   SheetFooter,
   SheetTitle,
   SheetDescription,
+}
+
+/** The close button's name for a screen reader, in the reader's language. */
+function CloseLabel() {
+  const { t } = useTranslation(CommonMessages)
+
+  return <span className="sr-only">{t("ui.close")}</span>
 }

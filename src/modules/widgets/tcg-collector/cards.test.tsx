@@ -54,6 +54,7 @@ const solRing: FollowedCardPrices = { game: 1, product: 910771, card: aCard(), h
 const render = (followed: FollowedCardPrices[], days = 30) =>
   renderToStaticMarkup(
     <TcgCollectorCardsCard
+      locale="en"
       followed={followed}
       days={days}
       serviceUrl="https://cards.test.local"
@@ -65,7 +66,7 @@ describe("PriceCurve", () => {
   it("places each day by its date in the window, so a short history fills only its last days", () => {
     const series = PriceCurve.series(history, { days: 5, lastDay: "2026-10-11" });
 
-    expect(series).toEqual({ label: "Trend", prices: [null, null, 1.2, 1.3, 1.45] });
+    expect(series).toEqual({ label: "trend", prices: [null, null, 1.2, 1.3, 1.45] });
   });
 
   it("leaves the days after a card's last price empty when another card has more recent ones", () => {
@@ -82,17 +83,17 @@ describe("PriceCurve", () => {
       { days: 2, lastDay: "2026-10-11" },
     );
 
-    expect(series).toEqual({ label: "Low", prices: [3, 0.9] });
+    expect(series).toEqual({ label: "low", prices: [3, 0.9] });
   });
 
   it("reads the curve out over the whole window, from the first known price to the last", () => {
     const series = PriceCurve.series(history, { days: 30, lastDay: "2026-10-11" });
 
-    expect(PriceCurve.describe(series)).toBe("Trend over 30 days: from €1.20 to €1.45");
+    expect(PriceCurve.describe(series, "en")).toBe("Trend over 30 days: from €1.20 to €1.45");
   });
 
   it("describes a single day by its one price", () => {
-    expect(PriceCurve.describe({ label: "Trend", prices: [2] })).toBe("Trend over 1 day: €2.00");
+    expect(PriceCurve.describe({ label: "trend", prices: [2] }, "en")).toBe("Trend over 1 day: €2.00");
   });
 
   it("finds the most recent priced day across the cards, and none when no card has one", () => {
@@ -118,6 +119,7 @@ describe("TcgCollectorCardsCard", () => {
   it("links to the card's sheet even when `link` ends with a slash", () => {
     const html = renderToStaticMarkup(
       <TcgCollectorCardsCard
+        locale="en"
         followed={[solRing]}
         days={30}
         serviceUrl="https://cards.test.local/"
@@ -229,7 +231,7 @@ describe("tcgCollectorCards", () => {
       }),
     );
 
-    const html = renderToStaticMarkup(<>{await Widget()}</>);
+    const html = renderToStaticMarkup(<>{await Widget({ locale: "en" })}</>);
 
     expect(called.map(request => request.url).sort()).toEqual([
       "http://tcg-collector-web:8080/api/card?game=1&product=910771",
@@ -259,7 +261,7 @@ describe("tcgCollectorCards", () => {
       }),
     );
 
-    const html = renderToStaticMarkup(<>{await Widget()}</>);
+    const html = renderToStaticMarkup(<>{await Widget({ locale: "en" })}</>);
 
     expect(html).toContain("Sol Ring");
     expect(html).toContain("Magic · product 42");
@@ -275,7 +277,7 @@ describe("tcgCollectorCards", () => {
       tcgCollectorCards(service, { cards: [{ game: 1, product: 910771 }], days: 30 }),
     );
 
-    const html = renderToStaticMarkup(<>{await Widget()}</>);
+    const html = renderToStaticMarkup(<>{await Widget({ locale: "en" })}</>);
 
     expect(html).toContain("TCG Collector is unavailable");
   });
@@ -286,6 +288,6 @@ describe("tcgCollectorCards", () => {
       tcgCollectorCards(aService(), { cards: [{ game: 1, product: 1 }], days: 30 }),
     );
 
-    expect(renderToStaticMarkup(<Skeleton />)).toContain("TCG Collector");
+    expect(renderToStaticMarkup(<Skeleton locale="en" />)).toContain("TCG Collector");
   });
 });

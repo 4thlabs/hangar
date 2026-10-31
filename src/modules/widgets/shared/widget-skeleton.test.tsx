@@ -6,7 +6,7 @@ import { WidgetSkeleton } from "./widget-skeleton.tsx";
 describe("WidgetSkeleton", () => {
   it("preserves the requested widget size without rendering a spinner", () => {
     const html = renderToStaticMarkup(
-      <WidgetSkeleton className="min-h-64" icon={new WidgetIcon("/icon.svg")} title="Service" />,
+      <WidgetSkeleton locale="en" className="min-h-64" icon={new WidgetIcon("/icon.svg")} title="Service" />,
     );
 
     expect(html).toContain("Service");

@@ -72,6 +72,7 @@ describe("BackrestSummaryCard", () => {
   it("sums what every repository protects into the header", () => {
     const html = renderToStaticMarkup(
       <BackrestSummaryCard
+        locale="en"
         repos={[
           BackrestRepo.display(healthy),
           BackrestRepo.display({ ...healthy, id: "local-usb", protectedBytes: "869730877440" }),
@@ -88,7 +89,12 @@ describe("BackrestSummaryCard", () => {
 
   it("shows the last run, the 30-day tally and when the next one is due", () => {
     const html = renderToStaticMarkup(
-      <BackrestSummaryCard repos={[BackrestRepo.display(healthy)]} serviceUrl="https://backup.test.local" now={NOW} />,
+      <BackrestSummaryCard
+        locale="en"
+        repos={[BackrestRepo.display(healthy)]}
+        serviceUrl="https://backup.test.local"
+        now={NOW}
+      />,
     );
 
     expect(html).toContain("homelab-b2");
@@ -108,7 +114,7 @@ describe("BackrestSummaryCard", () => {
     });
 
     const html = renderToStaticMarkup(
-      <BackrestSummaryCard repos={[failed]} serviceUrl="https://backup.test.local" now={NOW} />,
+      <BackrestSummaryCard locale="en" repos={[failed]} serviceUrl="https://backup.test.local" now={NOW} />,
     );
 
     expect(html).toContain("ERROR");
@@ -116,7 +122,9 @@ describe("BackrestSummaryCard", () => {
   });
 
   it("says so when Backrest has no repository at all", () => {
-    const html = renderToStaticMarkup(<BackrestSummaryCard repos={[]} serviceUrl="https://backup.test.local" />);
+    const html = renderToStaticMarkup(
+      <BackrestSummaryCard locale="en" repos={[]} serviceUrl="https://backup.test.local" />,
+    );
 
     expect(html).toContain("No repositories configured.");
   });
@@ -138,7 +146,7 @@ describe("backrestSummary", () => {
     });
 
     const html = renderToStaticMarkup(
-      <>{await aWidget(backrestSummaryDescriptor, backrestSummary(service)).Widget()}</>,
+      <>{await aWidget(backrestSummaryDescriptor, backrestSummary(service)).Widget({ locale: "en" })}</>,
     );
 
     expect(called.map(request => request.url)).toEqual(["http://backrest:9898/v1.Backrest/GetSummaryDashboard"]);
@@ -153,7 +161,7 @@ describe("backrestSummary", () => {
     vi.stubGlobal("fetch", () => Promise.reject(new Error("ECONNREFUSED")));
 
     const html = renderToStaticMarkup(
-      <>{await aWidget(backrestSummaryDescriptor, backrestSummary(service)).Widget()}</>,
+      <>{await aWidget(backrestSummaryDescriptor, backrestSummary(service)).Widget({ locale: "en" })}</>,
     );
 
     expect(html).toContain("unavailable");
@@ -161,7 +169,9 @@ describe("backrestSummary", () => {
 
   it("exposes a titled skeleton through the widget definition", () => {
     expect(
-      renderToStaticMarkup(<>{aWidget(backrestSummaryDescriptor, backrestSummary(aService())).Skeleton()}</>),
+      renderToStaticMarkup(
+        <>{aWidget(backrestSummaryDescriptor, backrestSummary(aService())).Skeleton({ locale: "en" })}</>,
+      ),
     ).toContain("Backrest");
   });
 });

@@ -15,6 +15,7 @@ describe("DockerGeneralStatsCard", () => {
   it("renders the local Docker metrics and their visible details", () => {
     const html = renderToStaticMarkup(
       <DockerGeneralStatsCard
+        locale="en"
         overview={{
           version: "27.3.1",
           containers: { total: 24, running: 22, stopped: 2 },
@@ -33,9 +34,29 @@ describe("DockerGeneralStatsCard", () => {
     expect(html).not.toContain("Updates available");
   });
 
+  it("speaks the reader's language, numbers included", () => {
+    const html = renderToStaticMarkup(
+      <DockerGeneralStatsCard
+        locale="fr"
+        overview={{
+          version: "27.3.1",
+          containers: { total: 1_024, running: 22, stopped: 2 },
+          images: { total: 31, unused: 7, size: 13_421_772_800 },
+          volumes: { total: 18, inUse: 15, unused: 3 },
+        }}
+        outdated={["alpha"]}
+      />,
+    );
+
+    expect(html).toContain("1\u202f024 conteneurs");
+    expect(html).toContain("7 inutilisées · 12,5 GB");
+    expect(html).toContain("Mises à jour disponibles");
+  });
+
   it("links the apps whose image is behind its registry", () => {
     const html = renderToStaticMarkup(
       <DockerGeneralStatsCard
+        locale="en"
         overview={{
           version: "27.3.1",
           containers: { total: 1, running: 1, stopped: 0 },

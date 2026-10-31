@@ -1,3 +1,5 @@
+import { Translation, type Translate } from "#libs/i18n";
+import { Locale, type LocaleCode } from "#libs/preferences";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import type { WidgetService } from "../config/config.ts";
 import type { WidgetBody } from "../shared/define-widget.tsx";
@@ -13,6 +15,7 @@ import {
 } from "../shared/index.ts";
 import { CardImageId, TcgCollectorClient, type CardImageRef, type TcgCard, type TcgDailyPrices } from "./api/index.ts";
 import { tcgCollectorCardsDescriptor } from "./descriptor.ts";
+import { TcgCollectorMessages } from "./messages.ts";
 
 const { appearance } = tcgCollectorCardsDescriptor;
 
@@ -22,25 +25,34 @@ const GAME_NAMES: ReadonlyMap<number, string> = new Map([
   [21, "Star Wars Unlimited"],
 ]);
 
-const Euros = new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR" });
-
-/** Days are calendar dates: written in UTC, so no time zone moves them to the day before. */
-const Days = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
-
 const MS_PER_DAY = 86_400_000;
 
-/** A price as the card writes it: an unknown one is a dash, never a zero. */
-function formatPrice(price: number | null) {
-  if (price === null) {
-    return "—";
+/** The words of the card, in the reader's language. */
+type CardsTranslate = Translate<typeof TcgCollectorMessages.en>;
+
+/** How the card writes prices and days, in the reader's language. */
+class CardFormat {
+  /** A price in euros: an unknown one is a dash, never a zero. */
+  static price(price: number | null, locale: LocaleCode) {
+    if (price === null) {
+      return "—";
+    }
+
+    return new Intl.NumberFormat(Locale.intlTag(locale), { style: "currency", currency: "EUR" }).format(price);
   }
 
-  return Euros.format(price);
-}
-
-/** A `YYYY-MM-DD` day from tcg-collector, as `Oct 11, 2026`. */
-function formatDay(day: string) {
-  return Days.format(new Date(`${day}T00:00:00Z`));
+  /**
+   * A `YYYY-MM-DD` day from tcg-collector, as `Oct 11, 2026`. Days are calendar dates: written in UTC, so no time
+   * zone moves them to the day before.
+   */
+  static day(day: string, locale: LocaleCode) {
+    return new Intl.DateTimeFormat(Locale.intlTag(locale), {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(`${day}T00:00:00Z`));
+  }
 }
 
 /** A `YYYY-MM-DD` day as a count of days, so two days subtract to the number of days between them. */
@@ -57,8 +69,8 @@ function cardPageUrl(serviceUrl: string, { game, product }: CardImageRef) {
 }
 
 /** A game's name, or its id for one tcg-collector may collect but the card does not know by name. */
-function gameName(game: number) {
-  return GAME_NAMES.get(game) ?? `Game ${game}`;
+function gameName(game: number, t: CardsTranslate) {
+  return GAME_NAMES.get(game) ?? t("game", { id: game });
 }
 
 /** One followed card as loaded: its catalog entry, null when tcg-collector does not know the product, and its days. */
@@ -79,7 +91,7 @@ export type PriceWindow = {
 
 /** Which price a curve follows, and that price on each day of the window, oldest first; null where it has none. */
 export type PriceSeries = {
-  label: "Trend" | "Low";
+  label: "trend" | "low";
   prices: (number | null)[];
 };
 
@@ -91,7 +103,7 @@ export class PriceCurve {
    */
   static series(history: readonly TcgDailyPrices[], { days, lastDay }: PriceWindow): PriceSeries {
     const hasTrend = history.some(entry => entry.trend !== null);
-    const label = hasTrend ? "Trend" : "Low";
+    const label = hasTrend ? "trend" : "low";
     const prices = Array.from<number | null>({ length: days }).fill(null);
     const lastSlot = days - 1;
 
@@ -107,15 +119,19 @@ export class PriceCurve {
   }
 
   /** What the curve shows, for a screen reader: `Trend over 30 days: from €1.20 to €1.45`. */
-  static describe({ label, prices }: PriceSeries) {
+  static describe({ label, prices }: PriceSeries, locale: LocaleCode) {
+    const t = Translation.create(TcgCollectorMessages, locale);
     const known = prices.filter(price => price !== null);
-    const period = `${label} over ${prices.length} ${prices.length === 1 ? "day" : "days"}`;
+    const period = t("over", { label: t(`price.${label}`), days: t("days", { count: prices.length }) });
 
     if (known.length === 1) {
-      return `${period}: ${formatPrice(known[0]!)}`;
+      return t("single", { period, price: CardFormat.price(known[0]!, locale) });
     }
 
-    return `${period}: from ${formatPrice(known[0] ?? null)} to ${formatPrice(known.at(-1) ?? null)}`;
+    const from = CardFormat.price(known[0] ?? null, locale);
+    const to = CardFormat.price(known.at(-1) ?? null, locale);
+
+    return t("range", { period, from, to });
   }
 
   /** The most recent day any of the cards has a price for, `YYYY-MM-DD`; `undefined` when none has one. */
@@ -128,10 +144,18 @@ export class PriceCurve {
 }
 
 /** The price curve of one card. Nothing when it has no price. */
-function PriceSparkline({ history, priceWindow }: { history: readonly TcgDailyPrices[]; priceWindow: PriceWindow }) {
+function PriceSparkline({
+  history,
+  priceWindow,
+  locale,
+}: {
+  history: readonly TcgDailyPrices[];
+  priceWindow: PriceWindow;
+  locale: LocaleCode;
+}) {
   const series = PriceCurve.series(history, priceWindow);
 
-  return <WidgetSparkline prices={series.prices} label={PriceCurve.describe(series)} />;
+  return <WidgetSparkline prices={series.prices} label={PriceCurve.describe(series, locale)} />;
 }
 
 /** The frame a card's image sits in, kept when there is no image, so every name starts on the same column. */
@@ -143,19 +167,24 @@ function CardRow({
   priceWindow,
   serviceUrl,
   placementKey,
+  locale,
 }: {
   followed: FollowedCardPrices;
   /** The curves' common window; absent when no card has a price yet. */
   priceWindow: PriceWindow | undefined;
   serviceUrl: string;
   placementKey: string;
+  locale: LocaleCode;
 }) {
+  const t = Translation.create(TcgCollectorMessages, locale);
+  const price = (value: number | null) => CardFormat.price(value, locale);
+
   if (!card) {
     return (
       <WidgetListItem media={<span className={THUMBNAIL_CLASSNAME} />}>
-        <p className="truncate font-medium text-muted-foreground">Card not found</p>
+        <p className="truncate font-medium text-muted-foreground">{t("notFound")}</p>
         <p className="truncate text-xs text-muted-foreground">
-          {gameName(game)} · product {product}
+          {gameName(game, t)} · {t("product", { id: product })}
         </p>
       </WidgetListItem>
     );
@@ -183,7 +212,7 @@ function CardRow({
           />
         </a>
       }
-      trailing={priceWindow && <PriceSparkline history={history} priceWindow={priceWindow} />}
+      trailing={priceWindow && <PriceSparkline history={history} priceWindow={priceWindow} locale={locale} />}
     >
       <div className="flex min-w-0 items-center gap-1.5">
         <a
@@ -200,13 +229,19 @@ function CardRow({
       {/* A flex gap spaces the separators `WidgetMetadata` puts between the prices, as the header's own description does. */}
       <p className="flex items-baseline gap-x-2 overflow-hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground">
         <span className="text-sm font-semibold text-primary">
-          <span className="sr-only">Trend </span>
-          {formatPrice(card.trend)}
+          <span className="sr-only">{t("price.trend")} </span>
+          {price(card.trend)}
         </span>
         <WidgetMetadata>
-          <span>Low {formatPrice(card.low)}</span>
+          <span>
+            {t("price.low")} {price(card.low)}
+          </span>
           {/* Most cards have no foil printing: a dash there would read as a missing price. */}
-          {card.trendFoil !== null && <span>Foil {formatPrice(card.trendFoil)}</span>}
+          {card.trendFoil !== null && (
+            <span>
+              {t("price.foil")} {price(card.trendFoil)}
+            </span>
+          )}
         </WidgetMetadata>
       </p>
     </WidgetListItem>
@@ -221,9 +256,17 @@ type TcgCollectorCardsCardProps = {
   serviceUrl: string;
   /** The placement's key, which its relayed images are addressed by. */
   placementKey: string;
+  locale: LocaleCode;
 };
 
-export function TcgCollectorCardsCard({ followed, days, serviceUrl, placementKey }: TcgCollectorCardsCardProps) {
+export function TcgCollectorCardsCard({
+  followed,
+  days,
+  serviceUrl,
+  placementKey,
+  locale,
+}: TcgCollectorCardsCardProps) {
+  const t = Translation.create(TcgCollectorMessages, locale);
   const latestDay = PriceCurve.latestDay(followed);
   const priceWindow = latestDay === undefined ? undefined : { days, lastDay: latestDay };
 
@@ -232,14 +275,12 @@ export function TcgCollectorCardsCard({ followed, days, serviceUrl, placementKey
       <WidgetHeader
         href={serviceUrl}
         icon={appearance.icon}
-        title={appearance.title}
+        title={t("title")}
         description={
           <WidgetMetadata>
-            <span>
-              {followed.length} {followed.length === 1 ? "card" : "cards"}
-            </span>
-            <span>{days} days</span>
-            {latestDay && <span>as of {formatDay(latestDay)}</span>}
+            <span>{t("cards", { count: followed.length })}</span>
+            <span>{t("days", { count: days })}</span>
+            {latestDay && <span>{t("asOf", { day: CardFormat.day(latestDay, locale) })}</span>}
           </WidgetMetadata>
         }
       />
@@ -254,6 +295,7 @@ export function TcgCollectorCardsCard({ followed, days, serviceUrl, placementKey
               priceWindow={priceWindow}
               serviceUrl={serviceUrl}
               placementKey={placementKey}
+              locale={locale}
             />
           ))}
         </WidgetList>
@@ -290,7 +332,13 @@ export const tcgCollectorCards = (
       }),
     );
   },
-  render: (followed, placementKey) => (
-    <TcgCollectorCardsCard followed={followed} days={days} serviceUrl={service.link} placementKey={placementKey} />
+  render: (followed, placementKey, locale) => (
+    <TcgCollectorCardsCard
+      followed={followed}
+      days={days}
+      serviceUrl={service.link}
+      placementKey={placementKey}
+      locale={locale}
+    />
   ),
 });

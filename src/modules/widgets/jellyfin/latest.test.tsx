@@ -73,6 +73,7 @@ describe("JellyfinLatestCard", () => {
   it("relays posters through Hangar and links the visitor to Jellyfin", () => {
     const html = renderToStaticMarkup(
       <JellyfinLatestCard
+        locale="en"
         counts={counts}
         items={items}
         serviceUrl="https://jellyfin.test.local"
@@ -87,6 +88,7 @@ describe("JellyfinLatestCard", () => {
   it("reads the library totals as a subtitle rather than a card of their own", () => {
     const html = renderToStaticMarkup(
       <JellyfinLatestCard
+        locale="en"
         counts={counts}
         items={items}
         serviceUrl="https://jellyfin.test.local"
@@ -103,6 +105,7 @@ describe("JellyfinLatestCard", () => {
   it("keeps the frame, without an <img>, for an item Jellyfin has no art for", () => {
     const html = renderToStaticMarkup(
       <JellyfinLatestCard
+        locale="en"
         counts={counts}
         items={[{ id: "s-1", imageId: undefined, title: "Drifters", subtitle: undefined }]}
         serviceUrl="https://jellyfin.test.local"
@@ -118,6 +121,7 @@ describe("JellyfinLatestCard", () => {
   it("says so when a library has nothing new", () => {
     const html = renderToStaticMarkup(
       <JellyfinLatestCard
+        locale="en"
         counts={counts}
         items={[]}
         serviceUrl="https://jellyfin.test.local"
@@ -163,7 +167,7 @@ describe("jellyfinLatest", () => {
     );
 
     const html = renderToStaticMarkup(
-      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget()}</>,
+      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget({ locale: "en" })}</>,
     );
 
     expect(urls(called)).toEqual([
@@ -189,7 +193,7 @@ describe("jellyfinLatest", () => {
     stub([{ Id: "u-2", Name: "thomas" }], many);
 
     const html = renderToStaticMarkup(
-      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget()}</>,
+      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget({ locale: "en" })}</>,
     );
 
     expect(cells(html)).toBe(10);
@@ -203,7 +207,7 @@ describe("jellyfinLatest", () => {
     stub([{ Id: "u-2", Name: "thomas" }], [episode("ep-1"), episode("ep-2")]);
 
     const html = renderToStaticMarkup(
-      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget()}</>,
+      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget({ locale: "en" })}</>,
     );
 
     expect(cells(html)).toBe(1);
@@ -213,7 +217,7 @@ describe("jellyfinLatest", () => {
     stub([{ Id: "u-1", Name: "someone-else" }], []);
 
     const html = renderToStaticMarkup(
-      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget()}</>,
+      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget({ locale: "en" })}</>,
     );
 
     expect(html).toContain("unavailable");
@@ -225,7 +229,7 @@ describe("jellyfinLatest", () => {
     const called = stub([{ Id: "u-2", Name: "thomas" }], []);
 
     const html = renderToStaticMarkup(
-      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget()}</>,
+      <>{await aWidget(jellyfinLatestDescriptor, jellyfinLatest(service, "thomas")).Widget({ locale: "en" })}</>,
     );
 
     expect(called[0]?.url).toBe("http://jellyfin:8096/Items/Counts");
@@ -238,7 +242,9 @@ describe("jellyfinLatest", () => {
 
   it("exposes a titled skeleton through the widget definition", () => {
     expect(
-      renderToStaticMarkup(<>{aWidget(jellyfinLatestDescriptor, jellyfinLatest(aService(), "thomas")).Skeleton()}</>),
+      renderToStaticMarkup(
+        <>{aWidget(jellyfinLatestDescriptor, jellyfinLatest(aService(), "thomas")).Skeleton({ locale: "en" })}</>,
+      ),
     ).toContain("Jellyfin");
   });
 });

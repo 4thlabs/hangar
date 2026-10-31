@@ -2,6 +2,7 @@ import { cn } from "cn";
 import { ExternalLinkIcon } from "lucide-react";
 import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
 import { RelativeTime } from "#libs/format";
+import { Locale, type LocaleCode } from "#libs/preferences";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import type { WidgetIcon } from "../config/config.ts";
 import { Units } from "./format.ts";
@@ -82,9 +83,19 @@ type WidgetMetricProps = Omit<ComponentProps<"div">, "title"> & {
   tone?: "default" | "destructive";
   /** A number is formatted here, so no caller has to remember to — and none can forget. */
   value: ReactNode;
+  /** The reader's language, which groups the thousands of a number value. */
+  locale: LocaleCode;
 };
 
-export function WidgetMetric({ className, detail, label, tone = "default", value, ...props }: WidgetMetricProps) {
+export function WidgetMetric({
+  className,
+  detail,
+  label,
+  tone = "default",
+  value,
+  locale,
+  ...props
+}: WidgetMetricProps) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-0", className)} {...props}>
       <dt className="text-xs font-medium uppercase leading-tight tracking-wide text-muted-foreground">{label}</dt>
@@ -94,7 +105,7 @@ export function WidgetMetric({ className, detail, label, tone = "default", value
           tone === "destructive" && "text-destructive",
         )}
       >
-        {typeof value === "number" ? Units.Integer.format(value) : value}
+        {typeof value === "number" ? Units.integer(value, locale) : value}
       </dd>
       {detail && <dd className="truncate text-xs leading-tight text-muted-foreground">{detail}</dd>}
     </div>
@@ -139,19 +150,19 @@ type WidgetTimeProps = {
   /** Passed by a card that takes its own `now`, so a test can pin the clock. */
   now?: number;
   /** `compact` writes `18h` rather than `18 hours ago`, for a row that has other things to say. */
-  style?: keyof typeof TIME_STYLES;
-};
-
-const TIME_STYLES = {
-  long: (at: number, now: number) => RelativeTime.format(at, now),
-  compact: (at: number, now: number) => RelativeTime.compact(at, now),
+  style?: "long" | "compact";
+  /** The reader's language. */
+  locale: LocaleCode;
 };
 
 /** A moment, as every widget's trailing column writes one. */
-export function WidgetTime({ at, style = "long", now = Date.now() }: WidgetTimeProps) {
+export function WidgetTime({ at, style = "long", now = Date.now(), locale }: WidgetTimeProps) {
+  const text =
+    style === "compact" ? RelativeTime.compact(at, now, locale) : RelativeTime.format(at, now, Locale.intlTag(locale));
+
   return (
     <time dateTime={new Date(at).toISOString()} className="shrink-0 text-xs text-muted-foreground">
-      {TIME_STYLES[style](at, now)}
+      {text}
     </time>
   );
 }

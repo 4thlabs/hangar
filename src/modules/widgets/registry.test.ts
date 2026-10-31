@@ -60,7 +60,7 @@ describe("WidgetRegistry", () => {
       { type: "frigate-events", column: 3 },
     ]);
 
-    const html = renderToStaticMarkup(await placement!.widget.Widget());
+    const html = renderToStaticMarkup(await placement!.widget.Widget({ locale: "en" }));
 
     expect(containerName).toHaveBeenCalledWith("frigate");
     expect(html).toContain("Frigate is unavailable");
@@ -73,7 +73,7 @@ describe("WidgetRegistry", () => {
       { type: "clock", column: 1 },
     ]);
 
-    await placement!.widget.Widget();
+    await placement!.widget.Widget({ locale: "en" });
 
     expect(containerName).not.toHaveBeenCalled();
   });

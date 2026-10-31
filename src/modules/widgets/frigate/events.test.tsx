@@ -44,6 +44,7 @@ describe("FrigateEventsCard", () => {
   it("renders Frigate statistics and recent events with public links", () => {
     const html = renderToStaticMarkup(
       <FrigateEventsCard
+        locale="en"
         events={events}
         stats={stats}
         serviceUrl="https://frigate.example.com"
@@ -67,6 +68,7 @@ describe("FrigateEventsCard", () => {
   it("renders the empty state when there are no recent events", () => {
     const html = renderToStaticMarkup(
       <FrigateEventsCard
+        locale="en"
         events={[]}
         stats={stats}
         serviceUrl="https://frigate.example.com"
@@ -102,7 +104,7 @@ describe("FrigateEventsCard", () => {
       }),
     );
 
-    const html = renderToStaticMarkup(<>{await Widget()}</>);
+    const html = renderToStaticMarkup(<>{await Widget({ locale: "en" })}</>);
 
     expect(called.every(request => request.url.startsWith("http://frigate:5000/api/"))).toBe(true);
     // The key the operator put in .env.global has to reach the request, not just the factory.
@@ -114,7 +116,7 @@ describe("FrigateEventsCard", () => {
 
   it("exposes a titled skeleton through the widget definition", () => {
     const { Skeleton } = aWidget(frigateEventsDescriptor, frigateEvents(aService()));
-    const html = renderToStaticMarkup(<Skeleton />);
+    const html = renderToStaticMarkup(<Skeleton locale="en" />);
 
     expect(html).toContain("Frigate");
     expect(html).toContain('aria-busy="true"');

@@ -37,7 +37,7 @@ const dashboard: Dashboard = {
 describe("ArcaneGeneralStatsCard", () => {
   it("renders the general Arcane metrics and their visible details", () => {
     const html = renderToStaticMarkup(
-      <ArcaneGeneralStatsCard dashboard={dashboard} serviceUrl="https://arcane.example.com" />,
+      <ArcaneGeneralStatsCard locale="en" dashboard={dashboard} serviceUrl="https://arcane.example.com" />,
     );
 
     expect(html).toContain("v2.18.1");
@@ -54,6 +54,7 @@ describe("ArcaneGeneralStatsCard", () => {
   it("renders an available update and action items", () => {
     const html = renderToStaticMarkup(
       <ArcaneGeneralStatsCard
+        locale="en"
         serviceUrl="https://arcane.example.com"
         dashboard={{
           ...dashboard,
@@ -77,7 +78,7 @@ describe("ArcaneGeneralStatsCard", () => {
 
   it("exposes a titled skeleton through the widget definition", () => {
     const { Skeleton } = aWidget(arcaneGeneralStatsDescriptor, arcaneGeneralStats(aService()));
-    const html = renderToStaticMarkup(<Skeleton />);
+    const html = renderToStaticMarkup(<Skeleton locale="en" />);
 
     expect(html).toContain("Arcane");
     expect(html).toContain('aria-busy="true"');

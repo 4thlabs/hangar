@@ -2,23 +2,29 @@
 
 import { cn } from "cn";
 import { useEffect, useState } from "react";
+import { Locale, type LocaleCode } from "#libs/preferences";
 import { WidgetCard, WidgetContent } from "../shared/index.ts";
 
-const timeFormatter = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
+/** How the clock writes the time, the month and the day, in the reader's language. */
+class ClockFormat {
+  static create(locale: LocaleCode) {
+    const tag = Locale.intlTag(locale);
 
-const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "long" });
-const weekdayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "long" });
+    return {
+      time: new Intl.DateTimeFormat(tag, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
+      month: new Intl.DateTimeFormat(tag, { month: "long" }),
+      weekday: new Intl.DateTimeFormat(tag, { weekday: "long" }),
+    };
+  }
+}
 
 /**
  * The module's only export: any export of a `"use client"` module reaches the server as a proxy, so the class name
  * comes in as a prop from `clock.tsx`.
  */
-export function ClockDisplay({ className }: { className?: string | undefined }) {
+export function ClockDisplay({ className, locale }: { className?: string | undefined; locale: LocaleCode }) {
   const [now, setNow] = useState<Date>(new Date());
+  const format = ClockFormat.create(locale);
 
   useEffect(() => {
     const updateClock = () => setNow(new Date());
@@ -35,7 +41,7 @@ export function ClockDisplay({ className }: { className?: string | undefined }) 
         <div className="flex flex-col gap-0">
           <p className="flex items-baseline gap-4 text-lg font-semibold">
             <span className="tabular-nums">{now.getDate()}</span>
-            <span>{monthFormatter.format(now)}</span>
+            <span>{format.month.format(now)}</span>
           </p>
           <p className="text-sm text-muted-foreground tabular-nums">{now.getFullYear()}</p>
         </div>
@@ -43,9 +49,9 @@ export function ClockDisplay({ className }: { className?: string | undefined }) 
         <div className="flex flex-col items-end gap-0">
           {/* Server and client times always differ by ms. */}
           <time className="text-lg font-semibold tabular-nums" dateTime={now.toISOString()} suppressHydrationWarning>
-            {timeFormatter.format(now)}
+            {format.time.format(now)}
           </time>
-          <p className="text-sm text-muted-foreground">{weekdayFormatter.format(now)}</p>
+          <p className="text-sm text-muted-foreground">{format.weekday.format(now)}</p>
         </div>
       </WidgetContent>
     </WidgetCard>

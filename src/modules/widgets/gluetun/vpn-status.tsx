@@ -1,17 +1,22 @@
 import { cn } from "cn";
+import { Translation } from "#libs/i18n";
+import type { LocaleCode } from "#libs/preferences";
 import type { WidgetService } from "../config/config.ts";
 import type { WidgetBody } from "../shared/define-widget.tsx";
 import { WidgetCard, WidgetContent, WidgetHeader } from "../shared/index.ts";
 import { GluetunClient, type GluetunPublicIp } from "./api/client.ts";
 import { gluetunVpnStatusDescriptor } from "./descriptor.ts";
+import { GluetunMessages } from "./messages.ts";
 
 const { appearance } = gluetunVpnStatusDescriptor;
 
 type GluetunVpnStatusCardProps = {
   publicIp: GluetunPublicIp;
+  locale: LocaleCode;
 };
 
-export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
+export function GluetunVpnStatusCard({ publicIp, locale }: GluetunVpnStatusCardProps) {
+  const t = Translation.create(GluetunMessages, locale);
   const { public_ip: address, city, country } = publicIp;
   // gluetun answers 200 with an empty address while the tunnel is down.
   const connected = address.length > 0;
@@ -19,13 +24,11 @@ export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
 
   return (
     <WidgetCard className={appearance.className}>
-      <WidgetHeader bordered icon={appearance.icon} title={appearance.title} />
+      <WidgetHeader bordered icon={appearance.icon} title={t("title")} />
 
       <WidgetContent className="flex flex-col gap-1">
         <p className="flex items-center gap-2 font-medium">
-          <span className={cn(!connected && "text-destructive")}>
-            Your VPN is {connected ? "connected" : "not connected"}!
-          </span>
+          <span className={cn(!connected && "text-destructive")}>{connected ? t("connected") : t("disconnected")}</span>
           {/* Decorative: the sentence says the same. */}
           <span
             aria-hidden="true"
@@ -47,5 +50,5 @@ export function GluetunVpnStatusCard({ publicIp }: GluetunVpnStatusCardProps) {
 /** Whether the tunnel is up, and where it comes out. No header link: gluetun has no web page. */
 export const gluetunVpnStatus = (service: WidgetService): WidgetBody<GluetunPublicIp> => ({
   load: async () => (await GluetunClient.connect(service)).getPublicIp(),
-  render: publicIp => <GluetunVpnStatusCard publicIp={publicIp} />,
+  render: (publicIp, _placementKey, locale) => <GluetunVpnStatusCard publicIp={publicIp} locale={locale} />,
 });

@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from "#modules/common/hooks/use-translation.ts"
+import { CommonMessages } from "#modules/common/messages.ts"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { cn } from "cn"
 
@@ -74,7 +76,7 @@ function DialogContent({
           >
             <XIcon
             />
-            <span className="sr-only">Close</span>
+            <CloseLabel />
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
@@ -159,4 +161,11 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
+}
+
+/** The close button's name for a screen reader, in the reader's language. */
+function CloseLabel() {
+  const { t } = useTranslation(CommonMessages)
+
+  return <span className="sr-only">{t("ui.close")}</span>
 }

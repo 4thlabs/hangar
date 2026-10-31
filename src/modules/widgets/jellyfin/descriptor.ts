@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { describeWidget, WidgetIcon, WidgetSchema } from "../config/config.ts";
+import { JellyfinMessages } from "./messages.ts";
 
 /** The library's totals and what landed in it last, with posters relayed through Hangar. */
 export const jellyfinLatestDescriptor = describeWidget({
@@ -9,10 +10,9 @@ export const jellyfinLatestDescriptor = describeWidget({
   }),
   app: "jellyfin",
   appearance: {
-    title: "Jellyfin",
+    messages: JellyfinMessages,
     icon: WidgetIcon.dashboard("jellyfin"),
     className: "min-h-64",
-    errorDescription: "The Jellyfin library could not be loaded.",
   },
   module: () => import("./latest.tsx"),
   create: ({ jellyfinLatest }, config, service) => jellyfinLatest(service(), config.user),
