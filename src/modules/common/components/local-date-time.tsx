@@ -1,6 +1,8 @@
 "use client";
 
+import { Locale } from "#libs/preferences";
 import { useInBrowser } from "#modules/common/hooks/use-in-browser.ts";
+import { useLocale } from "#modules/common/hooks/use-translation.ts";
 
 /** How a moment is written. */
 class LocalTime {
@@ -16,12 +18,13 @@ class LocalTime {
 }
 
 /**
- * A moment, written in the reader's time zone. The server only knows its own: it writes the moment
+ * A moment, written in the reader's time zone and language. The server only knows its own: it writes the moment
  * in UTC, saying so, and the browser rewrites it in its own zone once hydrated, without a mismatch.
  * @param value `null` writes a dash
  */
 export function LocalDateTime({ value }: { value: Date | string | null }) {
   const inBrowser = useInBrowser();
+  const locale = useLocale();
 
   if (value === null) {
     return "—";
@@ -30,5 +33,9 @@ export function LocalDateTime({ value }: { value: Date | string | null }) {
   const date = new Date(value);
   const zone: Intl.DateTimeFormatOptions = inBrowser ? {} : { timeZone: "UTC", timeZoneName: "short" };
 
-  return <time dateTime={date.toISOString()}>{date.toLocaleString("fr-FR", { ...LocalTime.Fields, ...zone })}</time>;
+  return (
+    <time dateTime={date.toISOString()}>
+      {date.toLocaleString(Locale.intlTag(locale), { ...LocalTime.Fields, ...zone })}
+    </time>
+  );
 }

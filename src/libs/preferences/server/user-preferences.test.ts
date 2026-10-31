@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Locale } from "../locale.ts";
 import { Theme } from "../theme.ts";
 import { UserPreferencesStore } from "./user-preferences.ts";
 
@@ -7,6 +8,7 @@ describe("UserPreferencesStore", () => {
     expect(UserPreferencesStore.parse("")).toEqual({
       theme: "system",
       themePalette: "claude",
+      locale: "en",
     });
   });
 
@@ -14,6 +16,7 @@ describe("UserPreferencesStore", () => {
     expect(UserPreferencesStore.parse("theme=dark; theme_palette=nord")).toEqual({
       theme: "dark",
       themePalette: "nord",
+      locale: "en",
     });
   });
 
@@ -22,19 +25,24 @@ describe("UserPreferencesStore", () => {
     expect(UserPreferencesStore.parse(`theme_palette=${palette}`).themePalette).toBe(palette);
   });
 
-  it.each(Theme.ColorModes.map(mode => mode.value))("accepts the %s color mode", mode => {
+  it.each(Theme.ColorModes)("accepts the %s color mode", mode => {
     expect(UserPreferencesStore.parse(`theme=${mode}`).theme).toBe(mode);
   });
 
+  it.each(Locale.Locales.map(locale => locale.value))("accepts the %s locale", locale => {
+    expect(UserPreferencesStore.parse(`locale=${locale}`).locale).toBe(locale);
+  });
+
   it("ignores invalid preference values", () => {
-    expect(UserPreferencesStore.parse("theme=blue; theme_palette=unknown")).toEqual({
+    expect(UserPreferencesStore.parse("theme=blue; theme_palette=unknown; locale=de")).toEqual({
       theme: "system",
       themePalette: "claude",
+      locale: "en",
     });
   });
 
   it("exposes preferences only within the intercepted request", async () => {
-    const preferences = { theme: "light", themePalette: "nord" } as const;
+    const preferences = { theme: "light", themePalette: "nord", locale: "fr" } as const;
 
     const store = new UserPreferencesStore();
 
@@ -45,6 +53,7 @@ describe("UserPreferencesStore", () => {
     expect(store.get()).toEqual({
       theme: "system",
       themePalette: "claude",
+      locale: "en",
     });
   });
 });

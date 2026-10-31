@@ -8,8 +8,8 @@ import { terminalStream } from "#app/api/terminal-stream.ts";
 export const POST = apiRoute<ApiContext<"/api/docker/apps/[project]/containers/[container]/terminal">>(
   {
     log: "Failed to open a container terminal",
-    unavailable: "Le terminal est indisponible.",
-    notFound: "Ce conteneur n’existe plus.",
+    unavailable: "terminal",
+    notFound: "container",
   },
   async (request, { params }, session) =>
     terminalStream(request, async (size, signal) => {

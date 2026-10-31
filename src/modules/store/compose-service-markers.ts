@@ -3,19 +3,22 @@ import { RangeSetBuilder, StateEffect, StateField, type EditorState, type Extens
 import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemirror/view";
 import { cn } from "cn";
 import type { ComposeService } from "#libs/docker";
-import { formatBytes, formatPercent } from "#modules/apps/format.ts";
+import { Translation } from "#libs/i18n";
+import type { LocaleCode } from "#libs/preferences";
+import { MetricFormat } from "#modules/apps/format.ts";
 import type { ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import type { ProjectServices } from "#modules/apps/project-services.ts";
 import { StatusDot, type ServiceTone } from "#modules/apps/status.ts";
+import { StoreMessages } from "#modules/store/messages.ts";
 
 /** The status drawn at the end of a service's key line. */
 export type ServiceMarker = { tone: ServiceTone; label: string };
 
 /**
- * The markers by service name, or `null` while Docker tells nothing: no marker at all then, rather than a
- * « non créé » on every service of an app that may well be running.
+ * The markers by service name, and the one of a service with no container, or `null` while Docker tells nothing:
+ * no marker at all then, rather than a "not created" on every service of an app that may well be running.
  */
-export type ServiceMarkers = ReadonlyMap<string, ServiceMarker> | null;
+export type ServiceMarkers = { byService: ReadonlyMap<string, ServiceMarker>; missing: ServiceMarker } | null;
 
 /** A service declared under `services:`, and where its key starts. */
 export type ComposeServiceKey = { name: string; from: number };
@@ -83,8 +86,6 @@ export class ComposeServiceMarkers {
   /** Replaces the markers with a new reading of Docker. */
   static readonly update = StateEffect.define<ServiceMarkers>();
 
-  private static readonly Missing: ServiceMarker = { tone: "missing", label: "non créé" };
-
   /** How long a jump may spend parsing the rest of the file, in milliseconds: a compose file takes far less. */
   private static readonly RevealParseBudget = 100;
 
@@ -108,21 +109,28 @@ export class ComposeServiceMarkers {
   }
 
   /**
-   * The markers for what Docker read: each service's containers running, its CPU and its memory. None before the
-   * first reading.
+   * The markers for what Docker read: each service's containers running, its CPU and its memory, in the reader's
+   * language. None before the first reading.
    */
-  static create(services: ProjectServices | null, stats: ContainerStats): ServiceMarkers {
+  static create(services: ProjectServices | null, stats: ContainerStats, locale: LocaleCode): ServiceMarkers {
     if (services === null || services.state === "unavailable") {
       return null;
     }
 
+    const missing: ServiceMarker = {
+      tone: "missing",
+      label: Translation.create(StoreMessages, locale)("editor.notCreated"),
+    };
+
     if (services.state === "absent") {
-      return new Map();
+      return { byService: new Map(), missing };
     }
 
-    return new Map(
-      services.detail.services.map(service => [service.name, ComposeServiceMarkers.marker(service, stats)]),
+    const byService = new Map(
+      services.detail.services.map(service => [service.name, ComposeServiceMarkers.marker(service, stats, locale)]),
     );
+
+    return { byService, missing };
   }
 
   /** The services declared at the top level of a compose file, in the order they are written. */
@@ -178,7 +186,7 @@ export class ComposeServiceMarkers {
     const builder = new RangeSetBuilder<Decoration>();
 
     for (const key of ComposeServiceMarkers.serviceKeys(state)) {
-      const marker = markers.get(key.name) ?? ComposeServiceMarkers.Missing;
+      const marker = markers.byService.get(key.name) ?? markers.missing;
       const lineEnd = state.doc.lineAt(key.from).to;
       const widget = new ServiceMarkerWidget(key.name, marker, onSelect);
 
@@ -188,7 +196,7 @@ export class ComposeServiceMarkers {
     return builder.finish();
   }
 
-  private static marker(service: ComposeService, stats: ContainerStats): ServiceMarker {
+  private static marker(service: ComposeService, stats: ContainerStats, locale: LocaleCode): ServiceMarker {
     const count = `${service.runningCount}/${service.containers.length}`;
     const metrics = service.containers.flatMap(container => stats[container.id] ?? []);
 
@@ -200,12 +208,14 @@ export class ComposeServiceMarkers {
     const cpu = ComposeServiceMarkers.sum(metrics.map(metric => metric.cpuPercent));
     const memory = ComposeServiceMarkers.sum(metrics.map(metric => metric.memoryUsage));
 
-    return { tone: service.status, label: `${count} · ${formatPercent(cpu)} · ${formatBytes(memory)}` };
+    const metricsLabel = `${MetricFormat.percent(cpu, locale)} · ${MetricFormat.bytes(memory, locale)}`;
+
+    return { tone: service.status, label: `${count} · ${metricsLabel}` };
   }
 
   /**
    * The total of the values known, `null` when none is: the first frame of a stream reads the CPU as unknown, and
-   * it must show as « — », not as « 0.0 % ».
+   * it must show as "—", not as "0.0%".
    */
   private static sum(values: (number | null)[]) {
     const known = values.filter(value => value !== null);

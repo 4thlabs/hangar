@@ -1,6 +1,7 @@
 import { Job } from "sidequest";
 import type { ImageUpdateReport } from "#libs/docker";
 import { logger } from "#libs/logs";
+import { NotificationText } from "#modules/notifications/notification-text.ts";
 import type { CreateJobServices } from "../services.ts";
 import { createWorkerServices } from "../worker.ts";
 
@@ -37,8 +38,7 @@ export class CheckImageVersion extends Job {
     if (outdated.size > 0) {
       await notifications.notify({
         level: "info",
-        title: "Mises à jour disponibles",
-        description: `${outdated.size} application${outdated.size > 1 ? "s ont" : " a"} une image plus récente en registre.`,
+        message: NotificationText.create("updatesAvailable", { count: outdated.size }),
         href: "/apps",
         dedupeKey: "image-updates",
       });

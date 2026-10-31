@@ -3,11 +3,9 @@
 import { useState, useTransition } from "react";
 import type { ActionResult } from "#modules/common/actions/action-result.ts";
 import { useServerAction } from "#modules/common/hooks/use-server-action.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import type { AppFileResult, SaveAppFileResult } from "#modules/store/actions/manage-app.ts";
-
-const SAVE_TITLES = { success: "Fichier enregistré", error: "Fichier refusé" };
-const CREATE_TITLES = { success: "Fichier créé", error: "Fichier refusé" };
-const READ_FAILED = "Impossible de lire ce fichier. Réessayez.";
+import { StoreMessages } from "#modules/store/messages.ts";
 
 export type AppFilesOptions = {
   id: string;
@@ -28,6 +26,7 @@ export type AppFilesOptions = {
  */
 export function useAppFiles({ id, files, initialFile, readFile, saveFile, createFile, onSaved }: AppFilesOptions) {
   const { run, isPending } = useServerAction();
+  const { t } = useTranslation(StoreMessages);
   const [isLoading, startLoading] = useTransition();
   const [paths, setPaths] = useState(files);
   const [selectedPath, setSelectedPath] = useState(initialFile.path);
@@ -80,7 +79,7 @@ export function useAppFiles({ id, files, initialFile, readFile, saveFile, create
         remember(relativePath, result.source);
       } catch (readError) {
         console.error("Reading an app file failed", readError);
-        setError(relativePath, READ_FAILED);
+        setError(relativePath, t("editor.readFailed"));
       }
     });
   };
@@ -97,7 +96,7 @@ export function useAppFiles({ id, files, initialFile, readFile, saveFile, create
 
     run(
       () => saveFile(id, relativePath, source),
-      SAVE_TITLES,
+      { success: t("editor.fileSaved"), error: t("editor.fileRejected") },
       settleWrite(relativePath, result => {
         setSavedSources(current => ({ ...current, [relativePath]: source }));
         onSaved(result);
@@ -115,7 +114,7 @@ export function useAppFiles({ id, files, initialFile, readFile, saveFile, create
 
     run(
       () => createFile(id, relativePath),
-      CREATE_TITLES,
+      { success: t("editor.fileCreated"), error: t("editor.fileRejected") },
       // Until it exists, the new file has no editor to show a refusal under: the open file's does.
       settleWrite(selectedPath, () => {
         setPaths(current => [...current, relativePath].sort());

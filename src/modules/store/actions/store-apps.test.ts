@@ -103,6 +103,6 @@ describe("uninstallApp", () => {
     const result = await uninstallApp("whoami");
 
     expect(result).toMatchObject({ success: true, installed: false });
-    expect(result.message).toContain("supprimez-la depuis un manager");
+    expect(result.message).toContain("remove it from a manager");
   });
 });

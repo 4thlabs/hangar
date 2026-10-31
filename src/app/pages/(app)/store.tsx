@@ -2,27 +2,30 @@ import { PlusIcon } from "lucide-react";
 import { Link } from "waku";
 import type { PageProps } from "waku/router";
 import { hangar } from "#libs/hangar/server";
+import { ServerTranslation } from "#libs/i18n/server";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { installApp, uninstallApp } from "#modules/store/actions/store-apps.ts";
 import { StoreAppCard } from "#modules/store/components/store-app-card.tsx";
 import { StoreFilterMenu } from "#modules/store/components/store-filter-menu.tsx";
 import { StoreCatalog } from "#modules/store/listing.ts";
+import { StoreMessages } from "#modules/store/messages.ts";
 import { storeSearchCodec } from "#modules/store/search-codec.ts";
 
 export default function StorePage({ search }: PageProps<"/store">) {
   const all = [...hangar.store.apps];
   const { apps, counts } = StoreCatalog.list(all, search);
+  const { t } = ServerTranslation.get(StoreMessages);
 
   return (
     <main>
-      <title>Store | Hangar</title>
+      <title>{`${t("title")} | Hangar`}</title>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Store</h1>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
         <div className="flex items-center gap-2">
           <StoreFilterMenu counts={counts} />
           <Link to="/store/new" className={buttonVariants({ variant: "outline" })}>
             <PlusIcon data-icon="inline-start" />
-            Nouvelle app
+            {t("newAppTitle")}
           </Link>
         </div>
       </div>
@@ -33,11 +36,7 @@ export default function StorePage({ search }: PageProps<"/store">) {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">
-          {all.length === 0
-            ? "Aucune application disponible dans le store."
-            : "Aucune application ne correspond à cette recherche."}
-        </p>
+        <p className="text-sm text-muted-foreground">{all.length === 0 ? t("noApps") : t("noMatchingApps")}</p>
       )}
     </main>
   );

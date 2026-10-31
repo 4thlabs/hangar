@@ -1,7 +1,8 @@
 /** One tab of the settings page. */
 export type SettingsTabId = "store" | "env" | "config" | "jobs" | "hangar";
 
-type SettingsTabEntry = { id: SettingsTabId; label: string };
+/** A tab; its label is `tabs.<id>` in `SettingsMessages`. */
+type SettingsTabEntry = { id: SettingsTabId };
 
 /**
  * The tabs of `/settings`, and the URL hash that opens each one. A hash rather than a query: switching tabs
@@ -10,11 +11,11 @@ type SettingsTabEntry = { id: SettingsTabId; label: string };
 export class SettingsTab {
   /** In the order the page lists them; the first one opens when the hash names none. */
   static readonly All: readonly SettingsTabEntry[] = [
-    { id: "store", label: "Store" },
-    { id: "env", label: "Environnement" },
-    { id: "config", label: "Configuration" },
-    { id: "jobs", label: "Jobs" },
-    { id: "hangar", label: "Hangar" },
+    { id: "store" },
+    { id: "env" },
+    { id: "config" },
+    { id: "jobs" },
+    { id: "hangar" },
   ];
 
   /** The tab a URL hash names, with or without its `#`; the first tab for any other hash. */

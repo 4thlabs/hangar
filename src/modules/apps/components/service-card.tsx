@@ -1,7 +1,8 @@
 import type { ComposeService } from "#libs/docker";
-import { s } from "#modules/apps/format.ts";
 import type { ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { statusLabel, statusVariant } from "#modules/apps/status.ts";
+import { AppsMessages } from "#modules/apps/messages.ts";
+import { statusVariant } from "#modules/apps/status.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { ContainerTable } from "./container-table.tsx";
@@ -9,17 +10,19 @@ import { ContainerTable } from "./container-table.tsx";
 type ServiceCardProps = { project: string; service: ComposeService; stats: ContainerStats };
 
 export function ServiceCard({ project, service, stats }: ServiceCardProps) {
+  const { t } = useTranslation(AppsMessages);
+  const unhealthy = service.unhealthyCount > 0 ? ` · ${t("service.unhealthy", { count: service.unhealthyCount })}` : "";
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>{service.name}</CardTitle>
         <CardDescription>
-          {service.runningCount}/{service.containers.length} conteneur{s(service.containers.length)} actif
-          {s(service.runningCount)}
-          {service.unhealthyCount > 0 ? ` · ${service.unhealthyCount} unhealthy` : ""}
+          {t("service.containers", { running: service.runningCount, total: service.containers.length })}
+          {unhealthy}
         </CardDescription>
         <CardAction>
-          <Badge variant={statusVariant(service.status)}>{statusLabel[service.status]}</Badge>
+          <Badge variant={statusVariant(service.status)}>{t(`status.${service.status}`)}</Badge>
         </CardAction>
       </CardHeader>
       <CardContent className="px-0">

@@ -2,10 +2,11 @@
 
 import { useSearch_UNSTABLE, useSetSearch_UNSTABLE } from "waku/router/client";
 import type { SwarmNode } from "#libs/docker";
-import { ClusterLabels } from "#modules/cluster/labels.ts";
+import { ClusterMessages } from "#modules/cluster/messages.ts";
 import { ClusterSearch, type StackHealth, type StackOrigin } from "#modules/cluster/search.ts";
 import type { StackFilterCounts } from "#modules/cluster/stack-filter.ts";
 import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 
 type StackFiltersProps = {
   nodes: SwarmNode[];
@@ -17,21 +18,22 @@ type StackFiltersProps = {
 export function StackFilters({ nodes, counts }: StackFiltersProps) {
   const search = useSearch_UNSTABLE({ from: "/cluster" });
   const setSearch = useSetSearch_UNSTABLE({ from: "/cluster" });
+  const { t } = useTranslation(ClusterMessages);
 
   return (
     <>
       <CheckboxFilterMenu
-        label="Origine"
+        label={t("filters.origin")}
         options={ClusterSearch.Origins.map(origin => ({
           value: origin,
-          label: ClusterLabels.Origin[origin],
+          label: t(`origin.${origin}`),
           count: counts.origin[origin] ?? 0,
         }))}
         selected={search?.origin ?? []}
         onChange={origin => void setSearch({ origin: origin as StackOrigin[] })}
       />
       <CheckboxFilterMenu
-        label="Nœud"
+        label={t("filters.node")}
         options={nodes.map(node => ({
           value: node.hostname,
           label: node.hostname,
@@ -41,10 +43,10 @@ export function StackFilters({ nodes, counts }: StackFiltersProps) {
         onChange={node => void setSearch({ node })}
       />
       <CheckboxFilterMenu
-        label="Santé"
+        label={t("filters.health")}
         options={ClusterSearch.Healths.map(health => ({
           value: health,
-          label: ClusterLabels.HealthShort[health],
+          label: t(`health.${health}`),
           count: counts.health[health] ?? 0,
         }))}
         selected={search?.health ?? []}

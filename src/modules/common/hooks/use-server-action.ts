@@ -3,6 +3,8 @@
 import { useTransition } from "react";
 import type { ActionResult } from "#modules/common/actions/action-result.ts";
 import { ActionToast } from "#modules/common/components/action-toast.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
+import { CommonMessages } from "#modules/common/messages.ts";
 import { toast } from "#modules/common/ui/toast.tsx";
 
 type ActionToastTitles = {
@@ -17,6 +19,7 @@ type ActionToastTitles = {
  * not a failed operation, and gets its own wording.
  */
 export function useServerAction() {
+  const { t } = useTranslation(CommonMessages);
   const [isPending, startTransition] = useTransition();
 
   /** `onSettled` runs after the toast, whether the action succeeded, failed or never returned. */
@@ -34,7 +37,7 @@ export function useServerAction() {
       } catch (error) {
         // The toast only says the request failed; the cause is for whoever opens the console.
         console.error("Server action failed", error);
-        toast.add(ActionToast.transportError(titles.error, titles.transport));
+        toast.add(ActionToast.transportError(titles.error, titles.transport ?? t("actions.transportError")));
       }
 
       await onSettled?.(result);

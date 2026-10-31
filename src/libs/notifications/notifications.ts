@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, inArray, isNull, notInArray, sql, type AnyRelations } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { notification, user, type Notification } from "#libs/db";
+import { notification, user, type Notification, type NotificationMessage } from "#libs/db";
 import { logger } from "#libs/logs";
 
 export type NotificationLevel = Notification["level"];
@@ -9,8 +9,8 @@ export type NotificationInput = {
   /** Recipient. Omitted, the notification fans out to every account. */
   userId?: string;
   level?: NotificationLevel;
-  title: string;
-  description?: string;
+  /** What it says, rendered in the reader's language when shown. */
+  message: NotificationMessage;
   /** Where clicking the notification goes, e.g. `/apps/immich`. */
   href?: string;
   /** Replaces this recipient's previous notification carrying the same key. */
@@ -27,6 +27,9 @@ export type NotificationInput = {
 export type NotificationPayload = {
   id: string;
   level: NotificationLevel;
+  /** What it says, for the browser to render in the reader's language; `null` on a row filed before messages. */
+  message: NotificationMessage | null;
+  /** The words of a row filed before messages, shown as they are. */
   title: string;
   description: string | null;
   href: string | null;
@@ -95,8 +98,9 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
         await this.db.insert(notification).values({
           userId,
           level: input.level ?? "info",
-          title: input.title,
-          description: input.description ?? null,
+          // The key, not words: the row has no language, and the logs and the database read it this way.
+          title: input.message.key,
+          message: input.message,
           href: input.href ?? null,
           dedupeKey: input.dedupeKey ?? null,
           seenAt: input.seen ? now : null,
@@ -106,7 +110,7 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
         await this.purge(userId);
       }
     } catch (error) {
-      logger.error("Failed to record a notification", { error, title: input.title });
+      logger.error("Failed to record a notification", { error, key: input.message.key });
     }
   }
 
@@ -220,6 +224,7 @@ export class Notifications<TRelations extends AnyRelations = AnyRelations> {
     return {
       id: row.id,
       level: row.level,
+      message: row.message,
       title: row.title,
       description: row.description,
       href: row.href,

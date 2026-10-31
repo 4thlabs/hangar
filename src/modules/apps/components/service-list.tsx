@@ -3,10 +3,12 @@ import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import type { ComposeService } from "#libs/docker";
 import { ContainerStatus } from "#modules/apps/components/container-status.tsx";
 import { ContainerStreamButton } from "#modules/apps/components/container-stream-button.tsx";
-import { formatBytes, formatPercent } from "#modules/apps/format.ts";
+import { MetricFormat } from "#modules/apps/format.ts";
 import { EMPTY_METRICS, type ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
+import { AppsMessages } from "#modules/apps/messages.ts";
 import type { ProjectServices } from "#modules/apps/project-services.ts";
-import { StatusDot, statusLabel } from "#modules/apps/status.ts";
+import { StatusDot } from "#modules/apps/status.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 
 type ServiceListProps = {
   project: string;
@@ -20,14 +22,16 @@ type ServiceListProps = {
 
 /** An app's services and their live state, each unfolding into its containers with their logs or console. */
 export function ServiceList({ project, services, stats, expandedService, onSelect }: ServiceListProps) {
+  const { t } = useTranslation(AppsMessages);
+
   return (
-    <section aria-label="Services de l’app" className="flex flex-col gap-1 rounded-lg border border-input p-1.5">
-      <p className="px-2 pt-1 text-xs font-medium text-muted-foreground">Services</p>
-      {services === null && <p className="px-2 pb-1 text-sm text-muted-foreground">Lecture de Docker…</p>}
-      {services?.state === "unavailable" && <p className="px-2 pb-1 text-sm text-destructive">Docker indisponible.</p>}
-      {services?.state === "absent" && (
-        <p className="px-2 pb-1 text-sm text-muted-foreground">Aucun conteneur : l’app n’est pas démarrée.</p>
+    <section aria-label={t("service.listLabel")} className="flex flex-col gap-1 rounded-lg border border-input p-1.5">
+      <p className="px-2 pt-1 text-xs font-medium text-muted-foreground">{t("service.list")}</p>
+      {services === null && <p className="px-2 pb-1 text-sm text-muted-foreground">{t("service.reading")}</p>}
+      {services?.state === "unavailable" && (
+        <p className="px-2 pb-1 text-sm text-destructive">{t("service.unavailable")}</p>
       )}
+      {services?.state === "absent" && <p className="px-2 pb-1 text-sm text-muted-foreground">{t("service.absent")}</p>}
       {services?.state === "loaded" && (
         <ul className="flex flex-col">
           {services.detail.services.map(service => (
@@ -55,6 +59,7 @@ type ServiceRowProps = {
 };
 
 function ServiceRow({ project, service, stats, isExpanded, onSelect }: ServiceRowProps) {
+  const { t, locale } = useTranslation(AppsMessages);
   const Chevron = isExpanded ? ChevronDownIcon : ChevronRightIcon;
 
   return (
@@ -62,7 +67,7 @@ function ServiceRow({ project, service, stats, isExpanded, onSelect }: ServiceRo
       <button
         type="button"
         aria-expanded={isExpanded}
-        title={statusLabel[service.status]}
+        title={t(`status.${service.status}`)}
         className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left font-mono text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [&_svg]:size-3.5 [&_svg]:shrink-0"
         onClick={onSelect}
       >
@@ -89,8 +94,8 @@ function ServiceRow({ project, service, stats, isExpanded, onSelect }: ServiceRo
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground tabular-nums">
-                  <span>{formatPercent(metrics.cpuPercent)}</span>
-                  <span>{formatBytes(metrics.memoryUsage)}</span>
+                  <span>{MetricFormat.percent(metrics.cpuPercent, locale)}</span>
+                  <span>{MetricFormat.bytes(metrics.memoryUsage, locale)}</span>
                   <span className="ml-auto">
                     <ContainerStreamButton project={project} container={container} />
                   </span>

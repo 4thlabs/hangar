@@ -14,11 +14,13 @@ import { StackTable } from "#modules/cluster/components/stack-table.tsx";
 import { SwarmSetup } from "#modules/cluster/components/swarm-setup.tsx";
 import { TokensDialog } from "#modules/cluster/components/tokens-dialog.tsx";
 import { ClusterLabels } from "#modules/cluster/labels.ts";
+import { ClusterMessages } from "#modules/cluster/messages.ts";
 import type { ClusterSearchState, StackSortColumn } from "#modules/cluster/search.ts";
 import { StackFilter } from "#modules/cluster/stack-filter.ts";
 import { AutoReload } from "#modules/common/components/auto-reload.tsx";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { useRouteRefresh } from "#modules/common/hooks/use-route-refresh.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
 import { TableSort } from "#modules/common/table-sort.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -35,6 +37,7 @@ type ClusterOverviewProps = { search: ClusterSearchState } & (
 
 export function ClusterOverview(props: ClusterOverviewProps) {
   const { refresh, isRefreshing } = useRouteRefresh();
+  const { t } = useTranslation(ClusterMessages);
   const [openStack, setOpenStack] = useState<string | null>(null);
   const cluster = "cluster" in props ? props.cluster : null;
   const manager = cluster?.state === "manager" ? cluster : null;
@@ -50,9 +53,9 @@ export function ClusterOverview(props: ClusterOverviewProps) {
       <AutoReload seconds={SwarmRules.RefreshMs / 1_000} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Cluster</h1>
+          <h1 className="text-2xl font-semibold">{t("title")}</h1>
           <p className="text-sm text-muted-foreground">
-            {manager ? ClusterLabels.summary(manager) : "Le cluster Swarm dont ce serveur fait partie."}
+            {manager ? ClusterLabels.summary(manager, t) : t("description")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -61,22 +64,22 @@ export function ClusterOverview(props: ClusterOverviewProps) {
             type="button"
             variant="outline"
             pending={isRefreshing}
-            pendingLabel="Actualiser"
+            pendingLabel={t("refresh")}
             icon={<RefreshCwIcon data-icon="inline-start" />}
             onClick={() => void refresh()}
           >
-            Actualiser
+            {t("refresh")}
           </PendingButton>
         </div>
       </div>
 
       {"error" in props && (
         <Alert variant="destructive">
-          <AlertTitle>Swarm indisponible</AlertTitle>
+          <AlertTitle>{t("unavailableTitle")}</AlertTitle>
           <AlertDescription>{props.error}</AlertDescription>
           <AlertAction>
             <Button type="button" variant="outline" size="sm" onClick={() => void refresh()}>
-              Réessayer
+              {t("retry")}
             </Button>
           </AlertAction>
         </Alert>
@@ -93,7 +96,7 @@ export function ClusterOverview(props: ClusterOverviewProps) {
       {manager && (
         <section className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">Stacks</h2>
+            <h2 className="text-lg font-semibold">{t("stacks")}</h2>
             <div className="flex flex-wrap items-center gap-2">
               <StackFilters nodes={manager.nodes} counts={StackFilter.counts(stacks, manageableStacks)} />
             </div>
@@ -123,15 +126,11 @@ export function ClusterOverview(props: ClusterOverviewProps) {
 
 /** The stack table, or why it has no row: no stack at all, or none the filters keep. */
 function StackTableOrEmpty({ total, ...table }: ComponentProps<typeof StackTable> & { total: number }) {
+  const { t } = useTranslation(ClusterMessages);
+
   if (table.stacks.length > 0) {
     return <StackTable {...table} />;
   }
 
-  return (
-    <p className="text-sm text-muted-foreground">
-      {total === 0
-        ? "Aucune stack, ni app installée prête pour le swarm."
-        : "Aucune stack ne correspond à ces filtres."}
-    </p>
-  );
+  return <p className="text-sm text-muted-foreground">{total === 0 ? t("noStacks") : t("noMatchingStacks")}</p>;
 }

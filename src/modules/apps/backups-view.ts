@@ -1,4 +1,5 @@
-import { plural, s } from "#modules/apps/format.ts";
+import type { Translate } from "#libs/i18n";
+import type { AppsMessages } from "#modules/apps/messages.ts";
 
 /** The app's `backups` entry, as far as its page tells it. */
 export type BackupSchedule = {
@@ -20,14 +21,14 @@ export class BackupsView {
    * One line on when and how the app is backed up.
    * @param schedule `null` when hangar.yml no longer declares a backup for the app
    */
-  static summary(schedule: BackupSchedule | null) {
+  static summary(schedule: BackupSchedule | null, t: Translate<typeof AppsMessages.en>) {
     if (!schedule) {
-      return "hangar.yml ne déclare plus de sauvegarde pour cette application.";
+      return t("backups.undeclared");
     }
 
-    const when = schedule.cron ? `Planifiée : ${schedule.cron}` : "Manuelle uniquement";
-    const kept = `${plural(schedule.keep, "archive")} conservée${s(schedule.keep)}`;
-    const stop = schedule.stop ? " · arrêtée pendant la sauvegarde" : "";
+    const when = schedule.cron ? t("backups.scheduled", { cron: schedule.cron }) : t("backups.manualOnly");
+    const kept = t("backups.kept", { count: schedule.keep });
+    const stop = schedule.stop ? ` · ${t("backups.stopped")}` : "";
 
     return `${when} · ${kept}${stop}`;
   }

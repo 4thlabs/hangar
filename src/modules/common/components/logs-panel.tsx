@@ -4,10 +4,13 @@ import { EraserIcon } from "lucide-react";
 import { useRef, useState, type UIEvent } from "react";
 import { StreamOutput, StreamReconnectButton, StreamStatusBadge } from "#modules/common/components/stream-output.tsx";
 import { useStreamText } from "#modules/common/hooks/use-stream-text.ts";
+import { useTranslation } from "#modules/common/hooks/use-translation.ts";
+import { CommonMessages } from "#modules/common/messages.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 
 /** The followed logs of a sheet and their toolbar; a new mount, as when the sheet opens, starts from the tail. */
 export function LogsPanel({ endpoint }: { endpoint: string }) {
+  const { t } = useTranslation(CommonMessages);
   const [following, setFollowing] = useState(true);
   const { text: logs, status, error, clear, reconnect } = useStreamText(endpoint);
   const lastScrollTop = useRef(0);
@@ -45,11 +48,11 @@ export function LogsPanel({ endpoint }: { endpoint: string }) {
         />
         <Button type="button" variant="ghost" size="sm" onClick={clear}>
           <EraserIcon data-icon="inline-start" />
-          Effacer
+          {t("logs.clear")}
         </Button>
         {!following && (
           <Button type="button" variant="ghost" size="sm" onClick={() => setFollowing(true)}>
-            Reprendre le suivi
+            {t("logs.resume")}
           </Button>
         )}
       </div>
@@ -57,7 +60,7 @@ export function LogsPanel({ endpoint }: { endpoint: string }) {
       <StreamOutput
         text={logs}
         error={error}
-        placeholder="En attente de logs…"
+        placeholder={t("logs.waiting")}
         follow={following}
         onScroll={handleScroll}
       />

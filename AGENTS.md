@@ -69,6 +69,19 @@ function or module-level `const`. The exceptions are React components and hooks,
 (`getConfig`), `"use server"` action exports, test fixtures under `mock/`, and the commander
 definitions in `src/cli`.
 
+## Translations
+
+- Every word the UI shows sits in a catalog, a module's `messages.ts`:
+  `class AppsMessages { static readonly en = {…}; static readonly fr: typeof AppsMessages.en = {…} }`. English
+  gives the shape, so a key missing in French is a type error. A message that interpolates or pluralizes is a
+  function of one object: `remove: ({ key }: { key: string }) => …`.
+- Read it with `t`, a dotted path checked by `tsc`: `useTranslation(Catalog)` in a client component,
+  `ServerTranslation.get(Catalog)` in a server component, an action or an API route, `Translation.create(Catalog,
+locale)` anywhere else. Each also hands back `locale`, for `Intl` (`Locale.intlTag`).
+- What outlives the request is filed in no language: a notification stores a key and its parameters
+  (`NotificationText.create`) and is rendered where the reader is known.
+- Logs, the messages libraries throw, and the CLI stay in English.
+
 ## Responsive layouts
 
 One tree, never one per breakpoint: a subtree hidden with `md:hidden` is still mounted, and every

@@ -1,10 +1,12 @@
 import { backups } from "#libs/backups/server";
 import { NotFoundError } from "#libs/hangar";
 import { hangar } from "#libs/hangar/server";
+import { ServerTranslation } from "#libs/i18n/server";
 import { backupJobs } from "#libs/jobs/server";
 import { logger } from "#libs/logs";
 import { backupApp, deleteBackup } from "#modules/apps/actions/manage-backups.ts";
 import { AppBackupsCard } from "#modules/apps/components/app-backups-card.tsx";
+import { AppsMessages } from "#modules/apps/messages.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 
 /**
@@ -14,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.ts
  */
 export async function AppBackupsContent({ project }: { project: string }) {
   const config = hangar.store.config.backup(project);
+  const { t } = ServerTranslation.get(AppsMessages);
 
   try {
     const [archives, running] = await Promise.all([backups.list(project), backupJobs.isActive(project)]);
@@ -42,8 +45,8 @@ export async function AppBackupsContent({ project }: { project: string }) {
 
     return (
       <Alert variant="destructive">
-        <AlertTitle>Sauvegardes indisponibles</AlertTitle>
-        <AlertDescription>Impossible de lister les archives de cette application.</AlertDescription>
+        <AlertTitle>{t("backups.unavailableTitle")}</AlertTitle>
+        <AlertDescription>{t("backups.unavailableDescription")}</AlertDescription>
       </Alert>
     );
   }

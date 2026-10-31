@@ -1,7 +1,9 @@
 import { PassThrough, Readable, Writable } from "node:stream";
 import { sessions } from "#libs/auth/server";
 import { NotFoundError } from "#libs/hangar";
+import { ServerTranslation } from "#libs/i18n/server";
 import { logger } from "#libs/logs";
+import { ApiMessages } from "#app/api/messages.ts";
 
 /** Error response for the API routes: the client only renders the message, the status is the machine-readable part. */
 export function apiError(message: string, status: number): Response {
@@ -84,10 +86,10 @@ export function sseStream(frames: AsyncIterable<string>): Response {
 type ApiRouteOptions = {
   /** Logged server-side when the handler throws something unexpected. */
   log: string;
-  /** Returned with 503 when the handler throws something unexpected. */
-  unavailable: string;
-  /** Returned with 404 when the handler throws a `NotFoundError`. Omit to treat it as a 503. */
-  notFound?: string;
+  /** What is unavailable, under `unavailable` in {@link ApiMessages}: returned with 503 when the handler throws. */
+  unavailable: keyof typeof ApiMessages.en.unavailable;
+  /** What is gone, under `notFound`: returned with 404 when the handler throws a `NotFoundError`. Omit for a 503. */
+  notFound?: keyof typeof ApiMessages.en.notFound;
 };
 
 type RouteContext = { params?: Record<string, string> };
@@ -101,21 +103,22 @@ export function apiRoute<C extends RouteContext = RouteContext>(
 ) {
   return async (request: Request, context = {} as C): Promise<Response> => {
     const session = await sessions.get(request);
+    const { t } = ServerTranslation.get(ApiMessages);
 
     if (!session) {
-      return apiError("Authentification requise.", 401);
+      return apiError(t("authRequired"), 401);
     }
 
     try {
       return await handler(request, context, session);
     } catch (error) {
       if (options.notFound !== undefined && error instanceof NotFoundError) {
-        return apiError(options.notFound, 404);
+        return apiError(t(`notFound.${options.notFound}`), 404);
       }
 
       logger.error(options.log, { error, ...context.params });
 
-      return apiError(options.unavailable, 503);
+      return apiError(t(`unavailable.${options.unavailable}`), 503);
     }
   };
 }

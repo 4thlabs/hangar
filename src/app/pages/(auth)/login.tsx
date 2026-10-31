@@ -1,12 +1,15 @@
 import { registration } from "#libs/auth/server";
+import { ServerTranslation } from "#libs/i18n/server";
 import { LoginForm } from "#modules/auth/components/login-form";
+import { AuthMessages } from "#modules/auth/messages.ts";
 
 export default async function LoginPage() {
   const registrationOpen = await registration.isOpen();
+  const { t } = ServerTranslation.get(AuthMessages);
 
   return (
     <>
-      <title>Sign in | Hangar</title>
+      <title>{`${t("login.pageTitle")} | Hangar`}</title>
       <LoginForm registrationOpen={registrationOpen} />
     </>
   );

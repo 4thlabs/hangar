@@ -1,4 +1,6 @@
 import { hangar } from "#libs/hangar/server";
+import { ServerTranslation } from "#libs/i18n/server";
+import { AppsMessages } from "#modules/apps/messages.ts";
 
 /** Why a compose command was refused. */
 type AppOperationRefusal = {
@@ -12,12 +14,14 @@ export class AppOperationGuard {
 
   /** Why a compose command on `project` is refused (malformed name, or not an app Hangar manages), or `null`. */
   static refuse(project: string): AppOperationRefusal | null {
+    const { t } = ServerTranslation.get(AppsMessages);
+
     if (!AppOperationGuard.ComposeProjectName.test(project)) {
-      return { reason: "invalid", message: "La commande Docker Compose est invalide." };
+      return { reason: "invalid", message: t("commands.invalid") };
     }
 
     if (!hangar.store.app(project)?.installed) {
-      return { reason: "unmanaged", message: "Cette application n’est pas installée et gérée par Hangar." };
+      return { reason: "unmanaged", message: t("commands.unmanaged") };
     }
 
     return null;
