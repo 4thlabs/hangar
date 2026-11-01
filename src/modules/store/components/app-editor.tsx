@@ -22,8 +22,16 @@ type AppEditorProps = Omit<AppFilesOptions, "onSaved">;
 /**
  * Edits every file of a store app: the file tree and the app's live services on the left, the open file beside
  * them. In the compose file, each service carries its state at the end of its line.
+ *
+ * Keyed on the app: moving to another app's editor keeps the page mounted, as only its `[id]` changes, and the
+ * tree, the open file and the drafts were seeded by the app the editor opened on.
  */
 export function AppEditor(props: AppEditorProps) {
+  return <SingleAppEditor key={props.id} {...props} />;
+}
+
+/** The editor of the one app it mounted with. */
+function SingleAppEditor(props: AppEditorProps) {
   const router = useRouter();
   const { t, locale } = useTranslation(StoreMessages);
   const viewRef = useRef<EditorView | null>(null);
