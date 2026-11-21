@@ -18,7 +18,7 @@ type GluetunVpnStatusCardProps = {
 export function GluetunVpnStatusCard({ publicIp, locale }: GluetunVpnStatusCardProps) {
   const t = Translation.create(GluetunMessages, locale);
   const { public_ip: address, city, country } = publicIp;
-  // gluetun answers 200 with an empty address while the tunnel is down.
+  // gluetun answers 200 without an address while the tunnel is down, which the client reads as empty.
   const connected = address.length > 0;
   const location = [city, country].filter(part => part.length > 0).join(", ");
 

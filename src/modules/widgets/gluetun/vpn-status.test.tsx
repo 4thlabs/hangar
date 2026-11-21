@@ -27,7 +27,7 @@ describe("GluetunVpnStatusCard", () => {
   });
 
   it("reads an empty address as a tunnel that is down", () => {
-    // gluetun answers 200 with an empty public_ip rather than failing, so the card has to
+    // gluetun answers 200 without an address rather than failing, so the card has to
     // recognise it: a 200 is not the same as a connection.
     const html = renderToStaticMarkup(
       <GluetunVpnStatusCard locale="en" publicIp={{ public_ip: "", city: "", country: "" }} />,
@@ -80,5 +80,40 @@ describe("GluetunVpnStatusCard", () => {
 
     expect(html).toContain("Gluetun");
     expect(html).toContain('aria-busy="true"');
+  });
+});
+
+describe("gluetunVpnStatus", () => {
+  // gluetun leaves out the fields it has no value for, rather than sending "".
+  it("reads a reply without a location as an address placed nowhere", async () => {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ public_ip: "203.0.113.42" }), {
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+
+    const { Widget } = aWidget(gluetunVpnStatusDescriptor, gluetunVpnStatus(aService()));
+    const html = renderToStaticMarkup(<>{await Widget({ locale: "en" })}</>);
+
+    expect(html).toContain("Your VPN is connected!");
+    expect(html).toContain(">203.0.113.42</p>");
+  });
+
+  it.each([
+    ["an empty object", {}],
+    ["null", null],
+    ["fields that are not text", { public_ip: 0, city: { name: "Zurich" } }],
+  ])("reads %s as a tunnel that is down", async (_label, reply) => {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(new Response(JSON.stringify(reply), { headers: { "content-type": "application/json" } })),
+    );
+
+    const { Widget } = aWidget(gluetunVpnStatusDescriptor, gluetunVpnStatus(aService()));
+    const html = renderToStaticMarkup(<>{await Widget({ locale: "en" })}</>);
+
+    expect(html).toContain("Your VPN is not connected!");
+    expect(html).toContain("text-destructive");
   });
 });
