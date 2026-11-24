@@ -42,12 +42,13 @@ pub struct ComposeContainer {
     pub image: String,
     /// What it is doing.
     pub state: ContainerState,
-    /// What its inspection adds to its list entry; none when the inspection failed, so that its restarts are unknown
-    /// and its health is the one its list entry shows.
+    /// What its inspection adds to its list entry; none when it was not inspected, as by
+    /// [`Docker::project_container`], or its inspection failed. Its restarts are then unknown: read its health with
+    /// [`ComposeContainer::health`], which falls back on its list entry.
     pub details: Option<ContainerDetails>,
-    /// What the status of its list entry shows of its healthcheck, as `docker ps` does; none when it declares none.
-    /// [`ComposeContainer::health`] reads it when there are no details.
-    pub listed_health: Option<Health>,
+    /// What the status of its list entry shows of its healthcheck, as `docker ps` does. Docker shows it only for a
+    /// container that runs and is not paused: none otherwise, as for one that declares no healthcheck.
+    pub(crate) listed_health: Option<Health>,
     /// The ports it publishes on the host, by host port.
     pub ports: Vec<PublishedPort>,
 }
@@ -282,7 +283,7 @@ impl Docker {
             quoll::Result<ContainerInspection, EngineMessage>,
         )>,
     ) -> ComposeContainers {
-        let mut failures = Vec::new();
+        let mut failed = 0;
         let mut containers = Vec::new();
 
         for (summary, inspection) in inspections {
@@ -290,7 +291,8 @@ impl Docker {
                 Ok(inspection) => Some(inspection),
                 Err(error) if DockerError::is_gone(&error) => continue,
                 Err(error) => {
-                    failures.push(error);
+                    tracing::debug!(container = %summary.id, %error, "could not inspect a container");
+                    failed += 1;
 
                     None
                 }
@@ -299,12 +301,10 @@ impl Docker {
             containers.extend(ComposeContainer::from_daemon(summary, inspection));
         }
 
-        if let Some(error) = failures.first() {
+        if failed > 0 {
             tracing::warn!(
-                count = failures.len(),
-                %error,
-                "could not inspect {} containers, kept with no details",
-                failures.len()
+                failed,
+                "could not inspect every container: each that failed is kept with no details"
             );
         }
 
@@ -591,6 +591,16 @@ mod tests {
     #[test]
     fn leaves_out_a_container_removed_since_the_list() {
         let gone = answered(404, &format!("No such container: {}", "a".repeat(FULL_ID)));
+
+        assert!(gathered_with_failed(gone).is_empty());
+    }
+
+    #[test]
+    fn leaves_out_a_container_podman_says_is_gone() {
+        let gone = answered(
+            404,
+            "no container with name or ID \"abc\" found: no such container",
+        );
 
         assert!(gathered_with_failed(gone).is_empty());
     }
