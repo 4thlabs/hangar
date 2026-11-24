@@ -246,15 +246,12 @@ impl Runtime {
         destination: &Destination,
         stop: &CancellationToken,
     ) -> Supervisor {
-        let stopping = CancellationToken::new();
-
         Supervisor {
             child,
             counted,
-            stdout: Reader::stdout(destination, stop, &stopping),
-            stderr: Reader::stderr(destination, stop, &stopping),
+            stdout: Reader::stdout(destination, stop),
+            stderr: Reader::stderr(destination, stop),
             stop: stop.clone(),
-            stopping,
             grace: self.grace,
         }
     }
@@ -333,12 +330,17 @@ impl CommandRunner for Runtime {
 #[cfg(all(test, unix))]
 mod tests {
     use std::future::Future;
+    use std::io;
+    use std::os::unix::process::ExitStatusExt;
     use std::path::PathBuf;
+    use std::process::ExitStatus;
     use std::time::Duration;
 
     use tokio::sync::mpsc;
 
     use super::Runtime;
+    use super::supervisor::Exit;
+    use crate::runtime::stderr_tail::StderrTail;
     use crate::{CancellationToken, Command, CommandRunner, Output, RunError};
 
     /// How long a test waits for what it checks before it fails, rather than hang.
@@ -415,6 +417,81 @@ mod tests {
         let signals = std::fs::read_to_string(&marker.0).expect("the child got SIGTERM");
 
         assert_eq!(signals, "term\n");
+    }
+
+    /// The exit of a child that printed `network conflict` on stderr.
+    fn exit(status: ExitStatus, read: io::Result<()>, stopped: bool) -> Exit {
+        let mut stderr = StderrTail::default();
+
+        stderr.write(b"network conflict\n");
+
+        Exit {
+            status: Ok(status),
+            read,
+            stdout: Vec::new(),
+            stderr,
+            stopped,
+        }
+    }
+
+    /// A pipe that could not be read.
+    fn read_error() -> io::Result<()> {
+        Err(io::Error::other("the pipe broke"))
+    }
+
+    /// The raw status of a child that exited with `code`.
+    fn exited_with(code: i32) -> ExitStatus {
+        ExitStatus::from_raw(code << 8)
+    }
+
+    /// The raw status of a child killed by `signal`.
+    fn killed_by(signal: i32) -> ExitStatus {
+        ExitStatus::from_raw(signal)
+    }
+
+    #[test]
+    fn a_child_that_failed_by_itself_reports_its_code_before_a_read_error() {
+        let outcome = Runtime::conclude(
+            &Command::new("docker"),
+            exit(exited_with(2), read_error(), false),
+        );
+
+        assert!(matches!(
+            outcome,
+            Err(RunError::Failed { code: 2, ref stderr, .. }) if stderr == "network conflict"
+        ));
+    }
+
+    #[test]
+    fn a_read_error_comes_before_the_sigpipe_it_caused() {
+        const SIGPIPE: i32 = 13;
+
+        let outcome = Runtime::conclude(
+            &Command::new("docker"),
+            exit(killed_by(SIGPIPE), read_error(), false),
+        );
+
+        assert!(matches!(outcome, Err(RunError::Io { .. })));
+    }
+
+    #[test]
+    fn a_read_error_comes_before_the_stop_it_caused() {
+        const SIGTERM: i32 = 15;
+
+        let outcome = Runtime::conclude(
+            &Command::new("docker"),
+            exit(killed_by(SIGTERM), read_error(), true),
+        );
+
+        assert!(matches!(outcome, Err(RunError::Io { .. })));
+    }
+
+    #[test]
+    fn a_stopped_child_is_cancelled_whatever_its_status() {
+        let outcome =
+            Runtime::conclude(&Command::new("docker"), exit(exited_with(0), Ok(()), true));
+
+        assert!(matches!(outcome, Err(RunError::Cancelled { .. })));
     }
 
     /// A file in the temporary directory, which a child writes to tell the test something; removed with it.
