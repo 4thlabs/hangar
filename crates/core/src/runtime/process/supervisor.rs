@@ -1,8 +1,8 @@
 //! The task that owns a child: its process, its pipes and its count, and the only one that signals it.
 
-use std::future;
+use std::future::{self, Future};
 use std::io;
-use std::pin::pin;
+use std::pin::Pin;
 use std::process::ExitStatus;
 use std::time::Duration;
 
@@ -26,6 +26,9 @@ pub(super) struct Supervisor {
     pub(super) stderr: Reader,
     /// Asks for the child to stop: the run's cancellation, the run dropped, or a pipe that can no longer be read.
     pub(super) stop: CancellationToken,
+    /// Cancelled once the child is signaled, or a stop comes while the rest of its output is read: the output channel
+    /// then loses what it cannot take.
+    pub(super) stopping: CancellationToken,
     /// How long the child has between SIGTERM and SIGKILL.
     pub(super) grace: Duration,
 }
@@ -39,7 +42,8 @@ pub(super) struct Exit {
     pub(super) read: io::Result<()>,
     pub(super) stdout: Vec<u8>,
     pub(super) stderr: StderrTail,
-    /// Whether it was signaled to stop before it exited, which makes the run cancelled.
+    /// Whether it was signaled to stop before it exited, which makes the run cancelled; `false` when `status` is an
+    /// error, as the child did not exit.
     pub(super) stopped: bool,
 }
 
@@ -49,6 +53,10 @@ enum Stop {
     /// Nobody asked for it.
     NotAsked,
     /// SIGTERM was sent; SIGKILL follows at the deadline.
+    #[cfg_attr(
+        not(unix),
+        expect(dead_code, reason = "there is no SIGTERM outside Unix")
+    )]
     Terminated { kill_at: Instant },
     /// SIGKILL was sent.
     Killed,
@@ -91,6 +99,7 @@ impl Supervisor {
             mut stdout,
             mut stderr,
             stop,
+            stopping,
             grace,
         } = self;
         let stdout_pipe = child.stdout.take();
@@ -99,53 +108,65 @@ impl Supervisor {
         let mut state = Stop::NotAsked;
         let mut read = None;
 
-        let status = {
-            let mut reading = pin!(Reader::read_both(
-                &mut stdout,
-                stdout_pipe,
-                &mut stderr,
-                stderr_pipe,
-                &exited
-            ));
+        // Boxed, to be dropped before the readers are finished.
+        let mut reading = Box::pin(Reader::read_both(
+            &mut stdout,
+            stdout_pipe,
+            &mut stderr,
+            stderr_pipe,
+            &exited,
+        ));
 
-            let ending = loop {
-                tokio::select! {
-                    biased;
-                    status = child.wait() => break Ending::Exited(status),
-                    result = reading.as_mut(), if read.is_none() => read = Some(result),
-                    () = stop.cancelled(), if state == Stop::NotAsked => {
-                        match Self::answer_stop(&mut child, grace) {
-                            Ok(Answer::Exited(status)) => break Ending::Exited(Ok(status)),
-                            Ok(Answer::Stopping(next)) => state = next,
-                            Err(error) => break Ending::Lost(error),
+        let ending = loop {
+            tokio::select! {
+                biased;
+                status = child.wait() => break Ending::Exited(status),
+                result = reading.as_mut(), if read.is_none() => read = Some(result),
+                () = stop.cancelled(), if state == Stop::NotAsked => {
+                    match Self::answer_stop(&mut child, grace) {
+                        Ok(Answer::Exited(status)) => break Ending::Exited(Ok(status)),
+                        Ok(Answer::Stopping(next)) => {
+                            stopping.cancel();
+                            state = next;
                         }
-                    }
-                    () = Self::deadline(state) => match Self::kill(&mut child) {
-                        Ok(next) => state = next,
                         Err(error) => break Ending::Lost(error),
-                    },
+                    }
                 }
-            };
-
-            let status = match ending {
-                Ending::Exited(status) => status,
-                Ending::Lost(error) => {
-                    Self::report(report, Exit::lost(error));
-                    Self::outlive(child, counted).await;
-
-                    return;
-                }
-            };
-
-            // The child is reaped: it no longer holds back a CLI waiting for its children.
-            drop(counted);
-            exited.cancel();
-
-            if read.is_none() {
-                read = Some(reading.await);
+                () = Self::deadline(state) => match Self::kill(&mut child) {
+                    Ok(next) => state = next,
+                    Err(error) => break Ending::Lost(error),
+                },
             }
+        };
 
-            status
+        let status = match ending {
+            Ending::Exited(status) => status,
+            Ending::Lost(error) => {
+                // The pipes close, so that the child gets EOF or SIGPIPE rather than block on a pipe nobody reads,
+                // and so does the output channel, so that its reader is not left waiting for its end.
+                drop(reading);
+                stopping.cancel();
+                stdout.finish().await;
+                stderr.finish().await;
+                drop((stdout, stderr));
+
+                Self::report(report, Exit::lost(error));
+                Self::outlive(child, counted).await;
+
+                return;
+            }
+        };
+
+        // The child is reaped: it no longer holds back a CLI waiting for its children.
+        drop(counted);
+        exited.cancel();
+
+        let read = match read {
+            Some(result) => {
+                drop(reading);
+                result
+            }
+            None => Self::drain(reading, &stop, &stopping).await,
         };
 
         stdout.finish().await;
@@ -155,12 +176,34 @@ impl Supervisor {
             report,
             Exit {
                 status,
-                read: read.unwrap_or(Ok(())),
+                read,
                 stdout: stdout.into_captured(),
                 stderr: stderr.into_tail(),
                 stopped: state != Stop::NotAsked,
             },
         );
+    }
+
+    /// Reads what the child left in its pipes. A stop that comes meanwhile lets a full channel lose what it cannot
+    /// take, so that a stalled reader does not hold the run; one that came as the child exited stopped nothing, and
+    /// cuts nothing either.
+    async fn drain(
+        mut reading: Pin<Box<impl Future<Output = io::Result<()>>>>,
+        stop: &CancellationToken,
+        stopping: &CancellationToken,
+    ) -> io::Result<()> {
+        if stop.is_cancelled() {
+            return reading.await;
+        }
+
+        tokio::select! {
+            biased;
+            result = &mut reading => result,
+            () = stop.cancelled() => {
+                stopping.cancel();
+                reading.await
+            }
+        }
     }
 
     /// Hands the exit to the run.
@@ -247,12 +290,13 @@ impl Exit {
             read: Ok(()),
             stdout: Vec::new(),
             stderr: StderrTail::default(),
-            stopped: true,
+            stopped: false,
         }
     }
 }
 
-#[cfg(all(test, unix))]
+// `waitid`, which sees an exit without reaping the child, is not in nix on every Unix, as macOS.
+#[cfg(all(test, any(target_os = "linux", target_os = "android")))]
 mod tests {
     use std::time::Duration;
 

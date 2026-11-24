@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 
 use self::children::{Children, Counted};
 use self::reader::Reader;
-use self::supervisor::Supervisor;
+use self::supervisor::{Exit, Supervisor};
 use super::stderr_tail::StderrTail;
 use super::{Command, CommandRunner, Output, RunError};
 
@@ -42,16 +42,18 @@ use super::{Command, CommandRunner, Output, RunError};
 /// # }
 /// ```
 ///
-/// The CLI, on Ctrl-C: the terminal sent SIGINT to the running child, which ends, and nothing new starts.
+/// The CLI, on Ctrl-C: the terminal sent SIGINT to the running child, which ends, and nothing new starts. A child
+/// that traps SIGINT does not end, so a second Ctrl-C stops it.
 ///
 /// ```no_run
 /// use std::pin::pin;
 ///
-/// use hangar_core::{Command, CommandRunner, Output, Runtime};
+/// use hangar_core::{CancellationToken, Command, CommandRunner, Output, Runtime};
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() {
-/// let runtime = Runtime::new();
+/// let cancellation = CancellationToken::new();
+/// let runtime = Runtime::with_cancellation(cancellation.clone());
 /// let mut up = pin!(async {
 ///     let command = Command::new("docker").args(["compose", "up", "--detach"]);
 ///
@@ -62,7 +64,14 @@ use super::{Command, CommandRunner, Output, RunError};
 ///     outcome = &mut up => outcome,
 ///     _ = tokio::signal::ctrl_c() => {
 ///         runtime.interrupt();
-///         up.await
+///
+///         tokio::select! {
+///             outcome = &mut up => outcome,
+///             _ = tokio::signal::ctrl_c() => {
+///                 cancellation.cancel();
+///                 up.await
+///             }
+///         }
 ///     }
 /// };
 ///
@@ -169,19 +178,32 @@ impl Runtime {
             source: io::Error::other("the task following the child ended without its exit"),
         })?;
 
-        // A lost pipe stops the child: its read error, not the signal, is the cause.
-        let status = exit.status.map_err(|source| RunError::Io {
-            program: program(),
-            source,
-        })?;
+        Self::conclude(command, exit)
+    }
 
-        exit.read.map_err(|source| RunError::Io {
-            program: program(),
+    /// The outcome of a run from its child's exit.
+    fn conclude(command: &Command, exit: Exit) -> Result<Vec<u8>, RunError> {
+        let io_error = |source| RunError::Io {
+            program: command.program.clone(),
             source,
-        })?;
+        };
+        let status = exit.status.map_err(io_error)?;
+
+        // A child that exited by itself reports its own failure first.
+        if !exit.stopped && status.code().is_some() {
+            Self::check(command, status, exit.stderr)?;
+            exit.read.map_err(io_error)?;
+
+            return Ok(exit.stdout);
+        }
+
+        // A lost pipe stops the child, or kills it with SIGPIPE: its read error, not the signal, is the cause.
+        exit.read.map_err(io_error)?;
 
         if exit.stopped {
-            return Err(RunError::Cancelled { program: program() });
+            return Err(RunError::Cancelled {
+                program: command.program.clone(),
+            });
         }
 
         Self::check(command, status, exit.stderr)?;
@@ -224,12 +246,15 @@ impl Runtime {
         destination: &Destination,
         stop: &CancellationToken,
     ) -> Supervisor {
+        let stopping = CancellationToken::new();
+
         Supervisor {
             child,
             counted,
-            stdout: Reader::stdout(destination, stop),
-            stderr: Reader::stderr(destination, stop),
+            stdout: Reader::stdout(destination, stop, &stopping),
+            stderr: Reader::stderr(destination, stop, &stopping),
             stop: stop.clone(),
+            stopping,
             grace: self.grace,
         }
     }
@@ -304,7 +329,8 @@ impl CommandRunner for Runtime {
     }
 }
 
-#[cfg(test)]
+// The children are run by `sh`.
+#[cfg(all(test, unix))]
 mod tests {
     use std::future::Future;
     use std::path::PathBuf;
@@ -333,7 +359,6 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
     #[tokio::test]
     async fn kills_a_child_that_ignores_sigterm_once_the_grace_period_is_over() {
         let runtime = runtime_with_grace(Duration::from_millis(100));
@@ -359,7 +384,6 @@ mod tests {
         assert!(!is_running(&pid), "the child is gone");
     }
 
-    #[cfg(unix)]
     #[tokio::test]
     async fn sends_one_sigterm_to_a_child_whose_cancelled_run_is_dropped() {
         let runtime = runtime_with_grace(Duration::from_millis(300));
@@ -416,7 +440,6 @@ mod tests {
     }
 
     /// Whether the process whose pid a child printed still runs.
-    #[cfg(unix)]
     fn is_running(printed_pid: &[u8]) -> bool {
         use nix::sys::signal::kill;
         use nix::unistd::Pid;
