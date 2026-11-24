@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 
 use self::children::{Children, Counted};
 use self::reader::Reader;
-use self::supervisor::{Exit, Supervisor};
+use self::supervisor::{Exit, Status, Supervisor};
 use super::stderr_tail::StderrTail;
 use super::{Command, CommandRunner, Output, RunError};
 
@@ -29,12 +29,15 @@ use super::{Command, CommandRunner, Output, RunError};
 ///   [`with_cancellation`](Self::with_cancellation), stops a running child: SIGTERM once, then SIGKILL 10 seconds
 ///   later if it is still there. A run that is dropped stops its child the same way.
 ///
-/// A cancelled run has one deadline, from the cancel: the grace period, then a second after the child is reaped, or
-/// after SIGKILL; a second after the cancel when the child had exited already. Until the deadline, nothing is cut:
-/// both pipes are read, and the output waits for its reader, a stalled one included. At the deadline, the pipes are
-/// no longer read, what is left of the output is dropped, the last line held back included, and the run fails with
-/// [`RunError::Cancelled`]. A reader that keeps up loses nothing written before the deadline; a run that ends before
-/// it, a child that exited by itself before the cancel, keeps its own outcome.
+/// After a cancel, output is best effort: both pipes are always read, so that a stalled reader never holds back a
+/// child that stops, and what the output channel does not take at once is dropped. The reading ends at the latest at
+/// the cut: a second after the grace period, pushed back to a second after the child is reaped; a second after the
+/// cancel when the child had exited already. A child killed and not reaped by the cut, as one in uninterruptible
+/// sleep, ends the run there, and [`idle`](Self::idle) waits for it until it is reaped.
+///
+/// A cancelled run fails with [`RunError::Cancelled`], unless its child exited by itself before the cancel stopped
+/// it: a failure then keeps its code, and a success holds only when the cut did not end the reading, so that a
+/// capture never passes truncated stdout for a success.
 ///
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
@@ -190,50 +193,44 @@ impl Runtime {
 
     /// The outcome of a run from its child's exit.
     fn conclude(command: &Command, exit: Exit) -> Result<Vec<u8>, RunError> {
+        let program = || command.program.clone();
         let io_error = |source| RunError::Io {
-            program: command.program.clone(),
+            program: program(),
             source,
         };
         let status = match exit.status {
-            Ok(status) => status,
-            Err(error) => return Err(io_error(Self::lost_track(error, exit.read))),
-        };
-        let read = exit
-            .read
-            .expect("the supervisor reads the pipes of a child it reaped to an end");
-        let is_cancelled = exit.stopped || exit.cut;
+            Status::Exited(status) => status,
+            Status::Lost(lost) => return Err(io_error(io::Error::new(lost.kind(), lost))),
+            Status::Unreaped => {
+                exit.read.map_err(io_error)?;
 
-        // A child that exited by itself reports its own failure first.
-        if !is_cancelled && status.code().is_some() {
+                return Err(RunError::Cancelled { program: program() });
+            }
+        };
+
+        // A child that exited by itself, never signaled, keeps its own failure, and its success when its output is
+        // whole: a cut one is cancelled, as a capture must not pass truncated stdout for a success.
+        if !exit.stopped && status.code().is_some() {
             Self::check(command, status, exit.stderr)?;
-            read.map_err(io_error)?;
+            exit.read.map_err(io_error)?;
+
+            if exit.cut {
+                return Err(RunError::Cancelled { program: program() });
+            }
 
             return Ok(exit.stdout);
         }
 
         // A lost pipe stops the child, or kills it with SIGPIPE: its read error, not the signal, is the cause.
-        read.map_err(io_error)?;
+        exit.read.map_err(io_error)?;
 
-        if is_cancelled {
-            return Err(RunError::Cancelled {
-                program: command.program.clone(),
-            });
+        if exit.stopped || exit.cut {
+            return Err(RunError::Cancelled { program: program() });
         }
 
         Self::check(command, status, exit.stderr)?;
 
         Ok(exit.stdout)
-    }
-
-    /// Why the supervisor lost track of a child, with how the reading of its pipes ended, if it did.
-    fn lost_track(error: io::Error, read: Option<io::Result<()>>) -> io::Error {
-        let message = match read {
-            Some(Ok(())) => return error,
-            Some(Err(read_error)) => format!("{error}; its output could not be read: {read_error}"),
-            None => format!("{error}; its output was not read to its end"),
-        };
-
-        io::Error::new(error.kind(), message)
     }
 
     /// Starts the child, its stdin closed and its output piped, unless it inherits this process's.
@@ -366,8 +363,10 @@ mod tests {
 
     use tokio::sync::mpsc;
 
+    use std::error::Error;
+
     use super::Runtime;
-    use super::supervisor::Exit;
+    use super::supervisor::{Exit, LostChild, Status};
     use crate::runtime::stderr_tail::StderrTail;
     use crate::{CancellationToken, Command, CommandRunner, Output, RunError};
 
@@ -454,8 +453,8 @@ mod tests {
         stderr.write(b"network conflict\n");
 
         Exit {
-            status: Ok(status),
-            read: Some(read),
+            status: Status::Exited(status),
+            read,
             stdout: Vec::new(),
             stderr,
             stopped,
@@ -524,7 +523,7 @@ mod tests {
     }
 
     #[test]
-    fn a_run_cut_at_its_deadline_is_cancelled_though_its_child_exited_by_itself() {
+    fn a_child_that_exited_by_itself_with_its_output_cut_is_cancelled() {
         let cut = Exit {
             cut: true,
             ..exit(exited_with(0), Ok(()), false)
@@ -536,14 +535,34 @@ mod tests {
     }
 
     #[test]
-    fn a_lost_child_reports_the_read_error_beside_its_own() {
-        let lost = Exit {
-            status: Err(io::Error::from(io::ErrorKind::PermissionDenied)),
-            ..exit(exited_with(0), read_error(), false)
+    fn a_child_that_failed_by_itself_keeps_its_code_whatever_the_cut() {
+        let cut = Exit {
+            cut: true,
+            ..exit(exited_with(4), Ok(()), false)
         };
-        let unfinished = Exit {
-            status: Err(io::Error::from(io::ErrorKind::PermissionDenied)),
-            read: None,
+
+        let outcome = Runtime::conclude(&Command::new("docker"), cut);
+
+        assert!(matches!(outcome, Err(RunError::Failed { code: 4, .. })));
+    }
+
+    #[test]
+    fn a_killed_child_not_reaped_by_the_cut_is_cancelled() {
+        let unreaped = Exit {
+            status: Status::Unreaped,
+            ..exit(exited_with(0), Ok(()), true)
+        };
+
+        let outcome = Runtime::conclude(&Command::new("docker"), unreaped);
+
+        assert!(matches!(outcome, Err(RunError::Cancelled { .. })));
+    }
+
+    #[test]
+    fn a_lost_child_keeps_its_error_and_the_read_error_as_its_source() {
+        let error = io::Error::from(io::ErrorKind::PermissionDenied);
+        let lost = Exit {
+            status: Status::Lost(LostChild::new(error, read_error())),
             ..exit(exited_with(0), Ok(()), false)
         };
 
@@ -551,25 +570,11 @@ mod tests {
         else {
             panic!("a lost child is an i/o error");
         };
-        let Err(RunError::Io {
-            source: unfinished_source,
-            ..
-        }) = Runtime::conclude(&Command::new("docker"), unfinished)
-        else {
-            panic!("a lost child is an i/o error");
-        };
+        let read_error = source.source().expect("the read error is the source");
 
         assert_eq!(source.kind(), io::ErrorKind::PermissionDenied);
-        assert!(
-            source
-                .to_string()
-                .ends_with("its output could not be read: the pipe broke")
-        );
-        assert!(
-            unfinished_source
-                .to_string()
-                .ends_with("its output was not read to its end")
-        );
+        assert!(source.to_string().starts_with("lost track of the child: "));
+        assert_eq!(read_error.to_string(), "the pipe broke");
     }
 
     /// A file in the temporary directory, which a child writes to tell the test something; removed with it.

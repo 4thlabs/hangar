@@ -366,9 +366,8 @@ async fn keeps_the_exit_status_when_a_cancel_comes_after_the_exit() {
     let cancellation = CancellationToken::new();
     let (sender, mut receiver) = channel();
 
-    // The grandchild holds the pipes, says once the runtime has reaped the child, and closes them before the deadline
-    // of the cancel.
-    let script = "parent=$$; (while kill -0 $parent 2>/dev/null; do sleep 0.01; done; echo reaped; sleep 0.3) & exit 4";
+    // The grandchild holds the pipes, and says once the runtime has reaped the child.
+    let script = "parent=$$; (while kill -0 $parent 2>/dev/null; do sleep 0.01; done; echo reaped; sleep 5) & exit 4";
     let command = shell(script).cancellation(cancellation.clone());
 
     let run = runtime.run(&command, Output::Lines(sender));
@@ -438,7 +437,8 @@ async fn a_cancel_ends_a_run_whose_reader_is_stalled() {
 }
 
 #[tokio::test]
-async fn releases_the_child_at_its_exit_and_cuts_a_stalled_reading_at_the_deadline() {
+async fn releases_the_child_at_its_exit_and_drops_what_a_stalled_reader_does_not_take_once_cancelled()
+ {
     let runtime = Runtime::new();
     let cancellation = CancellationToken::new();
     let (sender, _stalled) = mpsc::channel(1);
@@ -457,57 +457,41 @@ async fn releases_the_child_at_its_exit_and_cuts_a_stalled_reading_at_the_deadli
         cancellation.cancel();
     };
 
-    let (cut, ()) = within_deadline(async { tokio::join!(run, cancel_once_exited) }).await;
+    let (ended, ()) = within_deadline(async { tokio::join!(run, cancel_once_exited) }).await;
 
-    // The reader never took the rest: the deadline of the cancel cut it.
-    assert!(matches!(cut, Err(RunError::Cancelled { .. })));
+    // After the cancel, the output is best effort: what the full channel did not take is dropped.
+    ended.expect("the child exited by itself with code 0, its pipes read to their end");
 }
 
 #[tokio::test]
-async fn a_steady_reader_loses_nothing_written_before_the_deadline() {
+async fn a_stalled_reader_does_not_hold_back_a_child_that_stops() {
     let runtime = Runtime::new();
+    let marker = Marker::new("stalled-stop");
     let cancellation = CancellationToken::new();
     let (sender, mut receiver) = mpsc::channel(1);
 
-    // On SIGTERM, it prints three lines on each stream, then takes 3 seconds to exit: the deadline is a second after.
-    let script = r#"trap 'for i in 1 2 3; do echo out$i; echo err$i >&2; done; sleep 3; exit 0' TERM; echo started; while :; do sleep 0.05; done"#;
-    let command = shell(script).cancellation(cancellation.clone());
+    // On SIGTERM, it prints more than a pipe holds, then says it ended by itself: with nobody reading, it would block
+    // until SIGKILL, at the end of the 10-second grace period.
+    let script = r#"trap 'i=0; while [ $i -lt 20000 ]; do echo "line $i"; i=$((i + 1)); done; touch "$1"; exit 0' TERM; echo started; while :; do sleep 0.05; done"#;
+    let command = shell(script)
+        .args(["sh", marker.path()])
+        .cancellation(cancellation.clone());
 
     let run = runtime.run(&command, Output::Lines(sender));
-    let read_slowly = async {
-        let mut lines = vec![receiver.recv().await.expect("the child says it started")];
-
+    let cancel_then_stall = async {
+        receiver.recv().await.expect("the child says it started");
         cancellation.cancel();
 
-        // One message every 0.6 seconds, all of them by the deadline; a stream queued behind the other waits 1.2.
-        while let Some(line) = receiver.recv().await {
-            lines.push(line);
-            tokio::time::sleep(Duration::from_millis(600)).await;
-        }
-
-        lines
+        // Read no more.
+        receiver
     };
 
-    let (stopped, lines) = within_deadline(async { tokio::join!(run, read_slowly) }).await;
-    let mut lines: Vec<String> = lines
-        .iter()
-        .map(|line| String::from_utf8_lossy(line).into_owned())
-        .collect();
-
-    lines.sort();
+    let (stopped, _stalled) = within_deadline(async { tokio::join!(run, cancel_then_stall) }).await;
 
     assert!(matches!(stopped, Err(RunError::Cancelled { .. })));
-    assert_eq!(
-        lines,
-        [
-            "err1\n",
-            "err2\n",
-            "err3\n",
-            "out1\n",
-            "out2\n",
-            "out3\n",
-            "started\n"
-        ]
+    assert!(
+        marker.exists(),
+        "the child ended by itself, within the grace period"
     );
 }
 
