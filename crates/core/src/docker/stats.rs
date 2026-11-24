@@ -245,8 +245,12 @@ impl Docker {
             .into_iter()
             .filter_map(|(id, sample)| match sample {
                 Ok(sample) => Some((id, sample)),
+                // A container that stopped meanwhile answers 404. Another failure leaves it out of this frame alone,
+                // which the next one may have it in again.
                 Err(error) => {
-                    Self::warn_unless_gone("sample a container's usage", &id, &error);
+                    if !DockerError::is_gone(&error) {
+                        tracing::warn!(container = %id, %error, "could not sample a container's usage");
+                    }
 
                     None
                 }

@@ -325,11 +325,16 @@ async fn finds_a_container_only_within_its_project_and_by_id() {
         .project_container(&project.name, &web[..12])
         .await
         .expect("the container");
+    let uppercase = docker
+        .project_container(&project.name, &web[..12].to_ascii_uppercase())
+        .await
+        .expect("the container, by its id in uppercase");
     let elsewhere = docker.project_container("another-project", &web).await;
     let by_name = docker.project_container(&project.name, "web").await;
 
     assert_eq!(found.id, web);
     assert_eq!(found.service, "web");
+    assert_eq!(uppercase.id, web);
     assert!(
         matches!(elsewhere, Err(DockerError::NotFound { .. })),
         "{elsewhere:?}"

@@ -209,7 +209,7 @@ impl Docker {
     ///
     /// # Errors
     ///
-    /// When the daemon cannot list its containers.
+    /// When the daemon cannot list its containers, or inspect one that it listed and that still exists.
     pub async fn containers(&self) -> Result<ComposeContainers, DockerError> {
         let summaries = self.list_containers(true, PROJECT_LABEL.to_owned()).await?;
         let inspections = future::join_all(summaries.into_iter().map(|summary| async {
@@ -218,17 +218,30 @@ impl Docker {
             (summary, inspection)
         }))
         .await;
-        let containers = inspections
-            .into_iter()
-            .filter_map(|(summary, inspection)| match inspection {
-                Ok(inspection) => ComposeContainer::from_daemon(summary, inspection),
-                Err(error) => {
-                    Self::warn_unless_gone("inspect a container", &summary.id, &error);
 
-                    None
+        Self::gather(inspections)
+    }
+
+    /// The compose containers that the inspections of the listed containers describe. A container removed since the
+    /// list answers 404 and is left out, as `docker ps` does; any other failure fails the whole read, so that a
+    /// daemon going away between the list and the inspections does not read as every app stopped.
+    fn gather(
+        inspections: Vec<(
+            ContainerSummary,
+            quoll::Result<ContainerInspection, EngineMessage>,
+        )>,
+    ) -> Result<ComposeContainers, DockerError> {
+        let mut containers = Vec::new();
+
+        for (summary, inspection) in inspections {
+            match inspection {
+                Ok(inspection) => {
+                    containers.extend(ComposeContainer::from_daemon(summary, inspection))
                 }
-            })
-            .collect();
+                Err(error) if DockerError::is_gone(&error) => {}
+                Err(error) => return Err(DockerError::daemon("inspect a container", error)),
+            }
+        }
 
         Ok(ComposeContainers::new(containers))
     }
@@ -238,7 +251,7 @@ impl Docker {
     ///
     /// # Errors
     ///
-    /// [`DockerError::NotFound`] when `container_id` is not 12 to 64 hexadecimal digits, or names no container of a
+    /// [`DockerError::NotFound`] when `container_id` is not 12 to 64 hexadecimal digits, in either case, or names no container of a
     /// service of `project`; [`DockerError::Daemon`] when the daemon cannot list or inspect it.
     pub async fn project_container(
         &self,
@@ -251,11 +264,14 @@ impl Docker {
             return Err(missing());
         }
 
+        // Docker writes its ids in lowercase.
+        let prefix = container_id.to_ascii_lowercase();
+
         let summary = self
             .list_containers(true, format!("{PROJECT_LABEL}={project}"))
             .await?
             .into_iter()
-            .find(|summary| summary.id.starts_with(container_id))
+            .find(|summary| summary.id.starts_with(&prefix))
             .ok_or_else(missing)?;
         let inspection = self
             .engine
@@ -287,18 +303,6 @@ impl Docker {
             .list(all, &filters)
             .await
             .map_err(|error| DockerError::daemon("list the containers", error))
-    }
-
-    /// Logs a failed call on one container among many, unless the container went away meanwhile, which a read of
-    /// many containers expects.
-    pub(crate) fn warn_unless_gone(
-        action: &str,
-        container: &str,
-        error: &quoll::Error<EngineMessage>,
-    ) {
-        if !DockerError::is_gone(error) {
-            tracing::warn!(container, %error, "could not {action}");
-        }
     }
 }
 
@@ -436,6 +440,28 @@ mod tests {
             ContainerState::from_daemon("hibernating"),
             ContainerState::Unknown
         );
+    }
+
+    #[test]
+    fn leaves_out_a_container_removed_since_the_list() {
+        let gone = quoll::Error::not_found("No such container").into_shape();
+
+        let containers = Docker::gather(vec![(summary(&[]), Err(gone))]).expect("the containers");
+
+        assert!(containers.as_slice().is_empty());
+    }
+
+    #[test]
+    fn fails_the_read_when_an_inspection_fails_otherwise() {
+        let down = quoll::Error::internal("the daemon went away").into_shape();
+        let inspections = vec![
+            (summary(&[]), Ok(inspection(None))),
+            (summary(&[]), Err(down)),
+        ];
+
+        let error = Docker::gather(inspections).expect_err("a failed read");
+
+        assert!(matches!(error, DockerError::Daemon { .. }), "{error:?}");
     }
 
     #[test]

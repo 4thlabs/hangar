@@ -50,12 +50,16 @@ pub struct Docker {
 
 impl Docker {
     /// A client of the daemon that `DOCKER_HOST` names, else of Docker's own socket. It connects at its first call, so
-    /// a daemon that does not answer yet is not an error here.
+    /// a daemon that does not answer yet is not an error here, nor a host that does not resolve: those fail the
+    /// calls. A call that gets no answer within 30 seconds fails too; on a followed log and on the events, the
+    /// deadline is for the head of the answer alone.
     ///
     /// # Errors
     ///
-    /// [`DockerError::UnsupportedHost`] when `DOCKER_HOST` names neither a Unix socket nor a TCP address, and
-    /// [`DockerError::UnsupportedTls`] when `DOCKER_TLS_VERIFY` asks for TLS.
+    /// - [`DockerError::UnsupportedHost`] when `DOCKER_HOST` names neither a Unix socket nor a TCP address, or a port
+    ///   that is not a number from 1 to 65535;
+    /// - [`DockerError::UnsupportedTls`] when `DOCKER_TLS_VERIFY` asks for TLS to a daemon on TCP;
+    /// - [`DockerError::Daemon`] when the HTTP client cannot be built, as when the system's TLS settings do not load.
     pub fn connect() -> Result<Self, DockerError> {
         let engine = Host::from_env()?.client()?;
 

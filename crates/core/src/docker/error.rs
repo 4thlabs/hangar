@@ -25,8 +25,8 @@ pub enum DockerError {
         reason: &'static str,
     },
 
-    /// `DOCKER_TLS_VERIFY` asks for TLS, which Hangar does not speak to the daemon.
-    #[error("DOCKER_TLS_VERIFY is set: Hangar reaches a daemon without TLS only")]
+    /// `DOCKER_TLS_VERIFY` asks for TLS to a daemon on TCP, which Hangar does not speak.
+    #[error("DOCKER_TLS_VERIFY is set: Hangar reaches a daemon on TCP without TLS only")]
     UnsupportedTls,
 
     /// The daemon could not be reached, or answered with an error.
