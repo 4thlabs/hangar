@@ -10,7 +10,8 @@ use tokio_util::sync::CancellationToken;
 /// reads. A full channel pauses the run until the reader catches up, so that a slow reader holds the child back
 /// rather than growing memory with the whole output. Once the run is cancelled, what a full channel cannot take is
 /// lost, so that a stalled reader does not hold the stop back; a reader that has gone away loses the rest, and the
-/// command goes on without it.
+/// command goes on without it. Once the child exited, the run still waits for the reader to take the rest: a reader
+/// that stops reading without dropping its receiver holds the run until it is cancelled.
 ///
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
