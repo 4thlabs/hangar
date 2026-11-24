@@ -18,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 ///     .current_dir("/data/app-installed/web")
 ///     .cancellation(cancellation.clone());
 ///
-/// // Cancelling the token kills the child while it runs.
+/// // Cancelling the token stops the child while it runs: SIGTERM, then SIGKILL after the grace period.
 /// cancellation.cancel();
 /// # drop(command);
 /// ```
@@ -85,8 +85,9 @@ impl Command {
         self
     }
 
-    /// Kills the child when `cancellation` is cancelled; the run then fails with [`RunError::Cancelled`]. A command
-    /// whose token is already cancelled does not start.
+    /// Stops the child when `cancellation` is cancelled, with SIGTERM, then SIGKILL 10 seconds later if it is still
+    /// there; the run then fails with [`RunError::Cancelled`]. A command whose token is already cancelled does not
+    /// start.
     ///
     /// [`RunError::Cancelled`]: crate::RunError::Cancelled
     #[must_use]

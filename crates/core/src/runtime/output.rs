@@ -1,14 +1,16 @@
 //! Where the output of a run goes, and how it is cut on the way.
 
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 /// Where a run sends its stdout and stderr. A captured run keeps stdout alone instead, through
 /// [`CommandRunner::capture`](crate::CommandRunner::capture).
 ///
 /// A streamed output goes to a bounded channel, which a compose batch shares between its runs and an HTTP stream
 /// reads. A full channel pauses the run until the reader catches up, so that a slow reader holds the child back
-/// rather than growing memory with the whole output; a reader that has gone away loses the rest, and the command goes
-/// on without it.
+/// rather than growing memory with the whole output. Once the run is cancelled, what a full channel cannot take is
+/// lost, so that a stalled reader does not hold the stop back; a reader that has gone away loses the rest, and the
+/// command goes on without it.
 ///
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
@@ -53,6 +55,8 @@ pub enum Output {
 #[derive(Debug)]
 pub(crate) struct Forward {
     sender: mpsc::Sender<Vec<u8>>,
+    /// Cancelled once the run is asked to stop: a full channel then loses what it cannot take.
+    stop: CancellationToken,
     /// The start of a line still to end, for [`Output::Lines`]; `None` sends chunks as they come.
     pending_line: Option<Vec<u8>>,
 }
@@ -61,16 +65,18 @@ impl Forward {
     /// How long a line may grow before it is sent in pieces: a child printing no newline must not grow memory.
     const MAX_LINE_BYTES: usize = 64 * 1024;
 
-    /// A forward for one stream of a run, or `None` when the output is not streamed.
-    pub(crate) fn new(output: &Output) -> Option<Self> {
+    /// A forward for one stream of a run, which `stop` asks to stop, or `None` when the output is not streamed.
+    pub(crate) fn new(output: &Output, stop: &CancellationToken) -> Option<Self> {
         match output {
             Output::Inherit => None,
             Output::Lines(sender) => Some(Self {
                 sender: sender.clone(),
+                stop: stop.clone(),
                 pending_line: Some(Vec::new()),
             }),
             Output::Chunks(sender) => Some(Self {
                 sender: sender.clone(),
+                stop: stop.clone(),
                 pending_line: None,
             }),
         }
@@ -79,7 +85,7 @@ impl Forward {
     /// Sends what the child wrote, or keeps the start of a line until its end comes.
     pub(crate) async fn write(&mut self, chunk: &[u8]) {
         let Some(pending) = &mut self.pending_line else {
-            Self::send(&self.sender, chunk.to_vec()).await;
+            Self::send(&self.sender, &self.stop, chunk.to_vec()).await;
             return;
         };
 
@@ -94,7 +100,7 @@ impl Forward {
                 rest = tail;
 
                 if pending.ends_with(b"\n") || pending.len() == Self::MAX_LINE_BYTES {
-                    Self::send(&self.sender, std::mem::take(pending)).await;
+                    Self::send(&self.sender, &self.stop, std::mem::take(pending)).await;
                 }
             }
         }
@@ -107,20 +113,25 @@ impl Forward {
         };
 
         if !pending.is_empty() {
-            Self::send(&self.sender, std::mem::take(pending)).await;
+            Self::send(&self.sender, &self.stop, std::mem::take(pending)).await;
         }
     }
 
-    /// Sends one message, waiting while the channel is full.
-    async fn send(sender: &mpsc::Sender<Vec<u8>>, output: Vec<u8>) {
-        // A reader that has gone away, as a closed page, loses the rest: the command goes on without it.
-        let _ = sender.send(output).await;
+    /// Sends one message, waiting while the channel is full, unless the run is asked to stop.
+    async fn send(sender: &mpsc::Sender<Vec<u8>>, stop: &CancellationToken, output: Vec<u8>) {
+        tokio::select! {
+            biased;
+            // A reader that has gone away, as a closed page, loses the rest: the command goes on without it.
+            _ = sender.send(output) => {}
+            () = stop.cancelled() => {}
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use tokio::sync::mpsc;
+    use tokio_util::sync::CancellationToken;
 
     use super::{Forward, Output};
 
@@ -138,7 +149,8 @@ mod tests {
     #[tokio::test]
     async fn sends_whole_lines_whatever_the_chunks() {
         let (sender, receiver) = mpsc::channel(16);
-        let mut forward = Forward::new(&Output::Lines(sender)).expect("lines are streamed");
+        let mut forward = Forward::new(&Output::Lines(sender), &CancellationToken::new())
+            .expect("lines are streamed");
 
         forward.write(b"Pulling web\nPull").await;
         forward.write(b"ing db").await;
@@ -159,7 +171,8 @@ mod tests {
     #[tokio::test]
     async fn cuts_a_line_that_never_ends() {
         let (sender, receiver) = mpsc::channel(16);
-        let mut forward = Forward::new(&Output::Lines(sender)).expect("lines are streamed");
+        let mut forward = Forward::new(&Output::Lines(sender), &CancellationToken::new())
+            .expect("lines are streamed");
 
         forward
             .write(&vec![b'.'; Forward::MAX_LINE_BYTES + 10])
@@ -174,7 +187,8 @@ mod tests {
     #[tokio::test]
     async fn sends_chunks_as_they_come() {
         let (sender, receiver) = mpsc::channel(16);
-        let mut forward = Forward::new(&Output::Chunks(sender)).expect("chunks are streamed");
+        let mut forward = Forward::new(&Output::Chunks(sender), &CancellationToken::new())
+            .expect("chunks are streamed");
 
         forward.write(b"Pull").await;
         forward.write(b"ing\n").await;
@@ -186,7 +200,8 @@ mod tests {
     #[tokio::test]
     async fn goes_on_once_the_reader_is_gone() {
         let (sender, receiver) = mpsc::channel(1);
-        let mut forward = Forward::new(&Output::Lines(sender)).expect("lines are streamed");
+        let mut forward = Forward::new(&Output::Lines(sender), &CancellationToken::new())
+            .expect("lines are streamed");
 
         drop(receiver);
 
@@ -195,8 +210,23 @@ mod tests {
         forward.finish().await;
     }
 
+    #[tokio::test]
+    async fn loses_what_a_full_channel_cannot_take_once_stopped() {
+        let (sender, receiver) = mpsc::channel(1);
+        let stop = CancellationToken::new();
+        let mut forward = Forward::new(&Output::Lines(sender), &stop).expect("lines are streamed");
+
+        stop.cancel();
+
+        // Nobody reads: the second line would wait for ever without the stop.
+        forward.write(b"one\ntwo\n").await;
+        forward.finish().await;
+
+        assert_eq!(received(receiver), [b"one\n".to_vec()]);
+    }
+
     #[test]
     fn an_inherited_output_has_nothing_to_forward() {
-        assert!(Forward::new(&Output::Inherit).is_none());
+        assert!(Forward::new(&Output::Inherit, &CancellationToken::new()).is_none());
     }
 }

@@ -29,11 +29,11 @@ impl Reader {
     /// `ControlPersist`, must not hold the run.
     const DRAIN: Duration = Duration::from_secs(1);
 
-    /// The reader of stdout, which goes where `destination` says.
-    pub(super) fn stdout(destination: &Destination) -> Self {
+    /// The reader of stdout, which goes where `destination` says until `stop` asks the run to stop.
+    pub(super) fn stdout(destination: &Destination, stop: &CancellationToken) -> Self {
         match destination {
             Destination::Output(output) => Self {
-                forward: Forward::new(output),
+                forward: Forward::new(output, stop),
                 captured: None,
                 tail: None,
             },
@@ -46,9 +46,9 @@ impl Reader {
     }
 
     /// The reader of stderr, which keeps its end and goes with stdout when it is streamed.
-    pub(super) fn stderr(destination: &Destination) -> Self {
+    pub(super) fn stderr(destination: &Destination, stop: &CancellationToken) -> Self {
         let forward = match destination {
-            Destination::Output(output) => Forward::new(output),
+            Destination::Output(output) => Forward::new(output, stop),
             Destination::Capture => None,
         };
 

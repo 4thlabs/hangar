@@ -54,8 +54,7 @@ pub enum RunError {
         program: String,
     },
 
-    /// The system failed the run once the child started: its output, its exit status, or the kill of a cancelled
-    /// child.
+    /// The system failed the run once the child started: its output, its exit status, or the task that follows it.
     #[error("i/o error while running {program}")]
     Io {
         /// The program the run lost track of.

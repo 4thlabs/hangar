@@ -1,20 +1,21 @@
 //! The runner of real child processes, on `tokio::process`.
 
-mod child;
+mod children;
 mod reader;
+mod supervisor;
 
-use std::future::Future;
 use std::io;
-use std::pin::{Pin, pin};
+use std::pin::pin;
 use std::process::{ExitStatus, Stdio};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use tokio::process::Child;
 use tokio_util::sync::CancellationToken;
 
-use self::child::{ChildCount, RunningChild};
+use self::children::{Children, Counted};
 use self::reader::Reader;
+use self::supervisor::Supervisor;
 use super::stderr_tail::StderrTail;
 use super::{Command, CommandRunner, Output, RunError};
 
@@ -25,8 +26,8 @@ use super::{Command, CommandRunner, Output, RunError};
 /// - [`interrupt`](Self::interrupt) refuses the runs to come and lets the running ones end, which a terminal's
 ///   Ctrl-C has reached already;
 /// - a cancellation, the command's [`cancellation`](Command::cancellation) or the runtime's
-///   [`with_cancellation`](Self::with_cancellation), stops a running child: SIGTERM, then SIGKILL 10 seconds later
-///   if it is still there. A run that is dropped stops its child the same way.
+///   [`with_cancellation`](Self::with_cancellation), stops a running child: SIGTERM once, then SIGKILL 10 seconds
+///   later if it is still there, its output read all along. A run that is dropped stops its child the same way.
 ///
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
@@ -62,8 +63,7 @@ use super::{Command, CommandRunner, Output, RunError};
 /// ```
 #[derive(Debug, Clone)]
 pub struct Runtime {
-    interrupted: Arc<AtomicBool>,
-    children: Arc<ChildCount>,
+    children: Arc<Children>,
     cancellation: CancellationToken,
     /// How long a child has between SIGTERM and SIGKILL.
     grace: Duration,
@@ -97,8 +97,7 @@ impl Runtime {
     /// and fails the runs to come with [`RunError::Cancelled`].
     pub fn with_cancellation(cancellation: CancellationToken) -> Self {
         Self {
-            interrupted: Arc::new(AtomicBool::new(false)),
-            children: Arc::new(ChildCount::new()),
+            children: Arc::new(Children::new()),
             cancellation,
             grace: Self::GRACE,
         }
@@ -107,11 +106,11 @@ impl Runtime {
     /// Refuses the runs to come, which fail with [`RunError::Interrupted`], and lets the running children end: on
     /// Ctrl-C, the terminal sent them SIGINT already. The CLI then exits once [`idle`](Self::idle) resolves.
     pub fn interrupt(&self) {
-        self.interrupted.store(true, Ordering::SeqCst);
+        self.children.interrupt();
     }
 
     /// Resolves once no child of this runtime, its clones included, is running. A child whose run was dropped counts
-    /// until it is stopped.
+    /// until it exits.
     pub async fn idle(&self) {
         self.children.idle().await;
     }
@@ -124,57 +123,64 @@ impl Runtime {
     ) -> Result<Vec<u8>, RunError> {
         let program = || command.program.clone();
 
-        if self.interrupted.load(Ordering::SeqCst) {
+        // Counted before it starts, so that an interruption either refuses it or waits for it.
+        let Some(counted) = self.children.enter() else {
             return Err(RunError::Interrupted { program: program() });
-        }
+        };
 
         if self.is_cancelled(command) {
             return Err(RunError::Cancelled { program: program() });
         }
 
-        let mut child = self.spawn(command, &destination)?;
-        let stdout_pipe = child.child().stdout.take();
-        let stderr_pipe = child.child().stderr.take();
-        let mut stdout = Reader::stdout(&destination);
-        let mut stderr = Reader::stderr(&destination);
-        let exited = CancellationToken::new();
+        let child = Self::spawn(command, &destination)?;
+        let stop = CancellationToken::new();
 
-        let outcome = {
-            let reading = pin!(Reader::read_both(
-                &mut stdout,
-                stdout_pipe,
-                &mut stderr,
-                stderr_pipe,
-                &exited
-            ));
+        // A run dropped asks its child to stop, as a cancelled one does.
+        let _stop_on_drop = stop.clone().drop_guard();
 
-            self.follow(command, &mut child, reading, &exited).await
+        let exit = self.supervise(child, counted, &destination, &stop).start();
+        let exit = {
+            let mut exit = pin!(exit);
+
+            tokio::select! {
+                biased;
+                exit = &mut exit => exit,
+                () = self.cancelled(command) => {
+                    stop.cancel();
+                    exit.await
+                }
+            }
         };
 
-        stdout.finish().await;
-        stderr.finish().await;
+        let exit = exit.map_err(|_| RunError::Io {
+            program: program(),
+            source: io::Error::other("the task following the child ended without its exit"),
+        })?;
 
-        let (status, read) = outcome?;
+        if exit.stopped {
+            return Err(RunError::Cancelled { program: program() });
+        }
 
-        Self::check(command, status, stderr.into_tail())?;
-
-        read.map_err(|source| RunError::Io {
+        let status = exit.status.map_err(|source| RunError::Io {
             program: program(),
             source,
         })?;
 
-        Ok(stdout.into_captured())
+        Self::check(command, status, exit.stderr)?;
+
+        exit.read.map_err(|source| RunError::Io {
+            program: program(),
+            source,
+        })?;
+
+        Ok(exit.stdout)
     }
 
     /// Starts the child, its stdin closed and its output piped, unless it inherits this process's.
-    fn spawn(
-        &self,
-        command: &Command,
-        destination: &Destination,
-    ) -> Result<RunningChild, RunError> {
+    fn spawn(command: &Command, destination: &Destination) -> Result<Child, RunError> {
         let mut process = tokio::process::Command::new(&command.program);
 
-        // `RunningChild` stops a child gracefully; this is the last resort, when no runtime is left to do it.
+        // Its supervisor stops a child gracefully; this is the last resort, when the tokio runtime shuts down.
         process
             .args(&command.args)
             .envs(&command.env)
@@ -191,59 +197,28 @@ impl Runtime {
                 .stderr(Stdio::piped());
         }
 
-        let child = process.spawn().map_err(|source| RunError::Spawn {
+        process.spawn().map_err(|source| RunError::Spawn {
             program: command.program.clone(),
             source,
-        })?;
-
-        Ok(RunningChild::new(child, &self.children, self.grace))
+        })
     }
 
-    /// Follows the child to its exit while `reading` reads its pipes, and stops it when the run is cancelled first.
-    /// Returns its exit status and how the reading went.
-    async fn follow(
+    /// The supervisor of `child`, reading its output where `destination` says, which `stop` asks to stop it.
+    fn supervise(
         &self,
-        command: &Command,
-        child: &mut RunningChild,
-        mut reading: Pin<&mut impl Future<Output = io::Result<()>>>,
-        exited: &CancellationToken,
-    ) -> Result<(ExitStatus, io::Result<()>), RunError> {
-        let io_error = |source| RunError::Io {
-            program: command.program.clone(),
-            source,
-        };
-        let mut read = None;
-
-        let status = RunningChild::wait_reading(
-            child.child(),
-            reading.as_mut(),
-            &mut read,
-            self.cancelled(command),
-        )
-        .await;
-
-        let Some(status) = status else {
-            child.stop(reading, &mut read).await.map_err(io_error)?;
-
-            return Err(RunError::Cancelled {
-                program: command.program.clone(),
-            });
-        };
-
-        let status = status.map_err(io_error)?;
-
-        // The child is gone: what is left in its pipes is read, for a bounded time. A cancel now ends that reading
-        // and keeps the exit status, which is the run's outcome.
-        exited.cancel();
-
-        if read.is_none() {
-            tokio::select! {
-                result = reading => read = Some(result),
-                () = self.cancelled(command) => {}
-            }
+        child: Child,
+        counted: Counted,
+        destination: &Destination,
+        stop: &CancellationToken,
+    ) -> Supervisor {
+        Supervisor {
+            child,
+            counted,
+            stdout: Reader::stdout(destination, stop),
+            stderr: Reader::stderr(destination, stop),
+            stop: stop.clone(),
+            grace: self.grace,
         }
-
-        Ok((status, read.unwrap_or(Ok(()))))
     }
 
     /// Fails a run that did not exit with code 0, whatever it printed.
@@ -318,6 +293,7 @@ impl CommandRunner for Runtime {
 
 #[cfg(test)]
 mod tests {
+    use std::future::Future;
     use std::time::Duration;
 
     use tokio::sync::mpsc;
@@ -325,13 +301,28 @@ mod tests {
     use super::Runtime;
     use crate::{CancellationToken, Command, CommandRunner, Output, RunError};
 
+    /// How long a test waits for what it checks before it fails, rather than hang.
+    const DEADLINE: Duration = Duration::from_secs(10);
+
+    /// Awaits `future`, failing the test past [`DEADLINE`].
+    async fn within_deadline<T>(future: impl Future<Output = T>) -> T {
+        tokio::time::timeout(DEADLINE, future)
+            .await
+            .expect("the test is over before its deadline")
+    }
+
+    /// A runtime whose children have `grace` between SIGTERM and SIGKILL.
+    fn runtime_with_grace(grace: Duration) -> Runtime {
+        Runtime {
+            grace,
+            ..Runtime::new()
+        }
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn kills_a_child_that_ignores_sigterm_once_the_grace_period_is_over() {
-        let runtime = Runtime {
-            grace: Duration::from_millis(100),
-            ..Runtime::new()
-        };
+        let runtime = runtime_with_grace(Duration::from_millis(100));
         let cancellation = CancellationToken::new();
         let (sender, mut receiver) = mpsc::channel(16);
         let command = Command::new("sh")
@@ -347,14 +338,47 @@ mod tests {
             pid
         };
 
-        let (failure, pid) = tokio::time::timeout(Duration::from_secs(10), async {
-            tokio::join!(run, cancel_once_started)
-        })
-        .await
-        .expect("SIGKILL ends the child that ignores SIGTERM");
+        let (failure, pid) =
+            within_deadline(async { tokio::join!(run, cancel_once_started) }).await;
 
         assert!(matches!(failure, Err(RunError::Cancelled { .. })));
         assert!(!is_running(&pid), "the child is gone");
+    }
+
+    #[tokio::test]
+    async fn sends_one_sigterm_to_a_child_whose_cancelled_run_is_dropped() {
+        let runtime = runtime_with_grace(Duration::from_millis(300));
+        let marker =
+            std::env::temp_dir().join(format!("hangar-runtime-{}-one-sigterm", std::process::id()));
+        let cancellation = CancellationToken::new();
+        let (sender, mut receiver) = mpsc::channel(16);
+
+        // It writes a line per SIGTERM it gets, and goes on until SIGKILL.
+        let command = Command::new("sh")
+            .args([
+                "-c",
+                r#"trap 'echo term >> "$1"' TERM; echo started; while :; do sleep 0.05; done"#,
+                "sh",
+                marker.to_str().expect("a UTF-8 temporary directory"),
+            ])
+            .cancellation(cancellation.clone());
+        let running = runtime.clone();
+
+        let run = tokio::spawn(async move { running.run(&command, Output::Lines(sender)).await });
+
+        within_deadline(receiver.recv())
+            .await
+            .expect("the child says it started");
+        cancellation.cancel();
+        tokio::task::yield_now().await;
+        run.abort();
+        within_deadline(runtime.idle()).await;
+
+        let signals = std::fs::read_to_string(&marker).expect("the child got SIGTERM");
+
+        std::fs::remove_file(&marker).expect("the marker can be removed");
+
+        assert_eq!(signals, "term\n");
     }
 
     /// Whether the process whose pid a child printed still runs.
