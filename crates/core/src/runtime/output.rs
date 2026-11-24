@@ -8,10 +8,11 @@ use tokio_util::sync::CancellationToken;
 ///
 /// A streamed output goes to a bounded channel, which a compose batch shares between its runs and an HTTP stream
 /// reads. A full channel pauses the run until the reader catches up, so that a slow reader holds the child back
-/// rather than growing memory with the whole output. Once the run is cancelled, what a full channel cannot take is
-/// lost, so that a stalled reader does not hold the stop back; a reader that has gone away loses the rest, and the
-/// command goes on without it. Once the child exited, the run still waits for the reader to take the rest: a reader
-/// that stops reading without dropping its receiver holds the run until it is cancelled.
+/// rather than growing memory with the whole output. Once a cancel stops the child, or comes while the rest of its
+/// output is read, what a full channel cannot take is lost, so that a stalled reader does not hold the stop back; a
+/// reader that has gone away loses the rest, and the command goes on without it. Otherwise the run waits for the
+/// reader to take the rest, even after the child exited: a reader that stops reading without dropping its receiver
+/// holds the run until it is cancelled.
 ///
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
@@ -56,8 +57,8 @@ pub enum Output {
 #[derive(Debug)]
 pub(crate) struct Forward {
     sender: mpsc::Sender<Vec<u8>>,
-    /// Cancelled once the run is asked to stop: a full channel then loses what it cannot take.
-    stop: CancellationToken,
+    /// Cancelled once the child is being stopped: a full channel then loses what it cannot take.
+    stopping: CancellationToken,
     /// The start of a line still to end, for [`Output::Lines`]; `None` sends chunks as they come.
     pending_line: Option<Vec<u8>>,
 }
@@ -66,18 +67,19 @@ impl Forward {
     /// How long a line may grow before it is sent in pieces: a child printing no newline must not grow memory.
     const MAX_LINE_BYTES: usize = 64 * 1024;
 
-    /// A forward for one stream of a run, which `stop` asks to stop, or `None` when the output is not streamed.
-    pub(crate) fn new(output: &Output, stop: &CancellationToken) -> Option<Self> {
+    /// A forward for one stream of a run, lossy once `stopping` is cancelled, or `None` when the output is not
+    /// streamed.
+    pub(crate) fn new(output: &Output, stopping: &CancellationToken) -> Option<Self> {
         match output {
             Output::Inherit => None,
             Output::Lines(sender) => Some(Self {
                 sender: sender.clone(),
-                stop: stop.clone(),
+                stopping: stopping.clone(),
                 pending_line: Some(Vec::new()),
             }),
             Output::Chunks(sender) => Some(Self {
                 sender: sender.clone(),
-                stop: stop.clone(),
+                stopping: stopping.clone(),
                 pending_line: None,
             }),
         }
@@ -86,7 +88,7 @@ impl Forward {
     /// Sends what the child wrote, or keeps the start of a line until its end comes.
     pub(crate) async fn write(&mut self, chunk: &[u8]) {
         let Some(pending) = &mut self.pending_line else {
-            Self::send(&self.sender, &self.stop, chunk.to_vec()).await;
+            Self::send(&self.sender, &self.stopping, chunk.to_vec()).await;
             return;
         };
 
@@ -101,7 +103,7 @@ impl Forward {
                 rest = tail;
 
                 if pending.ends_with(b"\n") || pending.len() == Self::MAX_LINE_BYTES {
-                    Self::send(&self.sender, &self.stop, std::mem::take(pending)).await;
+                    Self::send(&self.sender, &self.stopping, std::mem::take(pending)).await;
                 }
             }
         }
@@ -114,17 +116,17 @@ impl Forward {
         };
 
         if !pending.is_empty() {
-            Self::send(&self.sender, &self.stop, std::mem::take(pending)).await;
+            Self::send(&self.sender, &self.stopping, std::mem::take(pending)).await;
         }
     }
 
-    /// Sends one message, waiting while the channel is full, unless the run is asked to stop.
-    async fn send(sender: &mpsc::Sender<Vec<u8>>, stop: &CancellationToken, output: Vec<u8>) {
+    /// Sends one message, waiting while the channel is full, unless the child is being stopped.
+    async fn send(sender: &mpsc::Sender<Vec<u8>>, stopping: &CancellationToken, output: Vec<u8>) {
         tokio::select! {
             biased;
             // A reader that has gone away, as a closed page, loses the rest: the command goes on without it.
             _ = sender.send(output) => {}
-            () = stop.cancelled() => {}
+            () = stopping.cancelled() => {}
         }
     }
 }
