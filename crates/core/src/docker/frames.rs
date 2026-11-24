@@ -56,13 +56,9 @@ impl Demux {
         let mut pieces = Vec::new();
 
         while !chunk.is_empty() && !self.has_failed {
-            if let Some(kept) = &mut self.not_frames {
-                Self::keep(kept, chunk);
-
-                if kept.len() >= LONGEST_ERROR {
-                    let message = Self::text(kept);
-
-                    pieces.push(self.fail(FrameError::NotFrames(message)));
+            if self.not_frames.is_some() {
+                if let Some(error) = self.collect(chunk) {
+                    pieces.push(self.fail(error));
                 }
 
                 break;
@@ -95,19 +91,26 @@ impl Demux {
             self.filled += part.len();
             chunk = rest;
 
+            if !self.may_be_a_header() {
+                // The daemon wrote something else than a frame, such as the text of an error: it is the message.
+                let header = self.header;
+                let filled = std::mem::take(&mut self.filled);
+
+                if let Some(error) = self.collect(&header[..filled]) {
+                    pieces.push(self.fail(error));
+                }
+
+                continue;
+            }
+
             if self.filled < HEADER {
                 break;
             }
 
             self.filled = 0;
 
-            let Some(payload) = self.payload_kind() else {
-                // The daemon wrote something else than a frame, such as the text of an error: it is the message,
-                // whatever chunks it comes in.
-                self.not_frames = Some(self.header.to_vec());
-
-                continue;
-            };
+            let payload = Self::payload_of(self.header[0])
+                .expect("a header that may be one names a known stream");
             let size = u32::from_be_bytes([
                 self.header[4],
                 self.header[5],
@@ -126,7 +129,7 @@ impl Demux {
     }
 
     /// Says the bytes have ended: the error of the daemon or the bytes that are not frames read so far, or
-    /// [`FrameError::Truncated`] when they ended inside a frame of output.
+    /// [`FrameError::Truncated`] when they ended inside a frame before any of its message.
     pub(crate) fn finish(&self) -> Result<(), FrameError> {
         if self.has_failed {
             return Ok(());
@@ -136,37 +139,48 @@ impl Demux {
             return Err(FrameError::NotFrames(Self::text(kept)));
         }
 
-        match self.payload {
-            Some((Payload::SystemError, _)) => {
-                return Err(FrameError::Daemon(Self::text(&self.system_error)));
-            }
-            Some((Payload::Output(_), _)) => return Err(FrameError::Truncated),
-            None => {}
+        let is_inside_a_frame = self.filled > 0 || self.payload.is_some();
+
+        if !self.system_error.is_empty() {
+            return Err(FrameError::Daemon(Self::text(&self.system_error)));
         }
 
-        if self.filled == 0 {
-            return Ok(());
-        }
-
-        let partial = &self.header[..self.filled];
-        let may_be_a_header =
-            partial[0] <= SYSTEM_ERROR && partial[1..].iter().take(3).all(|byte| *byte == 0);
-
-        if may_be_a_header {
+        if is_inside_a_frame {
             return Err(FrameError::Truncated);
         }
 
-        Err(FrameError::NotFrames(Self::text(partial)))
+        Ok(())
     }
 
-    /// What the header read holds, when it is one: a known stream and three zeros.
-    fn payload_kind(&self) -> Option<Payload> {
-        if self.header[1..4] != [0, 0, 0] {
-            return None;
+    /// Adds `bytes` to those that are not frames, and gives their message once it is whole: at its first line break,
+    /// so that a followed log whose connection stays open shows it at once, or at [`LONGEST_ERROR`].
+    fn collect(&mut self, bytes: &[u8]) -> Option<FrameError> {
+        let kept = self.not_frames.get_or_insert_with(Vec::new);
+        let searched = kept.len();
+
+        Self::keep(kept, bytes);
+
+        if let Some(line_break) = kept[searched..].iter().position(|byte| *byte == b'\n') {
+            kept.truncate(searched + line_break);
+
+            return Some(FrameError::NotFrames(Self::text(kept)));
         }
 
+        (kept.len() >= LONGEST_ERROR).then(|| FrameError::NotFrames(Self::text(kept)))
+    }
+
+    /// Whether the bytes of the header read so far may begin one: a known stream, then zeros up to the size.
+    fn may_be_a_header(&self) -> bool {
+        let read = &self.header[..self.filled];
+        let zeros = &read[1..read.len().min(4)];
+
+        Self::payload_of(read[0]).is_some() && zeros.iter().all(|byte| *byte == 0)
+    }
+
+    /// The payload of a frame written to `stream`, when it is a stream Docker writes.
+    fn payload_of(stream: u8) -> Option<Payload> {
         // Stdin, 0, goes with stdout, as Docker's own `stdcopy` writes it.
-        match self.header[0] {
+        match stream {
             0 | 1 => Some(Payload::Output(Output::Stdout)),
             2 => Some(Payload::Output(Output::Stderr)),
             SYSTEM_ERROR => Some(Payload::SystemError),
@@ -216,6 +230,13 @@ pub(crate) enum FrameError {
     /// The logs ended inside a frame.
     #[error("the logs ended inside a frame")]
     Truncated,
+}
+
+impl FrameError {
+    /// Whether the error holds what the daemon wrote, which says more than a failed connection.
+    pub(crate) fn is_message(&self) -> bool {
+        matches!(self, Self::Daemon(_) | Self::NotFrames(_))
+    }
 }
 
 #[cfg(test)]
@@ -325,7 +346,7 @@ mod tests {
     fn bytes_that_are_not_frames_are_the_message_whatever_chunks_they_come_in() {
         let bytes = [
             frame(1, b"ok\n"),
-            b"Error grabbing logs: unexpected EOF\n".to_vec(),
+            b"Error grabbing logs: unexpected EOF".to_vec(),
         ]
         .concat();
 
@@ -339,6 +360,29 @@ mod tests {
             assert_eq!(
                 demux.finish(),
                 Err(FrameError::NotFrames(
+                    "Error grabbing logs: unexpected EOF".to_owned()
+                )),
+                "cut at {cut}"
+            );
+        }
+    }
+
+    #[test]
+    fn bytes_that_are_not_frames_are_the_message_at_their_line_break_while_the_stream_stays_open() {
+        let bytes = [
+            frame(1, b"ok\n"),
+            b"Error grabbing logs: unexpected EOF\nmore".to_vec(),
+        ]
+        .concat();
+
+        for cut in 1..bytes.len() {
+            let mut demux = Demux::default();
+
+            let (_, _, failure) = read(&mut demux, &[&bytes[..cut], &bytes[cut..]]);
+
+            assert_eq!(
+                failure,
+                Some(FrameError::NotFrames(
                     "Error grabbing logs: unexpected EOF".to_owned()
                 )),
                 "cut at {cut}"
@@ -363,12 +407,19 @@ mod tests {
     fn text_shorter_than_a_header_is_the_message() {
         let mut demux = Demux::default();
 
-        read(&mut demux, &[b"oops\n"]);
+        let (_, _, failure) = read(&mut demux, &[b"oops\n"]);
 
-        assert_eq!(
-            demux.finish(),
-            Err(FrameError::NotFrames("oops".to_owned()))
-        );
+        assert_eq!(failure, Some(FrameError::NotFrames("oops".to_owned())));
+    }
+
+    #[test]
+    fn a_frame_of_the_daemons_errors_cut_before_its_message_is_cut_short() {
+        let bytes = frame(3, b"the log driver failed");
+        let mut demux = Demux::default();
+
+        read(&mut demux, &[&bytes[..HEADER]]);
+
+        assert_eq!(demux.finish(), Err(FrameError::Truncated));
     }
 
     #[test]

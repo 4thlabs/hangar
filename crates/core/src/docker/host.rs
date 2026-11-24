@@ -98,25 +98,39 @@ impl Host {
         }
 
         // An IPv6 address holds `:` too, but within its brackets.
-        let Some((host, port)) = address
-            .rsplit_once(':')
-            .filter(|(_, port)| !port.contains(']'))
-        else {
-            return Ok(Self::Tcp(format!("http://{address}:{DEFAULT_PORT}")));
+        let (host, port) = match address.rsplit_once(':') {
+            Some((host, port)) if !port.contains(']') => (host, Some(port)),
+            _ => (address, None),
         };
-        let is_port = port.bytes().all(|byte| byte.is_ascii_digit())
-            && port.parse::<u16>().is_ok_and(|port| port != 0);
-        // An IPv6 address goes within brackets, which alone tell its `:` from the port's.
-        let is_host = !host.is_empty()
-            && (!host.contains(':') || (host.starts_with('[') && host.ends_with(']')));
+        let is_port = port.is_none_or(|port| {
+            port.bytes().all(|byte| byte.is_ascii_digit())
+                && port.parse::<u16>().is_ok_and(|port| port != 0)
+        });
 
-        if !is_host || !is_port {
+        if !Self::is_host(host) || !is_port {
             return Err(unsupported(
                 "whose host or port does not read: write `tcp://host:port`, with a port from 1 to 65535",
             ));
         }
 
-        Ok(Self::Tcp(format!("http://{address}")))
+        let url = match port {
+            Some(port) => format!("http://{host}:{port}"),
+            None => format!("http://{host}:{DEFAULT_PORT}"),
+        };
+
+        Ok(Self::Tcp(url))
+    }
+
+    /// Whether `host` names a host: a name or an IPv4 address, with no `:` and no bracket, or an IPv6 address within
+    /// brackets, which alone tell its `:` from the port's.
+    fn is_host(host: &str) -> bool {
+        match host
+            .strip_prefix('[')
+            .and_then(|host| host.strip_suffix(']'))
+        {
+            Some(address) => !address.is_empty() && !address.contains(['[', ']']),
+            None => !host.is_empty() && !host.contains([':', '[', ']']),
+        }
     }
 
     /// A client of the daemon.
@@ -225,6 +239,11 @@ mod tests {
             "tcp://docker:+80",
             "tcp://::1",
             "tcp://::1:2375",
+            "tcp://[abc:2375",
+            "tcp://[]:2375",
+            "tcp://[abc",
+            "tcp://abc]",
+            "tcp://[[::1]]:2375",
             "tcp://:2375",
             "tcp://[::1]:",
             "ssh://me@host",

@@ -160,18 +160,20 @@ impl Following {
         }
     }
 
-    /// Ends the log: its unfinished lines first, then `error`, or that of a log that ended inside a frame.
+    /// Ends the log: its unfinished lines first, then its error. What the daemon wrote in its frames, or in place of
+    /// them, says more than `error`, the failed connection that may follow it; `error` says more than frames cut
+    /// short.
     fn end(&mut self, error: Option<DockerError>) {
         let lines = std::mem::take(&mut self.lines).finish();
-        let truncated = self
-            .demux
-            .as_ref()
-            .and_then(|demux| demux.finish().err())
-            .map(|error| DockerError::daemon(FOLLOWING, error));
+        let unfinished = self.demux.as_ref().and_then(|demux| demux.finish().err());
+        let error = match unfinished {
+            Some(message) if message.is_message() => Some(DockerError::daemon(FOLLOWING, message)),
+            cut => error.or_else(|| cut.map(|cut| DockerError::daemon(FOLLOWING, cut))),
+        };
 
         self.has_ended = true;
         self.ready.extend(lines.into_iter().map(Ok));
-        self.ready.extend(error.or(truncated).map(Err));
+        self.ready.extend(error.map(Err));
     }
 }
 
@@ -275,6 +277,25 @@ mod tests {
         assert_eq!(items.len(), 2, "{items:?}");
         assert_eq!(items[0], Ok("fatal: out of memory".to_owned()));
         assert!(items[1].is_err(), "{items:?}");
+    }
+
+    #[tokio::test]
+    async fn gives_what_the_daemon_wrote_rather_than_the_failed_connection_after_it() {
+        let chunk = b"Error grabbing logs: unexpected EOF".to_vec();
+
+        let items = followed(
+            vec![Ok(chunk), Err(Error::internal("the connection was cut"))],
+            Some(Demux::default()),
+        )
+        .await;
+
+        assert_eq!(
+            items,
+            [Err(
+                "the logs hold bytes that are not frames: Error grabbing logs: unexpected EOF"
+                    .to_owned()
+            )]
+        );
     }
 
     #[tokio::test]

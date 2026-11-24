@@ -151,8 +151,12 @@ impl<S: System + Sync> Following<S> {
                     self.works();
                     self.ready.extend(DockerChange::ALL);
                 }
-                // The connection failed: the stream ends after it, and the next connection reports everything.
-                Ok(Some(Err(error))) => tracing::warn!(%error, "the Docker events failed"),
+                // The connection failed, or an error quoll does not let `is_undecoded` tell apart yet (quoll#126):
+                // the connection is dropped, and the next one reports everything.
+                Ok(Some(Err(error))) => {
+                    tracing::warn!(%error, "the Docker events failed, following them again");
+                    self.events = None;
+                }
                 Ok(None) => {
                     tracing::warn!("the Docker events ended, following them again");
                     self.events = None;

@@ -77,14 +77,27 @@ impl DockerError {
     }
 
     /// Whether the daemon answered with a body that does not read as the call's result, such as an event of a kind
-    /// newer than Hangar: the connection works.
+    /// newer than Hangar: the connection works. It leans on the source of quoll's error being the JSON's error,
+    /// which quoll does not promise: [quoll#126](https://github.com/4thlabs/quoll/issues/126) asks for a public way
+    /// to tell it.
     pub(crate) fn is_undecoded<E: fmt::Debug>(error: &quoll::Error<E>) -> bool {
         std::error::Error::source(error).is_some_and(|source| source.is::<serde_json::Error>())
     }
 
-    /// Whether the call got no answer at all, as when the connection is refused or its deadline passed: the daemon
-    /// is in trouble, rather than the subject of the call.
+    /// Whether the call got no status, apart from JSON that does not read: no answer at all, as when the connection
+    /// is refused or its deadline passed, but also an answer that is not the call's result, as a body of another
+    /// content type or one that could not be read. quoll does not tell those apart yet
+    /// ([quoll#126](https://github.com/4thlabs/quoll/issues/126)).
     pub(crate) fn is_unanswered(error: &quoll::Error<EngineMessage>) -> bool {
         error.status().is_none() && !Self::is_undecoded(error)
+    }
+
+    /// Whether the daemon is in trouble rather than the subject of the call: no answer, as [`Self::is_unanswered`]
+    /// reads it, or a 5xx, from an overloaded daemon or a proxy in front of it that lost it.
+    pub(crate) fn is_daemon_failure(error: &quoll::Error<EngineMessage>) -> bool {
+        Self::is_unanswered(error)
+            || error
+                .status()
+                .is_some_and(|status| status.is_server_error())
     }
 }
