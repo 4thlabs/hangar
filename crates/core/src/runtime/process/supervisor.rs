@@ -1,5 +1,7 @@
 //! The task that owns a child: its process, its pipes and its count, and the only one that signals it.
 
+use std::error::Error;
+use std::fmt;
 use std::future::{self, Future};
 use std::io;
 use std::pin::Pin;
@@ -16,11 +18,11 @@ use super::reader::Reader;
 use crate::runtime::stderr_tail::StderrTail;
 
 /// Follows a child from its start to its exit, in a task of its own, so that a run cancelled and a run dropped stop it
-/// the same way: SIGTERM once, its pipes read meanwhile, so that what it prints as it stops does not kill it with
-/// SIGPIPE, then SIGKILL after the grace period.
+/// the same way: SIGTERM once, then SIGKILL after the grace period.
 ///
-/// A stopped run has one deadline: [`Reader::DRAIN`] after the child is reaped, or after SIGKILL. Until then, the
-/// pipes are read and the output waits for its reader; at the deadline, `cut` stops both, and the run is cancelled.
+/// From the stop on, the pipes are always read and the output is best effort, so that what the child prints as it
+/// stops never blocks it. The reading ends at the latest at the cut: [`Reader::DRAIN`] after the end of the grace
+/// period, pushed back to [`Reader::DRAIN`] after the reap.
 #[derive(Debug)]
 pub(super) struct Supervisor {
     pub(super) child: Child,
@@ -29,26 +31,42 @@ pub(super) struct Supervisor {
     pub(super) stderr: Reader,
     /// Asks for the child to stop: the run's cancellation, the run dropped, or a pipe that can no longer be read.
     pub(super) stop: CancellationToken,
-    /// Cancelled at the deadline of a stopped run, which the readers and their outputs share.
+    /// Cancelled at the cut of a stopped run, which ends the reading of both pipes.
     pub(super) cut: CancellationToken,
     /// How long the child has between SIGTERM and SIGKILL.
     pub(super) grace: Duration,
 }
 
-/// What a child left once it exited.
+/// What a child left.
 #[derive(Debug)]
 pub(super) struct Exit {
-    /// Its exit status, or why the supervisor lost track of it.
-    pub(super) status: io::Result<ExitStatus>,
-    /// How the reading of its pipes ended: at their close, at the silence that follows the exit, or at the cut;
-    /// `None` when it did not end, as for a child the supervisor lost track of.
-    pub(super) read: Option<io::Result<()>>,
+    pub(super) status: Status,
+    /// How the reading of its pipes ended: at their close, at the silence that follows the exit, or at the cut.
+    pub(super) read: io::Result<()>,
     pub(super) stdout: Vec<u8>,
     pub(super) stderr: StderrTail,
-    /// Whether it was signaled to stop before it exited; always `false` when `status` is an error.
+    /// Whether it was signaled to stop.
     pub(super) stopped: bool,
-    /// Whether the run reached the deadline of its stop, its output cut.
+    /// Whether the cut ended the reading, its output incomplete.
     pub(super) cut: bool,
+}
+
+/// How a child ended, as far as the supervisor knows.
+#[derive(Debug)]
+pub(super) enum Status {
+    /// It exited and was reaped.
+    Exited(ExitStatus),
+    /// The supervisor could not wait for it or signal it, and it may still run.
+    Lost(LostChild),
+    /// It was killed but not reaped by the cut, as a child in uninterruptible sleep; it stays counted until it is.
+    Unreaped,
+}
+
+/// Why the supervisor lost track of a child, with the error the reading of its pipes met, if any, as its source.
+#[derive(Debug)]
+pub(super) struct LostChild {
+    error: io::Error,
+    read: Option<io::Error>,
 }
 
 /// Where the stop of a child is.
@@ -79,9 +97,11 @@ enum Answer {
 #[derive(Debug)]
 enum Ending {
     /// The child exited and was reaped.
-    Exited(io::Result<ExitStatus>),
-    /// The child could not be signaled, and may still run.
+    Exited(ExitStatus),
+    /// The child could not be waited for or signaled, and may still run.
     Lost(io::Error),
+    /// The cut came before the reap of a killed child.
+    Unreaped,
 }
 
 impl Supervisor {
@@ -95,7 +115,7 @@ impl Supervisor {
     }
 
     /// Reads the pipes and waits for the child to exit, stopping it when asked; then reads what is left in its
-    /// pipes, which ends at their close, after a silence, or at the deadline of a stop, and reports the exit.
+    /// pipes, which ends at their close, after a silence, or at the cut, and reports the exit.
     async fn supervise(self, report: oneshot::Sender<Exit>) {
         let Self {
             mut child,
@@ -113,7 +133,7 @@ impl Supervisor {
         let mut cut_at = None;
         let mut read = None;
 
-        // Boxed, to be dropped before the readers are finished.
+        // Boxed, to be awaited to its end apart from the loop.
         let mut reading = Box::pin(Reader::read_both(
             &mut stdout,
             stdout_pipe,
@@ -125,12 +145,18 @@ impl Supervisor {
         let ending = loop {
             tokio::select! {
                 biased;
-                status = child.wait() => break Ending::Exited(status),
+                status = child.wait() => match status {
+                    Ok(status) => break Ending::Exited(status),
+                    Err(error) => break Ending::Lost(error),
+                },
                 result = reading.as_mut(), if read.is_none() => read = Some(result),
                 () = stop.cancelled(), if state == Stop::NotAsked => {
                     match Self::answer_stop(&mut child, grace) {
-                        Ok(Answer::Exited(status)) => break Ending::Exited(Ok(status)),
-                        Ok(Answer::Stopping(next)) => state = next,
+                        Ok(Answer::Exited(status)) => break Ending::Exited(status),
+                        Ok(Answer::Stopping(next)) => {
+                            state = next;
+                            cut_at = Some(Self::cut_after_signal(next));
+                        }
                         Err(error) => break Ending::Lost(error),
                     }
                 }
@@ -138,25 +164,49 @@ impl Supervisor {
                     Ok(next) => state = next,
                     Err(error) => break Ending::Lost(error),
                 },
-                // A killed child that is not reaped by the deadline, as one in uninterruptible sleep.
-                () = Self::at(cut_at), if !cut.is_cancelled() => cut.cancel(),
-            }
-
-            if state == Stop::Killed && cut_at.is_none() {
-                cut_at = Some(Instant::now() + Reader::DRAIN);
+                () = Self::at(cut_at) => break Ending::Unreaped,
             }
         };
 
         let status = match ending {
             Ending::Exited(status) => status,
             Ending::Lost(error) => {
-                // The pipes close, so that the child gets EOF or SIGPIPE rather than block on a pipe nobody reads,
-                // and so does the output channel, its last lines sent if its reader takes them in time.
-                drop(reading);
-                Self::finish_within(&mut stdout, &mut stderr, &cut).await;
+                // It cannot be stopped: its output goes best effort, read until a cut that closes the pipes, so that it
+                // gets EOF or SIGPIPE rather than block, and the output channel closes.
+                stop.cancel();
+
+                let read = match read {
+                    Some(result) => {
+                        drop(reading);
+                        result
+                    }
+                    None => Self::drain(reading, &stop, &cut, Some(Self::cut_from_now())).await,
+                };
+
                 drop((stdout, stderr));
 
-                Self::report(report, Exit::lost(error, read));
+                let lost = Status::Lost(LostChild::new(error, read));
+
+                Self::report(report, Exit::without_output(lost, Ok(()), false));
+                Self::outlive(child, counted).await;
+
+                return;
+            }
+            Ending::Unreaped => {
+                cut.cancel();
+
+                // The readers stop at the cut.
+                let read = match read {
+                    Some(result) => {
+                        drop(reading);
+                        result
+                    }
+                    None => reading.await,
+                };
+
+                drop((stdout, stderr));
+
+                Self::report(report, Exit::without_output(Status::Unreaped, read, true));
                 Self::outlive(child, counted).await;
 
                 return;
@@ -167,8 +217,10 @@ impl Supervisor {
         drop(counted);
         exited.cancel();
 
-        if stop.is_cancelled() && cut_at.is_none() {
-            cut_at = Some(Instant::now() + Reader::DRAIN);
+        if stop.is_cancelled() {
+            let after_reap = Self::cut_from_now();
+
+            cut_at = Some(cut_at.map_or(after_reap, |at: Instant| at.max(after_reap)));
         }
 
         let read = match read {
@@ -182,17 +234,17 @@ impl Supervisor {
         Self::report(
             report,
             Exit {
-                read: Some(read),
+                status: Status::Exited(status),
+                read,
                 stdout: stdout.into_captured(),
                 stderr: stderr.into_tail(),
-                stopped: status.is_ok() && state != Stop::NotAsked,
+                stopped: state != Stop::NotAsked,
                 cut: cut.is_cancelled(),
-                status,
             },
         );
     }
 
-    /// Reads what the child left in its pipes and sends the last lines, until the deadline of a stop: `cut_at`, or
+    /// Reads what the child left in its pipes and sends the last lines, until the cut: `cut_at`, or
     /// [`Reader::DRAIN`] after a stop that comes now.
     async fn drain(
         mut reading: Pin<Box<impl Future<Output = io::Result<()>>>>,
@@ -204,9 +256,7 @@ impl Supervisor {
             tokio::select! {
                 biased;
                 result = &mut reading => return result,
-                () = stop.cancelled(), if cut_at.is_none() => {
-                    cut_at = Some(Instant::now() + Reader::DRAIN);
-                }
+                () = stop.cancelled(), if cut_at.is_none() => cut_at = Some(Self::cut_from_now()),
                 () = Self::at(cut_at) => {
                     cut.cancel();
 
@@ -217,17 +267,19 @@ impl Supervisor {
         }
     }
 
-    /// Sends the lines the readers held back, for [`Reader::DRAIN`] at most, then cuts what is left.
-    async fn finish_within(stdout: &mut Reader, stderr: &mut Reader, cut: &CancellationToken) {
-        let finishing = async {
-            stdout.finish().await;
-            stderr.finish().await;
+    /// The cut of a child just signaled: [`Reader::DRAIN`] after the end of its grace period, which a SIGKILL ends
+    /// at once.
+    fn cut_after_signal(state: Stop) -> Instant {
+        let Stop::Terminated { kill_at } = state else {
+            return Self::cut_from_now();
         };
 
-        tokio::select! {
-            () = finishing => {}
-            () = tokio::time::sleep(Reader::DRAIN) => cut.cancel(),
-        }
+        kill_at + Reader::DRAIN
+    }
+
+    /// [`Reader::DRAIN`] from now.
+    fn cut_from_now() -> Instant {
+        Instant::now() + Reader::DRAIN
     }
 
     /// Hands the exit to the run.
@@ -236,7 +288,7 @@ impl Supervisor {
         let _ = report.send(exit);
     }
 
-    /// Keeps a child that could not be signaled counted until it exits on its own.
+    /// Keeps a child that could not be followed to its end counted until it exits on its own.
     async fn outlive(mut child: Child, counted: Counted) {
         if let Err(error) = child.wait().await {
             tracing::warn!(%error, "lost track of a child that could not be stopped");
@@ -316,16 +368,46 @@ impl Supervisor {
 }
 
 impl Exit {
-    /// The exit of a child the supervisor lost track of, and how the reading of its pipes ended, if it did.
-    fn lost(error: io::Error, read: Option<io::Result<()>>) -> Self {
+    /// The exit of a child that was not followed to its reap, whose output does not count: lost, or killed and not
+    /// reaped by the cut.
+    fn without_output(status: Status, read: io::Result<()>, stopped: bool) -> Self {
         Self {
-            status: Err(error),
+            status,
             read,
             stdout: Vec::new(),
             stderr: StderrTail::default(),
-            stopped: false,
-            cut: false,
+            stopped,
+            cut: true,
         }
+    }
+}
+
+impl LostChild {
+    /// The supervisor's `error`, with how the reading of the pipes ended.
+    pub(super) fn new(error: io::Error, read: io::Result<()>) -> Self {
+        Self {
+            error,
+            read: read.err(),
+        }
+    }
+
+    /// The kind of the supervisor's error.
+    pub(super) fn kind(&self) -> io::ErrorKind {
+        self.error.kind()
+    }
+}
+
+impl fmt::Display for LostChild {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "lost track of the child: {}", self.error)
+    }
+}
+
+impl Error for LostChild {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.read
+            .as_ref()
+            .map(|error| error as &(dyn Error + 'static))
     }
 }
 

@@ -12,9 +12,9 @@ use tokio_util::sync::CancellationToken;
 /// dropping its receiver holds the run until it is cancelled. A reader that has gone away loses the rest, and the
 /// command goes on without it.
 ///
-/// A cancelled run has one deadline, as [`Runtime`](crate::Runtime) says: until then nothing is cut, and every
-/// message waits for the reader, a stalled one included; at the deadline, what is left is dropped, the last line held
-/// back included. A reader that keeps up loses nothing written before the deadline.
+/// After a cancel, output is best effort: the pipes are always read, so that a stalled reader never holds back a
+/// child that stops, and what the channel does not take at once is dropped. A reader that keeps up still gets what
+/// fits, until the cut that [`Runtime`](crate::Runtime) describes.
 ///
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
@@ -59,8 +59,8 @@ pub enum Output {
 #[derive(Debug)]
 pub(crate) struct Forward {
     sender: mpsc::Sender<Vec<u8>>,
-    /// Cancelled at the deadline of a stopped run, for both streams at once: what is left is dropped.
-    cut: CancellationToken,
+    /// Cancelled once the run is asked to stop: from then on, what the channel does not take at once is dropped.
+    stop: CancellationToken,
     /// The start of a line still to end, for [`Output::Lines`]; `None` sends chunks as they come.
     pending_line: Option<Vec<u8>>,
 }
@@ -69,9 +69,9 @@ impl Forward {
     /// How long a line may grow before it is sent in pieces: a child printing no newline must not grow memory.
     const MAX_LINE_BYTES: usize = 64 * 1024;
 
-    /// A forward for one stream of a run, which drops what is left once `cut` is cancelled, or `None` when the output
-    /// is not streamed.
-    pub(crate) fn new(output: &Output, cut: &CancellationToken) -> Option<Self> {
+    /// A forward for one stream of a run, which waits for its reader until `stop` is cancelled, and drops what the
+    /// channel does not take at once after; `None` when the output is not streamed.
+    pub(crate) fn new(output: &Output, stop: &CancellationToken) -> Option<Self> {
         let (sender, pending_line) = match output {
             Output::Inherit => return None,
             Output::Lines(sender) => (sender, Some(Vec::new())),
@@ -80,7 +80,7 @@ impl Forward {
 
         Some(Self {
             sender: sender.clone(),
-            cut: cut.clone(),
+            stop: stop.clone(),
             pending_line,
         })
     }
@@ -88,7 +88,7 @@ impl Forward {
     /// Sends what the child wrote, or keeps the start of a line until its end comes.
     pub(crate) async fn write(&mut self, chunk: &[u8]) {
         let Some(pending) = &mut self.pending_line else {
-            Self::send(&self.sender, &self.cut, chunk.to_vec()).await;
+            Self::send(&self.sender, &self.stop, chunk.to_vec()).await;
             return;
         };
 
@@ -103,35 +103,43 @@ impl Forward {
                 rest = tail;
 
                 if pending.ends_with(b"\n") || pending.len() == Self::MAX_LINE_BYTES {
-                    Self::send(&self.sender, &self.cut, std::mem::take(pending)).await;
+                    Self::send(&self.sender, &self.stop, std::mem::take(pending)).await;
                 }
             }
         }
     }
 
-    /// Sends the last line, which the child did not end with a newline, unless the run was cut.
+    /// Sends the last line, which the child did not end with a newline.
     pub(crate) async fn finish(&mut self) {
         let Some(pending) = &mut self.pending_line else {
             return;
         };
 
         if !pending.is_empty() {
-            Self::send(&self.sender, &self.cut, std::mem::take(pending)).await;
+            Self::send(&self.sender, &self.stop, std::mem::take(pending)).await;
         }
     }
 
-    /// Sends one message, waiting while the channel is full, until the run is cut.
-    async fn send(sender: &mpsc::Sender<Vec<u8>>, cut: &CancellationToken, output: Vec<u8>) {
-        if cut.is_cancelled() {
-            return;
+    /// Sends one message, waiting while the channel is full until the run is asked to stop; from then on, a message
+    /// the channel does not take at once is dropped, so that the pipes are always read.
+    async fn send(sender: &mpsc::Sender<Vec<u8>>, stop: &CancellationToken, output: Vec<u8>) {
+        if !stop.is_cancelled() {
+            tokio::select! {
+                biased;
+                permit = sender.reserve() => {
+                    // A reader that has gone away, as a closed page, loses the rest: the command goes on without it.
+                    if let Ok(permit) = permit {
+                        permit.send(output);
+                    }
+
+                    return;
+                }
+                () = stop.cancelled() => {}
+            }
         }
 
-        tokio::select! {
-            biased;
-            // A reader that has gone away, as a closed page, loses the rest: the command goes on without it.
-            _ = sender.send(output) => {}
-            () = cut.cancelled() => {}
-        }
+        // After a stop, output is best effort: a full channel or a reader gone loses the message.
+        let _ = sender.try_send(output);
     }
 }
 
@@ -218,21 +226,32 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn waits_for_a_stalled_reader_until_the_cut_then_drops_the_rest() {
+    async fn drops_what_a_full_channel_does_not_take_once_stopped() {
         let (sender, receiver) = mpsc::channel(1);
-        let cut = CancellationToken::new();
-        let mut forward = Forward::new(&Output::Lines(sender), &cut).expect("lines are streamed");
+        let stop = CancellationToken::new();
+        let mut forward = Forward::new(&Output::Lines(sender), &stop).expect("lines are streamed");
 
-        // Nobody reads: the second line waits until the cut.
-        let cutting = async {
+        stop.cancel();
+
+        // Nobody reads: without the stop, the second line would wait for ever.
+        forward.write(b"one\ntwo\nheld").await;
+        forward.finish().await;
+
+        assert_eq!(received(receiver), [b"one\n".to_vec()]);
+    }
+
+    #[tokio::test]
+    async fn a_stop_ends_the_wait_for_a_stalled_reader_and_drops_that_message() {
+        let (sender, receiver) = mpsc::channel(1);
+        let stop = CancellationToken::new();
+        let mut forward = Forward::new(&Output::Lines(sender), &stop).expect("lines are streamed");
+
+        let stopping = async {
             tokio::task::yield_now().await;
-            cut.cancel();
+            stop.cancel();
         };
 
-        tokio::join!(forward.write(b"one\ntwo\n"), cutting);
-
-        forward.write(b"three\nheld").await;
-        forward.finish().await;
+        tokio::join!(forward.write(b"one\ntwo\n"), stopping);
 
         assert_eq!(received(receiver), [b"one\n".to_vec()]);
     }
