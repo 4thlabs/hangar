@@ -67,6 +67,8 @@ pub(crate) struct ContainerSummary {
     pub(crate) image: String,
     /// `running`, `exited`...
     pub(crate) state: String,
+    /// What `docker ps` shows, with the healthcheck at its end: `Up 5 minutes (unhealthy)`.
+    pub(crate) status: String,
     #[serde(deserialize_with = "null_as_default")]
     pub(crate) labels: HashMap<String, String>,
     #[serde(deserialize_with = "null_as_default")]
