@@ -8,7 +8,7 @@ use tokio::process::{ChildStderr, ChildStdout};
 use tokio_util::sync::CancellationToken;
 
 use super::Destination;
-use crate::runtime::output::Forward;
+use crate::runtime::output::{Forward, Outbox};
 use crate::runtime::stderr_tail::StderrTail;
 
 /// What a run keeps of one of the child's pipes as it reads it.
@@ -33,41 +33,33 @@ impl Reader {
     /// `ControlPersist`, must not hold the run. It is also how long a stopped run reads after its child is gone.
     pub(super) const DRAIN: Duration = Duration::from_secs(1);
 
-    /// The reader of stdout, which goes where `destination` says. It asks for `stop` when its pipe fails, its output
-    /// is best effort once `stop` is cancelled, and it stops reading at the `cut` of a stopped run.
+    /// The reader of stdout, which keeps it when `destination` captures it and sends it to `outbox` when it is
+    /// streamed. It asks for `stop` when its pipe fails, which makes the output best effort as a cancel does, and it
+    /// stops reading at the `cut` of a stopped run.
     pub(super) fn stdout(
         destination: &Destination,
+        outbox: Option<&Outbox>,
         stop: &CancellationToken,
         cut: &CancellationToken,
     ) -> Self {
-        let (forward, captured) = match destination {
-            Destination::Output(output) => (Forward::new(output, stop), None),
-            Destination::Capture => (None, Some(Vec::new())),
-        };
-
         Self {
-            forward,
+            forward: outbox.map(Outbox::forward),
             stop: stop.clone(),
             cut: cut.clone(),
-            captured,
+            captured: matches!(destination, Destination::Capture).then(Vec::new),
             tail: None,
         }
     }
 
-    /// The reader of stderr, which keeps its end and goes with stdout when it is streamed, as
+    /// The reader of stderr, which keeps its end and goes to `outbox` with stdout when it is streamed, as
     /// [`stdout`](Self::stdout) says.
     pub(super) fn stderr(
-        destination: &Destination,
+        outbox: Option<&Outbox>,
         stop: &CancellationToken,
         cut: &CancellationToken,
     ) -> Self {
-        let forward = match destination {
-            Destination::Output(output) => Forward::new(output, stop),
-            Destination::Capture => None,
-        };
-
         Self {
-            forward,
+            forward: outbox.map(Outbox::forward),
             stop: stop.clone(),
             cut: cut.clone(),
             captured: None,
@@ -76,27 +68,40 @@ impl Reader {
     }
 
     /// Reads both pipes to their end, until they stay silent for [`Reader::DRAIN`] once `exited` is cancelled, or
-    /// until the run is cut; then sends the lines held back.
+    /// until the run is cut; then sends the lines held back, while `outbox` feeds the channel to its end, or to the
+    /// cut.
     pub(super) async fn read_both(
         stdout: &mut Self,
         stdout_pipe: Option<ChildStdout>,
         stderr: &mut Self,
         stderr_pipe: Option<ChildStderr>,
         exited: &CancellationToken,
+        outbox: Option<&Outbox>,
     ) -> io::Result<()> {
-        let (stdout_read, stderr_read) = tokio::join!(
-            stdout.read(stdout_pipe, exited),
-            stderr.read(stderr_pipe, exited)
-        );
+        let reading = async {
+            let (stdout_read, stderr_read) = tokio::join!(
+                stdout.read(stdout_pipe, exited),
+                stderr.read(stderr_pipe, exited)
+            );
 
-        stdout.finish().await;
-        stderr.finish().await;
+            stdout.finish().await;
+            stderr.finish().await;
 
-        stdout_read.and(stderr_read)
+            stdout_read.and(stderr_read)
+        };
+        let flushing = async {
+            if let Some(outbox) = outbox {
+                outbox.flush().await;
+            }
+        };
+
+        let (read, ()) = tokio::join!(reading, flushing);
+
+        read
     }
 
-    /// Sends the last line held back, once the reading is over; [`read_both`](Self::read_both) does it at its end.
-    pub(super) async fn finish(&mut self) {
+    /// Sends the last line held back, once the reading is over, and ends the stream.
+    async fn finish(&mut self) {
         if let Some(forward) = &mut self.forward {
             forward.finish().await;
         }

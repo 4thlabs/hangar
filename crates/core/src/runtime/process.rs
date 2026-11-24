@@ -16,6 +16,7 @@ use tokio_util::sync::CancellationToken;
 use self::children::{Children, Counted};
 use self::reader::Reader;
 use self::supervisor::{Exit, Status, Supervisor};
+use super::output::Outbox;
 use super::stderr_tail::StderrTail;
 use super::{Command, CommandRunner, Output, RunError};
 
@@ -29,15 +30,16 @@ use super::{Command, CommandRunner, Output, RunError};
 ///   [`with_cancellation`](Self::with_cancellation), stops a running child: SIGTERM once, then SIGKILL 10 seconds
 ///   later if it is still there. A run that is dropped stops its child the same way.
 ///
-/// After a cancel, output is best effort: both pipes are always read, so that a stalled reader never holds back a
-/// child that stops, and what the output channel does not take at once is dropped. The reading ends at the latest at
-/// the cut: a second after the grace period, pushed back to a second after the child is reaped; a second after the
-/// cancel when the child had exited already. A child killed and not reaped by the cut, as one in uninterruptible
+/// After a cancel, or a pipe that can no longer be read, output is best effort: both pipes are always read, so that a
+/// stalled reader never holds back a child that stops, into a queue of 1 MiB that the output channel is fed from as
+/// its reader takes it; what does not fit is dropped, a whole line or chunk at a time. The reading ends at the latest
+/// at the cut, which drops what is left in the queue: a second after the child is reaped, or after the cancel when it
+/// had exited already. A child killed and not reaped a second after the grace period, as one in uninterruptible
 /// sleep, ends the run there, and [`idle`](Self::idle) waits for it until it is reaped.
 ///
 /// A cancelled run fails with [`RunError::Cancelled`], unless its child exited by itself before the cancel stopped
-/// it: a failure then keeps its code, and a success holds only when the cut did not end the reading, so that a
-/// capture never passes truncated stdout for a success.
+/// it: a failure then keeps its code, and a success holds only when no output was cut or dropped, so that a capture
+/// never passes truncated stdout for a success.
 ///
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
@@ -208,13 +210,16 @@ impl Runtime {
             }
         };
 
+        // Output dropped is incomplete, as cut output is.
+        let is_cut = exit.cut || exit.dropped;
+
         // A child that exited by itself, never signaled, keeps its own failure, and its success when its output is
         // whole: a cut one is cancelled, as a capture must not pass truncated stdout for a success.
         if !exit.stopped && status.code().is_some() {
             Self::check(command, status, exit.stderr)?;
             exit.read.map_err(io_error)?;
 
-            if exit.cut {
+            if is_cut {
                 return Err(RunError::Cancelled { program: program() });
             }
 
@@ -224,7 +229,7 @@ impl Runtime {
         // A lost pipe stops the child, or kills it with SIGPIPE: its read error, not the signal, is the cause.
         exit.read.map_err(io_error)?;
 
-        if exit.stopped || exit.cut {
+        if exit.stopped || is_cut {
             return Err(RunError::Cancelled { program: program() });
         }
 
@@ -269,12 +274,17 @@ impl Runtime {
         stop: &CancellationToken,
     ) -> Supervisor {
         let cut = CancellationToken::new();
+        let outbox = match destination {
+            Destination::Output(output) => Outbox::new(output, stop, &cut),
+            Destination::Capture => None,
+        };
 
         Supervisor {
             child,
             counted,
-            stdout: Reader::stdout(destination, stop, &cut),
-            stderr: Reader::stderr(destination, stop, &cut),
+            stdout: Reader::stdout(destination, outbox.as_ref(), stop, &cut),
+            stderr: Reader::stderr(outbox.as_ref(), stop, &cut),
+            outbox,
             stop: stop.clone(),
             cut,
             grace: self.grace,
@@ -459,6 +469,7 @@ mod tests {
             stderr,
             stopped,
             cut: false,
+            dropped: false,
         }
     }
 

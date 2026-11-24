@@ -366,8 +366,9 @@ async fn keeps_the_exit_status_when_a_cancel_comes_after_the_exit() {
     let cancellation = CancellationToken::new();
     let (sender, mut receiver) = channel();
 
-    // The grandchild holds the pipes, and says once the runtime has reaped the child.
-    let script = "parent=$$; (while kill -0 $parent 2>/dev/null; do sleep 0.01; done; echo reaped; sleep 5) & exit 4";
+    // The grandchild holds the pipes, says once the runtime has reaped the child, and keeps writing: the cut ends
+    // the reading.
+    let script = "parent=$$; (while kill -0 $parent 2>/dev/null; do sleep 0.01; done; echo reaped; while :; do echo x; sleep 0.2; done) & exit 4";
     let command = shell(script).cancellation(cancellation.clone());
 
     let run = runtime.run(&command, Output::Lines(sender));
@@ -437,8 +438,7 @@ async fn a_cancel_ends_a_run_whose_reader_is_stalled() {
 }
 
 #[tokio::test]
-async fn releases_the_child_at_its_exit_and_drops_what_a_stalled_reader_does_not_take_once_cancelled()
- {
+async fn releases_the_child_at_its_exit_and_fails_a_run_whose_output_was_dropped() {
     let runtime = Runtime::new();
     let cancellation = CancellationToken::new();
     let (sender, _stalled) = mpsc::channel(1);
@@ -457,10 +457,10 @@ async fn releases_the_child_at_its_exit_and_drops_what_a_stalled_reader_does_not
         cancellation.cancel();
     };
 
-    let (ended, ()) = within_deadline(async { tokio::join!(run, cancel_once_exited) }).await;
+    let (dropped, ()) = within_deadline(async { tokio::join!(run, cancel_once_exited) }).await;
 
-    // After the cancel, the output is best effort: what the full channel did not take is dropped.
-    ended.expect("the child exited by itself with code 0, its pipes read to their end");
+    // The reader never took the two lines: dropped at the cut, they make the run fail, though the child succeeded.
+    assert!(matches!(dropped, Err(RunError::Cancelled { .. })));
 }
 
 #[tokio::test]
@@ -493,6 +493,66 @@ async fn a_stalled_reader_does_not_hold_back_a_child_that_stops() {
         marker.exists(),
         "the child ended by itself, within the grace period"
     );
+}
+
+#[tokio::test]
+async fn a_reader_that_keeps_up_gets_what_a_child_prints_as_it_stops() {
+    let runtime = Runtime::new();
+    let cancellation = CancellationToken::new();
+    let (sender, mut receiver) = mpsc::channel(1);
+
+    // On SIGTERM, it prints 20 lines at once, as `docker compose down` its shutdown, into a channel of 1.
+    let script = r#"trap 'i=0; while [ $i -lt 20 ]; do echo "stopped $i"; i=$((i + 1)); done; exit 0' TERM; echo started; while :; do sleep 0.05; done"#;
+    let command = shell(script).cancellation(cancellation.clone());
+
+    let run = runtime.run(&command, Output::Lines(sender));
+    let read_all = async {
+        let mut count = 0;
+
+        while let Some(line) = receiver.recv().await {
+            if line == b"started\n" {
+                cancellation.cancel();
+            }
+
+            count += 1;
+        }
+
+        count
+    };
+
+    let (stopped, count) = within_deadline(async { tokio::join!(run, read_all) }).await;
+
+    assert!(matches!(stopped, Err(RunError::Cancelled { .. })));
+    assert_eq!(count, 21);
+}
+
+#[tokio::test]
+async fn cuts_a_second_after_the_reap_of_a_child_that_dies_on_sigterm() {
+    let runtime = Runtime::new();
+    let cancellation = CancellationToken::new();
+    let (sender, mut receiver) = mpsc::channel(16);
+
+    // The child dies at once on SIGTERM; the grandchild keeps writing, never silent long enough to end the reading.
+    let script = "(while :; do echo x; sleep 0.2; done) & echo started; wait";
+    let command = shell(script).cancellation(cancellation.clone());
+
+    let run = runtime.run(&command, Output::Lines(sender));
+    let read_all = async {
+        while let Some(line) = receiver.recv().await {
+            if line == b"started\n" {
+                cancellation.cancel();
+            }
+        }
+    };
+
+    // Well before the end of the 10-second grace period, which no longer matters once the child is reaped.
+    let (stopped, ()) = tokio::time::timeout(Duration::from_secs(5), async {
+        tokio::join!(run, read_all)
+    })
+    .await
+    .expect("the cut comes a second after the reap");
+
+    assert!(matches!(stopped, Err(RunError::Cancelled { .. })));
 }
 
 #[tokio::test]

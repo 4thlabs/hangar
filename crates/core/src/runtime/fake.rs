@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use tokio_util::sync::CancellationToken;
 
-use super::output::Forward;
+use super::output::Outbox;
 use super::stderr_tail::StderrTail;
 use super::{Command, CommandRunner, Output, RunError};
 
@@ -82,12 +82,18 @@ impl FakeRunner {
 
     /// Prints `text` where `output` says.
     async fn print(output: &Output, text: &str) {
-        let Some(mut forward) = Forward::new(output, &CancellationToken::new()) else {
+        let nothing = CancellationToken::new();
+        let Some(outbox) = Outbox::new(output, &nothing, &nothing) else {
             return;
         };
 
-        forward.write(text.as_bytes()).await;
-        forward.finish().await;
+        let mut forward = outbox.forward();
+        let writing = async move {
+            forward.write(text.as_bytes()).await;
+            forward.finish().await;
+        };
+
+        tokio::join!(writing, outbox.flush());
     }
 
     /// The failure of `command`, with its stderr's tail as a real run keeps it.

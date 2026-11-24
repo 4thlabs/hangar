@@ -15,20 +15,24 @@ use tokio_util::sync::CancellationToken;
 
 use super::children::Counted;
 use super::reader::Reader;
+use crate::runtime::output::Outbox;
 use crate::runtime::stderr_tail::StderrTail;
 
 /// Follows a child from its start to its exit, in a task of its own, so that a run cancelled and a run dropped stop it
 /// the same way: SIGTERM once, then SIGKILL after the grace period.
 ///
 /// From the stop on, the pipes are always read and the output is best effort, so that what the child prints as it
-/// stops never blocks it. The reading ends at the latest at the cut: [`Reader::DRAIN`] after the end of the grace
-/// period, pushed back to [`Reader::DRAIN`] after the reap.
+/// stops never blocks it. The reading ends at the latest at the cut: [`Reader::DRAIN`] after the reap, earlier or later
+/// than the end of the grace period; [`Reader::DRAIN`] after the end of the grace period, or after SIGKILL, bounds a
+/// child that is not reaped.
 #[derive(Debug)]
 pub(super) struct Supervisor {
     pub(super) child: Child,
     pub(super) counted: Counted,
     pub(super) stdout: Reader,
     pub(super) stderr: Reader,
+    /// Where a streamed output goes, which the readers write to.
+    pub(super) outbox: Option<Outbox>,
     /// Asks for the child to stop: the run's cancellation, the run dropped, or a pipe that can no longer be read.
     pub(super) stop: CancellationToken,
     /// Cancelled at the cut of a stopped run, which ends the reading of both pipes.
@@ -49,6 +53,8 @@ pub(super) struct Exit {
     pub(super) stopped: bool,
     /// Whether the cut ended the reading, its output incomplete.
     pub(super) cut: bool,
+    /// Whether a stopping run dropped output its reader did not take in time: incomplete, as after a cut.
+    pub(super) dropped: bool,
 }
 
 /// How a child ended, as far as the supervisor knows.
@@ -122,6 +128,7 @@ impl Supervisor {
             counted,
             mut stdout,
             mut stderr,
+            outbox,
             stop,
             cut,
             grace,
@@ -140,6 +147,7 @@ impl Supervisor {
             &mut stderr,
             stderr_pipe,
             &exited,
+            outbox.as_ref(),
         ));
 
         let ending = loop {
@@ -161,7 +169,12 @@ impl Supervisor {
                     }
                 }
                 () = Self::kill_deadline(state) => match Self::kill(&mut child) {
-                    Ok(next) => state = next,
+                    Ok(next) => {
+                        state = next;
+
+                        // From when SIGKILL was sent: a late timer must not find unreaped a child about to be.
+                        cut_at = cut_at.max(Some(Self::cut_from_now()));
+                    }
                     Err(error) => break Ending::Lost(error),
                 },
                 () = Self::at(cut_at) => break Ending::Unreaped,
@@ -217,10 +230,9 @@ impl Supervisor {
         drop(counted);
         exited.cancel();
 
+        // Reaped: the grace period no longer matters, earlier or later.
         if stop.is_cancelled() {
-            let after_reap = Self::cut_from_now();
-
-            cut_at = Some(cut_at.map_or(after_reap, |at: Instant| at.max(after_reap)));
+            cut_at = Some(Self::cut_from_now());
         }
 
         let read = match read {
@@ -240,6 +252,7 @@ impl Supervisor {
                 stderr: stderr.into_tail(),
                 stopped: state != Stop::NotAsked,
                 cut: cut.is_cancelled(),
+                dropped: outbox.as_ref().is_some_and(Outbox::has_dropped),
             },
         );
     }
@@ -309,6 +322,9 @@ impl Supervisor {
 
     /// Sends SIGTERM, which lets the child stop what it runs, as `docker compose` its plugin; SIGKILL at once when it
     /// cannot be sent.
+    ///
+    /// A child that exits by itself between the `try_wait` of [`answer_stop`](Self::answer_stop) and the SIGTERM is
+    /// reported cancelled: its exit code cannot tell it from a child that stopped gracefully on SIGTERM.
     #[cfg(unix)]
     fn terminate(child: &mut Child, grace: Duration) -> io::Result<Stop> {
         let Err(error) = Self::send_sigterm(child) else {
@@ -378,6 +394,7 @@ impl Exit {
             stderr: StderrTail::default(),
             stopped,
             cut: true,
+            dropped: false,
         }
     }
 }
