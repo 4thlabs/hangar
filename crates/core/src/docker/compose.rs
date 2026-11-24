@@ -230,12 +230,15 @@ impl ComposeContainers {
     }
 
     fn is_unhealthy(container: &ComposeContainer) -> bool {
-        container.health == Some(Health::Unhealthy)
+        container
+            .details
+            .is_some_and(|details| details.health == Some(Health::Unhealthy))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::ContainerDetails;
     use super::*;
 
     /// A running replica `alpha-web-1`, with no healthcheck.
@@ -248,8 +251,10 @@ mod tests {
             replica: Some(1),
             image: "nginx:alpine".to_owned(),
             state: ContainerState::Running,
-            health: None,
-            restart_count: Some(0),
+            details: Some(ContainerDetails {
+                health: None,
+                restart_count: Some(0),
+            }),
             ports: Vec::new(),
         }
     }
@@ -263,7 +268,10 @@ mod tests {
                 name: "beta-api-1".to_owned(),
                 project: "beta".to_owned(),
                 service: "api".to_owned(),
-                health: Some(Health::Unhealthy),
+                details: Some(ContainerDetails {
+                    health: Some(Health::Unhealthy),
+                    restart_count: Some(0),
+                }),
                 ..container()
             },
             container(),

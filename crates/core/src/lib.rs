@@ -6,7 +6,7 @@ mod version;
 
 pub use docker::{
     ComposeContainer, ComposeContainers, ComposeProjectDetail, ComposeProjectSummary,
-    ComposeService, ContainerMetrics, ContainerState, DaemonError, Docker, DockerChange,
-    DockerError, Health, ProjectStatus, PublishedPort, StatsFrame,
+    ComposeService, ContainerDetails, ContainerMetrics, ContainerState, DaemonError, Docker,
+    DockerChange, DockerError, Health, ProjectStatus, PublishedPort, StatsFrame,
 };
 pub use version::VERSION;

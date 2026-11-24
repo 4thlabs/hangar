@@ -167,7 +167,9 @@ impl Following {
         let lines = std::mem::take(&mut self.lines).finish();
         let unfinished = self.demux.as_ref().and_then(|demux| demux.finish().err());
         let error = match unfinished {
-            Some(message) if message.is_message() => Some(DockerError::daemon(FOLLOWING, message)),
+            Some(message) if message.is_from_daemon() => {
+                Some(DockerError::daemon(FOLLOWING, message))
+            }
             cut => error.or_else(|| cut.map(|cut| DockerError::daemon(FOLLOWING, cut))),
         };
 
