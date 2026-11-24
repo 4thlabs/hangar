@@ -30,7 +30,8 @@ is git-ignored.
 | `npm run db:migrate`              | Applies the migrations to `HANGAR_DB_HOST`     |
 | `npm run db:studio`               | Opens Drizzle Studio on the database           |
 
-CI runs `typecheck`, `test` and `build` on every pull request and push to `main`. Each push to
+CI runs `typecheck`, `test` and `build` on every pull request and push to `main`, and its `rust` job checks
+the Cargo workspace (see the Rust section of [`AGENTS.md`](../AGENTS.md)). Each push to
 `main` (a merged pull request) and each `v*` tag also builds the image for `amd64` and `arm64` and
 publishes it to `ghcr.io/4thlabs/hangar`: as `edge` for `main`, as the release tags for a `v*` tag.
 

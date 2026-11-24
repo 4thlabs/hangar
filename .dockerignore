@@ -13,3 +13,8 @@ dist
 .DS_Store
 plans
 PLAN.md
+# The Rust workspace, not in the image: a Rust-only commit leaves its build context as it was.
+crates
+Cargo.toml
+Cargo.lock
+target

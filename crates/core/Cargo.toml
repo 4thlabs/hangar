@@ -1,0 +1,10 @@
+[package]
+name = "hangar-core"
+description = "The core of Hangar, on no web framework; for now its version"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
