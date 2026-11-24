@@ -135,7 +135,35 @@ impl Host {
             None => format!("http://{host}:{DEFAULT_PORT}"),
         };
 
+        if !Self::reads_as_written(&url, host) {
+            return Err(unsupported(
+                "whose host a URL reads as another one, as `0x0a.0.0.2` reads as `10.0.0.2`: write the host plainly",
+            ));
+        }
+
         Ok(Self::Tcp(url))
+    }
+
+    /// Whether the client, which reads `url` as a browser does, reads in it the same host as the one written, as the
+    /// `docker` command would: not a name made of hexadecimal or octal numbers, which a URL rewrites as an IPv4
+    /// address. A name differs only by its case, and an IPv6 address only by how it is written.
+    fn reads_as_written(url: &str, host: &str) -> bool {
+        let Some(read) = Url::parse(url)
+            .ok()
+            .and_then(|url| url.host_str().map(str::to_owned))
+        else {
+            return false;
+        };
+        let as_ipv6 = |host: &str| {
+            host.strip_prefix('[')
+                .and_then(|host| host.strip_suffix(']'))
+                .and_then(|address| address.parse::<Ipv6Addr>().ok())
+        };
+
+        match (as_ipv6(&read), as_ipv6(host)) {
+            (Some(read), Some(written)) => read == written,
+            _ => read.eq_ignore_ascii_case(host),
+        }
     }
 
     /// Whether `host` names a host and nothing more, no path, user or query: an IPv4 address when it is digits and
@@ -303,6 +331,30 @@ mod tests {
         assert_eq!(
             parsed(Some("tcp://[fe80::1]:2375")),
             Host::Tcp("http://[fe80::1]:2375".into())
+        );
+    }
+
+    #[test]
+    fn refuses_a_host_that_a_url_reads_as_another_one() {
+        for docker_host in ["tcp://0x0a.0.0.2:2375", "tcp://1.2.3.0x4:2375"] {
+            let error = Host::parse(Some(docker_host)).expect_err("a host read as another");
+
+            assert!(
+                error.to_string().contains("reads as another"),
+                "{docker_host}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn takes_a_name_in_capitals_and_an_ipv6_address_written_long() {
+        assert_eq!(
+            parsed(Some("tcp://Docker.LAN:2375")),
+            Host::Tcp("http://Docker.LAN:2375".into())
+        );
+        assert_eq!(
+            parsed(Some("tcp://[fe80:0:0::1]")),
+            Host::Tcp("http://[fe80:0:0::1]:2375".into())
         );
     }
 

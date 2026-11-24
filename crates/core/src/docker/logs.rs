@@ -200,7 +200,14 @@ impl Docker {
             .containers()
             .logs(&container.id, true, true, true, true, TAIL)
             .await
-            .map_err(|error| DockerError::daemon(FOLLOWING, error))?;
+            .map_err(|error| {
+                // Removed between the list and the call.
+                if DockerError::is_gone(&error) {
+                    DockerError::not_found(format!("container {container_id}"))
+                } else {
+                    DockerError::daemon(FOLLOWING, error)
+                }
+            })?;
         let following = Following {
             demux: (!output.has_type(RAW_STREAM)).then(Demux::default),
             output,

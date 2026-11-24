@@ -8,8 +8,9 @@ use super::engine::EngineMessage;
 /// it.
 const NOT_FOUND: u16 = 404;
 
-/// How Docker's message for a container that does not exist starts, as `No such container: 3f2a…`.
-const NO_SUCH_CONTAINER: &str = "No such container";
+/// What the message of Docker, `No such container: 3f2a…`, and of Podman, `… no such container`, says of a container
+/// that does not exist, in lowercase.
+const NO_SUCH_CONTAINER: &str = "no such container";
 
 /// A Docker call that failed.
 #[derive(Debug, thiserror::Error)]
@@ -72,15 +73,18 @@ impl DockerError {
     }
 
     /// Whether the daemon answered that the container does not exist: one that went away mid-read, which a read of
-    /// many containers expects. A 404 without Docker's own message is not one: a proxy in front of the daemon may
-    /// answer it for a call it does not let through.
+    /// many containers expects. A 404 whose message does not say "no such container", in any case, is not one: a proxy
+    /// in front of the daemon may answer it for a call it does not let through.
     pub(crate) fn is_gone(error: &quoll::Error<EngineMessage>) -> bool {
         let is_not_found = error
             .status()
             .is_some_and(|status| status.as_u16() == NOT_FOUND);
-        let says_no_such_container = error
-            .detail()
-            .is_some_and(|detail| detail.message.starts_with(NO_SUCH_CONTAINER));
+        let says_no_such_container = error.detail().is_some_and(|detail| {
+            detail
+                .message
+                .to_ascii_lowercase()
+                .contains(NO_SUCH_CONTAINER)
+        });
 
         is_not_found && says_no_such_container
     }
