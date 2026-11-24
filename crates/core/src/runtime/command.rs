@@ -86,8 +86,8 @@ impl Command {
     }
 
     /// Stops the child when `cancellation` is cancelled, with SIGTERM, then SIGKILL 10 seconds later if it is still
-    /// there; the run then fails with [`RunError::Cancelled`]. A command whose token is already cancelled does not
-    /// start.
+    /// there; the run then fails with [`RunError::Cancelled`], by the deadline that [`Runtime`](crate::Runtime)
+    /// describes. A command whose token is already cancelled does not start.
     ///
     /// [`RunError::Cancelled`]: crate::RunError::Cancelled
     #[must_use]

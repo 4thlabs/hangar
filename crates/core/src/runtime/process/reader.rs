@@ -17,6 +17,8 @@ pub(super) struct Reader {
     forward: Option<Forward>,
     /// Asks the child to stop, when its pipe can no longer be read.
     stop: CancellationToken,
+    /// Cancelled at the deadline of a stopped run: the pipe is no longer read.
+    cut: CancellationToken,
     /// stdout, when it is captured.
     captured: Option<Vec<u8>>,
     /// The end of stderr.
@@ -28,45 +30,53 @@ impl Reader {
     const READ_BYTES: usize = 8 * 1024;
 
     /// How long a pipe may stay silent once the child exited: a grandchild that holds it open, as `ssh` with
-    /// `ControlPersist`, must not hold the run.
-    const DRAIN: Duration = Duration::from_secs(1);
+    /// `ControlPersist`, must not hold the run. It is also how long a stopped run reads after its child is gone.
+    pub(super) const DRAIN: Duration = Duration::from_secs(1);
 
-    /// The reader of stdout, which goes where `destination` says, and asks for `stop` when its pipe fails, which
-    /// also ends the wait for a stalled output channel.
-    pub(super) fn stdout(destination: &Destination, stop: &CancellationToken) -> Self {
-        match destination {
-            Destination::Output(output) => Self {
-                forward: Forward::new(output, stop),
-                stop: stop.clone(),
-                captured: None,
-                tail: None,
-            },
-            Destination::Capture => Self {
-                forward: None,
-                stop: stop.clone(),
-                captured: Some(Vec::new()),
-                tail: None,
-            },
+    /// The reader of stdout, which goes where `destination` says. It asks for `stop` when its pipe fails, and stops
+    /// reading, as its output stops sending, once `cut` is cancelled at the deadline of a stopped run.
+    pub(super) fn stdout(
+        destination: &Destination,
+        stop: &CancellationToken,
+        cut: &CancellationToken,
+    ) -> Self {
+        let (forward, captured) = match destination {
+            Destination::Output(output) => (Forward::new(output, cut), None),
+            Destination::Capture => (None, Some(Vec::new())),
+        };
+
+        Self {
+            forward,
+            stop: stop.clone(),
+            cut: cut.clone(),
+            captured,
+            tail: None,
         }
     }
 
     /// The reader of stderr, which keeps its end and goes with stdout when it is streamed, as
     /// [`stdout`](Self::stdout) says.
-    pub(super) fn stderr(destination: &Destination, stop: &CancellationToken) -> Self {
+    pub(super) fn stderr(
+        destination: &Destination,
+        stop: &CancellationToken,
+        cut: &CancellationToken,
+    ) -> Self {
         let forward = match destination {
-            Destination::Output(output) => Forward::new(output, stop),
+            Destination::Output(output) => Forward::new(output, cut),
             Destination::Capture => None,
         };
 
         Self {
             forward,
             stop: stop.clone(),
+            cut: cut.clone(),
             captured: None,
             tail: Some(StderrTail::default()),
         }
     }
 
-    /// Reads both pipes to their end, or until they stay silent for [`Reader::DRAIN`] once `exited` is cancelled.
+    /// Reads both pipes to their end, until they stay silent for [`Reader::DRAIN`] once `exited` is cancelled, or
+    /// until the run is cut; then sends the lines held back, unless the run is cut.
     pub(super) async fn read_both(
         stdout: &mut Self,
         stdout_pipe: Option<ChildStdout>,
@@ -79,10 +89,13 @@ impl Reader {
             stderr.read(stderr_pipe, exited)
         );
 
+        stdout.finish().await;
+        stderr.finish().await;
+
         stdout_read.and(stderr_read)
     }
 
-    /// Sends the last line held back, once the reading is over.
+    /// Sends the last line held back, once the reading is over; [`read_both`](Self::read_both) does it at its end.
     pub(super) async fn finish(&mut self) {
         if let Some(forward) = &mut self.forward {
             forward.finish().await;
@@ -112,8 +125,10 @@ impl Reader {
         let mut buffer = vec![0; Self::READ_BYTES];
 
         loop {
+            // The cut first: a pipe that never stops writing must not hold the deadline back.
             let read = tokio::select! {
                 biased;
+                () = self.cut.cancelled() => return Ok(()),
                 read = pipe.read(&mut buffer) => read,
                 () = Self::drained(exited) => return Ok(()),
             };
@@ -140,7 +155,12 @@ impl Reader {
         exited: &CancellationToken,
     ) -> io::Result<()> {
         self.stop.cancel();
-        exited.cancelled().await;
+
+        tokio::select! {
+            () = exited.cancelled() => {}
+            () = self.cut.cancelled() => {}
+        }
+
         drop(pipe);
 
         Err(error)
