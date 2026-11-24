@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use futures::{Stream, StreamExt, stream};
 use quoll::ByteStream;
 
-use super::engine::Containers as _;
+use super::engine::{Containers as _, EngineMessage};
 use super::frames::{Demux, Output, Piece};
 use super::{Docker, DockerError};
 
@@ -187,8 +187,9 @@ impl Docker {
     ///
     /// # Errors
     ///
-    /// The errors of [`Docker::project_container`], and [`DockerError::Daemon`] when the daemon does not send the
-    /// log. The stream ends with an error when the daemon fails while it is followed.
+    /// The errors of [`Docker::project_container`]; [`DockerError::NotFound`] when the container went away between the
+    /// list and the call; [`DockerError::Daemon`] when the daemon does not send the log otherwise. The stream ends
+    /// with an error when the daemon fails while it is followed.
     pub async fn logs(
         &self,
         project: &str,
@@ -200,14 +201,7 @@ impl Docker {
             .containers()
             .logs(&container.id, true, true, true, true, TAIL)
             .await
-            .map_err(|error| {
-                // Removed between the list and the call.
-                if DockerError::is_gone(&error) {
-                    DockerError::not_found(format!("container {container_id}"))
-                } else {
-                    DockerError::daemon(FOLLOWING, error)
-                }
-            })?;
+            .map_err(|error| Self::logs_error(container_id, error))?;
         let following = Following {
             demux: (!output.has_type(RAW_STREAM)).then(Demux::default),
             output,
@@ -217,6 +211,15 @@ impl Docker {
         };
 
         Ok(stream::unfold(following, Self::next_line))
+    }
+
+    /// The error of a call for the log of `container_id`: not found when the container went away since the list.
+    fn logs_error(container_id: &str, error: quoll::Error<EngineMessage>) -> DockerError {
+        if DockerError::is_gone(&error) {
+            return DockerError::not_found(format!("container {container_id}"));
+        }
+
+        DockerError::daemon(FOLLOWING, error)
     }
 
     /// The next line of a followed log, once it is whole.
@@ -270,6 +273,33 @@ mod tests {
             })
             .collect()
             .await
+    }
+
+    /// An error of the logs call with `status` and Docker's `message`.
+    fn answered(status: u16, message: &str) -> quoll::Error<EngineMessage> {
+        let status = http::StatusCode::from_u16(status).expect("a status");
+
+        quoll::Error::answered(
+            status,
+            EngineMessage {
+                message: message.to_owned(),
+            },
+        )
+    }
+
+    #[test]
+    fn finds_no_container_gone_before_its_logs_were_asked_for() {
+        let gone = answered(404, "No such container: 3f2a");
+        let failed = answered(500, "the log driver failed");
+
+        assert!(matches!(
+            Docker::logs_error("3f2a", gone),
+            DockerError::NotFound { .. }
+        ));
+        assert!(matches!(
+            Docker::logs_error("3f2a", failed),
+            DockerError::Daemon { .. }
+        ));
     }
 
     #[tokio::test]
