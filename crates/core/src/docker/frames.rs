@@ -136,7 +136,7 @@ impl Demux {
         }
 
         if let Some(kept) = &self.not_frames {
-            return Err(FrameError::NotFrames(Self::text(kept)));
+            return Err(FrameError::not_frames(kept));
         }
 
         let is_inside_a_frame = self.filled > 0 || self.payload.is_some();
@@ -171,10 +171,10 @@ impl Demux {
         if let Some(line_break) = kept[searched..].iter().position(|byte| *byte == b'\n') {
             kept.truncate(searched + line_break);
 
-            return Some(FrameError::NotFrames(Self::text(kept)));
+            return Some(FrameError::not_frames(kept));
         }
 
-        (kept.len() >= LONGEST_ERROR).then(|| FrameError::NotFrames(Self::text(kept)))
+        (kept.len() >= LONGEST_ERROR).then(|| FrameError::not_frames(kept))
     }
 
     /// Whether the bytes of the header read so far may begin one: a known stream, then zeros up to the size.
@@ -235,15 +235,29 @@ pub(crate) enum FrameError {
     /// text.
     #[error("the logs hold bytes that are not frames: {0}")]
     NotFrames(String),
+    /// Bytes that are not frames, and hold no text but line breaks and spaces.
+    #[error("the daemon wrote bytes that are not frames")]
+    Blank,
     /// The logs ended inside a frame.
     #[error("the logs ended inside a frame")]
     Truncated,
 }
 
 impl FrameError {
-    /// Whether the error holds what the daemon wrote, which says more than a failed connection.
-    pub(crate) fn is_message(&self) -> bool {
-        matches!(self, Self::Daemon(_) | Self::NotFrames(_))
+    /// Whether the error says what the daemon wrote, which says more than a failed connection.
+    pub(crate) fn is_from_daemon(&self) -> bool {
+        matches!(self, Self::Daemon(_) | Self::NotFrames(_) | Self::Blank)
+    }
+
+    /// The error of `bytes` that are not frames: their text, or [`FrameError::Blank`] when they hold none.
+    fn not_frames(bytes: &[u8]) -> Self {
+        let text = Demux::text(bytes);
+
+        if text.is_empty() {
+            return Self::Blank;
+        }
+
+        Self::NotFrames(text)
     }
 }
 
@@ -434,6 +448,19 @@ mod tests {
             Some(FrameError::NotFrames(
                 "Error grabbing logs: unexpected EOF".to_owned()
             ))
+        );
+    }
+
+    #[test]
+    fn bytes_that_are_not_frames_and_hold_only_line_breaks_say_so() {
+        let mut demux = Demux::default();
+
+        read(&mut demux, &[b"\r\n\n\r"]);
+
+        assert_eq!(demux.finish(), Err(FrameError::Blank));
+        assert_eq!(
+            FrameError::Blank.to_string(),
+            "the daemon wrote bytes that are not frames"
         );
     }
 

@@ -1,7 +1,7 @@
 //! Where the daemon listens, as `DOCKER_HOST` says it, and the client that reaches it there.
 
 use std::ffi::OsStr;
-use std::net::Ipv6Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -12,6 +12,9 @@ use super::engine::{Engine, EngineClient};
 
 /// Docker's own socket, where `DOCKER_HOST` names none.
 const DEFAULT_SOCKET: &str = "/var/run/docker.sock";
+
+/// The longest label of a DNS name.
+const MAX_LABEL: usize = 63;
 
 /// The port of a daemon on TCP without TLS, where `DOCKER_HOST` names none.
 const DEFAULT_PORT: u16 = 2375;
@@ -108,6 +111,12 @@ impl Host {
                 && port.parse::<u16>().is_ok_and(|port| port != 0)
         });
 
+        if host.starts_with('[') && host.contains('%') {
+            return Err(unsupported(
+                "whose IPv6 address has a zone id, which Hangar does not support: write the address without its `%...`",
+            ));
+        }
+
         if !Self::is_host(host) || !is_port {
             return Err(unsupported(
                 "whose host or port does not read: write `tcp://host:port`, with a port from 1 to 65535",
@@ -122,21 +131,36 @@ impl Host {
         Ok(Self::Tcp(url))
     }
 
-    /// Whether `host` names a host and nothing more, no path, user or query: a DNS name or an IPv4 address, of
-    /// letters, digits, `-`, `.` and `_`, or an IPv6 address within brackets, which alone tell its `:` from the port's.
+    /// Whether `host` names a host and nothing more, no path, user or query: an IPv4 address when it is digits and
+    /// dots alone, a DNS name otherwise, or an IPv6 address within brackets, which alone tell its `:` from the port's.
     fn is_host(host: &str) -> bool {
-        match host
+        if let Some(address) = host
             .strip_prefix('[')
             .and_then(|host| host.strip_suffix(']'))
         {
-            Some(address) => address.parse::<Ipv6Addr>().is_ok(),
-            None => {
-                !host.is_empty()
-                    && host.bytes().all(|byte| {
-                        byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_')
-                    })
-            }
+            return address.parse::<Ipv6Addr>().is_ok();
         }
+
+        if host
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b'.')
+        {
+            return host.parse::<Ipv4Addr>().is_ok();
+        }
+
+        host.split('.').all(Self::is_label)
+    }
+
+    /// Whether `label` is a label of a DNS name: letters, digits, `-` and `_`, neither starting nor ending with `-`.
+    fn is_label(label: &str) -> bool {
+        let is_spelled = label
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'));
+
+        (1..=MAX_LABEL).contains(&label.len())
+            && is_spelled
+            && !label.starts_with('-')
+            && !label.ends_with('-')
     }
 
     /// A client of the daemon.
@@ -144,12 +168,18 @@ impl Host {
         let builder = client::builder()
             .with(client::user_agent(USER_AGENT))
             .with(client::timeout(DEADLINE));
-        let built = match self {
-            Self::Tcp(url) => builder.build::<Engine>(url),
-            Self::Unix(path) => Self::over_socket(builder, path)?,
-        };
-
-        built.map_err(|error| DockerError::daemon("build the Docker client", error))
+        match self {
+            Self::Tcp(url) => {
+                builder
+                    .build::<Engine>(url)
+                    .map_err(|_| DockerError::UnsupportedHost {
+                        docker_host: url.clone(),
+                        reason: "which does not make a URL: write `tcp://host:port`",
+                    })
+            }
+            Self::Unix(path) => Self::over_socket(builder, path)?
+                .map_err(|error| DockerError::daemon("build the Docker client", error)),
+        }
     }
 
     #[cfg(unix)]
@@ -236,6 +266,29 @@ mod tests {
     }
 
     #[test]
+    fn takes_a_dns_name_or_an_ip_address() {
+        assert_eq!(
+            parsed(Some("tcp://my_docker.lan:2375")),
+            Host::Tcp("http://my_docker.lan:2375".into())
+        );
+        assert_eq!(
+            parsed(Some("tcp://10.0.0.2")),
+            Host::Tcp("http://10.0.0.2:2375".into())
+        );
+        assert_eq!(
+            parsed(Some("tcp://[fe80::1]:2375")),
+            Host::Tcp("http://[fe80::1]:2375".into())
+        );
+    }
+
+    #[test]
+    fn says_that_a_zone_id_is_not_supported() {
+        let error = Host::parse(Some("tcp://[fe80::1%eth0]:2375")).expect_err("a zone id");
+
+        assert!(error.to_string().contains("zone id"), "{error}");
+    }
+
+    #[test]
     fn another_host_says_what_to_write() {
         for docker_host in [
             "tcp://docker:",
@@ -256,6 +309,12 @@ mod tests {
             "tcp://docker?x=1",
             "tcp://docker#x",
             "tcp://doc ker:2375",
+            "tcp://999.1.1.1:2375",
+            "tcp://-:2375",
+            "tcp://.:2375",
+            "tcp://a..b:2375",
+            "tcp://-docker:2375",
+            "tcp://docker-:2375",
             "tcp://:2375",
             "tcp://[::1]:",
             "ssh://me@host",

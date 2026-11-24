@@ -31,7 +31,7 @@ mod stats;
 pub use compose::{
     ComposeContainers, ComposeProjectDetail, ComposeProjectSummary, ComposeService, ProjectStatus,
 };
-pub use container::{ComposeContainer, ContainerState, Health, PublishedPort};
+pub use container::{ComposeContainer, ContainerDetails, ContainerState, Health, PublishedPort};
 pub use error::{DaemonError, DockerError};
 pub use events::DockerChange;
 pub use stats::{ContainerMetrics, StatsFrame};
