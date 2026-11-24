@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use quoll::client;
+use url::Url;
 
 use super::DockerError;
 use super::engine::{Engine, EngineClient};
@@ -117,6 +118,12 @@ impl Host {
             ));
         }
 
+        if Self::has_zero_padded_octet(host) {
+            return Err(unsupported(
+                "whose IPv4 address has an octet with a leading zero, which some read as octal: write it without, as `10.0.0.2`",
+            ));
+        }
+
         if !Self::is_host(host) || !is_port {
             return Err(unsupported(
                 "whose host or port does not read: write `tcp://host:port`, with a port from 1 to 65535",
@@ -148,7 +155,22 @@ impl Host {
             return host.parse::<Ipv4Addr>().is_ok();
         }
 
-        host.split('.').all(Self::is_label)
+        // A name may end with the dot of the root, as `docker.lan.`.
+        let name = host.strip_suffix('.').unwrap_or(host);
+
+        name.split('.').all(Self::is_label)
+    }
+
+    /// Whether `host` is an IPv4 address with an octet that has a leading zero, as `010.0.0.2`.
+    fn has_zero_padded_octet(host: &str) -> bool {
+        let is_address = host
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b'.');
+
+        is_address
+            && host
+                .split('.')
+                .any(|octet| octet.len() > 1 && octet.starts_with('0'))
     }
 
     /// Whether `label` is a label of a DNS name: letters, digits, `-` and `_`, neither starting nor ending with `-`.
@@ -168,18 +190,21 @@ impl Host {
         let builder = client::builder()
             .with(client::user_agent(USER_AGENT))
             .with(client::timeout(DEADLINE));
-        match self {
+        let built = match self {
             Self::Tcp(url) => {
-                builder
-                    .build::<Engine>(url)
-                    .map_err(|_| DockerError::UnsupportedHost {
+                if Url::parse(url).is_err() {
+                    return Err(DockerError::UnsupportedHost {
                         docker_host: url.clone(),
                         reason: "which does not make a URL: write `tcp://host:port`",
-                    })
+                    });
+                }
+
+                builder.build::<Engine>(url)
             }
-            Self::Unix(path) => Self::over_socket(builder, path)?
-                .map_err(|error| DockerError::daemon("build the Docker client", error)),
-        }
+            Self::Unix(path) => Self::over_socket(builder, path)?,
+        };
+
+        built.map_err(|error| DockerError::daemon("build the Docker client", error))
     }
 
     #[cfg(unix)]
@@ -279,6 +304,21 @@ mod tests {
             parsed(Some("tcp://[fe80::1]:2375")),
             Host::Tcp("http://[fe80::1]:2375".into())
         );
+    }
+
+    #[test]
+    fn takes_a_name_that_ends_with_the_dot_of_the_root() {
+        assert_eq!(
+            parsed(Some("tcp://docker.lan.:2375")),
+            Host::Tcp("http://docker.lan.:2375".into())
+        );
+    }
+
+    #[test]
+    fn says_that_an_octet_with_a_leading_zero_is_not_supported() {
+        let error = Host::parse(Some("tcp://010.0.0.2:2375")).expect_err("a zero-padded octet");
+
+        assert!(error.to_string().contains("leading zero"), "{error}");
     }
 
     #[test]

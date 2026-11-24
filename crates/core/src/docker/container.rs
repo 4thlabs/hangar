@@ -42,9 +42,12 @@ pub struct ComposeContainer {
     pub image: String,
     /// What it is doing.
     pub state: ContainerState,
-    /// What its inspection adds to its list entry; none when the inspection failed, so that its health and its
-    /// restarts are unknown.
+    /// What its inspection adds to its list entry; none when the inspection failed, so that its restarts are unknown
+    /// and its health is the one its list entry shows.
     pub details: Option<ContainerDetails>,
+    /// What the status of its list entry shows of its healthcheck, as `docker ps` does; none when it declares none.
+    /// [`ComposeContainer::health`] reads it when there are no details.
+    pub listed_health: Option<Health>,
     /// The ports it publishes on the host, by host port.
     pub ports: Vec<PublishedPort>,
 }
@@ -140,8 +143,17 @@ impl ComposeContainer {
             image: summary.image,
             state: ContainerState::from_daemon(&summary.state),
             details: inspection.map(ContainerDetails::from_daemon),
+            listed_health: Health::from_status(&summary.status),
             ports: PublishedPort::from_daemon(summary.ports),
         })
+    }
+
+    /// What its healthcheck says: from its inspection, else from the status of its list entry.
+    pub fn health(&self) -> Option<Health> {
+        match self.details {
+            Some(details) => details.health,
+            None => self.listed_health,
+        }
     }
 
     /// Whether compose made the container for a `docker compose run`.
@@ -200,6 +212,20 @@ impl Health {
     }
 }
 
+impl Health {
+    /// What the status of a list entry shows of the healthcheck, at its end, as `Up 5 minutes (unhealthy)`.
+    fn from_status(status: &str) -> Option<Self> {
+        let shown = status.trim_end().strip_suffix(')')?.rsplit_once('(')?.1;
+
+        match shown {
+            "health: starting" => Some(Self::Starting),
+            "healthy" => Some(Self::Healthy),
+            "unhealthy" => Some(Self::Unhealthy),
+            _ => None,
+        }
+    }
+}
+
 impl PublishedPort {
     /// The ports of a list entry that are published on the host, by host port.
     fn from_daemon(ports: Vec<Port>) -> Vec<Self> {
@@ -243,10 +269,11 @@ impl Docker {
 
     /// The compose containers that the listed containers and their inspections describe. The list is the truth:
     ///
-    /// - A container whose inspection answers 404 is left out: it went away since the list, as `docker ps` leaves it
-    ///   out.
-    /// - A container whose inspection failed otherwise, with a 500, a deadline passed, a refused connection or an
-    ///   answer that does not read, is kept as its list entry gives it, with no details, and a warning.
+    /// - A container whose inspection answers 404 with Docker's "No such container" is left out: it went away since
+    ///   the list, as `docker ps` leaves it out.
+    /// - A container whose inspection failed otherwise, with a 500, another 404, a deadline passed, a refused
+    ///   connection or an answer that does not read, is kept as its list entry gives it, with no details. One warning
+    ///   per read says how many.
     /// - The container of a `docker compose run`, or one without the labels of a service, is left out, whatever its
     ///   inspection gave.
     fn gather(
@@ -255,44 +282,43 @@ impl Docker {
             quoll::Result<ContainerInspection, EngineMessage>,
         )>,
     ) -> ComposeContainers {
-        let containers = inspections
-            .into_iter()
-            .filter_map(|(summary, inspection)| {
-                let inspection = Self::inspected(&summary.id, inspection)?;
+        let mut failures = Vec::new();
+        let mut containers = Vec::new();
 
-                ComposeContainer::from_daemon(summary, inspection)
-            })
-            .collect();
+        for (summary, inspection) in inspections {
+            let inspection = match inspection {
+                Ok(inspection) => Some(inspection),
+                Err(error) if DockerError::is_gone(&error) => continue,
+                Err(error) => {
+                    failures.push(error);
+
+                    None
+                }
+            };
+
+            containers.extend(ComposeContainer::from_daemon(summary, inspection));
+        }
+
+        if let Some(error) = failures.first() {
+            tracing::warn!(
+                count = failures.len(),
+                %error,
+                "could not inspect {} containers, kept with no details",
+                failures.len()
+            );
+        }
 
         ComposeContainers::new(containers)
     }
 
-    /// The inspection of the container `id`: none, inside, when it failed and the container is kept with no details;
-    /// none at all when the container went away.
-    fn inspected(
-        id: &str,
-        inspection: quoll::Result<ContainerInspection, EngineMessage>,
-    ) -> Option<Option<ContainerInspection>> {
-        match inspection {
-            Ok(inspection) => Some(Some(inspection)),
-            Err(error) if DockerError::is_gone(&error) => None,
-            Err(error) => {
-                tracing::warn!(container = id, %error, "could not inspect a container, kept with no details");
-
-                Some(None)
-            }
-        }
-    }
-
-    /// The container of `project` whose id starts with `container_id`. Looked up within the project, so that an id
-    /// of another project reads as missing.
+    /// The container of `project` whose id starts with `container_id`, as the list gives it, with no details: a
+    /// caller that needs them reads [`Docker::containers`]. Looked up within the project, so that an id of another
+    /// project reads as missing.
     ///
     /// # Errors
     ///
     /// [`DockerError::NotFound`] when `container_id` is not 12 to 64 hexadecimal digits, in either case, or names no
-    /// container of a service of `project`, or one that went away since the list; [`DockerError::Daemon`] when the
-    /// daemon cannot list its containers. An inspection that fails otherwise gives the container with no details, as
-    /// [`Docker::containers`] does.
+    /// container of a service of `project`; [`DockerError::Daemon`] when the daemon cannot list its containers.
     pub async fn project_container(
         &self,
         project: &str,
@@ -306,17 +332,14 @@ impl Docker {
 
         // Docker writes its ids in lowercase.
         let prefix = container_id.to_ascii_lowercase();
-
         let summary = self
             .list_containers(true, format!("{PROJECT_LABEL}={project}"))
             .await?
             .into_iter()
             .find(|summary| summary.id.starts_with(&prefix))
             .ok_or_else(missing)?;
-        let inspection = self.engine.containers().inspect(&summary.id).await;
-        let inspection = Self::inspected(&summary.id, inspection).ok_or_else(missing)?;
 
-        ComposeContainer::from_daemon(summary, inspection).ok_or_else(missing)
+        ComposeContainer::from_daemon(summary, None).ok_or_else(missing)
     }
 
     /// The containers carrying `label`, a name or a `name=value`: all of them, or the running ones alone.
@@ -388,9 +411,8 @@ mod tests {
             .expect("an inspection")
     }
 
-    #[test]
-    fn reads_a_replica_of_a_compose_service() {
-        let container = ComposeContainer::from_daemon(summary(&[]), Some(inspection(None)));
+    /// The container that [`summary`] lists, written out, with `details`.
+    fn alpha_web(details: Option<ContainerDetails>) -> ComposeContainer {
         let port = |private_port, public_port| PublishedPort {
             ip: Some("0.0.0.0".to_owned()),
             private_port,
@@ -398,24 +420,64 @@ mod tests {
             protocol: "tcp".to_owned(),
         };
 
+        ComposeContainer {
+            id: "a".repeat(FULL_ID),
+            name: "alpha-web-1".to_owned(),
+            project: "alpha".to_owned(),
+            service: "web".to_owned(),
+            replica: Some(1),
+            image: "nginx:alpine".to_owned(),
+            state: ContainerState::Running,
+            details,
+            listed_health: None,
+            // Only the published ones, by host port.
+            ports: vec![port(80, 8080), port(443, 8443)],
+        }
+    }
+
+    #[test]
+    fn reads_a_replica_of_a_compose_service() {
+        let container = ComposeContainer::from_daemon(summary(&[]), Some(inspection(None)));
+        let details = ContainerDetails {
+            health: None,
+            restart_count: Some(2),
+        };
+
+        assert_eq!(container, Some(alpha_web(Some(details))));
+    }
+
+    #[test]
+    fn reads_the_healthcheck_the_status_of_a_list_entry_shows() {
         assert_eq!(
-            container,
-            Some(ComposeContainer {
-                id: "a".repeat(FULL_ID),
-                name: "alpha-web-1".to_owned(),
-                project: "alpha".to_owned(),
-                service: "web".to_owned(),
-                replica: Some(1),
-                image: "nginx:alpine".to_owned(),
-                state: ContainerState::Running,
-                details: Some(ContainerDetails {
-                    health: None,
-                    restart_count: Some(2),
-                }),
-                // Only the published ones, by host port.
-                ports: vec![port(80, 8080), port(443, 8443)],
-            })
+            Health::from_status("Up 5 minutes (unhealthy)"),
+            Some(Health::Unhealthy)
         );
+        assert_eq!(
+            Health::from_status("Up 5 seconds (health: starting)"),
+            Some(Health::Starting)
+        );
+        assert_eq!(
+            Health::from_status("Up 2 hours (healthy)"),
+            Some(Health::Healthy)
+        );
+        assert_eq!(Health::from_status("Up 2 hours"), None);
+        assert_eq!(Health::from_status("Exited (1) 2 minutes ago"), None);
+    }
+
+    #[test]
+    fn reads_the_health_from_the_list_entry_when_the_inspection_failed() {
+        let mut unhealthy = summary(&[]);
+
+        unhealthy.status = "Up 5 minutes (unhealthy)".to_owned();
+
+        let inspected =
+            ComposeContainer::from_daemon(unhealthy.clone(), Some(inspection(Some("healthy"))))
+                .expect("a container");
+        let listed = ComposeContainer::from_daemon(unhealthy, None).expect("a container");
+
+        // The inspection, when there is one, says more than the list.
+        assert_eq!(inspected.health(), Some(Health::Healthy));
+        assert_eq!(listed.health(), Some(Health::Unhealthy));
     }
 
     #[test]
@@ -490,10 +552,10 @@ mod tests {
     }
 
     /// An inspection's error with `status`, as the daemon answers it.
-    fn answered(status: u16) -> quoll::Error<EngineMessage> {
+    fn answered(status: u16, message: &str) -> quoll::Error<EngineMessage> {
         let status = http::StatusCode::from_u16(status).expect("a status");
         let message = EngineMessage {
-            message: format!("answered {status}"),
+            message: message.to_owned(),
         };
 
         quoll::Error::answered(status, message)
@@ -523,21 +585,27 @@ mod tests {
 
     /// Asserts that `containers` is the container of [`summary`] alone, as its list entry gives it.
     fn assert_kept_from_its_summary(containers: &[ComposeContainer]) {
-        let from_summary = ComposeContainer::from_daemon(summary(&[]), None).expect("a container");
-
-        assert_eq!(containers, [from_summary]);
-        assert_eq!(containers[0].details, None);
-        assert_eq!(containers[0].state, ContainerState::Running);
+        assert_eq!(containers, [alpha_web(None)]);
     }
 
     #[test]
     fn leaves_out_a_container_removed_since_the_list() {
-        assert!(gathered_with_failed(answered(404)).is_empty());
+        let gone = answered(404, &format!("No such container: {}", "a".repeat(FULL_ID)));
+
+        assert!(gathered_with_failed(gone).is_empty());
+    }
+
+    #[test]
+    fn keeps_a_container_whose_inspection_answered_a_404_that_is_not_dockers() {
+        // A socket proxy that lets the list through, and not the inspections.
+        assert_kept_from_its_summary(&gathered_with_failed(answered(404, "404 page not found")));
     }
 
     #[test]
     fn keeps_a_container_whose_inspection_answered_500_from_its_summary() {
-        assert_kept_from_its_summary(&gathered_with_failed(answered(500)));
+        let failed = answered(500, "error during connect");
+
+        assert_kept_from_its_summary(&gathered_with_failed(failed));
     }
 
     #[tokio::test]

@@ -230,9 +230,7 @@ impl ComposeContainers {
     }
 
     fn is_unhealthy(container: &ComposeContainer) -> bool {
-        container
-            .details
-            .is_some_and(|details| details.health == Some(Health::Unhealthy))
+        container.health() == Some(Health::Unhealthy)
     }
 }
 
@@ -255,6 +253,7 @@ mod tests {
                 health: None,
                 restart_count: Some(0),
             }),
+            listed_health: None,
             ports: Vec::new(),
         }
     }
@@ -334,6 +333,20 @@ mod tests {
                 container_ids: Vec::new(),
             }]
         );
+    }
+
+    #[test]
+    fn counts_as_unhealthy_a_container_whose_list_entry_says_so_with_no_details() {
+        let uninspected = ComposeContainer {
+            details: None,
+            listed_health: Some(Health::Unhealthy),
+            ..container()
+        };
+
+        let summaries = ComposeContainers::new(vec![uninspected]).summaries(["alpha"]);
+
+        assert_eq!(summaries[0].status, ProjectStatus::Unhealthy);
+        assert_eq!(summaries[0].unhealthy_count, 1);
     }
 
     #[test]

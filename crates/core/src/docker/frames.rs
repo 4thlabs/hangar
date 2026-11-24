@@ -157,9 +157,9 @@ impl Demux {
     fn collect(&mut self, bytes: &[u8]) -> Option<FrameError> {
         let kept = self.not_frames.get_or_insert_with(Vec::new);
         let searched = kept.len();
-        // The line breaks before the message, as the `\r\n` a daemon may write first, do not end it.
+        // The spaces and line breaks before the message, as the `\r\n` a daemon may write first, do not end it.
         let bytes = if kept.is_empty() {
-            let message = bytes.iter().position(|byte| !matches!(byte, b'\r' | b'\n'));
+            let message = bytes.iter().position(|byte| !byte.is_ascii_whitespace());
 
             &bytes[message.unwrap_or(bytes.len())..]
         } else {
@@ -440,7 +440,7 @@ mod tests {
 
         let (_, _, failure) = read(
             &mut demux,
-            &[b"\r\n", b"\nError grabbing logs: unexpected EOF\r\n"],
+            &[b"\r\n", b"\n \tError grabbing logs: unexpected EOF\r\n"],
         );
 
         assert_eq!(
