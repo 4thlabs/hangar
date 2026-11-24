@@ -14,10 +14,9 @@ use tokio::sync::mpsc;
 /// How long a test waits for what it checks before it fails, rather than hang.
 const DEADLINE: Duration = Duration::from_secs(10);
 
-/// A child that prints its pid, then loops until SIGTERM, which it answers by creating the file named as its first
-/// argument.
-const STOPS_ON_SIGTERM: &str =
-    r#"trap 'touch "$1"; exit 0' TERM; echo $$; while :; do sleep 0.1; done"#;
+/// A child that prints its pid, then loops until SIGTERM, which it answers by printing on stdout and stderr, then
+/// creating the file named as its first argument: a closed pipe would kill it with SIGPIPE before.
+const STOPS_ON_SIGTERM: &str = r#"trap 'echo stopping; echo stopping >&2; touch "$1"; exit 0' TERM; echo $$; while :; do sleep 0.1; done"#;
 
 /// A command running `script` in `sh`.
 fn shell(script: &str) -> Command {
@@ -255,8 +254,12 @@ async fn stops_the_child_with_sigterm_when_its_command_is_cancelled() {
     let (failure, pid) = within_deadline(async { tokio::join!(run, cancel_once_started) }).await;
 
     assert!(matches!(failure, Err(RunError::Cancelled { .. })));
-    assert!(marker.exists(), "the child got SIGTERM");
+    assert!(
+        marker.exists(),
+        "the child stopped on its own after SIGTERM"
+    );
     assert!(!is_running(&pid), "the child is gone");
+    assert_eq!(received(&mut receiver), ["stopping\n", "stopping\n"]);
 }
 
 #[tokio::test]
@@ -275,7 +278,10 @@ async fn stops_the_child_of_a_dropped_run_and_counts_it_until_then() {
     run.abort();
     within_deadline(runtime.idle()).await;
 
-    assert!(marker.exists(), "the child got SIGTERM");
+    assert!(
+        marker.exists(),
+        "the child stopped on its own after SIGTERM"
+    );
     assert!(!is_running(&pid), "the child is gone");
 }
 
@@ -377,6 +383,82 @@ async fn keeps_the_exit_status_when_a_cancel_comes_after_the_exit() {
 
     assert_eq!(line, b"reaped\n");
     assert!(matches!(failure, Err(RunError::Failed { code: 4, .. })));
+}
+
+#[tokio::test]
+async fn reads_to_the_end_what_a_child_left_when_a_cancel_comes_as_it_exits() {
+    let runtime = Runtime::new();
+    let cancellation = CancellationToken::new();
+
+    // The grandchild writes the rest of stdout once the child exited.
+    let command = shell("(sleep 0.3; echo late) & echo early").cancellation(cancellation.clone());
+
+    let capture = runtime.capture(&command);
+    let cancel_once_exited = async {
+        runtime.idle().await;
+        cancellation.cancel();
+    };
+
+    let (stdout, ()) = within_deadline(async { tokio::join!(capture, cancel_once_exited) }).await;
+
+    assert_eq!(
+        stdout.expect("the child exited before the cancel"),
+        "early\nlate\n"
+    );
+}
+
+#[tokio::test]
+async fn a_cancel_ends_a_run_whose_reader_is_stalled() {
+    let runtime = Runtime::new();
+    let cancellation = CancellationToken::new();
+    let (sender, mut receiver) = mpsc::channel(1);
+
+    // One write: the first line, the one that fills the channel, and one with no newline, held back until the end of
+    // the run, which the stop must not wait to send.
+    let command =
+        shell(r"printf 'ready\nfill\nheld'; exec sleep 60").cancellation(cancellation.clone());
+
+    let run = runtime.run(&command, Output::Lines(sender));
+    let cancel_once_stalled = async {
+        let ready = receiver.recv().await.expect("the child prints");
+
+        cancellation.cancel();
+
+        // Read no more: the channel stays full.
+        (ready, receiver)
+    };
+
+    let (stopped, (ready, _stalled)) =
+        within_deadline(async { tokio::join!(run, cancel_once_stalled) }).await;
+
+    assert_eq!(ready, b"ready\n");
+    assert!(matches!(stopped, Err(RunError::Cancelled { .. })));
+    within_deadline(runtime.idle()).await;
+}
+
+#[tokio::test]
+async fn releases_the_child_at_its_exit_and_ends_a_stalled_reading_on_cancel() {
+    let runtime = Runtime::new();
+    let cancellation = CancellationToken::new();
+    let (sender, _stalled) = mpsc::channel(1);
+
+    sender
+        .send(b"fills the channel".to_vec())
+        .await
+        .expect("the channel is open");
+
+    let command = shell("echo one; echo two").cancellation(cancellation.clone());
+
+    let run = runtime.run(&command, Output::Lines(sender));
+    let cancel_once_exited = async {
+        // The reading waits for the reader, the child does not.
+        runtime.idle().await;
+        cancellation.cancel();
+    };
+
+    let (ended, ()) = within_deadline(async { tokio::join!(run, cancel_once_exited) }).await;
+
+    ended.expect("the child exited with code 0 before the cancel");
 }
 
 #[tokio::test]

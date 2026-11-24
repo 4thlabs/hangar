@@ -82,7 +82,7 @@ impl FakeRunner {
 
     /// Prints `text` where `output` says.
     async fn print(output: &Output, text: &str) {
-        let Some(mut forward) = Forward::new(output) else {
+        let Some(mut forward) = Forward::new(output, &CancellationToken::new()) else {
             return;
         };
 
