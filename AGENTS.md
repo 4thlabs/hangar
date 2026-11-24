@@ -118,7 +118,7 @@ follows [`docs/rust/CODING_RULES.md`](docs/rust/CODING_RULES.md): read it before
 ```
 Cargo.toml        # the workspace: members = ["crates/*"], the shared settings and lints
 crates/
-├── core/         # hangar-core, the library: no web framework, no quoll
+├── core/         # hangar-core, the library: no web framework, quoll's client alone
 └── cli/          # hangar-cli, the binary `hangar`, on the core
 ```
 
