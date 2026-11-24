@@ -25,7 +25,8 @@ follows quoll's docs.
 - Each crate sits in `crates/<name>`, which `members = ["crates/*"]` picks up. Their shared settings and the
   versions of the dependencies two crates use are in the root's `[workspace.package]` and `[workspace.dependencies]`.
 - `hangar-core` (`crates/core`) holds what Hangar does: running commands, the store, compose and Docker. It depends
-  on no web framework and no quoll, so that the binary and the server both run on it. `hangar-cli` (`crates/cli`)
+  on no web framework, so that the binary and the server both run on it, and on quoll with its feature `client`
+  alone, never `server`: the APIs it calls, as Docker's Engine API, are quoll contracts. `hangar-cli` (`crates/cli`)
   is the binary `hangar`, on the core.
 - One subject per module, in `name.rs`, with its submodules in `name/`. There is no `mod.rs`.
 - `lib.rs` holds the crate's docs, its modules and what it re-exports; the code lives in the modules. `main.rs`
