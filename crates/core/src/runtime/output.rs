@@ -1,71 +1,58 @@
 //! Where the output of a run goes, and how it is cut on the way.
 
-use std::fmt;
-use std::sync::Arc;
-
-/// What receives the output of a streamed run: a compose batch's, which several runs share, or an HTTP stream's.
-///
-/// It is called from async code, so it must not block: it sends to an unbounded channel, not a bounded one, and a
-/// reader that has gone away drops the rest rather than holding the command back. Any `Fn(&[u8])` is a sink.
-///
-/// ```
-/// use std::sync::Arc;
-///
-/// use hangar_core::{Output, OutputSink};
-/// use tokio::sync::mpsc;
-///
-/// let (sender, _receiver) = mpsc::unbounded_channel::<Vec<u8>>();
-/// let sink: Arc<dyn OutputSink> = Arc::new(move |line: &[u8]| {
-///     // The reader may be gone: the command goes on regardless.
-///     let _ = sender.send(line.to_vec());
-/// });
-///
-/// let output = Output::Lines(sink);
-/// # drop(output);
-/// ```
-pub trait OutputSink: Send + Sync {
-    /// Receives the next piece of output: a line or a chunk, as [`Output`] says.
-    fn write(&self, output: &[u8]);
-}
-
-impl<F> OutputSink for F
-where
-    F: Fn(&[u8]) + Send + Sync,
-{
-    fn write(&self, output: &[u8]) {
-        self(output);
-    }
-}
+use tokio::sync::mpsc;
 
 /// Where a run sends its stdout and stderr. A captured run keeps stdout alone instead, through
 /// [`CommandRunner::capture`](crate::CommandRunner::capture).
-#[derive(Clone)]
+///
+/// A streamed output goes to a bounded channel, which a compose batch shares between its runs and an HTTP stream
+/// reads. A full channel pauses the run until the reader catches up, so that a slow reader holds the child back
+/// rather than growing memory with the whole output; a reader that has gone away loses the rest, and the command goes
+/// on without it.
+///
+/// ```
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), hangar_core::RunError> {
+/// use hangar_core::{Command, CommandRunner, Output, Runtime};
+/// use tokio::sync::mpsc;
+///
+/// let (sender, mut receiver) = mpsc::channel::<Vec<u8>>(64);
+/// let reader = tokio::spawn(async move {
+///     let mut lines = Vec::new();
+///
+///     while let Some(line) = receiver.recv().await {
+///         lines.push(String::from_utf8_lossy(&line).into_owned());
+///     }
+///
+///     lines
+/// });
+///
+/// let command = Command::new("sh").args(["-c", "echo pulled; echo started"]);
+///
+/// Runtime::new().run(&command, Output::Lines(sender)).await?;
+///
+/// assert_eq!(reader.await.expect("the reader does not panic"), ["pulled\n", "started\n"]);
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone)]
 pub enum Output {
     /// The child writes to this process's own stdout and stderr, a terminal's in the CLI. Its stderr then does not
     /// reach the error of a failed run.
     Inherit,
 
-    /// stdout and stderr go together to the sink, one line per write, with its newline. A line of more than 64 KiB
-    /// comes in pieces, and the last one lacks its newline when the output does not end with one.
-    Lines(Arc<dyn OutputSink>),
+    /// stdout and stderr go together to the channel, one line per message, with its newline. A line of more than
+    /// 64 KiB comes in pieces, and the last one lacks its newline when the output does not end with one.
+    Lines(mpsc::Sender<Vec<u8>>),
 
-    /// stdout and stderr go together to the sink, a chunk per write, as the child writes them.
-    Chunks(Arc<dyn OutputSink>),
+    /// stdout and stderr go together to the channel, a chunk per message, as the child writes them.
+    Chunks(mpsc::Sender<Vec<u8>>),
 }
 
-impl fmt::Debug for Output {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Inherit => formatter.write_str("Inherit"),
-            Self::Lines(_) => formatter.write_str("Lines(..)"),
-            Self::Chunks(_) => formatter.write_str("Chunks(..)"),
-        }
-    }
-}
-
-/// Sends one stream of a child, its stdout or its stderr, to a sink, cut as its [`Output`] says.
+/// Sends one stream of a child, its stdout or its stderr, to a channel, cut as its [`Output`] says.
+#[derive(Debug)]
 pub(crate) struct Forward {
-    sink: Arc<dyn OutputSink>,
+    sender: mpsc::Sender<Vec<u8>>,
     /// The start of a line still to end, for [`Output::Lines`]; `None` sends chunks as they come.
     pending_line: Option<Vec<u8>>,
 }
@@ -78,21 +65,21 @@ impl Forward {
     pub(crate) fn new(output: &Output) -> Option<Self> {
         match output {
             Output::Inherit => None,
-            Output::Lines(sink) => Some(Self {
-                sink: Arc::clone(sink),
+            Output::Lines(sender) => Some(Self {
+                sender: sender.clone(),
                 pending_line: Some(Vec::new()),
             }),
-            Output::Chunks(sink) => Some(Self {
-                sink: Arc::clone(sink),
+            Output::Chunks(sender) => Some(Self {
+                sender: sender.clone(),
                 pending_line: None,
             }),
         }
     }
 
     /// Sends what the child wrote, or keeps the start of a line until its end comes.
-    pub(crate) fn write(&mut self, chunk: &[u8]) {
+    pub(crate) async fn write(&mut self, chunk: &[u8]) {
         let Some(pending) = &mut self.pending_line else {
-            self.sink.write(chunk);
+            Self::send(&self.sender, chunk.to_vec()).await;
             return;
         };
 
@@ -107,58 +94,59 @@ impl Forward {
                 rest = tail;
 
                 if pending.ends_with(b"\n") || pending.len() == Self::MAX_LINE_BYTES {
-                    self.sink.write(pending);
-                    pending.clear();
+                    Self::send(&self.sender, std::mem::take(pending)).await;
                 }
             }
         }
     }
 
     /// Sends the last line, which the child did not end with a newline.
-    pub(crate) fn finish(&mut self) {
+    pub(crate) async fn finish(&mut self) {
         let Some(pending) = &mut self.pending_line else {
             return;
         };
 
         if !pending.is_empty() {
-            self.sink.write(pending);
-            pending.clear();
+            Self::send(&self.sender, std::mem::take(pending)).await;
         }
+    }
+
+    /// Sends one message, waiting while the channel is full.
+    async fn send(sender: &mpsc::Sender<Vec<u8>>, output: Vec<u8>) {
+        // A reader that has gone away, as a closed page, loses the rest: the command goes on without it.
+        let _ = sender.send(output).await;
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use tokio::sync::mpsc;
 
     use super::{Forward, Output};
 
-    /// A sink that keeps each write apart.
-    fn recording_sink() -> (Output, Output, Arc<Mutex<Vec<Vec<u8>>>>) {
-        let writes = Arc::new(Mutex::new(Vec::new()));
-        let recorded = Arc::clone(&writes);
-        let sink = Arc::new(move |output: &[u8]| {
-            recorded
-                .lock()
-                .expect("no test panics while holding the lock")
-                .push(output.to_vec());
-        });
+    /// What the channel received, each message apart.
+    fn received(mut receiver: mpsc::Receiver<Vec<u8>>) -> Vec<Vec<u8>> {
+        let mut messages = Vec::new();
 
-        (Output::Lines(sink.clone()), Output::Chunks(sink), writes)
+        while let Ok(message) = receiver.try_recv() {
+            messages.push(message);
+        }
+
+        messages
     }
 
-    #[test]
-    fn sends_whole_lines_whatever_the_chunks() {
-        let (lines, _, writes) = recording_sink();
-        let mut forward = Forward::new(&lines).expect("lines are streamed");
+    #[tokio::test]
+    async fn sends_whole_lines_whatever_the_chunks() {
+        let (sender, receiver) = mpsc::channel(16);
+        let mut forward = Forward::new(&Output::Lines(sender)).expect("lines are streamed");
 
-        forward.write(b"Pulling web\nPull");
-        forward.write(b"ing db");
-        forward.write(b"\nDone\nwith no newline");
-        forward.finish();
+        forward.write(b"Pulling web\nPull").await;
+        forward.write(b"ing db").await;
+        forward.write(b"\nDone\nwith no newline").await;
+        forward.finish().await;
 
         assert_eq!(
-            *writes.lock().expect("the forward is done"),
+            received(receiver),
             [
                 b"Pulling web\n".to_vec(),
                 b"Pulling db\n".to_vec(),
@@ -168,37 +156,43 @@ mod tests {
         );
     }
 
-    #[test]
-    fn cuts_a_line_that_never_ends() {
-        let (lines, _, writes) = recording_sink();
-        let mut forward = Forward::new(&lines).expect("lines are streamed");
+    #[tokio::test]
+    async fn cuts_a_line_that_never_ends() {
+        let (sender, receiver) = mpsc::channel(16);
+        let mut forward = Forward::new(&Output::Lines(sender)).expect("lines are streamed");
 
-        forward.write(&vec![b'.'; Forward::MAX_LINE_BYTES + 10]);
-        forward.finish();
+        forward
+            .write(&vec![b'.'; Forward::MAX_LINE_BYTES + 10])
+            .await;
+        forward.finish().await;
 
-        let lengths: Vec<usize> = writes
-            .lock()
-            .expect("the forward is done")
-            .iter()
-            .map(Vec::len)
-            .collect();
+        let lengths: Vec<usize> = received(receiver).iter().map(Vec::len).collect();
 
         assert_eq!(lengths, [Forward::MAX_LINE_BYTES, 10]);
     }
 
-    #[test]
-    fn sends_chunks_as_they_come() {
-        let (_, chunks, writes) = recording_sink();
-        let mut forward = Forward::new(&chunks).expect("chunks are streamed");
+    #[tokio::test]
+    async fn sends_chunks_as_they_come() {
+        let (sender, receiver) = mpsc::channel(16);
+        let mut forward = Forward::new(&Output::Chunks(sender)).expect("chunks are streamed");
 
-        forward.write(b"Pull");
-        forward.write(b"ing\n");
-        forward.finish();
+        forward.write(b"Pull").await;
+        forward.write(b"ing\n").await;
+        forward.finish().await;
 
-        assert_eq!(
-            *writes.lock().expect("the forward is done"),
-            [b"Pull".to_vec(), b"ing\n".to_vec()]
-        );
+        assert_eq!(received(receiver), [b"Pull".to_vec(), b"ing\n".to_vec()]);
+    }
+
+    #[tokio::test]
+    async fn goes_on_once_the_reader_is_gone() {
+        let (sender, receiver) = mpsc::channel(1);
+        let mut forward = Forward::new(&Output::Lines(sender)).expect("lines are streamed");
+
+        drop(receiver);
+
+        // More lines than the channel holds: a full channel would wait, a closed one does not.
+        forward.write(b"one\ntwo\nthree\n").await;
+        forward.finish().await;
     }
 
     #[test]

@@ -13,7 +13,7 @@ use std::future::Future;
 
 pub use command::Command;
 pub use error::RunError;
-pub use output::{Output, OutputSink};
+pub use output::Output;
 pub use process::Runtime;
 
 /// Runs child commands. The store and compose take one, so that their tests pass a fake runner instead of running
@@ -23,7 +23,8 @@ pub trait CommandRunner: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns a [`RunError`] when the command cannot start, exits with a non-zero code, is killed, or is cancelled.
+    /// Returns a [`RunError`] when the command cannot start, exits with a non-zero code, is killed, cancelled or
+    /// interrupted.
     fn run(
         &self,
         command: &Command,

@@ -41,6 +41,13 @@ impl StderrTail {
 
     /// Keeps the line being written, unless it is blank, and forgets the oldest beyond [`StderrTail::LINES`].
     fn end_line(&mut self) {
+        // A line cut at `LINE_BYTES` may end inside a character: drop its start rather than show it as garbage.
+        if let Err(error) = std::str::from_utf8(&self.partial)
+            && error.error_len().is_none()
+        {
+            self.partial.truncate(error.valid_up_to());
+        }
+
         let line = String::from_utf8_lossy(&self.partial).trim_end().to_owned();
 
         self.partial.clear();
@@ -91,6 +98,16 @@ mod tests {
             tail.finish(),
             "Error response from daemon\nno newline at the end"
         );
+    }
+
+    #[test]
+    fn cuts_a_long_line_at_a_character_boundary() {
+        let mut tail = StderrTail::default();
+        let long_line = format!("{}é and more\n", "x".repeat(StderrTail::LINE_BYTES - 1));
+
+        tail.write(long_line.as_bytes());
+
+        assert_eq!(tail.finish(), "x".repeat(StderrTail::LINE_BYTES - 1));
     }
 
     #[test]

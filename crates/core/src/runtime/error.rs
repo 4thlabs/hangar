@@ -39,11 +39,18 @@ pub enum RunError {
         signal: Option<i32>,
     },
 
-    /// The run was cancelled, by its command's token or by the runtime's, and the child killed; or it did not start,
+    /// The run was cancelled, by its command's token or by the runtime's, and the child stopped; or it did not start,
     /// cancelled before.
     #[error("{program} was cancelled")]
     Cancelled {
         /// The program that was cancelled.
+        program: String,
+    },
+
+    /// The run did not start: the runtime was interrupted, as by Ctrl-C in the CLI.
+    #[error("{program} was not run: interrupted")]
+    Interrupted {
+        /// The program that was not run.
         program: String,
     },
 
@@ -71,7 +78,7 @@ pub enum RunError {
 
 impl RunError {
     /// The exit code a shell gives this failure, which the `hangar` binary exits with: the child's own code, 128 and
-    /// the signal for a killed child, 130 for a cancelled run, as after Ctrl-C, and 1 otherwise.
+    /// the signal for a killed child, 130 for a cancelled or an interrupted run, as after Ctrl-C, and 1 otherwise.
     pub fn exit_code(&self) -> i32 {
         const SIGNALED: i32 = 128;
         const INTERRUPTED: i32 = 130;
@@ -82,7 +89,7 @@ impl RunError {
                 signal: Some(signal),
                 ..
             } => SIGNALED + signal,
-            Self::Cancelled { .. } => INTERRUPTED,
+            Self::Cancelled { .. } | Self::Interrupted { .. } => INTERRUPTED,
             Self::Spawn { .. }
             | Self::Killed { signal: None, .. }
             | Self::Io { .. }

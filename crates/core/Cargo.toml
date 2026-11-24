@@ -13,16 +13,20 @@ quoll = { git = "https://github.com/4thlabs/quoll", tag = "v0.10.0", features = 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["io-util", "macros", "process", "time"] }
+tokio = { version = "1", features = ["io-util", "macros", "process", "rt", "sync", "time"] }
 tokio-util = "0.7"
 tracing = "0.1"
 # The URL of a daemon on TCP, checked before the client is built, which reqwest reads with it too.
 url = "2"
 
+# SIGTERM, which lets a child stop on its own before the SIGKILL of tokio's `Child::kill`.
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.32", features = ["signal"] }
+
 [dev-dependencies]
 # The statuses a fake answer of the daemon has.
 http = "1"
-tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "test-util"] }
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "test-util", "time"] }
 
 [lints]
 workspace = true

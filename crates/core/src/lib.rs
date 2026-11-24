@@ -10,6 +10,6 @@ pub use docker::{
     ComposeService, ContainerDetails, ContainerMetrics, ContainerState, DaemonError, Docker,
     DockerChange, DockerError, Health, ProjectStatus, PublishedPort, StatsFrame,
 };
-pub use runtime::{Command, CommandRunner, Output, OutputSink, RunError, Runtime};
+pub use runtime::{Command, CommandRunner, Output, RunError, Runtime};
 pub use tokio_util::sync::CancellationToken;
 pub use version::VERSION;
