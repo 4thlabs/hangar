@@ -108,3 +108,28 @@ Write code for the next human reader. Clarity beats cleverness and brevity.
 - Errors: never swallow them; add context; keep the happy path readable.
 - Tests: names describe behavior; setup visible in the test.
 - Scope: change only what the task needs; keep refactors separate from behavior changes.
+
+## Rust
+
+The server is being rewritten in Rust, in the Cargo workspace at the root, beside the Waku version, which stays the
+published image until the switch. The sections above are the TypeScript conventions, for `src/`. The Rust code
+follows [`docs/rust/CODING_RULES.md`](docs/rust/CODING_RULES.md): read it before writing or reviewing Rust.
+
+```
+Cargo.toml        # the workspace: members = ["crates/*"], the shared settings and lints
+crates/
+├── core/         # hangar-core, the library: no web framework, no quoll
+└── cli/          # hangar-cli, the binary `hangar`, on the core
+```
+
+What CI's `rust` job runs, warnings as errors:
+
+```bash
+export RUSTFLAGS="-D warnings" RUSTDOCFLAGS="-D warnings"
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --all-features --locked
+cargo doc --workspace --all-features --no-deps --locked
+```
+
+`cargo run -p hangar-cli -- <args>` runs the binary. Nothing of the workspace goes into the Docker image.

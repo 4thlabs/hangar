@@ -12,6 +12,8 @@ export default defineConfig({
   vite: {
     resolve: { tsconfigPaths: true },
     optimizeDeps: { exclude: nativeDeps },
+    // Vite watches the whole root; Cargo's build directory holds thousands of files the app never imports.
+    server: { watch: { ignored: ["**/target/**"] } },
     plugins: [tailwindcss(), react(), babel({ presets: [reactCompilerPreset()] })],
     environments: {
       rsc: { resolve: { external: nativeDeps } },

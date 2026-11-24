@@ -61,6 +61,41 @@ jobs:
           BETTER_AUTH_URL: http://localhost:3010
           BETTER_AUTH_SECRET: build-only-secret-at-least-32-characters
 
+  # The Cargo workspace under crates/, beside the Node app, which it does not touch. The image does not
+  # wait for it: until the switch, a failing Rust job must not stop the Node image from publishing.
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+
+    env:
+      CARGO_TERM_COLOR: always
+      RUSTFLAGS: -D warnings
+      RUSTDOCFLAGS: -D warnings
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace --all-features --locked
+
+      - name: Docs
+        run: cargo doc --workspace --all-features --no-deps --locked
+
   image:
     name: Build ${{ matrix.platform }}
     needs: ci
