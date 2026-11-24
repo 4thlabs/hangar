@@ -27,7 +27,14 @@ use super::{Command, CommandRunner, Output, RunError};
 ///   Ctrl-C has reached already;
 /// - a cancellation, the command's [`cancellation`](Command::cancellation) or the runtime's
 ///   [`with_cancellation`](Self::with_cancellation), stops a running child: SIGTERM once, then SIGKILL 10 seconds
-///   later if it is still there, its output read all along. A run that is dropped stops its child the same way.
+///   later if it is still there. A run that is dropped stops its child the same way.
+///
+/// A cancelled run has one deadline, from the cancel: the grace period, then a second after the child is reaped, or
+/// after SIGKILL; a second after the cancel when the child had exited already. Until the deadline, nothing is cut:
+/// both pipes are read, and the output waits for its reader, a stalled one included. At the deadline, the pipes are
+/// no longer read, what is left of the output is dropped, the last line held back included, and the run fails with
+/// [`RunError::Cancelled`]. A reader that keeps up loses nothing written before the deadline; a run that ends before
+/// it, a child that exited by itself before the cancel, keeps its own outcome.
 ///
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
@@ -187,20 +194,27 @@ impl Runtime {
             program: command.program.clone(),
             source,
         };
-        let status = exit.status.map_err(io_error)?;
+        let status = match exit.status {
+            Ok(status) => status,
+            Err(error) => return Err(io_error(Self::lost_track(error, exit.read))),
+        };
+        let read = exit
+            .read
+            .expect("the supervisor reads the pipes of a child it reaped to an end");
+        let is_cancelled = exit.stopped || exit.cut;
 
         // A child that exited by itself reports its own failure first.
-        if !exit.stopped && status.code().is_some() {
+        if !is_cancelled && status.code().is_some() {
             Self::check(command, status, exit.stderr)?;
-            exit.read.map_err(io_error)?;
+            read.map_err(io_error)?;
 
             return Ok(exit.stdout);
         }
 
         // A lost pipe stops the child, or kills it with SIGPIPE: its read error, not the signal, is the cause.
-        exit.read.map_err(io_error)?;
+        read.map_err(io_error)?;
 
-        if exit.stopped {
+        if is_cancelled {
             return Err(RunError::Cancelled {
                 program: command.program.clone(),
             });
@@ -209,6 +223,17 @@ impl Runtime {
         Self::check(command, status, exit.stderr)?;
 
         Ok(exit.stdout)
+    }
+
+    /// Why the supervisor lost track of a child, with how the reading of its pipes ended, if it did.
+    fn lost_track(error: io::Error, read: Option<io::Result<()>>) -> io::Error {
+        let message = match read {
+            Some(Ok(())) => return error,
+            Some(Err(read_error)) => format!("{error}; its output could not be read: {read_error}"),
+            None => format!("{error}; its output was not read to its end"),
+        };
+
+        io::Error::new(error.kind(), message)
     }
 
     /// Starts the child, its stdin closed and its output piped, unless it inherits this process's.
@@ -246,12 +271,15 @@ impl Runtime {
         destination: &Destination,
         stop: &CancellationToken,
     ) -> Supervisor {
+        let cut = CancellationToken::new();
+
         Supervisor {
             child,
             counted,
-            stdout: Reader::stdout(destination, stop),
-            stderr: Reader::stderr(destination, stop),
+            stdout: Reader::stdout(destination, stop, &cut),
+            stderr: Reader::stderr(destination, stop, &cut),
             stop: stop.clone(),
+            cut,
             grace: self.grace,
         }
     }
@@ -427,10 +455,11 @@ mod tests {
 
         Exit {
             status: Ok(status),
-            read,
+            read: Some(read),
             stdout: Vec::new(),
             stderr,
             stopped,
+            cut: false,
         }
     }
 
@@ -492,6 +521,55 @@ mod tests {
             Runtime::conclude(&Command::new("docker"), exit(exited_with(0), Ok(()), true));
 
         assert!(matches!(outcome, Err(RunError::Cancelled { .. })));
+    }
+
+    #[test]
+    fn a_run_cut_at_its_deadline_is_cancelled_though_its_child_exited_by_itself() {
+        let cut = Exit {
+            cut: true,
+            ..exit(exited_with(0), Ok(()), false)
+        };
+
+        let outcome = Runtime::conclude(&Command::new("docker"), cut);
+
+        assert!(matches!(outcome, Err(RunError::Cancelled { .. })));
+    }
+
+    #[test]
+    fn a_lost_child_reports_the_read_error_beside_its_own() {
+        let lost = Exit {
+            status: Err(io::Error::from(io::ErrorKind::PermissionDenied)),
+            ..exit(exited_with(0), read_error(), false)
+        };
+        let unfinished = Exit {
+            status: Err(io::Error::from(io::ErrorKind::PermissionDenied)),
+            read: None,
+            ..exit(exited_with(0), Ok(()), false)
+        };
+
+        let Err(RunError::Io { source, .. }) = Runtime::conclude(&Command::new("docker"), lost)
+        else {
+            panic!("a lost child is an i/o error");
+        };
+        let Err(RunError::Io {
+            source: unfinished_source,
+            ..
+        }) = Runtime::conclude(&Command::new("docker"), unfinished)
+        else {
+            panic!("a lost child is an i/o error");
+        };
+
+        assert_eq!(source.kind(), io::ErrorKind::PermissionDenied);
+        assert!(
+            source
+                .to_string()
+                .ends_with("its output could not be read: the pipe broke")
+        );
+        assert!(
+            unfinished_source
+                .to_string()
+                .ends_with("its output was not read to its end")
+        );
     }
 
     /// A file in the temporary directory, which a child writes to tell the test something; removed with it.

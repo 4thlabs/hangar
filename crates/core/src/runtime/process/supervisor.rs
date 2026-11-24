@@ -1,7 +1,8 @@
 //! The task that owns a child: its process, its pipes and its count, and the only one that signals it.
 
-use std::future;
+use std::future::{self, Future};
 use std::io;
+use std::pin::Pin;
 use std::process::ExitStatus;
 use std::time::Duration;
 
@@ -17,6 +18,9 @@ use crate::runtime::stderr_tail::StderrTail;
 /// Follows a child from its start to its exit, in a task of its own, so that a run cancelled and a run dropped stop it
 /// the same way: SIGTERM once, its pipes read meanwhile, so that what it prints as it stops does not kill it with
 /// SIGPIPE, then SIGKILL after the grace period.
+///
+/// A stopped run has one deadline: [`Reader::DRAIN`] after the child is reaped, or after SIGKILL. Until then, the
+/// pipes are read and the output waits for its reader; at the deadline, `cut` stops both, and the run is cancelled.
 #[derive(Debug)]
 pub(super) struct Supervisor {
     pub(super) child: Child,
@@ -25,6 +29,8 @@ pub(super) struct Supervisor {
     pub(super) stderr: Reader,
     /// Asks for the child to stop: the run's cancellation, the run dropped, or a pipe that can no longer be read.
     pub(super) stop: CancellationToken,
+    /// Cancelled at the deadline of a stopped run, which the readers and their outputs share.
+    pub(super) cut: CancellationToken,
     /// How long the child has between SIGTERM and SIGKILL.
     pub(super) grace: Duration,
 }
@@ -34,13 +40,15 @@ pub(super) struct Supervisor {
 pub(super) struct Exit {
     /// Its exit status, or why the supervisor lost track of it.
     pub(super) status: io::Result<ExitStatus>,
-    /// Whether its pipes were read to their end, or to the silence that follows its exit.
-    pub(super) read: io::Result<()>,
+    /// How the reading of its pipes ended: at their close, at the silence that follows the exit, or at the cut;
+    /// `None` when it did not end, as for a child the supervisor lost track of.
+    pub(super) read: Option<io::Result<()>>,
     pub(super) stdout: Vec<u8>,
     pub(super) stderr: StderrTail,
-    /// Whether it was signaled to stop before it exited, which makes the run cancelled; always `false` when `status`
-    /// is an error.
+    /// Whether it was signaled to stop before it exited; always `false` when `status` is an error.
     pub(super) stopped: bool,
+    /// Whether the run reached the deadline of its stop, its output cut.
+    pub(super) cut: bool,
 }
 
 /// Where the stop of a child is.
@@ -87,7 +95,7 @@ impl Supervisor {
     }
 
     /// Reads the pipes and waits for the child to exit, stopping it when asked; then reads what is left in its
-    /// pipes, which ends at their close or after a silence, and reports the exit.
+    /// pipes, which ends at their close, after a silence, or at the deadline of a stop, and reports the exit.
     async fn supervise(self, report: oneshot::Sender<Exit>) {
         let Self {
             mut child,
@@ -95,12 +103,14 @@ impl Supervisor {
             mut stdout,
             mut stderr,
             stop,
+            cut,
             grace,
         } = self;
         let stdout_pipe = child.stdout.take();
         let stderr_pipe = child.stderr.take();
         let exited = CancellationToken::new();
         let mut state = Stop::NotAsked;
+        let mut cut_at = None;
         let mut read = None;
 
         // Boxed, to be dropped before the readers are finished.
@@ -124,10 +134,16 @@ impl Supervisor {
                         Err(error) => break Ending::Lost(error),
                     }
                 }
-                () = Self::deadline(state) => match Self::kill(&mut child) {
+                () = Self::kill_deadline(state) => match Self::kill(&mut child) {
                     Ok(next) => state = next,
                     Err(error) => break Ending::Lost(error),
                 },
+                // A killed child that is not reaped by the deadline, as one in uninterruptible sleep.
+                () = Self::at(cut_at), if !cut.is_cancelled() => cut.cancel(),
+            }
+
+            if state == Stop::Killed && cut_at.is_none() {
+                cut_at = Some(Instant::now() + Reader::DRAIN);
             }
         };
 
@@ -135,13 +151,12 @@ impl Supervisor {
             Ending::Exited(status) => status,
             Ending::Lost(error) => {
                 // The pipes close, so that the child gets EOF or SIGPIPE rather than block on a pipe nobody reads,
-                // and so does the output channel, so that its reader is not left waiting for its end.
+                // and so does the output channel, its last lines sent if its reader takes them in time.
                 drop(reading);
-                stdout.finish().await;
-                stderr.finish().await;
+                Self::finish_within(&mut stdout, &mut stderr, &cut).await;
                 drop((stdout, stderr));
 
-                Self::report(report, Exit::lost(error, read.unwrap_or(Ok(()))));
+                Self::report(report, Exit::lost(error, read));
                 Self::outlive(child, counted).await;
 
                 return;
@@ -152,27 +167,67 @@ impl Supervisor {
         drop(counted);
         exited.cancel();
 
+        if stop.is_cancelled() && cut_at.is_none() {
+            cut_at = Some(Instant::now() + Reader::DRAIN);
+        }
+
         let read = match read {
             Some(result) => {
                 drop(reading);
                 result
             }
-            None => reading.await,
+            None => Self::drain(reading, &stop, &cut, cut_at).await,
         };
-
-        stdout.finish().await;
-        stderr.finish().await;
 
         Self::report(
             report,
             Exit {
-                read,
+                read: Some(read),
                 stdout: stdout.into_captured(),
                 stderr: stderr.into_tail(),
                 stopped: status.is_ok() && state != Stop::NotAsked,
+                cut: cut.is_cancelled(),
                 status,
             },
         );
+    }
+
+    /// Reads what the child left in its pipes and sends the last lines, until the deadline of a stop: `cut_at`, or
+    /// [`Reader::DRAIN`] after a stop that comes now.
+    async fn drain(
+        mut reading: Pin<Box<impl Future<Output = io::Result<()>>>>,
+        stop: &CancellationToken,
+        cut: &CancellationToken,
+        mut cut_at: Option<Instant>,
+    ) -> io::Result<()> {
+        loop {
+            tokio::select! {
+                biased;
+                result = &mut reading => return result,
+                () = stop.cancelled(), if cut_at.is_none() => {
+                    cut_at = Some(Instant::now() + Reader::DRAIN);
+                }
+                () = Self::at(cut_at) => {
+                    cut.cancel();
+
+                    // The readers stop at the cut.
+                    return reading.await;
+                }
+            }
+        }
+    }
+
+    /// Sends the lines the readers held back, for [`Reader::DRAIN`] at most, then cuts what is left.
+    async fn finish_within(stdout: &mut Reader, stderr: &mut Reader, cut: &CancellationToken) {
+        let finishing = async {
+            stdout.finish().await;
+            stderr.finish().await;
+        };
+
+        tokio::select! {
+            () = finishing => {}
+            () = tokio::time::sleep(Reader::DRAIN) => cut.cancel(),
+        }
     }
 
     /// Hands the exit to the run.
@@ -228,13 +283,22 @@ impl Supervisor {
         Ok(Stop::Killed)
     }
 
-    /// Resolves at the deadline of a SIGTERM, and never otherwise.
-    async fn deadline(state: Stop) {
+    /// Resolves when a SIGTERM's grace period is over, and never otherwise.
+    async fn kill_deadline(state: Stop) {
         let Stop::Terminated { kill_at } = state else {
             return future::pending().await;
         };
 
         tokio::time::sleep_until(kill_at).await;
+    }
+
+    /// Resolves at `instant`, and never without one.
+    async fn at(instant: Option<Instant>) {
+        let Some(instant) = instant else {
+            return future::pending().await;
+        };
+
+        tokio::time::sleep_until(instant).await;
     }
 
     /// Sends SIGTERM to the child, unless it was reaped already.
@@ -252,14 +316,15 @@ impl Supervisor {
 }
 
 impl Exit {
-    /// The exit of a child the supervisor lost track of, and how the reading of its pipes went until then.
-    fn lost(error: io::Error, read: io::Result<()>) -> Self {
+    /// The exit of a child the supervisor lost track of, and how the reading of its pipes ended, if it did.
+    fn lost(error: io::Error, read: Option<io::Result<()>>) -> Self {
         Self {
             status: Err(error),
             read,
             stdout: Vec::new(),
             stderr: StderrTail::default(),
             stopped: false,
+            cut: false,
         }
     }
 }
