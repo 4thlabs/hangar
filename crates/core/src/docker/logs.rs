@@ -6,7 +6,7 @@ use futures::{Stream, StreamExt, stream};
 use quoll::ByteStream;
 
 use super::engine::Containers as _;
-use super::frames::{Demux, Output};
+use super::frames::{Demux, Output, Piece};
 use super::{Docker, DockerError};
 
 /// How many lines of the past a followed log starts with.
@@ -18,6 +18,10 @@ const RAW_STREAM: &str = "application/vnd.docker.raw-stream";
 /// What a failed read of a log says it was doing.
 const FOLLOWING: &str = "follow a container's logs";
 
+/// The longest line kept: past it, the bytes read so far go out as a line of their own, so that a log with no line
+/// break, as a progress bar a TTY draws with `\r` or binary output, does not grow without limit.
+const LONGEST_LINE: usize = 64 * 1024;
+
 /// Cuts the bytes of a log into lines. Each output keeps its own unfinished line, so that a line of stderr written
 /// between two halves of one of stdout splits neither.
 #[derive(Debug, Default)]
@@ -27,25 +31,37 @@ struct LogLines {
 }
 
 impl LogLines {
-    /// The lines that `bytes`, written to `output`, finish.
+    /// The lines that `bytes`, written to `output`, finish: those they end, and those they make reach
+    /// [`LONGEST_LINE`]. Only `bytes` are searched for line breaks, never what came before them.
     fn push(&mut self, output: Output, bytes: &[u8]) -> Vec<String> {
         let pending = match output {
             Output::Stdout => &mut self.stdout,
             Output::Stderr => &mut self.stderr,
         };
+        let mut lines = Vec::new();
 
-        pending.extend_from_slice(bytes);
+        for piece in bytes.split_inclusive(|byte| *byte == b'\n') {
+            let (mut text, is_whole) = match piece.strip_suffix(b"\n") {
+                Some(text) => (text, true),
+                None => (piece, false),
+            };
 
-        let Some(last_newline) = pending.iter().rposition(|byte| *byte == b'\n') else {
-            return Vec::new();
-        };
-        let rest = pending.split_off(last_newline + 1);
-        let finished = std::mem::replace(pending, rest);
+            while pending.len() + text.len() >= LONGEST_LINE {
+                let (head, rest) = text.split_at(LONGEST_LINE - pending.len());
 
-        finished
-            .split(|byte| *byte == b'\n')
-            .filter_map(Self::line)
-            .collect()
+                pending.extend_from_slice(head);
+                lines.extend(Self::line(&std::mem::take(pending)));
+                text = rest;
+            }
+
+            pending.extend_from_slice(text);
+
+            if is_whole {
+                lines.extend(Self::line(&std::mem::take(pending)));
+            }
+        }
+
+        lines
     }
 
     /// The unfinished lines, once the log ended.
@@ -57,7 +73,8 @@ impl LogLines {
     }
 
     /// One line, decoded, without the `\r` a TTY ends it with. Decoding waits for the whole line, so a character
-    /// split between two chunks stays whole; bytes that are not UTF-8 read as `�`.
+    /// split between two chunks stays whole, unless a line cut at [`LONGEST_LINE`] splits it; bytes that are not UTF-8
+    /// read as `�`.
     fn line(bytes: &[u8]) -> Option<String> {
         if bytes.is_empty() {
             return None;
@@ -80,31 +97,42 @@ struct Following {
 }
 
 impl Following {
-    /// The lines that `chunk` finishes.
-    fn read(&mut self, chunk: &[u8]) -> Result<Vec<String>, DockerError> {
+    /// Reads `chunk`: the lines it finishes, and the end of the log when its frames say the daemon failed.
+    fn read(&mut self, chunk: &[u8]) {
         let Some(demux) = &mut self.demux else {
-            return Ok(self.lines.push(Output::Stdout, chunk));
-        };
-        let pieces = demux
-            .push(chunk)
-            .map_err(|error| DockerError::daemon(FOLLOWING, error))?;
+            let lines = self.lines.push(Output::Stdout, chunk);
 
-        Ok(pieces
-            .into_iter()
-            .flat_map(|(output, bytes)| self.lines.push(output, bytes))
-            .collect())
+            self.ready.extend(lines.into_iter().map(Ok));
+
+            return;
+        };
+
+        for piece in demux.push(chunk) {
+            match piece {
+                Piece::Output(output, bytes) => {
+                    let lines = self.lines.push(output, bytes);
+
+                    self.ready.extend(lines.into_iter().map(Ok));
+                }
+                Piece::Failed(error) => {
+                    return self.end(Some(DockerError::daemon(FOLLOWING, error)));
+                }
+            }
+        }
     }
 
-    /// The last lines, once the log ended, and the error of a log that ended inside a frame.
-    fn finish(&mut self) {
+    /// Ends the log: its unfinished lines first, then `error`, or that of a log that ended inside a frame.
+    fn end(&mut self, error: Option<DockerError>) {
         let lines = std::mem::take(&mut self.lines).finish();
+        let truncated = self
+            .demux
+            .as_ref()
+            .and_then(|demux| demux.finish().err())
+            .map(|error| DockerError::daemon(FOLLOWING, error));
 
+        self.has_ended = true;
         self.ready.extend(lines.into_iter().map(Ok));
-
-        if let Some(Err(error)) = self.demux.as_ref().map(Demux::finish) {
-            self.ready
-                .push_back(Err(DockerError::daemon(FOLLOWING, error)));
-        }
+        self.ready.extend(error.or(truncated).map(Err));
     }
 }
 
@@ -155,23 +183,9 @@ impl Docker {
             }
 
             match following.output.next().await {
-                Some(Ok(chunk)) => match following.read(&chunk) {
-                    Ok(lines) => following.ready.extend(lines.into_iter().map(Ok)),
-                    Err(error) => {
-                        following.has_ended = true;
-                        following.ready.push_back(Err(error));
-                    }
-                },
-                Some(Err(error)) => {
-                    following.has_ended = true;
-                    following
-                        .ready
-                        .push_back(Err(DockerError::daemon(FOLLOWING, error)));
-                }
-                None => {
-                    following.has_ended = true;
-                    following.finish();
-                }
+                Some(Ok(chunk)) => following.read(&chunk),
+                Some(Err(error)) => following.end(Some(DockerError::daemon(FOLLOWING, error))),
+                None => following.end(None),
             }
         }
     }
@@ -179,7 +193,70 @@ impl Docker {
 
 #[cfg(test)]
 mod tests {
-    use super::{LogLines, Output};
+    use quoll::Error;
+
+    use super::*;
+
+    /// The items of a log whose daemon sends `chunks`, in frames when `demux` is set.
+    async fn followed(
+        chunks: Vec<quoll::Result<Vec<u8>>>,
+        demux: Option<Demux>,
+    ) -> Vec<Result<String, String>> {
+        let following = Following {
+            output: ByteStream::try_new(stream::iter(chunks)),
+            demux,
+            lines: LogLines::default(),
+            ready: VecDeque::new(),
+            has_ended: false,
+        };
+
+        stream::unfold(following, Docker::next_line)
+            .map(|item| {
+                item.map_err(|error| {
+                    std::error::Error::source(&error)
+                        .map(ToString::to_string)
+                        .unwrap_or_default()
+                })
+            })
+            .collect()
+            .await
+    }
+
+    #[tokio::test]
+    async fn gives_the_unfinished_line_before_the_error_that_ends_the_log() {
+        let items = followed(
+            vec![
+                Ok(b"fatal: out of memory".to_vec()),
+                Err(Error::internal("the connection was cut")),
+            ],
+            None,
+        )
+        .await;
+
+        assert_eq!(items.len(), 2, "{items:?}");
+        assert_eq!(items[0], Ok("fatal: out of memory".to_owned()));
+        assert!(items[1].is_err(), "{items:?}");
+    }
+
+    #[tokio::test]
+    async fn gives_the_unfinished_line_before_the_daemons_error_in_its_frames() {
+        let frame = |stream: u8, payload: &[u8]| {
+            let size = u32::try_from(payload.len()).expect("a small payload");
+
+            [&[stream, 0, 0, 0][..], &size.to_be_bytes(), payload].concat()
+        };
+        let chunk = [frame(1, b"partial"), frame(3, b"the log driver failed")].concat();
+
+        let items = followed(vec![Ok(chunk)], Some(Demux::default())).await;
+
+        assert_eq!(
+            items,
+            [
+                Ok("partial".to_owned()),
+                Err("error from daemon in stream: the log driver failed".to_owned())
+            ]
+        );
+    }
 
     #[test]
     fn cuts_a_chunk_into_its_lines() {
@@ -220,6 +297,37 @@ mod tests {
         let mut lines = LogLines::default();
 
         assert_eq!(lines.push(Output::Stdout, b"prompt\r\n"), ["prompt"]);
+    }
+
+    #[test]
+    fn gives_out_a_line_with_no_break_at_the_longest_line() {
+        let mut lines = LogLines::default();
+        let chunk = [b'#'; 1024];
+        let mut given = Vec::new();
+
+        // A progress bar redrawn with `\r` alone, 200 KiB of it.
+        for _ in 0..200 {
+            given.extend(lines.push(Output::Stdout, &chunk));
+        }
+
+        assert_eq!(given.len(), 3);
+        assert!(given.iter().all(|line| line.len() == LONGEST_LINE));
+        assert_eq!(lines.stdout.len(), 200 * 1024 - 3 * LONGEST_LINE);
+    }
+
+    #[test]
+    fn cuts_a_long_line_at_the_longest_line_and_goes_on() {
+        let mut lines = LogLines::default();
+        let mut bytes = vec![b'a'; LONGEST_LINE + 10];
+
+        bytes.extend(b"\nnext\n");
+
+        let given = lines.push(Output::Stdout, &bytes);
+
+        assert_eq!(
+            given.iter().map(String::len).collect::<Vec<_>>(),
+            [LONGEST_LINE, 10, 4]
+        );
     }
 
     #[test]

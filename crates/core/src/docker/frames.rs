@@ -4,6 +4,12 @@
 /// The size of a frame's header.
 const HEADER: usize = 8;
 
+/// The stream of a frame that holds an error of the daemon rather than output, as Docker's own `stdcopy` reads it.
+const SYSTEM_ERROR: u8 = 3;
+
+/// How much of an error of the daemon, or of bytes that are not frames, is kept for its message.
+const LONGEST_ERROR: usize = 64 * 1024;
+
 /// The output a piece of payload was written to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Output {
@@ -11,33 +17,60 @@ pub(crate) enum Output {
     Stderr,
 }
 
-/// Splits frames as their bytes come, cut anywhere: a payload is given as it comes, never held whole, so that a long
-/// line of a followed container shows as soon as its bytes do.
+/// What a chunk of frames holds, in order: pieces of output, then a failure after which nothing more is read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Piece<'a> {
+    /// Bytes written to `Output`.
+    Output(Output, &'a [u8]),
+    /// The end of the frames.
+    Failed(FrameError),
+}
+
+/// What the payload of the frame being read is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Payload {
+    Output(Output),
+    SystemError,
+}
+
+/// Splits frames as their bytes come, cut anywhere: a payload of output is given as it comes, never held whole, so
+/// that a long line of a followed container shows as soon as its bytes do.
 #[derive(Debug, Default)]
 pub(crate) struct Demux {
     header: [u8; HEADER],
     /// How much of the next header has come.
     filled: usize,
-    /// The output of the frame being read, and how many of its bytes are still to come.
-    payload: Option<(Output, usize)>,
+    /// The payload of the frame being read, and how many of its bytes are still to come.
+    payload: Option<(Payload, usize)>,
+    /// The error of the daemon read so far.
+    system_error: Vec<u8>,
+    has_failed: bool,
 }
 
 impl Demux {
-    /// The pieces of payload `chunk` holds, each with its output, in order.
-    pub(crate) fn push<'a>(
-        &mut self,
-        mut chunk: &'a [u8],
-    ) -> Result<Vec<(Output, &'a [u8])>, FrameError> {
+    /// The pieces `chunk` holds, in order. After a [`Piece::Failed`], nothing more is read.
+    pub(crate) fn push<'a>(&mut self, mut chunk: &'a [u8]) -> Vec<Piece<'a>> {
         let mut pieces = Vec::new();
 
-        while !chunk.is_empty() {
-            if let Some((output, left)) = self.payload {
-                let (piece, rest) = chunk.split_at(left.min(chunk.len()));
-                let left = left - piece.len();
+        while !chunk.is_empty() && !self.has_failed {
+            if let Some((payload, left)) = self.payload {
+                let (bytes, rest) = chunk.split_at(left.min(chunk.len()));
+                let left = left - bytes.len();
 
-                pieces.push((output, piece));
-                self.payload = (left > 0).then_some((output, left));
+                self.payload = (left > 0).then_some((payload, left));
                 chunk = rest;
+
+                match payload {
+                    Payload::Output(output) => pieces.push(Piece::Output(output, bytes)),
+                    Payload::SystemError => {
+                        Self::keep(&mut self.system_error, bytes);
+
+                        if left == 0 {
+                            pieces.push(self.system_error());
+                        }
+                    }
+                }
+
                 continue;
             }
 
@@ -53,11 +86,14 @@ impl Demux {
 
             self.filled = 0;
 
-            // Stdin, 0, goes with stdout, as Docker's own `stdcopy` writes it.
-            let output = match self.header[0] {
-                0 | 1 => Output::Stdout,
-                2 => Output::Stderr,
-                other => return Err(FrameError::UnknownStream(other)),
+            let Some(payload) = self.payload_kind() else {
+                // The daemon wrote something else than a frame, such as the text of an error: it is the message.
+                let mut bytes = self.header.to_vec();
+
+                Self::keep(&mut bytes, chunk);
+                pieces.push(self.fail(FrameError::NotFrames(Self::text(&bytes))));
+
+                break;
             };
             let size = u32::from_be_bytes([
                 self.header[4],
@@ -66,28 +102,78 @@ impl Demux {
                 self.header[7],
             ]);
 
-            self.payload = (size > 0).then_some((output, size as usize));
+            self.payload = (size > 0).then_some((payload, size as usize));
+
+            if size == 0 && payload == Payload::SystemError {
+                pieces.push(self.system_error());
+            }
         }
 
-        Ok(pieces)
+        pieces
     }
 
     /// Says the bytes have ended: an error when they ended inside a frame.
     pub(crate) fn finish(&self) -> Result<(), FrameError> {
-        if self.filled > 0 || self.payload.is_some() {
+        if !self.has_failed && (self.filled > 0 || self.payload.is_some()) {
             return Err(FrameError::Truncated);
         }
 
         Ok(())
     }
+
+    /// What the header read holds, when it is one: a known stream and three zeros.
+    fn payload_kind(&self) -> Option<Payload> {
+        if self.header[1..4] != [0, 0, 0] {
+            return None;
+        }
+
+        // Stdin, 0, goes with stdout, as Docker's own `stdcopy` writes it.
+        match self.header[0] {
+            0 | 1 => Some(Payload::Output(Output::Stdout)),
+            2 => Some(Payload::Output(Output::Stderr)),
+            SYSTEM_ERROR => Some(Payload::SystemError),
+            _ => None,
+        }
+    }
+
+    /// The error of the daemon, once its frame is whole.
+    fn system_error(&mut self) -> Piece<'static> {
+        let message = Self::text(&std::mem::take(&mut self.system_error));
+
+        self.fail(FrameError::Daemon(message))
+    }
+
+    /// The failure after which nothing more is read.
+    fn fail(&mut self, error: FrameError) -> Piece<'static> {
+        self.has_failed = true;
+        self.payload = None;
+
+        Piece::Failed(error)
+    }
+
+    /// Adds `bytes` to the message `kept`, up to [`LONGEST_ERROR`].
+    fn keep(kept: &mut Vec<u8>, bytes: &[u8]) {
+        let room = LONGEST_ERROR.saturating_sub(kept.len());
+
+        kept.extend_from_slice(&bytes[..room.min(bytes.len())]);
+    }
+
+    /// The text of a message, without its last line break.
+    fn text(bytes: &[u8]) -> String {
+        String::from_utf8_lossy(bytes).trim_end().to_owned()
+    }
 }
 
-/// Bytes that are not Docker's frames.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+/// Bytes that are not Docker's frames, or that say the daemon failed.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum FrameError {
-    /// A header naming a stream other than stdin, stdout and stderr: the bytes are not frames.
-    #[error("the logs hold a frame of an unknown stream, {0}")]
-    UnknownStream(u8),
+    /// A frame of the daemon's own errors, stream 3, with its message.
+    #[error("error from daemon in stream: {0}")]
+    Daemon(String),
+    /// A header naming no known stream: the bytes from there are not frames, such as an error the daemon wrote as
+    /// text.
+    #[error("the logs hold bytes that are not frames: {0}")]
+    NotFrames(String),
     /// The logs ended inside a frame.
     #[error("the logs ended inside a frame")]
     Truncated,
@@ -107,20 +193,21 @@ mod tests {
         frame
     }
 
-    /// What `demux` gives of `chunks`, the pieces of each output put end to end.
-    fn read(demux: &mut Demux, chunks: &[&[u8]]) -> (Vec<u8>, Vec<u8>) {
-        let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+    /// What `demux` gives of `chunks`: the pieces of each output put end to end, and the failure if there is one.
+    fn read(demux: &mut Demux, chunks: &[&[u8]]) -> (Vec<u8>, Vec<u8>, Option<FrameError>) {
+        let (mut stdout, mut stderr, mut failure) = (Vec::new(), Vec::new(), None);
 
         for chunk in chunks {
-            for (output, piece) in demux.push(chunk).expect("frames") {
-                match output {
-                    Output::Stdout => stdout.extend(piece),
-                    Output::Stderr => stderr.extend(piece),
+            for piece in demux.push(chunk) {
+                match piece {
+                    Piece::Output(Output::Stdout, bytes) => stdout.extend(bytes),
+                    Piece::Output(Output::Stderr, bytes) => stderr.extend(bytes),
+                    Piece::Failed(error) => failure = Some(error),
                 }
             }
         }
 
-        (stdout, stderr)
+        (stdout, stderr, failure)
     }
 
     #[test]
@@ -138,10 +225,11 @@ mod tests {
                 let mut demux = Demux::default();
                 let chunks = [&bytes[..cut], &bytes[cut..second], &bytes[second..]];
 
-                let (stdout, stderr) = read(&mut demux, &chunks);
+                let (stdout, stderr, failure) = read(&mut demux, &chunks);
 
                 assert_eq!(stdout, b"hello\nbye\n", "cut at {cut} and {second}");
                 assert_eq!(stderr, b"oops\n", "cut at {cut} and {second}");
+                assert_eq!(failure, None, "cut at {cut} and {second}");
                 assert_eq!(demux.finish(), Ok(()));
             }
         }
@@ -152,9 +240,9 @@ mod tests {
         let bytes = frame(1, b"a long line\n");
         let mut demux = Demux::default();
 
-        let pieces = demux.push(&bytes[..10]).expect("frames");
+        let pieces = demux.push(&bytes[..10]);
 
-        assert_eq!(pieces, [(Output::Stdout, &b"a "[..])]);
+        assert_eq!(pieces, [Piece::Output(Output::Stdout, &b"a "[..])]);
     }
 
     #[test]
@@ -164,19 +252,65 @@ mod tests {
         for cut in 1..bytes.len() {
             let mut demux = Demux::default();
 
-            demux.push(&bytes[..cut]).expect("frames");
+            demux.push(&bytes[..cut]);
 
             assert_eq!(demux.finish(), Err(FrameError::Truncated), "cut at {cut}");
         }
     }
 
     #[test]
-    fn a_frame_of_an_unknown_stream_is_an_error() {
+    fn a_frame_of_the_daemons_errors_is_its_message_after_the_output_before_it() {
+        let bytes = [
+            frame(1, b"last\n"),
+            frame(3, b"the log driver failed\n"),
+            frame(1, b"after\n"),
+        ]
+        .concat();
+
+        for cut in 1..bytes.len() {
+            let mut demux = Demux::default();
+
+            let (stdout, _, failure) = read(&mut demux, &[&bytes[..cut], &bytes[cut..]]);
+
+            assert_eq!(stdout, b"last\n", "cut at {cut}");
+            assert_eq!(
+                failure,
+                Some(FrameError::Daemon("the log driver failed".to_owned())),
+                "cut at {cut}"
+            );
+            assert_eq!(demux.finish(), Ok(()));
+        }
+    }
+
+    #[test]
+    fn bytes_that_are_not_frames_are_kept_as_the_message() {
+        let bytes = [
+            frame(1, b"ok\n"),
+            b"Error grabbing logs: unexpected EOF\n".to_vec(),
+        ]
+        .concat();
         let mut demux = Demux::default();
 
+        let (stdout, _, failure) = read(&mut demux, &[&bytes]);
+
+        assert_eq!(stdout, b"ok\n");
         assert_eq!(
-            demux.push(&frame(7, b"x")),
-            Err(FrameError::UnknownStream(7))
+            failure,
+            Some(FrameError::NotFrames(
+                "Error grabbing logs: unexpected EOF".to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn a_frame_of_an_unknown_stream_is_not_frames() {
+        let mut demux = Demux::default();
+
+        let (_, _, failure) = read(&mut demux, &[&frame(7, b"x")]);
+
+        assert!(
+            matches!(failure, Some(FrameError::NotFrames(_))),
+            "{failure:?}"
         );
     }
 }
