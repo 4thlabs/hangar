@@ -157,6 +157,14 @@ impl Demux {
     fn collect(&mut self, bytes: &[u8]) -> Option<FrameError> {
         let kept = self.not_frames.get_or_insert_with(Vec::new);
         let searched = kept.len();
+        // The line breaks before the message, as the `\r\n` a daemon may write first, do not end it.
+        let bytes = if kept.is_empty() {
+            let message = bytes.iter().position(|byte| !matches!(byte, b'\r' | b'\n'));
+
+            &bytes[message.unwrap_or(bytes.len())..]
+        } else {
+            bytes
+        };
 
         Self::keep(kept, bytes);
 
@@ -410,6 +418,23 @@ mod tests {
         let (_, _, failure) = read(&mut demux, &[b"oops\n"]);
 
         assert_eq!(failure, Some(FrameError::NotFrames("oops".to_owned())));
+    }
+
+    #[test]
+    fn bytes_that_are_not_frames_start_their_message_past_the_line_breaks_before_it() {
+        let mut demux = Demux::default();
+
+        let (_, _, failure) = read(
+            &mut demux,
+            &[b"\r\n", b"\nError grabbing logs: unexpected EOF\r\n"],
+        );
+
+        assert_eq!(
+            failure,
+            Some(FrameError::NotFrames(
+                "Error grabbing logs: unexpected EOF".to_owned()
+            ))
+        );
     }
 
     #[test]

@@ -8,6 +8,12 @@ use super::engine::EngineMessage;
 /// it.
 const NOT_FOUND: u16 = 404;
 
+/// The first of the statuses of a daemon that is gone: 502, 503 and 504.
+const BAD_GATEWAY: u16 = 502;
+
+/// The last of the statuses of a daemon that is gone.
+const GATEWAY_TIMEOUT: u16 = 504;
+
 /// A Docker call that failed.
 #[derive(Debug, thiserror::Error)]
 pub enum DockerError {
@@ -92,12 +98,14 @@ impl DockerError {
         error.status().is_none() && !Self::is_undecoded(error)
     }
 
-    /// Whether the daemon is in trouble rather than the subject of the call: no answer, as [`Self::is_unanswered`]
-    /// reads it, or a 5xx, from an overloaded daemon or a proxy in front of it that lost it.
-    pub(crate) fn is_daemon_failure(error: &quoll::Error<EngineMessage>) -> bool {
-        Self::is_unanswered(error)
-            || error
-                .status()
-                .is_some_and(|status| status.is_server_error())
+    /// Whether the daemon is gone rather than the subject of the call in trouble: no answer, as
+    /// [`Self::is_unanswered`] reads it, or a 502, 503 or 504, from a proxy in front of a daemon it lost or a
+    /// daemon that is going away. A 500 is not one: Docker answers it for a problem of one container too.
+    pub(crate) fn is_daemon_gone(error: &quoll::Error<EngineMessage>) -> bool {
+        let is_gateway_failure = error
+            .status()
+            .is_some_and(|status| (BAD_GATEWAY..=GATEWAY_TIMEOUT).contains(&status.as_u16()));
+
+        Self::is_unanswered(error) || is_gateway_failure
     }
 }

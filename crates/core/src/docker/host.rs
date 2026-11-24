@@ -1,6 +1,7 @@
 //! Where the daemon listens, as `DOCKER_HOST` says it, and the client that reaches it there.
 
 use std::ffi::OsStr;
+use std::net::Ipv6Addr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -121,15 +122,20 @@ impl Host {
         Ok(Self::Tcp(url))
     }
 
-    /// Whether `host` names a host: a name or an IPv4 address, with no `:` and no bracket, or an IPv6 address within
-    /// brackets, which alone tell its `:` from the port's.
+    /// Whether `host` names a host and nothing more, no path, user or query: a DNS name or an IPv4 address, of
+    /// letters, digits, `-`, `.` and `_`, or an IPv6 address within brackets, which alone tell its `:` from the port's.
     fn is_host(host: &str) -> bool {
         match host
             .strip_prefix('[')
             .and_then(|host| host.strip_suffix(']'))
         {
-            Some(address) => !address.is_empty() && !address.contains(['[', ']']),
-            None => !host.is_empty() && !host.contains([':', '[', ']']),
+            Some(address) => address.parse::<Ipv6Addr>().is_ok(),
+            None => {
+                !host.is_empty()
+                    && host.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_')
+                    })
+            }
         }
     }
 
@@ -244,6 +250,12 @@ mod tests {
             "tcp://[abc",
             "tcp://abc]",
             "tcp://[[::1]]:2375",
+            "tcp://[zzz]:2375",
+            "tcp://docker/x",
+            "tcp://me@docker:2375",
+            "tcp://docker?x=1",
+            "tcp://docker#x",
+            "tcp://doc ker:2375",
             "tcp://:2375",
             "tcp://[::1]:",
             "ssh://me@host",
