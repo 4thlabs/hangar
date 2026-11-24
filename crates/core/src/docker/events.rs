@@ -7,9 +7,9 @@ use futures::{Stream, StreamExt, stream};
 use quoll::JsonLines;
 use tokio::time::Instant;
 
-use super::Docker;
 use super::container::PROJECT_LABEL;
 use super::engine::{Event, System};
+use super::{Docker, DockerError};
 
 /// The first pause before following again, doubled after each attempt up to [`LONGEST_PAUSE`].
 const FIRST_PAUSE: Duration = Duration::from_secs(1);
@@ -19,7 +19,8 @@ const LONGEST_PAUSE: Duration = Duration::from_secs(30);
 
 /// How long a connection stays open, with no event, before it counts as working: the pause before the next one then
 /// starts again from [`FIRST_PAUSE`]. A proxy that answers then closes at once keeps the pause doubling instead, so
-/// that it does not make a reload of everything every second.
+/// that it does not make a reload of everything every second. It is timed while the stream is read, so that a caller
+/// slow to read does not make a connection that closed at once look open.
 const STEADY: Duration = Duration::from_secs(10);
 
 /// The label the daemon puts on the container of a Swarm task.
@@ -113,8 +114,8 @@ struct Following<S> {
     events: Option<JsonLines<Event>>,
     /// The changes read, not given yet.
     ready: VecDeque<DockerChange>,
-    /// When the connection opened, while there is one.
-    connected_at: Option<Instant>,
+    /// When the connection counts as working, until it does.
+    steady_at: Option<Instant>,
     /// The pause before the next attempt.
     pause: Duration,
     is_first_attempt: bool,
@@ -128,40 +129,42 @@ impl<S: System + Sync> Following<S> {
                 return Some((change, self));
             }
 
-            match &mut self.events {
-                Some(events) => match events.next().await {
-                    Some(Ok(event)) => {
-                        // An event says the connection works.
-                        self.pause = FIRST_PAUSE;
-                        self.ready.extend(DockerChange::of(&event));
-                    }
-                    // An event that does not read made stale what it made stale, which is not known: everything. When
-                    // the connection failed, the stream ends after it.
-                    Some(Err(error)) => {
-                        tracing::warn!(%error, "could not read a Docker event");
-                        self.ready.extend(DockerChange::ALL);
-                    }
-                    None => self.disconnect(),
-                },
-                None => self.connect().await,
+            let Some(events) = &mut self.events else {
+                self.connect().await;
+
+                continue;
+            };
+            let next = match self.steady_at {
+                Some(steady_at) => tokio::time::timeout_at(steady_at, events.next()).await,
+                None => Ok(events.next().await),
+            };
+
+            match next {
+                Err(_) => self.works(),
+                Ok(Some(Ok(event))) => {
+                    self.works();
+                    self.ready.extend(DockerChange::of(&event));
+                }
+                // An event that does not read made stale what it made stale, which is not known: everything.
+                Ok(Some(Err(error))) if DockerError::is_undecoded(&error) => {
+                    tracing::warn!(%error, "could not read a Docker event");
+                    self.works();
+                    self.ready.extend(DockerChange::ALL);
+                }
+                // The connection failed: the stream ends after it, and the next connection reports everything.
+                Ok(Some(Err(error))) => tracing::warn!(%error, "the Docker events failed"),
+                Ok(None) => {
+                    tracing::warn!("the Docker events ended, following them again");
+                    self.events = None;
+                }
             }
         }
     }
 
-    /// Drops the connection that ended, to follow the events again.
-    fn disconnect(&mut self) {
-        tracing::warn!("the Docker events ended, following them again");
-
-        let was_steady = self
-            .connected_at
-            .take()
-            .is_some_and(|connected_at| connected_at.elapsed() >= STEADY);
-
-        if was_steady {
-            self.pause = FIRST_PAUSE;
-        }
-
-        self.events = None;
+    /// Says the connection works: the pause before the next one starts again from [`FIRST_PAUSE`].
+    fn works(&mut self) {
+        self.pause = FIRST_PAUSE;
+        self.steady_at = None;
     }
 
     /// Follows the events, after a pause unless it is the first attempt. A new connection reports every change.
@@ -178,7 +181,7 @@ impl<S: System + Sync> Following<S> {
             Ok(events) => {
                 tracing::info!("following the Docker daemon's events");
                 self.events = Some(events);
-                self.connected_at = Some(Instant::now());
+                self.steady_at = Some(Instant::now() + STEADY);
                 self.ready.extend(DockerChange::ALL);
             }
             Err(error) => {
@@ -210,7 +213,7 @@ impl Docker {
             filters: DockerChange::filters(),
             events: None,
             ready: VecDeque::new(),
-            connected_at: None,
+            steady_at: None,
             pause: FIRST_PAUSE,
             is_first_attempt: true,
         };
@@ -306,6 +309,26 @@ mod tests {
         )
     }
 
+    /// Every change that `daemon` makes the stream give, until none comes for an hour.
+    async fn all_changes(daemon: FakeDaemon) -> Vec<DockerChange> {
+        let daemon: &'static FakeDaemon = Box::leak(Box::new(daemon));
+        let mut stream = Box::pin(Docker::follow(daemon));
+        let mut changes = Vec::new();
+
+        while let Ok(Some(change)) =
+            tokio::time::timeout(Duration::from_secs(3600), stream.next()).await
+        {
+            changes.push(change);
+        }
+
+        changes
+    }
+
+    /// An error of a body that does not read as an event.
+    fn undecodable() -> Error {
+        Error::internal(serde_json::from_str::<Event>("not an event").expect_err("not JSON"))
+    }
+
     /// The first `count` changes that `daemon` makes the stream give.
     async fn changes(daemon: FakeDaemon, count: usize) -> (Vec<DockerChange>, &'static FakeDaemon) {
         let daemon: &'static FakeDaemon = Box::leak(Box::new(daemon));
@@ -392,7 +415,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn reports_every_change_for_an_event_it_cannot_read_and_goes_on() {
         let daemon = FakeDaemon::new([Connection::Sends(vec![
-            Err(Error::internal("not an event")),
+            Err(undecodable()),
             Ok(compose_container()),
         ])]);
 
@@ -442,7 +465,7 @@ mod tests {
     async fn pauses_a_second_again_once_a_connection_stayed_open() {
         let daemon: &'static FakeDaemon = Box::leak(Box::new(FakeDaemon::new([
             Connection::Sends(Vec::new()),
-            Connection::Opens(STEADY),
+            Connection::Opens(STEADY + Duration::from_secs(1)),
             Connection::Sends(Vec::new()),
         ])));
         let started = Instant::now();
@@ -450,8 +473,48 @@ mod tests {
         let changes: Vec<DockerChange> = Docker::follow(daemon).take(12).collect().await;
 
         assert_eq!(changes.len(), 12);
-        // 1 second, the steady connection, then 1 again rather than 2.
-        assert_eq!(started.elapsed(), Duration::from_secs(2) + STEADY);
+        // 1 second, the connection that stayed open, then 1 again rather than 2.
+        assert_eq!(started.elapsed(), Duration::from_secs(3) + STEADY);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn does_not_count_a_slow_reader_as_a_connection_that_stayed_open() {
+        let daemon: &'static FakeDaemon = Box::leak(Box::new(FakeDaemon::new([
+            Connection::Refused,
+            Connection::Refused,
+            Connection::Sends(Vec::new()),
+            Connection::Sends(Vec::new()),
+        ])));
+        let mut changes = Box::pin(Docker::follow(daemon));
+
+        for _ in DockerChange::ALL {
+            changes.next().await;
+        }
+
+        // The caller reads again long after the connection, which closed at once.
+        tokio::time::sleep(2 * STEADY).await;
+
+        let read_again = Instant::now();
+
+        for _ in DockerChange::ALL {
+            changes.next().await;
+        }
+
+        // The pause went on doubling, 1, 2, then 4 seconds, rather than starting again from 1.
+        assert_eq!(read_again.elapsed(), Duration::from_secs(4));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn reports_every_change_once_when_a_connection_fails_then_ends() {
+        let daemon = FakeDaemon::new([
+            Connection::Sends(vec![Err(Error::internal("the connection was cut"))]),
+            Connection::Sends(Vec::new()),
+        ]);
+
+        let changes = all_changes(daemon).await;
+
+        // One report per connection, none for the failure: the next connection reports it.
+        assert_eq!(changes, [DockerChange::ALL, DockerChange::ALL].concat());
     }
 
     #[tokio::test(start_paused = true)]
