@@ -17,7 +17,9 @@ tokio = { version = "1", features = ["time"] }
 tracing = "0.1"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "test-util"] }
+# The statuses a fake answer of the daemon has.
+http = "1"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "test-util"] }
 
 [lints]
 workspace = true

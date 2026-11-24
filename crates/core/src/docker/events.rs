@@ -246,6 +246,8 @@ mod tests {
         Sends(Vec<quoll::Result<Event>>),
         /// The daemon sends no event, and ends the stream after this long.
         Opens(Duration),
+        /// The daemon sends these, then keeps the stream open for ever.
+        SendsAndStays(Vec<quoll::Result<Event>>),
     }
 
     /// A daemon that answers each call as the test says, then never again.
@@ -279,6 +281,9 @@ mod tests {
             async move {
                 match connection {
                     Some(Connection::Sends(events)) => Ok(JsonLines::try_new(stream::iter(events))),
+                    Some(Connection::SendsAndStays(events)) => Ok(JsonLines::try_new(
+                        stream::iter(events).chain(stream::pending()),
+                    )),
                     Some(Connection::Opens(duration)) => {
                         let ends = stream::once(tokio::time::sleep(duration))
                             .filter_map(|()| future::ready(None::<quoll::Result<Event>>));
@@ -506,6 +511,19 @@ mod tests {
 
         // The pause went on doubling, 1, 2, then 4 seconds, rather than starting again from 1.
         assert_eq!(read_again.elapsed(), Duration::from_secs(4));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn follows_again_after_an_error_that_does_not_end_the_stream() {
+        // An error that is not JSON that does not read, on a stream that does not end after it.
+        let daemon = FakeDaemon::new([
+            Connection::SendsAndStays(vec![Err(Error::internal("the body could not be read"))]),
+            Connection::Sends(Vec::new()),
+        ]);
+
+        let changes = all_changes(daemon).await;
+
+        assert_eq!(changes, [DockerChange::ALL, DockerChange::ALL].concat());
     }
 
     #[tokio::test(start_paused = true)]
