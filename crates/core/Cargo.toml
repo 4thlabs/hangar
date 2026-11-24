@@ -1,6 +1,6 @@
 [package]
 name = "hangar-core"
-description = "The core of Hangar, on no web framework: Docker, and soon running commands, the store and compose"
+description = "The core of Hangar, on no web framework: running commands and Docker, and soon the store and compose"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -13,7 +13,8 @@ quoll = { git = "https://github.com/4thlabs/quoll", tag = "v0.10.0", features = 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["io-util", "macros", "process", "time"] }
+tokio-util = "0.7"
 tracing = "0.1"
 # The URL of a daemon on TCP, checked before the client is built, which reqwest reads with it too.
 url = "2"
@@ -21,7 +22,7 @@ url = "2"
 [dev-dependencies]
 # The statuses a fake answer of the daemon has.
 http = "1"
-tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "test-util"] }
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "test-util"] }
 
 [lints]
 workspace = true
