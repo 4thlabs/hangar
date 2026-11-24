@@ -196,12 +196,10 @@ impl Supervisor {
                     None => Self::drain(reading, &stop, &cut, Some(Self::cut_from_now())).await,
                 };
 
-                drop((stdout, stderr));
-
                 let lost = Status::Lost(LostChild::new(error, read));
+                let exit = Exit::without_output(lost, Ok(()), false);
 
-                Self::report(report, Exit::without_output(lost, Ok(()), false));
-                Self::outlive(child, counted).await;
+                Self::abandon(report, exit, (stdout, stderr, outbox), child, counted).await;
 
                 return;
             }
@@ -217,10 +215,9 @@ impl Supervisor {
                     None => reading.await,
                 };
 
-                drop((stdout, stderr));
+                let exit = Exit::without_output(Status::Unreaped, read, true);
 
-                Self::report(report, Exit::without_output(Status::Unreaped, read, true));
-                Self::outlive(child, counted).await;
+                Self::abandon(report, exit, (stdout, stderr, outbox), child, counted).await;
 
                 return;
             }
@@ -299,6 +296,21 @@ impl Supervisor {
     fn report(report: oneshot::Sender<Exit>, exit: Exit) {
         // A run that went away does not wait for the exit.
         let _ = report.send(exit);
+    }
+
+    /// Ends the run of a child the supervisor no longer follows: closes its output, the readers and the outbox, which
+    /// holds the sender of the output channel, so that its reader sees the end with the run's rather than with the
+    /// child's; reports `exit`; then keeps the child counted until it exits.
+    async fn abandon(
+        report: oneshot::Sender<Exit>,
+        exit: Exit,
+        output: (Reader, Reader, Option<Outbox>),
+        child: Child,
+        counted: Counted,
+    ) {
+        drop(output);
+        Self::report(report, exit);
+        Self::outlive(child, counted).await;
     }
 
     /// Keeps a child that could not be followed to its end counted until it exits on its own.
@@ -433,11 +445,64 @@ impl Error for LostChild {
 mod tests {
     use std::time::Duration;
 
-    use nix::sys::signal::kill;
+    use std::sync::Arc;
+
+    use nix::sys::signal::{Signal, kill};
     use nix::sys::wait::{Id, WaitPidFlag, waitid};
     use nix::unistd::Pid;
+    use tokio::sync::{mpsc, oneshot};
+    use tokio_util::sync::CancellationToken;
 
-    use super::{Answer, Supervisor};
+    use super::super::Destination;
+    use super::super::children::Children;
+    use super::{Answer, Exit, Status, Supervisor};
+    use crate::Output;
+    use crate::runtime::output::Outbox;
+    use crate::runtime::process::reader::Reader;
+
+    #[tokio::test]
+    async fn an_abandoned_child_closes_the_output_channel_before_it_exits() {
+        let deadline = Duration::from_secs(10);
+        let mut child = tokio::process::Command::new("sleep")
+            .arg("60")
+            .kill_on_drop(true)
+            .spawn()
+            .expect("sleep starts");
+        let pid = Pid::from_raw(child.id().expect("running").cast_signed());
+        let children = Arc::new(Children::new());
+        let counted = children.enter().expect("not interrupted");
+        let (sender, mut receiver) = mpsc::channel(1);
+        let nothing = CancellationToken::new();
+        let outbox = Outbox::new(&Output::Lines(sender), &nothing, &nothing);
+        let stdout = Reader::stdout(&Destination::Capture, outbox.as_ref(), &nothing, &nothing);
+        let stderr = Reader::stderr(outbox.as_ref(), &nothing, &nothing);
+        let (report, exit) = oneshot::channel();
+
+        drop(child.stdout.take());
+
+        let abandoning = tokio::spawn(Supervisor::abandon(
+            report,
+            Exit::without_output(Status::Unreaped, Ok(()), true),
+            (stdout, stderr, outbox),
+            child,
+            counted,
+        ));
+
+        let end = tokio::time::timeout(deadline, receiver.recv())
+            .await
+            .expect("the output channel closes with the run");
+        let exit = exit.await.expect("the run is reported");
+
+        assert!(end.is_none());
+        assert!(matches!(exit.status, Status::Unreaped));
+        assert!(kill(pid, None).is_ok(), "the child still runs");
+
+        kill(pid, Signal::SIGKILL).expect("the child can be killed");
+        tokio::time::timeout(deadline, children.idle())
+            .await
+            .expect("the child is counted until it is reaped");
+        abandoning.await.expect("the task does not panic");
+    }
 
     #[tokio::test]
     async fn a_stop_after_the_exit_keeps_the_exit_status() {

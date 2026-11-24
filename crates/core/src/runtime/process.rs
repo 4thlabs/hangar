@@ -34,7 +34,8 @@ use super::{Command, CommandRunner, Output, RunError};
 /// stalled reader never holds back a child that stops, into a queue of 1 MiB that the output channel is fed from as
 /// its reader takes it; what does not fit is dropped, a whole line or chunk at a time. The reading ends at the latest
 /// at the cut, which drops what is left in the queue: a second after the child is reaped, or after the cancel when it
-/// had exited already. A child killed and not reaped a second after the grace period, as one in uninterruptible
+/// had exited already. A grandchild still printing past that second is cut, so that Ctrl-C does not wait for it until
+/// the end of a 10-second grace period that its parent no longer needs. A child killed and not reaped a second after the grace period, as one in uninterruptible
 /// sleep, ends the run there, and [`idle`](Self::idle) waits for it until it is reaped.
 ///
 /// A cancelled run fails with [`RunError::Cancelled`], unless its child exited by itself before the cancel stopped
