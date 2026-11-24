@@ -1,5 +1,6 @@
 //! Where the daemon listens, as `DOCKER_HOST` says it, and the client that reaches it there.
 
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -33,15 +34,29 @@ pub(crate) enum Host {
 impl Host {
     /// The daemon that `DOCKER_HOST` names, else Docker's own socket.
     pub(crate) fn from_env() -> Result<Self, DockerError> {
-        let tls_verify = std::env::var("DOCKER_TLS_VERIFY").ok();
+        let docker_host = std::env::var_os("DOCKER_HOST");
+        let tls_verify = std::env::var_os("DOCKER_TLS_VERIFY");
+        let docker_host = match docker_host.as_deref().map(OsStr::to_str) {
+            None => None,
+            Some(Some(docker_host)) => Some(docker_host),
+            Some(None) => {
+                return Err(DockerError::UnsupportedHost {
+                    docker_host: docker_host
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned(),
+                    reason: "which is not UTF-8: write `unix:///path` or `tcp://host:port`",
+                });
+            }
+        };
 
-        Self::parse(std::env::var("DOCKER_HOST").ok().as_deref())?.refuse_tls(tls_verify.as_deref())
+        Self::parse(docker_host)?.refuse_tls(tls_verify.as_deref())
     }
 
     /// The host, unless `tls_verify`, the value of `DOCKER_TLS_VERIFY`, asks for TLS on TCP: that needs the client's
     /// certificate, which Hangar does not send, and is better said than a failed call. A Unix socket has no TLS,
     /// and the variable means nothing there, as for the `docker` command.
-    fn refuse_tls(self, tls_verify: Option<&str>) -> Result<Self, DockerError> {
+    fn refuse_tls(self, tls_verify: Option<&OsStr>) -> Result<Self, DockerError> {
         let asks_tls = tls_verify.is_some_and(|value| !value.is_empty());
 
         if asks_tls && matches!(self, Self::Tcp(_)) {
@@ -89,9 +104,13 @@ impl Host {
         else {
             return Ok(Self::Tcp(format!("http://{address}:{DEFAULT_PORT}")));
         };
-        let is_port = port.parse::<u16>().is_ok_and(|port| port != 0);
+        let is_port = port.bytes().all(|byte| byte.is_ascii_digit())
+            && port.parse::<u16>().is_ok_and(|port| port != 0);
+        // An IPv6 address goes within brackets, which alone tell its `:` from the port's.
+        let is_host = !host.is_empty()
+            && (!host.contains(':') || (host.starts_with('[') && host.ends_with(']')));
 
-        if host.is_empty() || !is_port {
+        if !is_host || !is_port {
             return Err(unsupported(
                 "whose host or port does not read: write `tcp://host:port`, with a port from 1 to 65535",
             ));
@@ -185,13 +204,15 @@ mod tests {
         let tcp = || parsed(Some("tcp://docker:2376"));
         let socket = || parsed(None);
 
+        let set = |value: &'static str| Some(OsStr::new(value));
+
         assert!(matches!(
-            tcp().refuse_tls(Some("1")),
+            tcp().refuse_tls(set("1")),
             Err(DockerError::UnsupportedTls)
         ));
-        assert_eq!(tcp().refuse_tls(Some("")).ok(), Some(tcp()));
+        assert_eq!(tcp().refuse_tls(set("")).ok(), Some(tcp()));
         assert_eq!(tcp().refuse_tls(None).ok(), Some(tcp()));
-        assert_eq!(socket().refuse_tls(Some("1")).ok(), Some(socket()));
+        assert_eq!(socket().refuse_tls(set("1")).ok(), Some(socket()));
     }
 
     #[test]
@@ -201,6 +222,9 @@ mod tests {
             "tcp://docker:abc",
             "tcp://docker:0",
             "tcp://docker:70000",
+            "tcp://docker:+80",
+            "tcp://::1",
+            "tcp://::1:2375",
             "tcp://:2375",
             "tcp://[::1]:",
             "ssh://me@host",

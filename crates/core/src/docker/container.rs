@@ -223,8 +223,9 @@ impl Docker {
     }
 
     /// The compose containers that the inspections of the listed containers describe. A container removed since the
-    /// list answers 404 and is left out, as `docker ps` does; any other failure fails the whole read, so that a
-    /// daemon going away between the list and the inspections does not read as every app stopped.
+    /// list answers 404 and is left out, as `docker ps` does; one whose inspection answered another error, or an
+    /// answer that does not read, is left out with a warning, so that it does not hide the others. A call that got no
+    /// answer at all fails the whole read: the daemon is in trouble, and the read must not say every app stopped.
     fn gather(
         inspections: Vec<(
             ContainerSummary,
@@ -238,8 +239,13 @@ impl Docker {
                 Ok(inspection) => {
                     containers.extend(ComposeContainer::from_daemon(summary, inspection))
                 }
+                Err(error) if DockerError::is_unanswered(&error) => {
+                    return Err(DockerError::daemon("inspect a container", error));
+                }
                 Err(error) if DockerError::is_gone(&error) => {}
-                Err(error) => return Err(DockerError::daemon("inspect a container", error)),
+                Err(error) => {
+                    tracing::warn!(container = %summary.id, %error, "could not inspect a container");
+                }
             }
         }
 
@@ -452,11 +458,32 @@ mod tests {
     }
 
     #[test]
-    fn fails_the_read_when_an_inspection_fails_otherwise() {
-        let down = quoll::Error::internal("the daemon went away").into_shape();
+    fn leaves_out_a_container_whose_inspection_answered_an_error() {
+        let refused = quoll::Error::bad_request("the container is in an odd state").into_shape();
         let inspections = vec![
             (summary(&[]), Ok(inspection(None))),
-            (summary(&[]), Err(down)),
+            (summary(&[]), Err(refused)),
+        ];
+
+        let containers = Docker::gather(inspections).expect("the containers");
+
+        assert_eq!(containers.as_slice().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn fails_the_read_when_an_inspection_got_no_answer() {
+        // Nothing listens on port 1: the connection is refused.
+        let engine = super::super::host::Host::Tcp("http://127.0.0.1:1".to_owned())
+            .client()
+            .expect("a client");
+        let unanswered = engine
+            .containers()
+            .inspect("abc")
+            .await
+            .expect_err("no answer");
+        let inspections = vec![
+            (summary(&[]), Ok(inspection(None))),
+            (summary(&[]), Err(unanswered)),
         ];
 
         let error = Docker::gather(inspections).expect_err("a failed read");

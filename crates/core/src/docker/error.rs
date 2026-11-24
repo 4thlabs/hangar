@@ -1,5 +1,7 @@
 //! The errors of the Docker client.
 
+use std::fmt;
+
 use super::engine::EngineMessage;
 
 /// What the daemon answers for a subject that does not exist, such as a container gone between a list and a call on
@@ -72,5 +74,17 @@ impl DockerError {
         error
             .status()
             .is_some_and(|status| status.as_u16() == NOT_FOUND)
+    }
+
+    /// Whether the daemon answered with a body that does not read as the call's result, such as an event of a kind
+    /// newer than Hangar: the connection works.
+    pub(crate) fn is_undecoded<E: fmt::Debug>(error: &quoll::Error<E>) -> bool {
+        std::error::Error::source(error).is_some_and(|source| source.is::<serde_json::Error>())
+    }
+
+    /// Whether the call got no answer at all, as when the connection is refused or its deadline passed: the daemon
+    /// is in trouble, rather than the subject of the call.
+    pub(crate) fn is_unanswered(error: &quoll::Error<EngineMessage>) -> bool {
+        error.status().is_none() && !Self::is_undecoded(error)
     }
 }

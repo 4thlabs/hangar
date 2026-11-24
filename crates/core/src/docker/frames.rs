@@ -44,6 +44,9 @@ pub(crate) struct Demux {
     payload: Option<(Payload, usize)>,
     /// The error of the daemon read so far.
     system_error: Vec<u8>,
+    /// The bytes read since a header that did not read as one, which are the message: kept until the end of the
+    /// stream, or until [`LONGEST_ERROR`].
+    not_frames: Option<Vec<u8>>,
     has_failed: bool,
 }
 
@@ -53,6 +56,18 @@ impl Demux {
         let mut pieces = Vec::new();
 
         while !chunk.is_empty() && !self.has_failed {
+            if let Some(kept) = &mut self.not_frames {
+                Self::keep(kept, chunk);
+
+                if kept.len() >= LONGEST_ERROR {
+                    let message = Self::text(kept);
+
+                    pieces.push(self.fail(FrameError::NotFrames(message)));
+                }
+
+                break;
+            }
+
             if let Some((payload, left)) = self.payload {
                 let (bytes, rest) = chunk.split_at(left.min(chunk.len()));
                 let left = left - bytes.len();
@@ -87,13 +102,11 @@ impl Demux {
             self.filled = 0;
 
             let Some(payload) = self.payload_kind() else {
-                // The daemon wrote something else than a frame, such as the text of an error: it is the message.
-                let mut bytes = self.header.to_vec();
+                // The daemon wrote something else than a frame, such as the text of an error: it is the message,
+                // whatever chunks it comes in.
+                self.not_frames = Some(self.header.to_vec());
 
-                Self::keep(&mut bytes, chunk);
-                pieces.push(self.fail(FrameError::NotFrames(Self::text(&bytes))));
-
-                break;
+                continue;
             };
             let size = u32::from_be_bytes([
                 self.header[4],
@@ -112,13 +125,38 @@ impl Demux {
         pieces
     }
 
-    /// Says the bytes have ended: an error when they ended inside a frame.
+    /// Says the bytes have ended: the error of the daemon or the bytes that are not frames read so far, or
+    /// [`FrameError::Truncated`] when they ended inside a frame of output.
     pub(crate) fn finish(&self) -> Result<(), FrameError> {
-        if !self.has_failed && (self.filled > 0 || self.payload.is_some()) {
+        if self.has_failed {
+            return Ok(());
+        }
+
+        if let Some(kept) = &self.not_frames {
+            return Err(FrameError::NotFrames(Self::text(kept)));
+        }
+
+        match self.payload {
+            Some((Payload::SystemError, _)) => {
+                return Err(FrameError::Daemon(Self::text(&self.system_error)));
+            }
+            Some((Payload::Output(_), _)) => return Err(FrameError::Truncated),
+            None => {}
+        }
+
+        if self.filled == 0 {
+            return Ok(());
+        }
+
+        let partial = &self.header[..self.filled];
+        let may_be_a_header =
+            partial[0] <= SYSTEM_ERROR && partial[1..].iter().take(3).all(|byte| *byte == 0);
+
+        if may_be_a_header {
             return Err(FrameError::Truncated);
         }
 
-        Ok(())
+        Err(FrameError::NotFrames(Self::text(partial)))
     }
 
     /// What the header read holds, when it is one: a known stream and three zeros.
@@ -147,6 +185,7 @@ impl Demux {
     fn fail(&mut self, error: FrameError) -> Piece<'static> {
         self.has_failed = true;
         self.payload = None;
+        self.not_frames = None;
 
         Piece::Failed(error)
     }
@@ -283,22 +322,66 @@ mod tests {
     }
 
     #[test]
-    fn bytes_that_are_not_frames_are_kept_as_the_message() {
+    fn bytes_that_are_not_frames_are_the_message_whatever_chunks_they_come_in() {
         let bytes = [
             frame(1, b"ok\n"),
             b"Error grabbing logs: unexpected EOF\n".to_vec(),
         ]
         .concat();
+
+        for cut in 1..bytes.len() {
+            let mut demux = Demux::default();
+
+            let (stdout, _, failure) = read(&mut demux, &[&bytes[..cut], &bytes[cut..]]);
+
+            assert_eq!(stdout, b"ok\n", "cut at {cut}");
+            assert_eq!(failure, None, "cut at {cut}");
+            assert_eq!(
+                demux.finish(),
+                Err(FrameError::NotFrames(
+                    "Error grabbing logs: unexpected EOF".to_owned()
+                )),
+                "cut at {cut}"
+            );
+        }
+    }
+
+    #[test]
+    fn bytes_that_are_not_frames_fail_at_the_longest_error() {
         let mut demux = Demux::default();
+        let text = vec![b'x'; LONGEST_ERROR + 100];
 
-        let (stdout, _, failure) = read(&mut demux, &[&bytes]);
+        let (_, _, failure) = read(&mut demux, &[&text[..10], &text[10..]]);
 
-        assert_eq!(stdout, b"ok\n");
         assert_eq!(
             failure,
-            Some(FrameError::NotFrames(
-                "Error grabbing logs: unexpected EOF".to_owned()
-            ))
+            Some(FrameError::NotFrames("x".repeat(LONGEST_ERROR)))
+        );
+    }
+
+    #[test]
+    fn text_shorter_than_a_header_is_the_message() {
+        let mut demux = Demux::default();
+
+        read(&mut demux, &[b"oops\n"]);
+
+        assert_eq!(
+            demux.finish(),
+            Err(FrameError::NotFrames("oops".to_owned()))
+        );
+    }
+
+    #[test]
+    fn a_frame_of_the_daemons_errors_cut_short_keeps_what_came() {
+        let bytes = frame(3, b"the log driver failed");
+        let mut demux = Demux::default();
+
+        let (_, _, failure) = read(&mut demux, &[&bytes[..HEADER + 7]]);
+
+        assert_eq!(failure, None);
+        assert_eq!(
+            demux.finish(),
+            Err(FrameError::Daemon("the log".to_owned()))
         );
     }
 
@@ -306,11 +389,12 @@ mod tests {
     fn a_frame_of_an_unknown_stream_is_not_frames() {
         let mut demux = Demux::default();
 
-        let (_, _, failure) = read(&mut demux, &[&frame(7, b"x")]);
+        read(&mut demux, &[&frame(7, b"x")]);
 
         assert!(
-            matches!(failure, Some(FrameError::NotFrames(_))),
-            "{failure:?}"
+            matches!(demux.finish(), Err(FrameError::NotFrames(_))),
+            "{:?}",
+            demux.finish()
         );
     }
 }
