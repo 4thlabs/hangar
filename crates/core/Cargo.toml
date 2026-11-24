@@ -28,5 +28,9 @@ nix = { version = "0.32", features = ["signal"] }
 http = "1"
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "test-util", "time"] }
 
+# waitid, to see a child exit without reaping it.
+[target.'cfg(unix)'.dev-dependencies]
+nix = { version = "0.32", features = ["process", "signal"] }
+
 [lints]
 workspace = true

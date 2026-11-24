@@ -42,23 +42,31 @@ use super::{Command, CommandRunner, Output, RunError};
 /// # }
 /// ```
 ///
-/// The CLI, on Ctrl-C:
+/// The CLI, on Ctrl-C: the terminal sent SIGINT to the running child, which ends, and nothing new starts.
 ///
 /// ```no_run
-/// use hangar_core::Runtime;
+/// use std::pin::pin;
+///
+/// use hangar_core::{Command, CommandRunner, Output, Runtime};
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() {
 /// let runtime = Runtime::new();
-/// let on_ctrl_c = runtime.clone();
+/// let mut up = pin!(async {
+///     let command = Command::new("docker").args(["compose", "up", "--detach"]);
 ///
-/// tokio::spawn(async move {
-///     if tokio::signal::ctrl_c().await.is_ok() {
-///         on_ctrl_c.interrupt();
-///         on_ctrl_c.idle().await;
-///         std::process::exit(130);
-///     }
+///     runtime.run(&command, Output::Inherit).await
 /// });
+///
+/// let outcome = tokio::select! {
+///     outcome = &mut up => outcome,
+///     _ = tokio::signal::ctrl_c() => {
+///         runtime.interrupt();
+///         up.await
+///     }
+/// };
+///
+/// std::process::exit(outcome.map_or_else(|error| error.exit_code(), |()| 0));
 /// # }
 /// ```
 #[derive(Debug, Clone)]
@@ -104,13 +112,16 @@ impl Runtime {
     }
 
     /// Refuses the runs to come, which fail with [`RunError::Interrupted`], and lets the running children end: on
-    /// Ctrl-C, the terminal sent them SIGINT already. The CLI then exits once [`idle`](Self::idle) resolves.
+    /// Ctrl-C, the terminal sent them SIGINT already.
     pub fn interrupt(&self) {
         self.children.interrupt();
     }
 
     /// Resolves once no child of this runtime, its clones included, is running. A child whose run was dropped counts
     /// until it exits.
+    ///
+    /// The children are counted until they exit, not until their runs return: a run may still be forwarding its last
+    /// lines when this resolves. A caller that shows the output awaits its runs instead, as the CLI does on Ctrl-C.
     pub async fn idle(&self) {
         self.children.idle().await;
     }
@@ -139,6 +150,7 @@ impl Runtime {
         let _stop_on_drop = stop.clone().drop_guard();
 
         let exit = self.supervise(child, counted, &destination, &stop).start();
+
         let exit = {
             let mut exit = pin!(exit);
 
@@ -157,21 +169,22 @@ impl Runtime {
             source: io::Error::other("the task following the child ended without its exit"),
         })?;
 
-        if exit.stopped {
-            return Err(RunError::Cancelled { program: program() });
-        }
-
+        // A lost pipe stops the child: its read error, not the signal, is the cause.
         let status = exit.status.map_err(|source| RunError::Io {
             program: program(),
             source,
         })?;
 
-        Self::check(command, status, exit.stderr)?;
-
         exit.read.map_err(|source| RunError::Io {
             program: program(),
             source,
         })?;
+
+        if exit.stopped {
+            return Err(RunError::Cancelled { program: program() });
+        }
+
+        Self::check(command, status, exit.stderr)?;
 
         Ok(exit.stdout)
     }
@@ -294,6 +307,7 @@ impl CommandRunner for Runtime {
 #[cfg(test)]
 mod tests {
     use std::future::Future;
+    use std::path::PathBuf;
     use std::time::Duration;
 
     use tokio::sync::mpsc;
@@ -345,11 +359,11 @@ mod tests {
         assert!(!is_running(&pid), "the child is gone");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn sends_one_sigterm_to_a_child_whose_cancelled_run_is_dropped() {
         let runtime = runtime_with_grace(Duration::from_millis(300));
-        let marker =
-            std::env::temp_dir().join(format!("hangar-runtime-{}-one-sigterm", std::process::id()));
+        let marker = Marker::new("one-sigterm");
         let cancellation = CancellationToken::new();
         let (sender, mut receiver) = mpsc::channel(16);
 
@@ -359,7 +373,7 @@ mod tests {
                 "-c",
                 r#"trap 'echo term >> "$1"' TERM; echo started; while :; do sleep 0.05; done"#,
                 "sh",
-                marker.to_str().expect("a UTF-8 temporary directory"),
+                marker.path(),
             ])
             .cancellation(cancellation.clone());
         let running = runtime.clone();
@@ -374,11 +388,31 @@ mod tests {
         run.abort();
         within_deadline(runtime.idle()).await;
 
-        let signals = std::fs::read_to_string(&marker).expect("the child got SIGTERM");
-
-        std::fs::remove_file(&marker).expect("the marker can be removed");
+        let signals = std::fs::read_to_string(&marker.0).expect("the child got SIGTERM");
 
         assert_eq!(signals, "term\n");
+    }
+
+    /// A file in the temporary directory, which a child writes to tell the test something; removed with it.
+    struct Marker(PathBuf);
+
+    impl Marker {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("hangar-runtime-unit-{}-{name}", std::process::id()));
+
+            Self(path)
+        }
+
+        fn path(&self) -> &str {
+            self.0.to_str().expect("a UTF-8 temporary directory")
+        }
+    }
+
+    impl Drop for Marker {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
     }
 
     /// Whether the process whose pid a child printed still runs.

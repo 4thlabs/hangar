@@ -15,6 +15,8 @@ use crate::runtime::stderr_tail::StderrTail;
 #[derive(Debug)]
 pub(super) struct Reader {
     forward: Option<Forward>,
+    /// Asks the child to stop, when its pipe can no longer be read.
+    stop: CancellationToken,
     /// stdout, when it is captured.
     captured: Option<Vec<u8>>,
     /// The end of stderr.
@@ -34,11 +36,13 @@ impl Reader {
         match destination {
             Destination::Output(output) => Self {
                 forward: Forward::new(output, stop),
+                stop: stop.clone(),
                 captured: None,
                 tail: None,
             },
             Destination::Capture => Self {
                 forward: None,
+                stop: stop.clone(),
                 captured: Some(Vec::new()),
                 tail: None,
             },
@@ -54,6 +58,7 @@ impl Reader {
 
         Self {
             forward,
+            stop: stop.clone(),
             captured: None,
             tail: Some(StderrTail::default()),
         }
@@ -107,8 +112,13 @@ impl Reader {
         loop {
             let read = tokio::select! {
                 biased;
-                read = pipe.read(&mut buffer) => read?,
+                read = pipe.read(&mut buffer) => read,
                 () = Self::drained(exited) => return Ok(()),
+            };
+
+            let read = match read {
+                Ok(read) => read,
+                Err(error) => return self.fail(error, pipe, exited).await,
             };
 
             if read == 0 {
@@ -117,6 +127,21 @@ impl Reader {
 
             self.take(&buffer[..read]).await;
         }
+    }
+
+    /// Stops the child, whose output can no longer be read, and holds `pipe` open until it exits, so that its next
+    /// write does not kill it with SIGPIPE before SIGTERM reaches it.
+    async fn fail(
+        &self,
+        error: io::Error,
+        pipe: impl AsyncRead + Unpin,
+        exited: &CancellationToken,
+    ) -> io::Result<()> {
+        self.stop.cancel();
+        exited.cancelled().await;
+        drop(pipe);
+
+        Err(error)
     }
 
     /// Keeps and sends what the child wrote.
