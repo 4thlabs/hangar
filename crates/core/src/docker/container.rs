@@ -223,9 +223,11 @@ impl Docker {
     }
 
     /// The compose containers that the inspections of the listed containers describe. A container removed since the
-    /// list answers 404 and is left out, as `docker ps` does; one whose inspection answered another error, or an
-    /// answer that does not read, is left out with a warning, so that it does not hide the others. A call that got no
-    /// answer at all fails the whole read: the daemon is in trouble, and the read must not say every app stopped.
+    /// list answers 404 and is left out, as `docker ps` does. One whose inspection answered another 4xx, or JSON that
+    /// does not read, is left out with a warning, so that it does not hide the others. A daemon in trouble, a 5xx or
+    /// no status, fails the whole read, which must not say every app stopped; until
+    /// [quoll#126](https://github.com/4thlabs/quoll/issues/126), no status also covers an answer that is not an
+    /// inspection, as a body of another content type.
     fn gather(
         inspections: Vec<(
             ContainerSummary,
@@ -239,7 +241,7 @@ impl Docker {
                 Ok(inspection) => {
                     containers.extend(ComposeContainer::from_daemon(summary, inspection))
                 }
-                Err(error) if DockerError::is_unanswered(&error) => {
+                Err(error) if DockerError::is_daemon_failure(&error) => {
                     return Err(DockerError::daemon("inspect a container", error));
                 }
                 Err(error) if DockerError::is_gone(&error) => {}
@@ -470,10 +472,27 @@ mod tests {
         assert_eq!(containers.as_slice().len(), 1);
     }
 
+    #[test]
+    fn fails_the_read_when_an_inspection_answered_a_server_error() {
+        let overloaded = quoll::Error::internal("the daemon is overloaded").into_shape();
+        let inspections = vec![
+            (summary(&[]), Ok(inspection(None))),
+            (summary(&[]), Err(overloaded)),
+        ];
+
+        let error = Docker::gather(inspections).expect_err("a failed read");
+
+        assert!(matches!(error, DockerError::Daemon { .. }), "{error:?}");
+    }
+
     #[tokio::test]
     async fn fails_the_read_when_an_inspection_got_no_answer() {
-        // Nothing listens on port 1: the connection is refused.
-        let engine = super::super::host::Host::Tcp("http://127.0.0.1:1".to_owned())
+        // A port that was just bound then freed: nothing listens on it, and the connection is refused at once.
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port")
+            .port();
+        let engine = super::super::host::Host::Tcp(format!("http://127.0.0.1:{port}"))
             .client()
             .expect("a client");
         let unanswered = engine
