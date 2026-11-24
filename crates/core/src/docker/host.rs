@@ -135,7 +135,13 @@ impl Host {
             None => format!("http://{host}:{DEFAULT_PORT}"),
         };
 
-        if !Self::reads_as_written(&url, host) {
+        let Ok(parsed) = Url::parse(&url) else {
+            return Err(unsupported(
+                "which does not make a URL: write `tcp://host:port`",
+            ));
+        };
+
+        if !Self::reads_as_written(&parsed, host) {
             return Err(unsupported(
                 "whose host a URL reads as another one, as `0x0a.0.0.2` reads as `10.0.0.2`: write the host plainly",
             ));
@@ -147,11 +153,8 @@ impl Host {
     /// Whether the client, which reads `url` as a browser does, reads in it the same host as the one written, as the
     /// `docker` command would: not a name made of hexadecimal or octal numbers, which a URL rewrites as an IPv4
     /// address. A name differs only by its case, and an IPv6 address only by how it is written.
-    fn reads_as_written(url: &str, host: &str) -> bool {
-        let Some(read) = Url::parse(url)
-            .ok()
-            .and_then(|url| url.host_str().map(str::to_owned))
-        else {
+    fn reads_as_written(url: &Url, host: &str) -> bool {
+        let Some(read) = url.host_str() else {
             return false;
         };
         let as_ipv6 = |host: &str| {
@@ -160,7 +163,7 @@ impl Host {
                 .and_then(|address| address.parse::<Ipv6Addr>().ok())
         };
 
-        match (as_ipv6(&read), as_ipv6(host)) {
+        match (as_ipv6(read), as_ipv6(host)) {
             (Some(read), Some(written)) => read == written,
             _ => read.eq_ignore_ascii_case(host),
         }
@@ -341,6 +344,18 @@ mod tests {
 
             assert!(
                 error.to_string().contains("reads as another"),
+                "{docker_host}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn says_that_a_host_a_url_does_not_take_does_not_make_a_url() {
+        for docker_host in ["tcp://host.1:2375", "tcp://xn--a:2375"] {
+            let error = Host::parse(Some(docker_host)).expect_err("a host a URL does not take");
+
+            assert!(
+                error.to_string().contains("does not make a URL"),
                 "{docker_host}: {error}"
             );
         }

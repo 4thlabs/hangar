@@ -25,8 +25,11 @@ const SHORTEST_ID: usize = 12;
 /// The length of a full container id.
 const FULL_ID: usize = 64;
 
-/// A container of a compose service, as the project's page shows it.
+/// A container of a compose service, as the project's page shows it. The core builds it, from what the daemon lists
+/// and inspects: it also keeps the health its list entry shows, which [`ComposeContainer::health`] reads, and which
+/// two containers must share to be equal.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ComposeContainer {
     /// The full container id.
     pub id: String,
@@ -270,11 +273,12 @@ impl Docker {
 
     /// The compose containers that the listed containers and their inspections describe. The list is the truth:
     ///
-    /// - A container whose inspection answers 404 with Docker's "No such container" is left out: it went away since
-    ///   the list, as `docker ps` leaves it out.
+    /// - A container whose inspection answers 404 with Docker's `No such container: …`, or Podman's
+    ///   `…: no such container`, is left out: it went away since the list, as `docker ps` leaves it out.
     /// - A container whose inspection failed otherwise, with a 500, another 404, a deadline passed, a refused
-    ///   connection or an answer that does not read, is kept as its list entry gives it, with no details. One warning
-    ///   per read says how many.
+    ///   connection or an answer that does not read, is kept as its list entry gives it, with no details. Each
+    ///   failure is logged at debug, under one warning per read that says how many containers it kept so, and the
+    ///   first error.
     /// - The container of a `docker compose run`, or one without the labels of a service, is left out, whatever its
     ///   inspection gave.
     fn gather(
@@ -284,26 +288,35 @@ impl Docker {
         )>,
     ) -> ComposeContainers {
         let mut failed = 0;
+        let mut first_failure = None;
         let mut containers = Vec::new();
 
         for (summary, inspection) in inspections {
-            let inspection = match inspection {
-                Ok(inspection) => Some(inspection),
+            let (inspection, failure) = match inspection {
+                Ok(inspection) => (Some(inspection), None),
                 Err(error) if DockerError::is_gone(&error) => continue,
                 Err(error) => {
                     tracing::debug!(container = %summary.id, %error, "could not inspect a container");
-                    failed += 1;
 
-                    None
+                    (None, Some(error))
                 }
             };
+            let Some(container) = ComposeContainer::from_daemon(summary, inspection) else {
+                continue;
+            };
 
-            containers.extend(ComposeContainer::from_daemon(summary, inspection));
+            if let Some(error) = failure {
+                failed += 1;
+                first_failure.get_or_insert(error);
+            }
+
+            containers.push(container);
         }
 
-        if failed > 0 {
+        if let Some(error) = first_failure {
             tracing::warn!(
                 failed,
+                %error,
                 "could not inspect every container: each that failed is kept with no details"
             );
         }
