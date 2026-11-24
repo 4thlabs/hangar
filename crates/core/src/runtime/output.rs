@@ -169,7 +169,11 @@ impl Outbox {
             if !has_message {
                 tokio::select! {
                     () = changed => continue,
-                    () = self.shared.cut.cancelled() => return,
+                    () = self.shared.cut.cancelled() => {
+                        // A message may have come with the cut: it is dropped, and counted.
+                        self.shared.drop_all();
+                        return;
+                    }
                 }
             }
 
@@ -453,19 +457,18 @@ mod tests {
         let reading = async {
             let mut lines = Vec::new();
 
-            while let Some(line) = receiver.recv().await {
-                lines.push(line);
+            for _ in 0..3 {
+                // The forward waits for the reader: the queue never holds more than the message on its way.
+                assert!(outbox.shared.queue().messages.len() <= 1);
+
+                lines.push(receiver.recv().await.expect("a line"));
                 tokio::task::yield_now().await;
             }
 
             lines
         };
-        let flushing = async {
-            outbox.flush().await;
-            drop(outbox);
-        };
 
-        let ((), (), lines) = tokio::join!(writing, flushing, reading);
+        let ((), (), lines) = tokio::join!(writing, outbox.flush(), reading);
 
         assert_eq!(
             lines,
