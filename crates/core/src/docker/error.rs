@@ -1,7 +1,5 @@
 //! The errors of the Docker client.
 
-use std::fmt;
-
 use super::engine::EngineMessage;
 
 /// What the daemon answers for a subject that does not exist, such as a container gone between a list and a call on
@@ -90,13 +88,5 @@ impl DockerError {
         });
 
         is_not_found && says_no_such_container
-    }
-
-    /// Whether the daemon answered with a body that does not read as the call's result, such as an event of a kind
-    /// newer than Hangar: the connection works. It leans on the source of quoll's error being the JSON's error,
-    /// which quoll does not promise: [quoll#126](https://github.com/4thlabs/quoll/issues/126) asks for a public way
-    /// to tell it.
-    pub(crate) fn is_undecoded<E: fmt::Debug>(error: &quoll::Error<E>) -> bool {
-        std::error::Error::source(error).is_some_and(|source| source.is::<serde_json::Error>())
     }
 }

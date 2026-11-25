@@ -26,7 +26,7 @@ const PATIENCE: Duration = Duration::from_secs(60);
 
 quoll::api! {
     /// The calls the tests make their containers with.
-    #[openapi(none)]
+    #[server(none)]
     #[error(Message)]
     api Fixtures = "/v1.44";
 
@@ -419,13 +419,17 @@ async fn reports_every_change_then_those_of_a_compose_container() {
     let mut connected = Vec::new();
 
     for _ in DockerChange::ALL {
-        connected.push(next("the changes of the connection", &mut events).await);
+        connected.push(
+            next("the changes of the connection", &mut events)
+                .await
+                .expect("a change"),
+        );
     }
 
     project.running("web").await;
 
     within("a change of the containers", async {
-        while next("a change", &mut events).await != DockerChange::Containers {}
+        while next("a change", &mut events).await.expect("a change") != DockerChange::Containers {}
     })
     .await;
 
