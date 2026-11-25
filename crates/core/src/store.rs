@@ -230,9 +230,13 @@ impl<R: CommandRunner> Store<R> {
         };
         let mut apps = Vec::new();
 
-        let ids = Self::names(self.data_dir.store_apps())
-            .await
-            .map_err(|error| StoreError::io("list", self.data_dir.store_apps(), error))?;
+        // A clone without `store/`, an empty repository say, carries no app, as one without `hangar.yml` has no
+        // category.
+        let ids = match Self::names(self.data_dir.store_apps()).await {
+            Ok(names) => names,
+            Err(error) if Disk::is_missing(&error) => Vec::new(),
+            Err(error) => return Err(StoreError::io("list", self.data_dir.store_apps(), error)),
+        };
 
         for id in ids {
             let folder = self.data_dir.store_apps().join(&id);
