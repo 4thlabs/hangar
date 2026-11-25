@@ -42,9 +42,11 @@ pub use env::GlobalEnv;
 pub use error::StoreError;
 pub use yaml::YamlError;
 
+pub(crate) use disk::Disk;
+
 use crate::{Command, CommandRunner, Output};
 use app_id::AppId;
-use disk::{Access, Disk};
+use disk::Access;
 use yaml::Yaml;
 
 /// The store of a data directory: its clone, its configuration, its apps and the global environment.

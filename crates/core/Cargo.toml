@@ -1,6 +1,6 @@
 [package]
 name = "hangar-core"
-description = "The core of Hangar, on no web framework: running commands, Docker and the store, and soon compose"
+description = "The core of Hangar, on no web framework: running commands, Docker, the store and compose"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
