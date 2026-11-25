@@ -39,6 +39,10 @@ pub use stats::{ContainerMetrics, StatsFrame};
 use engine::EngineClient;
 use host::Host;
 
+/// The most calls of one read in flight at once, one per container: a host with many containers is read in turns
+/// rather than in one burst.
+const CONCURRENT_CALLS: usize = 16;
+
 /// A client of the Docker daemon that `DOCKER_HOST` names, else of Docker's own socket, `/var/run/docker.sock`.
 ///
 /// It reaches a daemon on a Unix socket, `unix:///path`, or on TCP without TLS, `tcp://host:port`, which serve version

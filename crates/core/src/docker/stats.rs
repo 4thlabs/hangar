@@ -3,11 +3,11 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
-use futures::{Stream, future, stream};
+use futures::{Stream, StreamExt, stream};
 
 use super::container::PROJECT_LABEL;
 use super::engine::{Containers as _, StatsSample};
-use super::{Docker, DockerError};
+use super::{CONCURRENT_CALLS, Docker, DockerError};
 
 /// How often a frame goes out, and so the window the CPU share is measured over.
 const INTERVAL: Duration = Duration::from_secs(1);
@@ -168,6 +168,10 @@ impl Docker {
     /// The resource usage of every running container of a compose project, a frame every second. Each call measures
     /// its own CPU shares, from its own samples: the first frame has none.
     ///
+    /// A frame holds the containers of every compose project on the host, as the frames of Hangar's Waku version do,
+    /// those of projects Hangar did not install among them: a caller that shows only its own projects keeps the ids
+    /// of their containers, whose [`project`](super::ComposeContainer::project) [`Docker::containers`] gives.
+    ///
     /// # Errors
     ///
     /// When the daemon cannot list its containers: the first sample is taken before the stream is returned, so that
@@ -230,16 +234,19 @@ impl Docker {
         let running = self
             .list_containers(false, PROJECT_LABEL.to_owned())
             .await?;
-        let samples = future::join_all(running.into_iter().map(|container| async move {
-            let sample = self
-                .engine
-                .containers()
-                .stats(&container.id, false, true)
-                .await;
+        let samples: Vec<_> = stream::iter(running)
+            .map(|container| async move {
+                let sample = self
+                    .engine
+                    .containers()
+                    .stats(&container.id, false, true)
+                    .await;
 
-            (container.id, sample)
-        }))
-        .await;
+                (container.id, sample)
+            })
+            .buffer_unordered(CONCURRENT_CALLS)
+            .collect()
+            .await;
 
         Ok(samples
             .into_iter()
