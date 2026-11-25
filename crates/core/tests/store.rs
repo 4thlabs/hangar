@@ -574,6 +574,27 @@ async fn refuses_to_uninstall_an_id_that_is_not_an_app_s() {
 }
 
 #[tokio::test]
+async fn lists_the_apps_of_a_clone_without_app_installed_and_installs_one() {
+    let fixture = full_store().await;
+
+    fixture.install().await.expect("the store installs");
+    std::fs::remove_dir_all(fixture.data_dir().installed()).expect("app-installed can be removed");
+
+    assert!(fixture.apps().await.iter().all(|(_, installed)| !installed));
+
+    fixture
+        .store
+        .install_app("delta-app")
+        .await
+        .expect("app-installed is created");
+
+    assert_eq!(
+        fixture.link("delta-app"),
+        Some(fixture.in_store("delta-app"))
+    );
+}
+
+#[tokio::test]
 async fn lists_as_apps_only_the_folders_named_as_app_ids() {
     let fixture = Fixture::new(&[
         ("store/alpha-app/compose.yml", "services: {}\n"),

@@ -44,7 +44,7 @@ pub use yaml::YamlError;
 
 use crate::{Command, CommandRunner, Output};
 use app_id::AppId;
-use disk::Disk;
+use disk::{Access, Disk};
 use yaml::Yaml;
 
 /// The store of a data directory: its clone, its configuration, its apps and the global environment.
@@ -199,7 +199,8 @@ impl<R: CommandRunner> Store<R> {
                 .map_err(|error| StoreError::io("create", folder, error))?;
         }
 
-        tokio::fs::write(file, source)
+        // Whole, by a rename: a read meanwhile, by the Waku version say, sees the old file or the new one.
+        Disk::replace(file, source.as_bytes(), Access::Default)
             .await
             .map_err(|error| StoreError::io("write", file, error))?;
         self.link_all(&config).await;
@@ -221,10 +222,19 @@ impl<R: CommandRunner> Store<R> {
         }
 
         let config = self.config().await?;
-        let installed = Self::names(self.data_dir.installed()).await?;
+        // A clone without `app-installed/` yet, made by the Waku version say, has no app installed.
+        let installed = match Self::names(self.data_dir.installed()).await {
+            Ok(names) => names,
+            Err(error) if Disk::is_missing(&error) => Vec::new(),
+            Err(error) => return Err(StoreError::io("list", self.data_dir.installed(), error)),
+        };
         let mut apps = Vec::new();
 
-        for id in Self::names(self.data_dir.store_apps()).await? {
+        let ids = Self::names(self.data_dir.store_apps())
+            .await
+            .map_err(|error| StoreError::io("list", self.data_dir.store_apps(), error))?;
+
+        for id in ids {
             let folder = self.data_dir.store_apps().join(&id);
             let is_app = AppId::regex().is_match(&id) && !config.shared.contains(&id);
 
@@ -363,6 +373,11 @@ impl<R: CommandRunner> Store<R> {
             }
         }
 
+        let installed = self.data_dir.installed();
+
+        tokio::fs::create_dir_all(installed)
+            .await
+            .map_err(|error| StoreError::io("create", installed, error))?;
         tracing::info!(app = %name, "linking an app of the store");
         Disk::link(&source, &destination)
             .await
@@ -396,12 +411,11 @@ impl<R: CommandRunner> Store<R> {
     }
 
     /// The names in `folder`, those that are UTF-8.
-    async fn names(folder: &Path) -> Result<Vec<String>, StoreError> {
-        let list_error = |error| StoreError::io("list", folder, error);
-        let mut reader = tokio::fs::read_dir(folder).await.map_err(list_error)?;
+    async fn names(folder: &Path) -> io::Result<Vec<String>> {
+        let mut reader = tokio::fs::read_dir(folder).await?;
         let mut names = Vec::new();
 
-        while let Some(entry) = reader.next_entry().await.map_err(list_error)? {
+        while let Some(entry) = reader.next_entry().await? {
             names.extend(entry.file_name().into_string().ok());
         }
 
