@@ -19,6 +19,9 @@ pub enum RunError {
 
     /// The command exited with a non-zero code, whatever it printed before: `docker stack deploy` prints its progress
     /// before a failure, which must not pass for a success.
+    ///
+    /// Its message holds the stderr, for the CLI and the logs. That stderr may name a registry's URL, a host path or
+    /// an environment value: a server shows its users a message of its own, not this one.
     #[error("{program} exited with code {code}{}", Self::cause(stderr))]
     Failed {
         /// The program that failed.

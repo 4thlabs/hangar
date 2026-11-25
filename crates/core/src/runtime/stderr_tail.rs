@@ -18,18 +18,24 @@ impl StderrTail {
     /// How much of a line is kept: its start, which names the error.
     const LINE_BYTES: usize = 1024;
 
-    /// Takes in what the child wrote to stderr.
+    /// Takes in what the child wrote to stderr. A carriage return ends a line as a newline does: a progress that
+    /// redraws itself with `\r` would otherwise be one long line, cut at its start, before the error at its end.
     pub(crate) fn write(&mut self, chunk: &[u8]) {
-        for piece in chunk.split_inclusive(|byte| *byte == b'\n') {
+        for piece in chunk.split_inclusive(|byte| Self::ends_line(*byte)) {
             let room = Self::LINE_BYTES.saturating_sub(self.partial.len());
 
             self.partial
                 .extend_from_slice(&piece[..piece.len().min(room)]);
 
-            if piece.ends_with(b"\n") {
+            if piece.last().copied().is_some_and(Self::ends_line) {
                 self.end_line();
             }
         }
+    }
+
+    /// Whether `byte` ends a line; `\r\n` ends it once, as the empty line between them is left out.
+    fn ends_line(byte: u8) -> bool {
+        byte == b'\n' || byte == b'\r'
     }
 
     /// The last lines, blank ones left out, joined by newlines.
@@ -98,6 +104,20 @@ mod tests {
             tail.finish(),
             "Error response from daemon\nno newline at the end"
         );
+    }
+
+    #[test]
+    fn ends_a_line_at_a_carriage_return() {
+        let mut tail = StderrTail::default();
+        let progress = "Downloading 42%\r".repeat(1000);
+
+        tail.write(format!("{progress}error: boom\n").as_bytes());
+
+        let tail = tail.finish();
+        let lines: Vec<&str> = tail.lines().collect();
+
+        assert_eq!(lines.len(), StderrTail::LINES);
+        assert_eq!(lines.last(), Some(&"error: boom"));
     }
 
     #[test]
