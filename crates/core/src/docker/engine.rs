@@ -8,7 +8,7 @@ use serde::{Deserialize, Deserializer};
 
 quoll::api! {
     /// The Docker Engine API, version 1.44, which Docker 25 and later serve: Docker 29 serves no older one.
-    #[openapi(none)]
+    #[server(none)]
     #[error(EngineMessage)]
     pub(crate) api Engine = "/v1.44";
 

@@ -142,7 +142,7 @@ impl Demux {
         let is_inside_a_frame = self.filled > 0 || self.payload.is_some();
 
         if !self.system_error.is_empty() {
-            return Err(FrameError::Daemon(Self::text(&self.system_error)));
+            return Err(FrameError::daemon(&self.system_error));
         }
 
         if is_inside_a_frame {
@@ -198,9 +198,9 @@ impl Demux {
 
     /// The error of the daemon, once its frame is whole.
     fn system_error(&mut self) -> Piece<'static> {
-        let message = Self::text(&std::mem::take(&mut self.system_error));
+        let error = FrameError::daemon(&std::mem::take(&mut self.system_error));
 
-        self.fail(FrameError::Daemon(message))
+        self.fail(error)
     }
 
     /// The failure after which nothing more is read.
@@ -231,6 +231,9 @@ pub(crate) enum FrameError {
     /// A frame of the daemon's own errors, stream 3, with its message.
     #[error("error from daemon in stream: {0}")]
     Daemon(String),
+    /// A frame of the daemon's own errors that holds no text but line breaks and spaces, or nothing.
+    #[error("the daemon reported an error in the stream, with no message")]
+    Unexplained,
     /// A header naming no known stream: the bytes from there are not frames, such as an error the daemon wrote as
     /// text.
     #[error("the logs hold bytes that are not frames: {0}")]
@@ -246,7 +249,21 @@ pub(crate) enum FrameError {
 impl FrameError {
     /// Whether the error says what the daemon wrote, which says more than a failed connection.
     pub(crate) fn is_from_daemon(&self) -> bool {
-        matches!(self, Self::Daemon(_) | Self::NotFrames(_) | Self::Blank)
+        matches!(
+            self,
+            Self::Daemon(_) | Self::Unexplained | Self::NotFrames(_) | Self::Blank
+        )
+    }
+
+    /// The error of a frame of the daemon's errors: its text, or [`FrameError::Unexplained`] when it holds none.
+    fn daemon(bytes: &[u8]) -> Self {
+        let text = Demux::text(bytes);
+
+        if text.is_empty() {
+            return Self::Unexplained;
+        }
+
+        Self::Daemon(text)
     }
 
     /// The error of `bytes` that are not frames: their text, or [`FrameError::Blank`] when they hold none.
@@ -461,6 +478,28 @@ mod tests {
         assert_eq!(
             FrameError::Blank.to_string(),
             "the daemon wrote bytes that are not frames"
+        );
+    }
+
+    #[test]
+    fn a_frame_of_the_daemons_errors_with_no_message_says_so() {
+        for payload in [&b""[..], b" \r\n\t"] {
+            let mut demux = Demux::default();
+
+            let (_, _, failure) = read(&mut demux, &[&frame(3, payload)]);
+
+            assert_eq!(failure, Some(FrameError::Unexplained), "{payload:?}");
+        }
+
+        let bytes = frame(3, b" \r\n the log driver failed");
+        let mut demux = Demux::default();
+
+        read(&mut demux, &[&bytes[..HEADER + 2]]);
+
+        assert_eq!(demux.finish(), Err(FrameError::Unexplained));
+        assert_eq!(
+            FrameError::Unexplained.to_string(),
+            "the daemon reported an error in the stream, with no message"
         );
     }
 

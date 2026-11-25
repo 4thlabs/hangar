@@ -939,17 +939,17 @@ dependencies = [
 
 [[package]]
 name = "quoll"
-version = "0.9.2"
-source = "git+https://github.com/4thlabs/quoll?tag=v0.9.2#f951db2537adb02fa44b6680429fb3ae367e3dd4"
+version = "0.10.0"
+source = "git+https://github.com/4thlabs/quoll?tag=v0.10.0#9d710716d9970fac97285f7e24f6f33fcf3a08a7"
 dependencies = [
  "backon",
  "base64",
  "bytes",
+ "fastrand",
  "futures-core",
  "futures-util",
  "http",
  "httpdate",
- "hyper",
  "percent-encoding",
  "pin-project-lite",
  "quoll-macros",
@@ -969,8 +969,8 @@ dependencies = [
 
 [[package]]
 name = "quoll-macros"
-version = "0.9.2"
-source = "git+https://github.com/4thlabs/quoll?tag=v0.9.2#f951db2537adb02fa44b6680429fb3ae367e3dd4"
+version = "0.10.0"
+source = "git+https://github.com/4thlabs/quoll?tag=v0.10.0#9d710716d9970fac97285f7e24f6f33fcf3a08a7"
 dependencies = [
  "proc-macro2",
  "quote",
