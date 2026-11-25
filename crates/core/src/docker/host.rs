@@ -24,6 +24,9 @@ const DEFAULT_PORT: u16 = 2375;
 /// than holding it forever, and a followed log or the events are not cut.
 const DEADLINE: Duration = Duration::from_secs(30);
 
+/// How many times a read is tried again after a failure that may pass.
+const RETRIES: u32 = 2;
+
 /// The `User-Agent` of Hangar's calls.
 const USER_AGENT: &str = concat!("hangar/", env!("CARGO_PKG_VERSION"));
 
@@ -217,9 +220,15 @@ impl Host {
     }
 
     /// A client of the daemon.
+    ///
+    /// It tries a `GET` again, up to twice, after a failure that may pass: a connection refused, or closed before the
+    /// answer, as a pooled one that a proxy such as docker-socket-proxy dropped, a deadline passed before the answer
+    /// began, or a 502, 503 or 504. quoll tries again only the requests that may be sent twice, so that a `POST`,
+    /// which starts or stops a container, is sent once. The deadline is per attempt.
     pub(crate) fn client(&self) -> Result<EngineClient, DockerError> {
         let builder = client::builder()
             .with(client::user_agent(USER_AGENT))
+            .with(client::retry(RETRIES))
             .with(client::timeout(DEADLINE));
         let built = match self {
             Self::Tcp(url) => {
@@ -265,7 +274,55 @@ impl Host {
 
 #[cfg(test)]
 mod tests {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::{TcpListener, TcpStream};
+
+    use super::super::engine::Containers as _;
     use super::*;
+
+    /// Reads the head of a request on `connection`.
+    async fn read_request(connection: &mut TcpStream) {
+        let mut request = Vec::new();
+        let mut chunk = [0; 1024];
+
+        while !request.windows(4).any(|end| end == b"\r\n\r\n") {
+            let read = connection.read(&mut chunk).await.expect("a request");
+
+            assert!(read > 0, "the request ended before its head");
+            request.extend_from_slice(&chunk[..read]);
+        }
+    }
+
+    #[tokio::test]
+    async fn tries_a_read_again_when_its_connection_closes_without_an_answer() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("a listener");
+        let port = listener.local_addr().expect("its address").port();
+        // A proxy that drops the first connection once the request came, then answers on the next.
+        let daemon = tokio::spawn(async move {
+            let (mut dropped, _) = listener.accept().await.expect("a connection");
+
+            read_request(&mut dropped).await;
+            drop(dropped);
+
+            let (mut answered, _) = listener.accept().await.expect("a connection again");
+
+            read_request(&mut answered).await;
+            answered
+                .write_all(b"HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 2\r\n\r\n[]")
+                .await
+                .expect("an answer");
+        });
+        let engine = Host::Tcp(format!("http://127.0.0.1:{port}"))
+            .client()
+            .expect("a client");
+
+        let listed = engine.containers().list(true, "{}").await;
+
+        assert_eq!(listed.expect("the list, the second time"), []);
+        daemon
+            .await
+            .expect("the daemon answered the second connection");
+    }
 
     fn parsed(docker_host: Option<&str>) -> Host {
         Host::parse(docker_host).expect("a host")

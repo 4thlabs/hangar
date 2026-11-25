@@ -82,7 +82,7 @@ impl DockerChange {
         }
     }
 
-    /// What a state of the followed events makes stale, or the error that ends them, logged here once.
+    /// What a state of the followed events makes stale, or the error that ends them, which the caller logs.
     fn after(followed: Followed<Event, EngineMessage>) -> Vec<Result<Self, DockerError>> {
         match followed {
             Followed::Connected => {
@@ -112,8 +112,6 @@ impl DockerChange {
                 Vec::new()
             }
             Followed::Stopped(error) => {
-                tracing::error!(%error, "the Docker daemon refused the events, no longer following them");
-
                 vec![Err(DockerError::daemon("follow the Docker events", error))]
             }
         }
@@ -138,8 +136,9 @@ impl Docker {
     /// # Errors
     ///
     /// It ends with a [`DockerError::Daemon`] when the daemon refuses the call in a way that calling again would not
-    /// change, a 4xx such as an API version it does not serve: the error is logged once, and nothing is followed
-    /// after it. It never ends otherwise.
+    /// change, a 4xx such as an API version it does not serve. That error is its last item, and nothing is followed
+    /// after it: it is not logged here, so the caller logs it. The other failures are logged here as warnings, and
+    /// followed again: it never ends otherwise.
     pub fn events(&self) -> impl Stream<Item = Result<DockerChange, DockerError>> + Send + 'static {
         Self::follow(self.engine.system())
     }
