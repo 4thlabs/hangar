@@ -420,17 +420,203 @@ async fn refuses_an_app_the_store_does_not_carry() {
 }
 
 #[tokio::test]
-async fn never_replaces_what_already_sits_in_app_installed() {
+async fn never_replaces_what_already_sits_in_app_installed_and_says_so() {
     let fixture = full_store().await;
     let own_folder = fixture.data_dir().installed().join("alpha-app");
 
     std::fs::create_dir_all(&own_folder).expect("a folder can be made");
-    fixture.install().await.expect("the store installs");
+    fixture
+        .install()
+        .await
+        .expect("the store installs, linking the others");
 
+    let install = fixture.store.install_app("alpha-app").await;
+    let uninstall = fixture.store.uninstall_app("alpha-app").await;
+
+    assert!(
+        matches!(install, Err(StoreError::InTheWay { .. })),
+        "{install:?}"
+    );
+    assert!(
+        matches!(uninstall, Err(StoreError::InTheWay { .. })),
+        "{uninstall:?}"
+    );
     assert!(
         own_folder.is_dir() && fixture.link("alpha-app").is_none(),
         "the folder stays"
     );
+    assert_eq!(fixture.link("beta-app"), Some(fixture.in_store("beta-app")));
+}
+
+#[tokio::test]
+async fn reports_a_link_that_leads_elsewhere_and_leaves_it() {
+    let fixture = full_store().await;
+    let elsewhere = fixture.data_dir().root().join("elsewhere");
+
+    std::fs::create_dir_all(&elsewhere).expect("a folder can be made");
+    std::fs::create_dir_all(fixture.data_dir().installed()).expect("app-installed can be made");
+    std::os::unix::fs::symlink(&elsewhere, fixture.data_dir().installed().join("delta-app"))
+        .expect("a link can be made");
+    fixture.install().await.expect("the store installs");
+
+    let install = fixture.store.install_app("delta-app").await;
+
+    assert!(
+        matches!(install, Err(StoreError::InTheWay { .. })),
+        "{install:?}"
+    );
+    assert_eq!(fixture.link("delta-app"), Some(elsewhere));
+}
+
+#[tokio::test]
+async fn takes_a_relative_link_to_the_app_for_one_installed_already() {
+    let fixture = full_store().await;
+
+    fixture.install().await.expect("the store installs");
+
+    let link = fixture.data_dir().installed().join("delta-app");
+
+    std::os::unix::fs::symlink("../app-store/store/delta-app", &link).expect("a link can be made");
+    fixture
+        .store
+        .install_app("delta-app")
+        .await
+        .expect("delta-app is installed already");
+
+    assert_eq!(
+        fixture.link("delta-app"),
+        Some(PathBuf::from("../app-store/store/delta-app"))
+    );
+}
+
+#[tokio::test]
+async fn replaces_a_dangling_link_on_install_and_removes_one_on_uninstall() {
+    let fixture = full_store().await;
+    let installed = fixture.data_dir().installed();
+
+    std::fs::create_dir_all(installed).expect("app-installed can be made");
+    // Links written under another root, by the Waku container say, or to an app removed upstream since.
+    std::os::unix::fs::symlink(
+        "/elsewhere/app-store/store/alpha-app",
+        installed.join("alpha-app"),
+    )
+    .expect("a link can be made");
+    std::os::unix::fs::symlink(
+        "/elsewhere/app-store/store/removed-app",
+        installed.join("removed-app"),
+    )
+    .expect("a link can be made");
+    fixture.install().await.expect("the store installs");
+
+    assert_eq!(
+        fixture.link("alpha-app"),
+        Some(fixture.in_store("alpha-app"))
+    );
+
+    fixture
+        .store
+        .uninstall_app("removed-app")
+        .await
+        .expect("a dangling link uninstalls");
+
+    assert_eq!(fixture.link("removed-app"), None);
+}
+
+#[tokio::test]
+async fn uninstalls_an_app_the_store_no_longer_reads() {
+    let fixture = full_store().await;
+
+    fixture.install().await.expect("the store installs");
+    std::fs::write(
+        fixture.in_store("alpha-app").join("compose.yml"),
+        "services: [\n",
+    )
+    .expect("the compose file can be broken");
+    std::fs::write(fixture.data_dir().config_file(), "categories: [\n")
+        .expect("the config can be broken");
+
+    fixture
+        .store
+        .uninstall_app("alpha-app")
+        .await
+        .expect("the link goes all the same");
+
+    assert_eq!(fixture.link("alpha-app"), None);
+    assert!(
+        fixture.in_store("alpha-app").is_dir(),
+        "the store keeps the app"
+    );
+}
+
+#[tokio::test]
+async fn refuses_to_uninstall_an_id_that_is_not_an_app_s() {
+    let fixture = full_store().await;
+
+    fixture.install().await.expect("the store installs");
+
+    for id in ["../app-store", "networks.yml/..", "", "Alpha-App"] {
+        let error = fixture
+            .store
+            .uninstall_app(id)
+            .await
+            .expect_err("the id is not an app's");
+
+        assert!(
+            matches!(error, StoreError::InvalidAppId { .. }),
+            "{id:?}: {error:?}"
+        );
+    }
+
+    assert_eq!(
+        fixture.link("alpha-app"),
+        Some(fixture.in_store("alpha-app"))
+    );
+}
+
+#[tokio::test]
+async fn lists_as_apps_only_the_folders_named_as_app_ids() {
+    let fixture = Fixture::new(&[
+        ("store/alpha-app/compose.yml", "services: {}\n"),
+        ("store/README.md", "# The apps\n"),
+        ("store/.github/compose.yml", "services: {}\n"),
+        ("store/Jellyfin/compose.yml", "services: {}\n"),
+        ("store/.tmpl/compose.yml", "services: {}\n"),
+    ])
+    .await;
+
+    fixture.install().await.expect("the store installs");
+
+    assert_eq!(fixture.apps().await, [("alpha-app".to_owned(), false)]);
+}
+
+#[tokio::test]
+async fn saves_the_first_config_of_a_store_that_ships_none() {
+    let fixture = Fixture::new(&[("store/alpha-app/compose.yml", "services: {}\n")]).await;
+
+    fixture.install().await.expect("the store installs");
+    fixture
+        .store
+        .save_config("categories:\n  - { name: a, color: blue, stacks: [alpha-app] }\n")
+        .await
+        .expect("config/ is created");
+
+    assert_eq!(
+        fixture.link("alpha-app"),
+        Some(fixture.in_store("alpha-app"))
+    );
+}
+
+#[tokio::test]
+async fn refuses_to_save_a_config_before_the_store_is_cloned() {
+    let fixture = full_store().await;
+    let error = fixture
+        .store
+        .save_config("categories: []\n")
+        .await
+        .expect_err("there is no clone to write in");
+
+    assert!(matches!(error, StoreError::NotInstalled), "{error:?}");
+    assert!(!fixture.data_dir().store().exists());
 }
 
 #[tokio::test]

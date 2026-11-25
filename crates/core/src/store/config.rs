@@ -17,7 +17,9 @@ pub use widget::{Column, FollowedCard, ServiceOptions, Widget, WidgetKind};
 
 use super::{Yaml, YamlError};
 use backup::BackupFields;
-use rules::{Integer, List, MAX_SAFE_INTEGER, NonEmpty, present};
+use rules::{
+    AppIdPattern, EntryName, Integer, List, MAX_SAFE_INTEGER, Matching, NonEmpty, present,
+};
 
 /// A `hangar.yml` that does not parse.
 #[derive(Debug, thiserror::Error)]
@@ -52,7 +54,8 @@ pub enum ConfigError {
 pub struct Config {
     /// The groups the apps are filtered by, and the order commands run in.
     pub categories: Vec<Category>,
-    /// The files under `store/` that are not apps but that stacks reference, linked beside them at install.
+    /// The files under `store/` that are not apps but that stacks reference, linked beside them at install: each a
+    /// single name, which never leaves `store/` nor `app-installed/`.
     pub shared: Vec<String>,
     /// The dashboard, in declaration order: a clock and Docker's stats in the first column and Frigate's events in the
     /// third unless the file declares its own.
@@ -72,7 +75,7 @@ pub struct Category {
     pub name: String,
     /// Any CSS color.
     pub color: String,
-    /// Its app ids, in start order.
+    /// Its app ids, in start order: each a folder name under `store/`.
     pub stacks: Vec<String>,
 }
 
@@ -82,7 +85,7 @@ pub struct Category {
 struct ConfigFields {
     categories: List<CategoryFields>,
     #[serde(default)]
-    shared: List<NonEmpty>,
+    shared: List<EntryName>,
     /// Read one by one: the type of a widget says which fields it has.
     #[serde(default, deserialize_with = "present")]
     widgets: Option<List<Value>>,
@@ -104,7 +107,7 @@ impl ConfigFields {
 struct CategoryFields {
     name: NonEmpty,
     color: NonEmpty,
-    stacks: List<NonEmpty>,
+    stacks: List<Matching<AppIdPattern>>,
 }
 
 impl Config {
@@ -333,6 +336,53 @@ mod tests {
         );
         assert_eq!(invalid("categories: []\nshared: [1]\n").0, "shared[0]");
         assert_eq!(invalid("- categories\n").0, ".");
+    }
+
+    #[test]
+    fn refuses_a_stack_that_is_not_an_app_id() {
+        for stack in [
+            "../../app-data",
+            "a/b",
+            "/etc",
+            "..",
+            ".hidden",
+            "Jellyfin",
+            "",
+        ] {
+            let source =
+                format!("categories:\n  - {{ name: a, color: blue, stacks: ['{stack}'] }}\n");
+
+            assert_eq!(
+                invalid(&source),
+                (
+                    "categories[0].stacks[0]".to_owned(),
+                    "invalid app id".to_owned()
+                ),
+                "{stack:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn refuses_a_shared_file_that_leaves_the_store() {
+        for file in [
+            "../networks.yml",
+            "common/networks.yml",
+            "/etc/passwd",
+            ".",
+            "..",
+            "networks.yml/",
+            "",
+        ] {
+            let source = format!("categories: []\nshared: [networks.yml, '{file}']\n");
+            let (field, message) = invalid(&source);
+
+            assert_eq!(field, "shared[1]", "{file:?}");
+            assert!(
+                message.starts_with("must be a file name under store/"),
+                "{file:?}: {message}"
+            );
+        }
     }
 
     #[test]

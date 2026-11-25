@@ -1,13 +1,11 @@
 //! The `backups:` of `hangar.yml`: the apps whose data folder Hangar archives, one entry per app.
 
-use regex::Regex;
 use serde::Deserialize;
 use serde::de::{self, Deserializer};
 
 use super::ConfigError;
 use super::cron::Cron;
-use super::rules::{Integer, List, MAX_SAFE_INTEGER, Matching, NonEmpty, Pattern, present};
-use crate::store::AppId;
+use super::rules::{AppIdPattern, Integer, List, MAX_SAFE_INTEGER, Matching, NonEmpty, present};
 
 /// The backup of one app's data folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,18 +90,6 @@ impl From<BackupFields> for Backup {
             include: strings(fields.include.0),
             exclude: strings(fields.exclude.0),
         }
-    }
-}
-
-/// An app id, as [`AppId`] takes one.
-#[derive(Debug, Clone)]
-struct AppIdPattern;
-
-impl Pattern for AppIdPattern {
-    const MESSAGE: &str = "invalid app id";
-
-    fn regex() -> &'static Regex {
-        AppId::regex()
     }
 }
 

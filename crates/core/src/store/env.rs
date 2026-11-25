@@ -1,16 +1,20 @@
 //! `.env.global`, the environment every stack is composed with, and the `${VARIABLES}` the installed stacks reference.
 
 mod dotenv;
+mod format;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use regex::Regex;
+use tokio::io::AsyncWriteExt;
 
-use super::{DataDir, StoreError};
+use super::{DataDir, Disk, StoreError};
 use dotenv::Dotenv;
+use format::EnvFormat;
 
 /// A reference to a variable in a compose file, `$FOO` or `${FOO…}`, capturing its name: what compose accepts as one.
 static REFERENCE: LazyLock<Regex> =
@@ -20,17 +24,28 @@ static REFERENCE: LazyLock<Regex> =
 static VARIABLE_NAME: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*$").expect("the pattern is valid"));
 
+/// The lock of each `.env.global` of the process, by its path: one per data directory, whatever the [`GlobalEnv`]s.
+static LOCKS: LazyLock<Mutex<HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>> =
+    LazyLock::new(Mutex::default);
+
 /// The global environment file, `.env.global`. Hand-edited as much as generated, so a write merges into what is on
 /// disk, and drops only the variables it is told to.
 ///
-/// Its format is the Waku version's: a header, the time of the last write, then the variables sorted, `KEY=value`
-/// unquoted. Each write first copies the file aside, as `.env.global.<time>.bak`.
+/// Its format is the Waku version's: a header, the time of the last write, then the variables sorted, `KEY=value`,
+/// quoted only where dotenv would otherwise read the value back another way. Each write first copies the file aside,
+/// as `.env.global.<time>.bak`.
+///
+/// The writes of this process to one data directory take turns, from the read they merge into to the file in place;
+/// and the file is replaced whole, by a rename, so that a compose run never reads it half written. Another process
+/// writing the file at the same time, the Waku version say, is not covered: one of the two writes may be lost.
 #[derive(Debug, Clone)]
 pub struct GlobalEnv {
     file: PathBuf,
     installed: PathBuf,
     /// Values a new variable starts with, when Hangar knows the answer.
     defaults: BTreeMap<String, String>,
+    /// Held from the read of a write to its rename.
+    lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl GlobalEnv {
@@ -43,20 +58,24 @@ impl GlobalEnv {
     /// The extensions of the files compose interpolates: its own fragments and the `env_file:` targets beside them.
     const INTERPOLATED: [&str; 3] = [".yml", ".yaml", ".env"];
 
-    /// The head of the file, before the time of its last write.
-    const HEADER: &str =
-        "# Global Environment Variables\n# These variables are available to all projects\n";
-
     /// The environment of `data_dir`, whose `APP_DATA_DIR` starts as its `app-data`: the stacks keep their data
     /// under the data directory Hangar itself uses. Reads nothing: neither the file nor the apps exist before the
     /// store is installed.
     pub fn new(data_dir: &DataDir) -> Self {
         let app_data = data_dir.app_data().to_string_lossy().into_owned();
+        let file = data_dir.env_file().to_owned();
+        let lock = LOCKS
+            .lock()
+            .expect("no thread panics while holding the locks")
+            .entry(file.clone())
+            .or_default()
+            .clone();
 
         Self {
-            file: data_dir.env_file().to_owned(),
+            file,
             installed: data_dir.installed().to_owned(),
             defaults: BTreeMap::from([("APP_DATA_DIR".to_owned(), app_data)]),
+            lock,
         }
     }
 
@@ -87,13 +106,30 @@ impl GlobalEnv {
     }
 
     /// Merges `updates` into what is on disk now, so that a variable added meanwhile survives, then drops the
-    /// variables of `remove`, the only way one is ever lost. The file is copied aside first.
+    /// variables of `remove`, the only way one is ever lost. The file is copied aside first, then replaced whole.
     ///
     /// # Errors
     ///
-    /// Returns [`StoreError::Io`] when the file cannot be read, copied aside or written; it is not written when the
-    /// copy fails: it holds secrets kept nowhere else.
+    /// Returns [`StoreError::InvalidVariable`] for a name of `updates` that compose does not accept,
+    /// [`StoreError::UnwritableValue`] for a value no quoting writes back the same, and [`StoreError::Io`] when the
+    /// file cannot be read, copied aside or written. Nothing is written then; nor when the copy fails: the file holds
+    /// secrets kept nowhere else.
     pub async fn write(
+        &self,
+        updates: BTreeMap<String, String>,
+        remove: &[&str],
+    ) -> Result<BTreeMap<String, String>, StoreError> {
+        if let Some(key) = updates.keys().find(|key| !Self::is_variable_name(key)) {
+            return Err(StoreError::InvalidVariable { key: key.clone() });
+        }
+
+        let _turn = self.lock.lock().await;
+
+        self.update(updates, remove).await
+    }
+
+    /// [`write`](Self::write), its turn taken.
+    async fn update(
         &self,
         updates: BTreeMap<String, String>,
         remove: &[&str],
@@ -107,11 +143,10 @@ impl GlobalEnv {
         }
 
         let now = jiff::Timestamp::now();
+        let contents = EnvFormat::serialize(&variables, &now)?;
 
         self.back_up(&now).await?;
-        tokio::fs::write(&self.file, Self::serialize(&variables, &now))
-            .await
-            .map_err(|error| StoreError::io("write", &self.file, error))?;
+        self.replace(contents.as_bytes()).await?;
 
         Ok(variables)
     }
@@ -149,6 +184,7 @@ impl GlobalEnv {
 
     /// Seeds the namespaced variables the files of `entries` reference.
     async fn seed(&self, entries: &[String]) -> Result<BTreeMap<String, String>, StoreError> {
+        let _turn = self.lock.lock().await;
         let current = self.read().await?;
         // Naming the apps is a listing; reading their files is what a narrower scope saves.
         let prefixes: Vec<String> = std::iter::once(Self::SHARED_PREFIX.to_owned())
@@ -174,7 +210,7 @@ impl GlobalEnv {
             return Ok(current);
         }
 
-        self.write(missing, &[]).await
+        self.update(missing, &[]).await
     }
 
     /// The installed apps: the entries of `app-installed` that read as a folder.
@@ -301,39 +337,81 @@ impl GlobalEnv {
             .map(|name| format!("{}_", name.to_uppercase()))
     }
 
-    /// Copies the file aside, named after `now`. A file that does not exist yet has nothing to copy.
+    /// Copies the file aside, named after `now`, with a number after it when two writes share a millisecond, and its
+    /// permissions. A file that does not exist yet has nothing to copy.
     async fn back_up(&self, now: &jiff::Timestamp) -> Result<(), StoreError> {
+        let contents = match tokio::fs::read(&self.file).await {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(StoreError::io("back up", &self.file, error)),
+        };
         // `:` is fine on Linux but not everywhere, and these names are read by humans.
-        let stamp = Self::timestamp(now).replace(':', "-");
-        let mut backup = self.file.clone().into_os_string();
+        let stamp = EnvFormat::timestamp(now).replace(':', "-");
+        let name = |attempt: u32| match attempt {
+            1 => self.beside(&format!(".{stamp}.bak")),
+            _ => self.beside(&format!(".{stamp}-{attempt}.bak")),
+        };
 
-        backup.push(format!(".{stamp}.bak"));
+        self.create(name, &contents)
+            .await
+            .map(drop)
+            .map_err(|error| StoreError::io("back up", &self.file, error))
+    }
 
-        match tokio::fs::copy(&self.file, &backup).await {
-            Ok(_) => Ok(()),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(StoreError::io("back up", &self.file, error)),
+    /// Writes `contents` to a file beside `.env.global`, then renames it in its place, so that the file is never seen
+    /// half written.
+    async fn replace(&self, contents: &[u8]) -> Result<(), StoreError> {
+        let process = std::process::id();
+        let name = |attempt: u32| self.beside(&format!(".{process}-{attempt}.tmp"));
+        let written = self
+            .create(name, contents)
+            .await
+            .map_err(|error| StoreError::io("write", &self.file, error))?;
+
+        if let Err(error) = tokio::fs::rename(&written, &self.file).await {
+            Self::discard(&written).await;
+
+            return Err(StoreError::io("write", &self.file, error));
+        }
+
+        Ok(())
+    }
+
+    /// Creates a new file named by `name`, with `contents` and the permissions of `.env.global` when it exists: it
+    /// holds secrets, which an owner may have kept to themselves. A file left half written is removed.
+    async fn create(&self, name: impl Fn(u32) -> PathBuf, contents: &[u8]) -> io::Result<PathBuf> {
+        let (mut file, path) = Disk::create_new(name).await?;
+        let written = async {
+            if let Ok(metadata) = tokio::fs::metadata(&self.file).await {
+                file.set_permissions(metadata.permissions()).await?;
+            }
+
+            file.write_all(contents).await?;
+            file.sync_all().await
+        };
+
+        if let Err(error) = written.await {
+            Self::discard(&path).await;
+
+            return Err(error);
+        }
+
+        Ok(path)
+    }
+
+    /// Removes a file a failed write left: the write's error is the one returned, and this one is logged.
+    async fn discard(path: &Path) {
+        if let Err(error) = tokio::fs::remove_file(path).await {
+            tracing::warn!(path = %path.display(), %error, "could not remove the file of a failed write");
         }
     }
 
-    /// The variables the way the file has always looked: the header, the time of the write, the sorted pairs.
-    fn serialize(variables: &BTreeMap<String, String>, now: &jiff::Timestamp) -> String {
-        let body: Vec<String> = variables
-            .iter()
-            .map(|(key, value)| format!("{key}={value}"))
-            .collect();
+    /// The path of `.env.global` followed by `suffix`.
+    fn beside(&self, suffix: &str) -> PathBuf {
+        let mut path = OsString::from(self.file.as_os_str());
 
-        format!(
-            "{}# Last updated: {}\n\n{}\n",
-            Self::HEADER,
-            Self::timestamp(now),
-            body.join("\n")
-        )
-    }
-
-    /// `now` as JavaScript's `toISOString` writes it: UTC, to the millisecond.
-    fn timestamp(now: &jiff::Timestamp) -> String {
-        format!("{now:.3}")
+        path.push(suffix);
+        PathBuf::from(path)
     }
 }
 
@@ -345,7 +423,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::GlobalEnv;
-    use crate::store::DataDir;
+    use crate::store::{DataDir, StoreError};
 
     /// A data directory in a temporary directory, and its environment.
     struct Fixture {
@@ -718,6 +796,150 @@ mod tests {
             ["", "ACME_EMAIL=root@example.com", "TZ=Europe/Paris"]
         );
         assert!(contents.ends_with("TZ=Europe/Paris\n"));
+    }
+
+    #[tokio::test]
+    async fn reads_back_a_value_written_by_hand_after_any_number_of_writes() {
+        let fixture = Fixture::new();
+
+        std::fs::write(fixture.env.file(), "DB_PASSWORD=\"p#ss w0rd \"\n")
+            .expect("the file can be edited");
+
+        for round in 0..2 {
+            fixture
+                .env
+                .write(variables([("ROUND", &round.to_string())]), &[])
+                .await
+                .expect("the file can be written");
+        }
+
+        let read = fixture.env.read().await.expect("the file reads");
+
+        assert_eq!(
+            read.get("DB_PASSWORD").map(String::as_str),
+            Some("p#ss w0rd ")
+        );
+    }
+
+    #[tokio::test]
+    async fn writes_a_value_with_a_newline_without_adding_a_variable() {
+        let fixture = Fixture::new();
+
+        fixture
+            .env
+            .write(variables([("KEY", "a\nINJECTED=1")]), &[])
+            .await
+            .expect("the file can be written");
+
+        assert_eq!(
+            fixture.env.read().await.expect("the file reads"),
+            variables([("KEY", "a\nINJECTED=1")])
+        );
+    }
+
+    #[tokio::test]
+    async fn refuses_a_name_compose_does_not_accept_and_writes_nothing() {
+        let fixture = Fixture::new();
+
+        for key in ["", "1A", "A-B", "A B", "A\nB", "A=B"] {
+            let error = fixture
+                .env
+                .write(variables([("GOOD", "1"), (key, "x")]), &[])
+                .await
+                .expect_err("the name is refused");
+
+            assert!(
+                matches!(error, StoreError::InvalidVariable { .. }),
+                "{key:?}: {error:?}"
+            );
+        }
+
+        assert!(!fixture.env.file().exists());
+    }
+
+    #[tokio::test]
+    async fn loses_no_write_when_many_run_at_once() {
+        let fixture = Fixture::new();
+        let writes = (0..20).map(|index| {
+            let env = GlobalEnv::new(&fixture.data_dir);
+
+            async move {
+                env.write(variables([(&format!("KEY_{index}"), "set")]), &[])
+                    .await
+            }
+        });
+
+        for written in futures::future::join_all(writes).await {
+            written.expect("the file can be written");
+        }
+
+        let leftovers: Vec<_> = std::fs::read_dir(fixture.data_dir.root())
+            .expect("the data directory is readable")
+            .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+            .filter(|name| name.ends_with(".tmp"))
+            .collect();
+
+        assert_eq!(fixture.env.read().await.expect("the file reads").len(), 20);
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+    }
+
+    #[tokio::test]
+    async fn numbers_the_copies_of_writes_that_share_a_millisecond() {
+        let fixture = Fixture::new();
+        let now = jiff::Timestamp::now();
+
+        std::fs::write(fixture.env.file(), "DOMAIN=example.com\n")
+            .expect("the file can be written");
+        fixture
+            .env
+            .back_up(&now)
+            .await
+            .expect("the file can be copied");
+        fixture
+            .env
+            .back_up(&now)
+            .await
+            .expect("the file can be copied again");
+
+        let backups = backups(fixture.data_dir.root());
+
+        assert_eq!(backups.len(), 2, "{backups:?}");
+        assert!(
+            backups.iter().any(|backup| backup.ends_with("Z-2.bak")),
+            "{backups:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn keeps_the_permissions_of_the_file_and_gives_them_to_its_copies() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture = Fixture::new();
+        let mode = |path: &Path| {
+            std::fs::metadata(path)
+                .expect("the file is there")
+                .permissions()
+                .mode()
+                & 0o777
+        };
+
+        std::fs::write(fixture.env.file(), "SECRET=1\n").expect("the file can be written");
+        std::fs::set_permissions(fixture.env.file(), std::fs::Permissions::from_mode(0o600))
+            .expect("the permissions can be set");
+        fixture
+            .env
+            .write(variables([("SECRET", "2")]), &[])
+            .await
+            .expect("the file can be written");
+
+        let backup = fixture
+            .data_dir
+            .root()
+            .join(&backups(fixture.data_dir.root())[0]);
+
+        assert_eq!(mode(fixture.env.file()), 0o600);
+        assert_eq!(mode(&backup), 0o600);
     }
 
     #[test]
