@@ -30,13 +30,18 @@ use super::{Command, CommandRunner, Output, RunError};
 ///   [`with_cancellation`](Self::with_cancellation), stops a running child: SIGTERM once, then SIGKILL 10 seconds
 ///   later if it is still there. A run that is dropped stops its child the same way.
 ///
+/// Before a cancel, a full output channel pauses the run: a reader that stops reading without dropping its receiver
+/// holds it until it is cancelled, or until the server of its HTTP stream cuts the connection and drops the
+/// receiver, as [`Output`] says of quoll's `serve`, which does it after 60 s, and of `axum::serve`, which never does.
+///
 /// After a cancel, or a pipe that can no longer be read, output is best effort: both pipes are always read, so that a
 /// stalled reader never holds back a child that stops, into a queue of 1 MiB that the output channel is fed from as
 /// its reader takes it; what does not fit is dropped, a whole line or chunk at a time. The reading ends at the latest
 /// at the cut, which drops what is left in the queue: a second after the child is reaped, or after the cancel when it
 /// had exited already. A grandchild still printing past that second is cut, so that Ctrl-C does not wait for it until
-/// the end of a 10-second grace period that its parent no longer needs. A child killed and not reaped a second after the grace period, as one in uninterruptible
-/// sleep, ends the run there, and [`idle`](Self::idle) waits for it until it is reaped.
+/// the end of a 10-second grace period that its parent no longer needs. A child killed and not reaped a second after
+/// the grace period, as one in uninterruptible sleep, ends the run there, and [`idle`](Self::idle) waits for it until
+/// it is reaped.
 ///
 /// A cancelled run fails with [`RunError::Cancelled`], unless its child exited by itself before the cancel stopped
 /// it: a failure then keeps its code, and a success holds only when no output was cut or dropped, so that a capture
