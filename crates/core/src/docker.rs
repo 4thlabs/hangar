@@ -52,7 +52,8 @@ impl Docker {
     /// A client of the daemon that `DOCKER_HOST` names, else of Docker's own socket. It connects at its first call, so
     /// a daemon that does not answer yet is not an error here, nor a host that does not resolve: those fail the
     /// calls. A call that gets no answer within 30 seconds fails too; on a followed log and on the events, the
-    /// deadline is for the head of the answer alone.
+    /// deadline is for the head of the answer alone. A read is tried again, up to twice, after a failure that may
+    /// pass, as a connection that a proxy closed before the answer: the deadline is then per attempt.
     ///
     /// # Errors
     ///
