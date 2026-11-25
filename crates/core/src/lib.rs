@@ -1,8 +1,10 @@
 //! The core of Hangar, on no web framework, so that the `hangar` binary and the server both run on it. It holds its
-//! version, the runtime, which runs `docker`, `docker compose` and `git`, and Docker; the store and compose come later.
+//! version, the runtime, which runs `docker`, `docker compose` and `git`, Docker, and the store, with its
+//! configuration and the global environment; compose comes later.
 
 mod docker;
 mod runtime;
+mod store;
 mod version;
 
 pub use docker::{
@@ -11,5 +13,9 @@ pub use docker::{
     DockerChange, DockerError, Health, ProjectStatus, PublishedPort, StatsFrame,
 };
 pub use runtime::{Command, CommandRunner, Output, RunError, Runtime};
+pub use store::{
+    Backup, Category, Column, Config, ConfigError, DataDir, FollowedCard, GlobalEnv,
+    ServiceOptions, Store, StoreApp, StoreError, Widget, WidgetKind, YamlError,
+};
 pub use tokio_util::sync::CancellationToken;
 pub use version::VERSION;
