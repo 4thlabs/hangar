@@ -31,13 +31,26 @@ impl EnvFormat {
                     .ok_or_else(|| StoreError::UnwritableValue { key: key.clone() })
             })
             .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(format!(
+        let file = format!(
             "{}# Last updated: {}\n\n{}\n",
             Self::HEADER,
             Self::timestamp(now),
             lines.join("\n")
-        ))
+        );
+
+        // Each line reads back alone; the whole file is read back too, so that no line ever runs into the next.
+        let read_back = Dotenv::parse(&file);
+        let changed = variables
+            .iter()
+            .find(|(key, value)| read_back.get(*key) != Some(*value))
+            .map(|(key, _)| key)
+            .or_else(|| read_back.keys().find(|key| !variables.contains_key(*key)));
+
+        if let Some(key) = changed {
+            return Err(StoreError::UnwritableValue { key: key.clone() });
+        }
+
+        Ok(file)
     }
 
     /// `now` as JavaScript's `toISOString` writes it: UTC, to the millisecond.
@@ -46,11 +59,14 @@ impl EnvFormat {
     }
 
     /// The line of `key`: bare as the Waku version writes it, else the first quoting that dotenv reads back as
-    /// `value`, double quotes with `\n` escaped first. Each is checked with the parser rather than reasoned about, as
+    /// `value`, double quotes with `\n` escaped first. A value that starts with a quote is never bare: dotenv would
+    /// read it up to the same quote on a line below, `A="start` swallowing `B=end"`. Each is checked with the parser rather than reasoned about, as
     /// dotenv's rules are many: a `#` starts a comment, the ends are trimmed, `\n` expands in double quotes only.
     fn line(key: &str, value: &str) -> Option<String> {
         let escaped = value.replace('\n', r"\n").replace('\r', r"\r");
-        let bare = (!Self::has_blank_ends(value)).then(|| format!("{key}={value}"));
+        let opens_a_quote = value.starts_with(['\'', '"', '`']);
+        let bare =
+            (!opens_a_quote && !Self::has_blank_ends(value)).then(|| format!("{key}={value}"));
         let quoted = [
             format!("{key}=\"{escaped}\""),
             format!("{key}='{value}'"),
@@ -64,10 +80,10 @@ impl EnvFormat {
         })
     }
 
-    /// Whether `value` starts or ends with a blank that dotenv may trim. JavaScript's `trim` and Rust's do not agree
-    /// on every one, `U+FEFF` say, so such a value is quoted, never written bare.
+    /// Whether `value` starts or ends with a blank that dotenv trims, or that Rust would: such a value is quoted,
+    /// never written bare.
     fn has_blank_ends(value: &str) -> bool {
-        let is_blank = |character: char| character.is_whitespace() || character == '\u{feff}';
+        let is_blank = |character: char| character.is_whitespace() || Dotenv::is_space(character);
 
         value.starts_with(is_blank) || value.ends_with(is_blank)
     }
@@ -134,6 +150,20 @@ mod tests {
             variables,
             "a second write changes nothing"
         );
+    }
+
+    #[test]
+    fn keeps_apart_two_values_with_quotes_that_would_pair_across_lines() {
+        let variables = BTreeMap::from([
+            ("A".to_owned(), "\"start".to_owned()),
+            ("B".to_owned(), "end\"".to_owned()),
+            ("C".to_owned(), "'".to_owned()),
+            ("D".to_owned(), "it's".to_owned()),
+            ("E".to_owned(), "`".to_owned()),
+            ("F".to_owned(), "x`".to_owned()),
+        ]);
+
+        assert_eq!(round_trip(&variables), variables);
     }
 
     #[test]

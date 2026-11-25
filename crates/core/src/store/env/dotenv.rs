@@ -6,13 +6,17 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+/// JavaScript's `\s`, which differs from Rust's: it holds U+FEFF, the byte order mark a hand-edited file may start
+/// with, and not U+0085.
+const JAVASCRIPT_SPACE: &str = r"[\t\n\x{0B}\x{0C}\r \x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]";
+
 /// One variable, as dotenv's `LINE` matches it: `KEY=value`, `export KEY=value` or `KEY: value`, the value quoted
-/// with `'`, `"` or `` ` `` (over several lines, then) or bare up to a `#`. JavaScript's `\w` is ASCII.
+/// with `'`, `"` or `` ` `` (over several lines, then) or bare up to a `#`. JavaScript's `\w` is ASCII, and its `\s`
+/// is [`JAVASCRIPT_SPACE`].
 static LINE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r#"(?m)^\s*(?:export\s+)?([A-Za-z0-9_.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?$"#,
-    )
-    .expect("the pattern is valid")
+    let pattern = r#"(?m)^\s*(?:export\s+)?([A-Za-z0-9_.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?$"#;
+
+    Regex::new(&pattern.replace(r"\s", JAVASCRIPT_SPACE)).expect("the pattern is valid")
 });
 
 /// dotenv's parser.
@@ -32,9 +36,24 @@ impl Dotenv {
             .collect()
     }
 
+    /// Whether JavaScript's `trim` and `\s` take `character` for a blank.
+    pub(super) fn is_space(character: char) -> bool {
+        matches!(
+            character,
+            '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | ' ' | '\u{A0}' | '\u{1680}' | '\u{2000}'
+                ..='\u{200A}'
+                    | '\u{2028}'
+                    | '\u{2029}'
+                    | '\u{202F}'
+                    | '\u{205F}'
+                    | '\u{3000}'
+                    | '\u{FEFF}'
+        )
+    }
+
     /// A value trimmed, without the quotes around it, and with `\n` and `\r` expanded when they are double quotes.
     fn value(raw: &str) -> String {
-        let value = raw.trim();
+        let value = raw.trim_matches(Self::is_space);
         let mut characters = value.chars();
         let first = characters.next();
         let is_quoted = first.is_some_and(|quote| "'\"`".contains(quote))
@@ -61,7 +80,7 @@ mod tests {
     use super::Dotenv;
 
     /// What dotenv 17's `parse` answers, run on dotenv itself.
-    const DOTENV: [(&str, &[(&str, &str)]); 36] = [
+    const DOTENV: [(&str, &[(&str, &str)]); 39] = [
         ("A=1", &[("A", "1")]),
         ("export B = two ", &[("B", "two")]),
         ("C='single # not comment'", &[("C", "single # not comment")]),
@@ -101,6 +120,12 @@ mod tests {
         ("AK=a#b", &[("AK", "a")]),
         ("AL:x", &[]),
         ("AM:  y", &[("AM", "y")]),
+        (
+            "\u{feff}TOKEN=secret\nNEXT=ok",
+            &[("TOKEN", "secret"), ("NEXT", "ok")],
+        ),
+        ("AN=\u{feff}value\u{feff}", &[("AN", "value")]),
+        ("AO=\u{85}value\u{85}", &[("AO", "\u{85}value\u{85}")]),
     ];
 
     #[test]
