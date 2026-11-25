@@ -10,6 +10,8 @@ use std::marker::PhantomData;
 use regex::Regex;
 use serde::de::{self, Deserialize, Deserializer, SeqAccess, Visitor};
 
+use crate::store::{AppId, Disk};
+
 /// The largest integer zod's `z.int()` accepts, `Number.MAX_SAFE_INTEGER`.
 pub(super) const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
 
@@ -108,6 +110,37 @@ impl<'de, P: Pattern> Deserialize<'de> for Matching<P> {
         }
 
         Ok(Self(text, PhantomData))
+    }
+}
+
+/// An app id, as `backups[].app` and the stacks of a category take one, so that it names a folder under `store/`.
+#[derive(Debug, Clone)]
+pub(super) struct AppIdPattern;
+
+impl Pattern for AppIdPattern {
+    const MESSAGE: &str = "invalid app id";
+
+    fn regex() -> &'static Regex {
+        AppId::regex()
+    }
+}
+
+/// The name of a shared file: a single entry of `store/`, linked into `app-installed/` under the same name, never a
+/// path that leaves either.
+#[derive(Debug, Clone)]
+pub(super) struct EntryName(pub(super) String);
+
+impl<'de> Deserialize<'de> for EntryName {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = String::deserialize(deserializer)?;
+
+        if !Disk::is_entry_name(&name) {
+            return Err(de::Error::custom(
+                "must be a file name under store/, without a separator, . or ..",
+            ));
+        }
+
+        Ok(Self(name))
     }
 }
 

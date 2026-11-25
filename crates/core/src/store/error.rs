@@ -53,6 +53,48 @@ pub enum StoreError {
         source: ConfigError,
     },
 
+    /// The store is not cloned yet, which this needs.
+    #[error("the store is not installed")]
+    NotInstalled,
+
+    /// A name that would not stay a single entry of `app-installed/` or `store/`: empty, `.`, `..`, absolute, or with
+    /// a separator.
+    #[error("{name:?} is not the name of an app or of a shared file")]
+    InvalidName {
+        /// The name.
+        name: String,
+    },
+
+    /// An id that is not an app's: lowercase letters, digits, `.`, `_` and `-`, starting with a letter or a digit.
+    #[error("{id:?} is not an app id")]
+    InvalidAppId {
+        /// The id.
+        id: String,
+    },
+
+    /// Something that is not a link to the store sits where an app's link goes, in `app-installed/`: it is left as
+    /// it is.
+    #[error("{} is in the way: it is not a link to the store", path.display())]
+    InTheWay {
+        /// What is in the way.
+        path: PathBuf,
+    },
+
+    /// A variable name that compose does not accept, which `.env.global` is not given.
+    #[error("{key:?} is not a variable name")]
+    InvalidVariable {
+        /// The name.
+        key: String,
+    },
+
+    /// A value that no quoting writes so that dotenv reads it back the same: one that holds every kind of quote, and
+    /// a newline or a `#`.
+    #[error("the value of {key} cannot be written to .env.global")]
+    UnwritableValue {
+        /// The variable.
+        key: String,
+    },
+
     /// The store carries no app of this id, or none that Hangar can read: its folder has no `compose.yml` that
     /// parses.
     #[error("the store has no app {id}")]
