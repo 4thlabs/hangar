@@ -595,6 +595,34 @@ async fn lists_the_apps_of_a_clone_without_app_installed_and_installs_one() {
 }
 
 #[tokio::test]
+async fn lists_no_app_in_a_clone_without_a_store_folder() {
+    let fixture = Fixture::new(&[]).await;
+
+    fixture
+        .install()
+        .await
+        .expect("a repository without store/ installs");
+
+    assert!(fixture.apps().await.is_empty());
+    assert!(
+        fixture
+            .store
+            .installed_apps()
+            .await
+            .expect("the apps can be listed")
+            .is_empty()
+    );
+
+    let error = fixture
+        .store
+        .install_app("alpha-app")
+        .await
+        .expect_err("there is no app");
+
+    assert!(matches!(error, StoreError::UnknownApp { .. }), "{error:?}");
+}
+
+#[tokio::test]
 async fn lists_as_apps_only_the_folders_named_as_app_ids() {
     let fixture = Fixture::new(&[
         ("store/alpha-app/compose.yml", "services: {}\n"),
