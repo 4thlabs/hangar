@@ -16,6 +16,12 @@ use tokio_util::sync::CancellationToken;
 /// dropping its receiver holds the run until it is cancelled. A reader that has gone away loses the rest, and the
 /// command goes on without it.
 ///
+/// The run sets no bound of its own on a stalled reader: the server of the HTTP stream does. quoll's `serve` and
+/// `serve_on` cut a connection whose socket takes no write for 60 s, once the kernel's buffers are full, and drop
+/// its stream with the receiver it holds: a client that stops reading without closing its connection is then a
+/// reader that has gone away. A router served with `axum::serve` has no such bound, and its stalled client holds the
+/// run until it is cancelled.
+///
 /// Once the run is stopping, after a cancel or a pipe that can no longer be read, the pipes no longer wait for the
 /// channel, so that a stalled reader never holds back a child that stops: what they give goes to a queue of 1 MiB,
 /// which the channel is fed from as the reader takes it, so that a reader that keeps up loses nothing. What does not
