@@ -1,6 +1,6 @@
 [package]
 name = "hangar-core"
-description = "The core of Hangar, on no web framework: running commands and Docker, and soon the store and compose"
+description = "The core of Hangar, on no web framework: running commands, Docker and the store, and soon compose"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -8,12 +8,20 @@ publish.workspace = true
 
 [dependencies]
 futures = "0.3"
+# The timestamps of `.env.global`'s header and of its `.bak` copies.
+jiff = { version = "0.2", default-features = false, features = ["std"] }
 # The client side alone: the core depends on no web framework.
 quoll = { git = "https://github.com/4thlabs/quoll", tag = "v0.10.0", features = ["client"] }
+# The patterns of the Waku version's rules, `.env.global`'s parser and the `${VARIABLES}` of the stacks, as written there.
+regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# `hangar.yml` and the compose files of the store, as the Waku version reads them with js-yaml.
+serde_norway = "0.9"
+# The path of the field at fault in a `hangar.yml` that does not parse.
+serde_path_to_error = "0.1"
 thiserror = "2"
-tokio = { version = "1", features = ["io-util", "macros", "process", "rt", "sync", "time"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "process", "rt", "sync", "time"] }
 tokio-util = "0.7"
 tracing = "0.1"
 # The URL of a daemon on TCP, checked before the client is built, which reqwest reads with it too.
@@ -26,6 +34,8 @@ nix = { version = "0.32", features = ["signal"] }
 [dev-dependencies]
 # The statuses a fake answer of the daemon has.
 http = "1"
+# The data directory of a test.
+tempfile = "3"
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "test-util", "time"] }
 
 # waitid, to see a child exit without reaping it.
