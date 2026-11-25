@@ -4,15 +4,13 @@ mod dotenv;
 mod format;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use regex::Regex;
-use tokio::io::AsyncWriteExt;
 
-use super::{DataDir, Disk, StoreError};
+use super::{Access, DataDir, Disk, StoreError};
 use dotenv::Dotenv;
 use format::EnvFormat;
 
@@ -36,7 +34,8 @@ static LOCKS: LazyLock<Mutex<HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>> =
 /// as `.env.global.<time>.bak`.
 ///
 /// The writes of this process to one data directory take turns, from the read they merge into to the file in place;
-/// and the file is replaced whole, by a rename, so that a compose run never reads it half written. Another process
+/// and the file is replaced whole, by a rename, so that a compose run never reads it half written. It keeps its
+/// permissions, which its copies take too; created, it is readable by its owner alone. Another process
 /// writing the file at the same time, the Waku version say, is not covered: one of the two writes may be lost.
 #[derive(Debug, Clone)]
 pub struct GlobalEnv {
@@ -352,66 +351,22 @@ impl GlobalEnv {
             _ => self.beside(&format!(".{stamp}-{attempt}.bak")),
         };
 
-        self.create(name, &contents)
+        Disk::write_new(name, &contents, &self.file, Access::OwnerOnly)
             .await
             .map(drop)
             .map_err(|error| StoreError::io("back up", &self.file, error))
     }
 
-    /// Writes `contents` to a file beside `.env.global`, then renames it in its place, so that the file is never seen
-    /// half written.
+    /// Replaces the file whole with `contents`, readable by its owner alone when it is new: it holds secrets.
     async fn replace(&self, contents: &[u8]) -> Result<(), StoreError> {
-        let process = std::process::id();
-        let name = |attempt: u32| self.beside(&format!(".{process}-{attempt}.tmp"));
-        let written = self
-            .create(name, contents)
+        Disk::replace(&self.file, contents, Access::OwnerOnly)
             .await
-            .map_err(|error| StoreError::io("write", &self.file, error))?;
-
-        if let Err(error) = tokio::fs::rename(&written, &self.file).await {
-            Self::discard(&written).await;
-
-            return Err(StoreError::io("write", &self.file, error));
-        }
-
-        Ok(())
-    }
-
-    /// Creates a new file named by `name`, with `contents` and the permissions of `.env.global` when it exists: it
-    /// holds secrets, which an owner may have kept to themselves. A file left half written is removed.
-    async fn create(&self, name: impl Fn(u32) -> PathBuf, contents: &[u8]) -> io::Result<PathBuf> {
-        let (mut file, path) = Disk::create_new(name).await?;
-        let written = async {
-            if let Ok(metadata) = tokio::fs::metadata(&self.file).await {
-                file.set_permissions(metadata.permissions()).await?;
-            }
-
-            file.write_all(contents).await?;
-            file.sync_all().await
-        };
-
-        if let Err(error) = written.await {
-            Self::discard(&path).await;
-
-            return Err(error);
-        }
-
-        Ok(path)
-    }
-
-    /// Removes a file a failed write left: the write's error is the one returned, and this one is logged.
-    async fn discard(path: &Path) {
-        if let Err(error) = tokio::fs::remove_file(path).await {
-            tracing::warn!(path = %path.display(), %error, "could not remove the file of a failed write");
-        }
+            .map_err(|error| StoreError::io("write", &self.file, error))
     }
 
     /// The path of `.env.global` followed by `suffix`.
     fn beside(&self, suffix: &str) -> PathBuf {
-        let mut path = OsString::from(self.file.as_os_str());
-
-        path.push(suffix);
-        PathBuf::from(path)
+        Disk::beside(&self.file, suffix)
     }
 }
 
@@ -940,6 +895,27 @@ mod tests {
 
         assert_eq!(mode(fixture.env.file()), 0o600);
         assert_eq!(mode(&backup), 0o600);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn creates_the_file_readable_by_its_owner_alone() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture = Fixture::new();
+
+        fixture
+            .env
+            .write(variables([("SECRET", "1")]), &[])
+            .await
+            .expect("the file can be written");
+
+        let mode = std::fs::metadata(fixture.env.file())
+            .expect("the file is there")
+            .permissions()
+            .mode();
+
+        assert_eq!(mode & 0o777, 0o600);
     }
 
     #[test]
