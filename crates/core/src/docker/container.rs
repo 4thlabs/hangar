@@ -2,10 +2,10 @@
 
 use std::collections::HashMap;
 
-use futures::future;
+use futures::{StreamExt, stream};
 
 use super::engine::{ContainerInspection, ContainerSummary, Containers as _, EngineMessage, Port};
-use super::{ComposeContainers, Docker, DockerError};
+use super::{CONCURRENT_CALLS, ComposeContainers, Docker, DockerError};
 
 /// The label compose puts on each container of a project, set to the project's name.
 pub(crate) const PROJECT_LABEL: &str = "com.docker.compose.project";
@@ -261,12 +261,15 @@ impl Docker {
     /// When the daemon cannot list its containers. The inspections that follow fail no read.
     pub async fn containers(&self) -> Result<ComposeContainers, DockerError> {
         let summaries = self.list_containers(true, PROJECT_LABEL.to_owned()).await?;
-        let inspections = future::join_all(summaries.into_iter().map(|summary| async {
-            let inspection = self.engine.containers().inspect(&summary.id).await;
+        let inspections = stream::iter(summaries)
+            .map(|summary| async {
+                let inspection = self.engine.containers().inspect(&summary.id).await;
 
-            (summary, inspection)
-        }))
-        .await;
+                (summary, inspection)
+            })
+            .buffered(CONCURRENT_CALLS)
+            .collect()
+            .await;
 
         Ok(Self::gather(inspections))
     }
