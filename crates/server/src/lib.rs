@@ -2,7 +2,8 @@
 //! Vite build of `web/`, on one origin. Its [`Settings`] come from the environment, checked once at the start. Every
 //! route but those of signing in and the health route takes a session, the signed cookie of a user of `hangar.yml`.
 //! The store's routes run on the core's `Store`: its apps, its `hangar.yml`, `.env.global`, and its sync, which runs
-//! apart from the request that starts it. The Docker routes read a cache of the daemon that its events keep fresh.
+//! apart from the request that starts it. The Docker routes read a cache of the daemon that its events keep fresh. The
+//! notifications are one list for every user, kept in a JSON file of the data directory and pushed as they are filed.
 
 mod app;
 mod auth;

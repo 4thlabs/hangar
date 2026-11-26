@@ -40,11 +40,12 @@ pub(crate) struct StoreState {
 
 impl StoreState {
     /// The store of the server's settings, its commands, `git` and `docker compose`, run by `runtime`; what it installs
-    /// or uninstalls is told to the Docker pages through `docker_changes`.
+    /// or uninstalls is told to the Docker pages through `docker_changes`, and the end of a sync filed with `notifier`.
     pub(crate) fn new(
         settings: &Settings,
         runtime: Runtime,
         docker_changes: DockerChanges,
+        notifier: Notifier,
     ) -> Arc<Self> {
         Arc::new(Self {
             store: Store::new(
@@ -56,7 +57,7 @@ impl StoreState {
             sync: watch::Sender::new(None),
             gate: ChangeGate::default(),
             starting: Mutex::new(()),
-            notifier: Notifier::default(),
+            notifier,
             docker_changes,
         })
     }

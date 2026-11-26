@@ -11,6 +11,7 @@ use hangar_core::{Docker, Runtime};
 use crate::Settings;
 use crate::auth::{Auth, AuthBodyLimit, OriginCheck};
 use crate::docker::{DockerChanges, DockerState};
+use crate::notifications::Notifier;
 use crate::store::StoreState;
 use crate::trailing_slash::TrailingSlash;
 
@@ -20,6 +21,7 @@ pub struct App {
     pub(crate) auth: Arc<Auth>,
     pub(crate) store: Arc<StoreState>,
     pub(crate) docker: Arc<DockerState>,
+    pub(crate) notifier: Notifier,
 }
 
 impl App {
@@ -30,14 +32,22 @@ impl App {
     }
 
     /// The state of a server of `settings` on the daemon of `docker`, its commands run by `runtime`: with the variables
-    /// it sets, as a `PATH` that finds another `docker`, or the cancellation that stops them.
+    /// it sets, as a `PATH` that finds another `docker`, or the cancellation that stops them. The notifications are read
+    /// from their file of the data directory.
     pub fn with_runtime(settings: &Settings, runtime: Runtime, docker: Docker) -> Self {
         let docker_changes = DockerChanges::new();
+        let notifier = Notifier::load(&settings.data_dir);
 
         Self {
             auth: Arc::new(Auth::new(settings)),
-            store: StoreState::new(settings, runtime.clone(), docker_changes.clone()),
+            store: StoreState::new(
+                settings,
+                runtime.clone(),
+                docker_changes.clone(),
+                notifier.clone(),
+            ),
             docker: DockerState::new(settings, runtime, docker, docker_changes),
+            notifier,
         }
     }
 
@@ -58,7 +68,8 @@ pub fn router(app: App) -> axum::Router {
         editor: app.clone(),
         config: app.clone(),
         env: app.clone(),
-        docker: app,
+        docker: app.clone(),
+        notifications: app,
     })
 }
 
