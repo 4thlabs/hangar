@@ -176,7 +176,7 @@ app's page read the containers of the compose projects, and `GET /api/docker/ove
 (`info` and `df`), from a cache: one read of the daemon shared by the requests that wait for it, served as it is for a
 minute, then served while it is read again, as the Waku version's `Cache` does; the overview, whose `df` is the
 daemon's slowest call, for five minutes. A failed read is not kept, and a failed reread keeps the last value; after a
-failure, the daemon is not asked again before a wait, from 2 seconds doubled up to a minute, and a failed reread is
+failure, the daemon is not asked again before a wait, from 2 seconds doubled up to a minute, and a failed read is
 tried again once its wait has passed. The server follows the
 daemon's events from its start, and reads again what they make stale, whatever that wait, the events of a quarter of a
 second gathered, two seconds for the overview; when the events are followed again after the daemon went away,

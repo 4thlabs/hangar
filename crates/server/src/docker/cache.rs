@@ -157,7 +157,8 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
     }
 
     /// Reloads the value, for a caller that learnt it changed: readers keep the current one meanwhile. A value never
-    /// read is left alone, as nobody waits for it.
+    /// asked for is left alone, as nobody waits for it; one whose first read failed is not, as its page shows that
+    /// failure.
     pub(crate) fn refresh(self: &Arc<Self>) {
         let mut state = self.lock();
 
@@ -167,7 +168,7 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
             return;
         }
 
-        if state.value.is_some() {
+        if state.value.is_some() || state.failure.is_some() {
             self.start(&mut state);
         }
     }
@@ -225,18 +226,19 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
     }
 
     /// Keeps what a load gave, or the failure and the wait it starts, and starts the load a refresh queued meanwhile. A
-    /// failed reload is tried again once its wait has passed, as nothing else may ask for it: the event that made the
-    /// value stale has come and gone, and the pages read again only once the value changes.
+    /// failed load is tried again once its wait has passed, as nothing else may ask for it: the event that made the
+    /// value stale has come and gone, and the pages read again only once the value changes, or a first one comes.
     fn finish(self: &Arc<Self>, loaded: &Loaded<T>) {
         let (has_changed, retry_at) = {
             let mut state = self.lock();
             let mut retry_at = None;
             let has_changed = match loaded {
                 Ok(value) => {
-                    let has_changed = state
-                        .value
-                        .as_ref()
-                        .is_some_and(|(previous, _)| previous != value);
+                    // A first value after a failed read changes what the pages show too: their failure.
+                    let has_changed = match &state.value {
+                        Some((previous, _)) => previous != value,
+                        None => state.failure.is_some(),
+                    };
 
                     state.value = Some((Arc::clone(value), Instant::now()));
                     state.failure = None;
@@ -259,10 +261,7 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
 
                     let at = Instant::now() + wait;
 
-                    if state.value.is_some() {
-                        retry_at = Some(at);
-                    }
-
+                    retry_at = Some(at);
                     state.failure = Some(LoadFailure {
                         error: Arc::clone(error),
                         wait,
@@ -593,6 +592,43 @@ mod tests {
         }
 
         assert_eq!((value(&cached).await, source.changes()), (2, 1));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn reloads_a_value_whose_first_read_failed_and_tells_of_it() {
+        let source = Source::new([Answer::Fails, Answer::Gives(1)], OPEN);
+        let cached = source.cached();
+
+        assert!(cached.get().await.is_err());
+
+        cached.refresh();
+        cached.settled().await;
+
+        assert_eq!(
+            (source.loads(), source.changes()),
+            (2, 1),
+            "the refresh read it, whatever the wait"
+        );
+        assert_eq!(value(&cached).await, 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn tries_a_failed_first_read_again_once_its_wait_has_passed_unasked() {
+        let source = Source::new([Answer::Fails, Answer::Gives(1)], OPEN);
+        let cached = source.cached();
+
+        assert!(cached.get().await.is_err());
+
+        tokio::time::advance(Duration::from_secs(2)).await;
+
+        // The retry's task runs once the clock moved: it is awaited, never slept for.
+        while source.loads() < 2 {
+            tokio::task::yield_now().await;
+        }
+
+        cached.settled().await;
+
+        assert_eq!((value(&cached).await, source.changes()), (1, 1));
     }
 
     #[tokio::test(start_paused = true)]

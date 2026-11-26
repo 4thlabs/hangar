@@ -30,6 +30,8 @@ export function useDockerStats(containerIds: readonly string[]) {
     const close = () => {
       stop?.();
       stop = undefined;
+      // Hidden, the figures would grow old: the tab shown again starts from none until its first frame.
+      setStats({});
     };
 
     const sync = () => (document.hidden ? close() : open());
