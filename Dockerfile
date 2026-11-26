@@ -1,3 +1,24 @@
+# syntax=docker/dockerfile:1
+
+# The Rust binary `hangar`, for `docker exec -it hangar hangar store up`. Alpine's Rust targets musl, which links it
+# statically: the same binary as the release's, built for the platform of the image.
+FROM rust:1-alpine AS cli
+
+# Package versions are coupled to the Alpine base repository.
+# hadolint ignore=DL3018
+RUN apk add --no-cache musl-dev
+
+WORKDIR /src
+
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+# The target folder is a cache mount, gone after the step: the binary is copied out of it in the same step.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/target \
+    cargo build --release --locked -p hangar-cli \
+    && cp target/release/hangar /usr/local/bin/hangar
+
 FROM node:24-alpine AS builder
 
 WORKDIR /app
@@ -5,7 +26,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY . .
+# Without the Rust workspace, which the `cli` stage builds: a Rust-only commit leaves the Waku build cached.
+COPY --exclude=crates --exclude=Cargo.toml --exclude=Cargo.lock . .
 
 # Waku evaluates server modules during the build, so provide isolated build-time values.
 # The auth secret is a disposable placeholder and is not copied into the runtime image.
@@ -52,6 +74,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY package.json sidequest.jobs.js ./
 COPY src ./src
 COPY --chmod=755 docker-entrypoint.sh /
+COPY --from=cli /usr/local/bin/hangar /usr/local/bin/hangar
 
 VOLUME ["/app/data"]
 
