@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, createRoute, createRouter, type RouterHistory } from "@tanstack/react-router";
-import { AppsSearchParams } from "#modules/apps/apps-search.ts";
+import { validateAppsSearch } from "#modules/apps/apps-search.ts";
 import { AppDetailPage } from "#modules/apps/components/app-detail-page.tsx";
 import { AppsPage } from "#modules/apps/components/apps-page.tsx";
 import { loginPath, type Session } from "#modules/auth/api/session.ts";
@@ -54,7 +54,7 @@ const appsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/apps",
   component: AppsPage,
-  validateSearch: AppsSearchParams.validate,
+  validateSearch: validateAppsSearch,
   staticData: { searchable: true },
 });
 

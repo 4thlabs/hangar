@@ -1,5 +1,5 @@
 import type { ProjectStatus, ProjectSummary } from "#libs/api";
-import { AppsSearchParams, type AppSortColumn, type AppsSort, type AppUpdate } from "#modules/apps/apps-search.ts";
+import { appStatuses, type AppSortColumn, type AppsSort, type AppUpdate } from "#modules/apps/apps-search.ts";
 import { searchByName } from "#modules/common/search-by-name.ts";
 import { sortRows } from "#modules/common/table-sort.ts";
 
@@ -13,61 +13,59 @@ export type ProjectQuery = {
   sort: AppsSort;
 };
 
-/** Narrows and orders the apps of `/apps`, as the Waku version does. */
-export class ProjectFilter {
-  /** What each sortable column compares on. The status sorts by the filter menu's order. */
-  private static readonly SortValue: Record<AppSortColumn, (project: ProjectSummary) => number | string> = {
-    name: project => project.name,
-    // After any real name, so that the apps of no category group at the bottom, ascending.
-    category: project => project.category?.name ?? "￿",
-    status: project => AppsSearchParams.Statuses.indexOf(project.status),
-    services: project => project.serviceCount,
-    containers: project => project.containerIds.length,
-    unhealthy: project => project.unhealthyCount,
-  };
+// Narrows and orders the apps of `/apps`, as the Waku version does.
 
-  /**
-   * The apps of the categories, statuses and sides of the update filter ticked, none ticked keeping all of them, then
-   * those whose name matches the query, by relevance; in the order of a column when one is asked for. An app in no
-   * category of `hangar.yml` shows only with no category ticked.
-   */
-  static apply(
-    projects: readonly ProjectSummary[],
-    { q, statuses, categories, updates, sort }: ProjectQuery,
-  ): ProjectSummary[] {
-    const classified =
-      categories.length === 0
-        ? projects
-        : projects.filter(project => project.category && categories.includes(project.category.name));
+/** What each sortable column compares on. The status sorts by the filter menu's order. */
+const sortValues: Record<AppSortColumn, (project: ProjectSummary) => number | string> = {
+  name: project => project.name,
+  // After any real name, so that the apps of no category group at the bottom, ascending.
+  category: project => project.category?.name ?? "￿",
+  status: project => appStatuses.indexOf(project.status),
+  services: project => project.serviceCount,
+  containers: project => project.containerIds.length,
+  unhealthy: project => project.unhealthyCount,
+};
 
-    const matching =
-      statuses.length === 0 ? classified : classified.filter(project => statuses.includes(project.status));
+/**
+ * The apps of the categories, statuses and sides of the update filter ticked, none ticked keeping all of them, then
+ * those whose name matches the query, by relevance; in the order of a column when one is asked for. An app in no
+ * category of `hangar.yml` shows only with no category ticked.
+ */
+export function filterProjects(
+  projects: readonly ProjectSummary[],
+  { q, statuses, categories, updates, sort }: ProjectQuery,
+): ProjectSummary[] {
+  const classified =
+    categories.length === 0
+      ? projects
+      : projects.filter(project => project.category && categories.includes(project.category.name));
 
-    const updating =
-      updates.length === 0 ? matching : matching.filter(project => updates.includes(ProjectFilter.update(project)));
+  const matching = statuses.length === 0 ? classified : classified.filter(project => statuses.includes(project.status));
 
-    const found = searchByName(q, updating);
+  const updating =
+    updates.length === 0 ? matching : matching.filter(project => updates.includes(updateSideOf(project)));
 
-    return sort ? sortRows(found, sort, ProjectFilter.SortValue[sort.column]) : found;
-  }
+  const found = searchByName(q, updating);
 
-  /** The side of the update filter `project` falls on: one no check has answered for yet counts as up to date. */
-  static update(project: ProjectSummary): AppUpdate {
-    return project.updateAvailable ? "available" : "current";
-  }
+  return sort ? sortRows(found, sort, sortValues[sort.column]) : found;
+}
 
-  /** How many of `projects` give each value of `key`, for the counts of a filter menu. */
-  static count(projects: readonly ProjectSummary[], key: (project: ProjectSummary) => string | undefined) {
-    const counts = new Map<string, number>();
+/** The side of the update filter `project` falls on: one no check has answered for yet counts as up to date. */
+export function updateSideOf(project: ProjectSummary): AppUpdate {
+  return project.updateAvailable ? "available" : "current";
+}
 
-    for (const project of projects) {
-      const value = key(project);
+/** How many of `projects` give each value of `key`, for the counts of a filter menu. */
+export function countBy(projects: readonly ProjectSummary[], key: (project: ProjectSummary) => string | undefined) {
+  const counts = new Map<string, number>();
 
-      if (value !== undefined) {
-        counts.set(value, (counts.get(value) ?? 0) + 1);
-      }
+  for (const project of projects) {
+    const value = key(project);
+
+    if (value !== undefined) {
+      counts.set(value, (counts.get(value) ?? 0) + 1);
     }
-
-    return counts;
   }
+
+  return counts;
 }

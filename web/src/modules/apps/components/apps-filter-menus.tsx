@@ -1,8 +1,16 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { ProjectSummary } from "#libs/api";
-import { AppsSearchParams } from "#modules/apps/apps-search.ts";
-import { ProjectFilter } from "#modules/apps/project-filter.ts";
-import { ProjectStatusView } from "#modules/apps/project-status.ts";
+import {
+  appStatuses,
+  appUpdateLabels,
+  appUpdates,
+  joinSearchValues,
+  parseAppCategories,
+  parseAppStatuses,
+  parseAppUpdates,
+} from "#modules/apps/apps-search.ts";
+import { countBy, updateSideOf } from "#modules/apps/project-filter.ts";
+import { projectStatusLabels } from "#modules/apps/project-status.ts";
 import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
 
 type AppsFilterMenusProps = {
@@ -17,13 +25,13 @@ type AppsFilterMenusProps = {
 export function AppsFilterMenus({ projects }: AppsFilterMenusProps) {
   const search = useSearch({ from: "/app/apps" });
   const navigate = useNavigate({ from: "/apps" });
-  const statusCounts = ProjectFilter.count(projects, project => project.status);
-  const categoryCounts = ProjectFilter.count(projects, project => project.category?.name);
-  const updateCounts = ProjectFilter.count(projects, ProjectFilter.update);
+  const statusCounts = countBy(projects, project => project.status);
+  const categoryCounts = countBy(projects, project => project.category?.name);
+  const updateCounts = countBy(projects, updateSideOf);
   const categories = [...categoryCounts.keys()].sort((left, right) => left.localeCompare(right));
 
   const write = (key: "status" | "category" | "update", selected: readonly string[]) =>
-    void navigate({ search: previous => ({ ...previous, [key]: AppsSearchParams.write(selected) }), replace: true });
+    void navigate({ search: previous => ({ ...previous, [key]: joinSearchValues(selected) }), replace: true });
 
   return (
     <>
@@ -35,28 +43,28 @@ export function AppsFilterMenus({ projects }: AppsFilterMenusProps) {
             label: category,
             count: categoryCounts.get(category) ?? 0,
           }))}
-          selected={AppsSearchParams.categories(search.category)}
+          selected={parseAppCategories(search.category)}
           onChange={selected => write("category", selected)}
         />
       )}
       <CheckboxFilterMenu
         label="Status"
-        options={AppsSearchParams.Statuses.map(status => ({
+        options={appStatuses.map(status => ({
           value: status,
-          label: ProjectStatusView.Labels[status],
+          label: projectStatusLabels[status],
           count: statusCounts.get(status) ?? 0,
         }))}
-        selected={AppsSearchParams.statuses(search.status)}
+        selected={parseAppStatuses(search.status)}
         onChange={selected => write("status", selected)}
       />
       <CheckboxFilterMenu
         label="Update"
-        options={AppsSearchParams.Updates.map(update => ({
+        options={appUpdates.map(update => ({
           value: update,
-          label: AppsSearchParams.UpdateLabels[update],
+          label: appUpdateLabels[update],
           count: updateCounts.get(update) ?? 0,
         }))}
-        selected={AppsSearchParams.updates(search.update)}
+        selected={parseAppUpdates(search.update)}
         onChange={selected => write("update", selected)}
       />
     </>

@@ -9,14 +9,11 @@ import {
   type ComposeEvent,
   type ComposeRequest,
 } from "#libs/api";
-import { ComposeOutput, type ComposeOutputState } from "#modules/apps/compose-output.ts";
+import { applyComposeEvents, emptyComposeOutput, type ComposeOutputState } from "#modules/apps/compose-output.ts";
 import { describeError } from "#modules/common/error-message.ts";
 
-/** What the panel says of its stream. */
-class ComposeStreamText {
-  /** A stream that ended before its `end`. */
-  static readonly CutShort = "The output was cut short: the command goes on on the server.";
-}
+/** What the panel says of a stream that ended before its `end`. */
+const cutShortMessage = "The output was cut short: the command goes on on the server.";
 
 /** Where the stream of a batch's output is. */
 export type ComposeStreamStatus = "connecting" | "connected" | "ended" | "error";
@@ -28,7 +25,7 @@ export type ComposeStreamStatus = "connecting" | "connected" | "ended" | "error"
  */
 export function useComposeStream() {
   const queryClient = useQueryClient();
-  const [output, setOutput] = useState<ComposeOutputState>(() => ComposeOutput.create([]));
+  const [output, setOutput] = useState<ComposeOutputState>(() => emptyComposeOutput([]));
   const [status, setStatus] = useState<ComposeStreamStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
   const stopRef = useRef<() => void>(() => {});
@@ -39,7 +36,7 @@ export function useComposeStream() {
 
       // The lines come in bursts, as an image's layers are pulled: each event is folded as it comes, which bounds the
       // lines kept even while a hidden tab runs no frame, and the output is rendered once a frame, not once a line.
-      let folded = ComposeOutput.create(apps);
+      let folded = emptyComposeOutput(apps);
       let frame: number | undefined;
       let hasEnded = false;
 
@@ -69,7 +66,7 @@ export function useComposeStream() {
             void queryClient.invalidateQueries({ queryKey: getComposeBatchesQueryKey() });
           },
           onItem: event => {
-            folded = ComposeOutput.apply(folded, [event]);
+            folded = applyComposeEvents(folded, [event]);
 
             if (event.kind !== "end") {
               frame ??= requestAnimationFrame(render);
@@ -91,7 +88,7 @@ export function useComposeStream() {
 
             // Cut before its `end`, the batch goes on all the same: the listing says how it ends.
             setStatus("error");
-            setError(failure === undefined ? ComposeStreamText.CutShort : describeError(failure));
+            setError(failure === undefined ? cutShortMessage : describeError(failure));
           },
         },
         request,

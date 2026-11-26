@@ -5,11 +5,8 @@ import { describeError } from "#modules/common/error-message.ts";
 /** Where a followed log is. */
 export type LogStatus = "connecting" | "connected" | "ended" | "error";
 
-/** The lines of a followed log the page keeps. */
-class LogLines {
-  /** The most lines kept: a log followed for hours would otherwise grow without end. */
-  static readonly Max = 5_000;
-}
+/** The most lines of a followed log the page keeps: a log followed for hours would otherwise grow without end. */
+const maxLogLines = 5_000;
 
 /**
  * The log `url` streams, its last 200 lines then each new one, until the container stops. Read again from its tail by
@@ -43,7 +40,7 @@ export function useLogEvents(url: string) {
 
       pending = [];
       frame = undefined;
-      setLines(current => [...current, ...added].slice(-LogLines.Max));
+      setLines(current => [...current, ...added].slice(-maxLogLines));
     };
 
     const flushNow = () => {
@@ -67,8 +64,8 @@ export function useLogEvents(url: string) {
 
         // A hidden tab runs no frame, while the log goes on: what waits for one is bounded too, cut once in a while
         // rather than at each line.
-        if (pending.length >= 2 * LogLines.Max) {
-          pending = pending.slice(-LogLines.Max);
+        if (pending.length >= 2 * maxLogLines) {
+          pending = pending.slice(-maxLogLines);
         }
 
         frame ??= requestAnimationFrame(flush);

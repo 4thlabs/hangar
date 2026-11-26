@@ -23,74 +23,73 @@ export type AppsSearch = {
   sort?: string | undefined;
 };
 
-/** Reads and writes the search of `/apps`. */
-export class AppsSearchParams {
-  /** Every status, in the order the filter menu lists them, which is also the order the status column sorts by. */
-  static readonly Statuses: readonly ProjectStatus[] = [
-    ProjectStatus.running,
-    ProjectStatus.partial,
-    ProjectStatus.stopped,
-    ProjectStatus.unhealthy,
-  ];
+// Reads and writes the search of `/apps`.
 
-  /** Both sides of the update filter, in the order its menu lists them. */
-  static readonly Updates: readonly AppUpdate[] = ["available", "current"];
+/** Every status, in the order the filter menu lists them, which is also the order the status column sorts by. */
+export const appStatuses: readonly ProjectStatus[] = [
+  ProjectStatus.running,
+  ProjectStatus.partial,
+  ProjectStatus.stopped,
+  ProjectStatus.unhealthy,
+];
 
-  /** What the update filter's menu calls each side. */
-  static readonly UpdateLabels: Readonly<Record<AppUpdate, string>> = { available: "Available", current: "Up to date" };
+/** Both sides of the update filter, in the order its menu lists them. */
+export const appUpdates: readonly AppUpdate[] = ["available", "current"];
 
-  /** The sortable columns, in the table's order. */
-  static readonly SortColumns: readonly AppSortColumn[] = [
-    "name",
-    "category",
-    "status",
-    "services",
-    "containers",
-    "unhealthy",
-  ];
+/** What the update filter's menu calls each side. */
+export const appUpdateLabels: Readonly<Record<AppUpdate, string>> = { available: "Available", current: "Up to date" };
 
-  /** The search of a URL: a value of another type left out, and an unknown status or column dropped. */
-  static validate(search: Record<string, unknown>): AppsSearch {
-    const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : undefined);
-    const sort = AppsSearchParams.sort(search.sort);
+/** The sortable columns, in the table's order. */
+export const appSortColumns: readonly AppSortColumn[] = [
+  "name",
+  "category",
+  "status",
+  "services",
+  "containers",
+  "unhealthy",
+];
 
-    const validated: AppsSearch = {
-      q: text(search.q),
-      status: AppsSearchParams.write(AppsSearchParams.statuses(search.status)),
-      category: AppsSearchParams.write(AppsSearchParams.categories(search.category)),
-      update: AppsSearchParams.write(AppsSearchParams.updates(search.update)),
-      sort: sort ? serializeSort(sort) : undefined,
-    };
+/** The search of a URL: a value of another type left out, and an unknown status or column dropped. */
+export function validateAppsSearch(search: Record<string, unknown>): AppsSearch {
+  const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : undefined);
+  const sort = parseAppsSort(search.sort);
 
-    return Object.fromEntries(Object.entries(validated).filter(([, value]) => value !== undefined));
-  }
+  const validated: AppsSearch = {
+    q: text(search.q),
+    status: joinSearchValues(parseAppStatuses(search.status)),
+    category: joinSearchValues(parseAppCategories(search.category)),
+    update: joinSearchValues(parseAppUpdates(search.update)),
+    sort: sort ? serializeSort(sort) : undefined,
+  };
 
-  /** The statuses `status` ticks, in the menu's order. */
-  static statuses(status: unknown): ProjectStatus[] {
-    const ticked = new Set(typeof status === "string" ? status.split(",") : []);
+  return Object.fromEntries(Object.entries(validated).filter(([, value]) => value !== undefined));
+}
 
-    return AppsSearchParams.Statuses.filter(candidate => ticked.has(candidate));
-  }
+/** The statuses `status` ticks, in the menu's order. */
+export function parseAppStatuses(status: unknown): ProjectStatus[] {
+  const ticked = new Set(typeof status === "string" ? status.split(",") : []);
 
-  /** The sides of the update filter `update` ticks, in the menu's order. */
-  static updates(update: unknown): AppUpdate[] {
-    const ticked = new Set(typeof update === "string" ? update.split(",") : []);
+  return appStatuses.filter(candidate => ticked.has(candidate));
+}
 
-    return AppsSearchParams.Updates.filter(candidate => ticked.has(candidate));
-  }
+/** The sides of the update filter `update` ticks, in the menu's order. */
+export function parseAppUpdates(update: unknown): AppUpdate[] {
+  const ticked = new Set(typeof update === "string" ? update.split(",") : []);
 
-  /** The categories `category` ticks, as `hangar.yml` names them: one that matches no app keeps none. */
-  static categories(category: unknown): string[] {
-    return typeof category === "string" ? category.split(",").filter(Boolean) : [];
-  }
+  return appUpdates.filter(candidate => ticked.has(candidate));
+}
 
-  /** The order `sort` names, `null` for the default one. */
-  static sort(sort: unknown): AppsSort {
-    return typeof sort === "string" ? parseSort(sort, AppsSearchParams.SortColumns) : null;
-  }
+/** The categories `category` ticks, as `hangar.yml` names them: one that matches no app keeps none. */
+export function parseAppCategories(category: unknown): string[] {
+  return typeof category === "string" ? category.split(",").filter(Boolean) : [];
+}
 
-  /** The comma-separated `values`, `undefined` for none. */
-  static write(values: readonly string[]): string | undefined {
-    return values.length > 0 ? values.join(",") : undefined;
-  }
+/** The order `sort` names, `null` for the default one. */
+export function parseAppsSort(sort: unknown): AppsSort {
+  return typeof sort === "string" ? parseSort(sort, appSortColumns) : null;
+}
+
+/** The comma-separated `values`, `undefined` for none. */
+export function joinSearchValues(values: readonly string[]): string | undefined {
+  return values.length > 0 ? values.join(",") : undefined;
 }

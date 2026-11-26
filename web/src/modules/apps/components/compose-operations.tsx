@@ -9,7 +9,16 @@ import {
 } from "lucide-react";
 import type { ComposeAction } from "#libs/api";
 import { ComposeOutputSheet } from "#modules/apps/components/compose-output-sheet.tsx";
-import { ComposeActions, type ComposeOperation, type UpFlag } from "#modules/apps/compose-actions.ts";
+import {
+  composeCommandLine,
+  confirmationDescription,
+  confirmationTitle,
+  upAction,
+  upFlagOrder,
+  upFlags,
+  type ComposeOperation,
+  type UpFlag,
+} from "#modules/apps/compose-actions.ts";
 import type { ComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import { ButtonGroup } from "#modules/common/ui/button-group.tsx";
@@ -23,12 +32,10 @@ import {
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 
 /** How the operation buttons draw each option of Up. */
-class OperationIcons {
-  static readonly Flag: Readonly<Record<UpFlag, LucideIcon>> = {
-    pull: ArrowUpFromLineIcon,
-    forceRecreate: RefreshCwIcon,
-  };
-}
+const upFlagIcons: Readonly<Record<UpFlag, LucideIcon>> = {
+  pull: ArrowUpFromLineIcon,
+  forceRecreate: RefreshCwIcon,
+};
 
 type ComposeOperationButtonsProps = {
   compose: ComposeCommand;
@@ -40,7 +47,7 @@ type ComposeOperationButtonsProps = {
  * are checkboxes in its menu, so that a new option adds no button.
  */
 export function ComposeOperationButtons({ compose, size }: ComposeOperationButtonsProps) {
-  const up = ComposeActions.up(compose.flags);
+  const up = upAction(compose.flags);
   const restart: ComposeAction = { operation: "restart" };
   const down: ComposeAction = { operation: "down" };
   const runningOperation = compose.isRunning ? compose.shown?.action.operation : undefined;
@@ -56,9 +63,9 @@ export function ComposeOperationButtons({ compose, size }: ComposeOperationButto
           size={size}
           disabled={compose.disabled}
           onClick={() => compose.request(up)}
-          title={ComposeActions.commandLine(up)}
+          title={composeCommandLine(up)}
           // The count alone does not say which options: the name gives the whole command.
-          aria-label={`Up: ${ComposeActions.commandLine(up)}`}
+          aria-label={`Up: ${composeCommandLine(up)}`}
         >
           {icon("up", PowerIcon)}
           Up
@@ -78,8 +85,8 @@ export function ComposeOperationButtons({ compose, size }: ComposeOperationButto
             <ChevronDownIcon />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" sideOffset={6} className="min-w-60">
-            {ComposeActions.FlagOrder.map(flag => {
-              const Icon = OperationIcons.Flag[flag];
+            {upFlagOrder.map(flag => {
+              const Icon = upFlagIcons[flag];
 
               return (
                 <DropdownMenuCheckboxItem
@@ -89,10 +96,8 @@ export function ComposeOperationButtons({ compose, size }: ComposeOperationButto
                 >
                   <Icon />
                   <span className="flex flex-col">
-                    {ComposeActions.Flags[flag].label}
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {ComposeActions.Flags[flag].arguments.join(" ")}
-                    </span>
+                    {upFlags[flag].label}
+                    <span className="font-mono text-xs text-muted-foreground">{upFlags[flag].arguments.join(" ")}</span>
                   </span>
                 </DropdownMenuCheckboxItem>
               );
@@ -106,7 +111,7 @@ export function ComposeOperationButtons({ compose, size }: ComposeOperationButto
         size={size}
         disabled={compose.disabled}
         onClick={() => compose.request(restart)}
-        title={ComposeActions.commandLine(restart)}
+        title={composeCommandLine(restart)}
       >
         {icon("restart", RotateCwIcon)}
         Restart
@@ -117,7 +122,7 @@ export function ComposeOperationButtons({ compose, size }: ComposeOperationButto
         size={size}
         disabled={compose.disabled}
         onClick={() => compose.request(down)}
-        title={ComposeActions.commandLine(down)}
+        title={composeCommandLine(down)}
       >
         {icon("down", Trash2Icon)}
         Down
@@ -142,8 +147,8 @@ export function ComposeDialogs({ compose, subject, count }: ComposeDialogsProps)
     <>
       <ConfirmDialog
         open={confirmation !== null}
-        title={confirmation ? ComposeActions.confirmationTitle(confirmation, subject) : ""}
-        description={confirmation ? ComposeActions.confirmationDescription(confirmation, count) : ""}
+        title={confirmation ? confirmationTitle(confirmation, subject) : ""}
+        description={confirmation ? confirmationDescription(confirmation, count) : ""}
         destructive={confirmation?.operation === "down"}
         onConfirm={() => confirmation && compose.run(confirmation)}
         onCancel={compose.cancel}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ComposeEvent } from "#libs/api";
-import { ComposeOutput } from "./compose-output.ts";
+import { applyComposeEvents, composeFailures, emptyComposeOutput, maxRunLines } from "./compose-output.ts";
 
 const failure = {
   code: "compose.failed",
@@ -8,7 +8,7 @@ const failure = {
   message: "x",
 } as const;
 
-describe("ComposeOutput.apply", () => {
+describe("applyComposeEvents", () => {
   it("files each app's lines and outcome under it, in the order the batch runs them", () => {
     const events: ComposeEvent[] = [
       { kind: "started", app: "alpha" },
@@ -18,7 +18,7 @@ describe("ComposeOutput.apply", () => {
       { kind: "line", app: "beta", line: "no such image" },
     ];
 
-    const output = ComposeOutput.apply(ComposeOutput.create(["alpha", "beta", "gamma"]), events);
+    const output = applyComposeEvents(emptyComposeOutput(["alpha", "beta", "gamma"]), events);
 
     expect(output.apps).toEqual([
       { app: "alpha", status: "succeeded", lines: ["pulling"], error: null },
@@ -40,7 +40,7 @@ describe("ComposeOutput.apply", () => {
       { kind: "end", apps: [...outcomes] },
     ];
 
-    const output = ComposeOutput.apply(ComposeOutput.create(["alpha", "beta"]), events);
+    const output = applyComposeEvents(emptyComposeOutput(["alpha", "beta"]), events);
 
     expect(output.skipped).toBe(12);
     expect(output.apps.map(run => [run.status, run.error])).toEqual([
@@ -48,19 +48,19 @@ describe("ComposeOutput.apply", () => {
       ["failed", failure],
     ]);
 
-    expect(output.report && ComposeOutput.failures(output.report)).toBe(1);
+    expect(output.report && composeFailures(output.report)).toBe(1);
   });
 
   it("keeps the last lines of an app that prints too many", () => {
-    const lines: ComposeEvent[] = Array.from({ length: ComposeOutput.MaxLines + 5 }, (_, index) => ({
+    const lines: ComposeEvent[] = Array.from({ length: maxRunLines + 5 }, (_, index) => ({
       kind: "line",
       app: "alpha",
       line: `${index}`,
     }));
 
-    const [alpha] = ComposeOutput.apply(ComposeOutput.create(["alpha"]), lines).apps;
+    const [alpha] = applyComposeEvents(emptyComposeOutput(["alpha"]), lines).apps;
 
-    expect(alpha?.lines).toHaveLength(ComposeOutput.MaxLines);
+    expect(alpha?.lines).toHaveLength(maxRunLines);
     expect(alpha?.lines[0]).toBe("5");
   });
 });

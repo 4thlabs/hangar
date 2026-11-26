@@ -1,5 +1,5 @@
 import type { NotificationMessage } from "#libs/api";
-import { ComposeActions } from "#modules/apps/compose-actions.ts";
+import { composeActionOfNotification, composeLabel, composeOutcome } from "#modules/apps/compose-actions.ts";
 
 /** What a notification says once worded. */
 export type NotificationWords = { title: string; description?: string };
@@ -32,20 +32,20 @@ export class NotificationText {
       description: "The update of the store failed. See the server's log.",
     }),
     composeSucceeded: ({ params: { project, operation, flags } }) => {
-      const action = ComposeActions.fromNotification(operation, flags);
+      const action = composeActionOfNotification(operation, flags);
 
       if (action === null) {
         return { title: "Docker Compose finished", description: `The command succeeded for ${project}.` };
       }
 
       return {
-        title: `${ComposeActions.label(action)} finished`,
-        description: ComposeActions.outcome(action, project),
+        title: `${composeLabel(action)} finished`,
+        description: composeOutcome(action, project),
       };
     },
     composeFailed: ({ params: { project, operation, flags } }) => {
-      const action = ComposeActions.fromNotification(operation, flags);
-      const label = action === null ? "Docker Compose" : ComposeActions.label(action);
+      const action = composeActionOfNotification(operation, flags);
+      const label = action === null ? "Docker Compose" : composeLabel(action);
 
       return {
         title: `${label} failed`,

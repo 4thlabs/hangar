@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComposeAction, ComposeReport, ProjectDetail, ProjectStatus, ProjectSummary } from "#libs/api";
 import { coded, events, FakeEventSource, problem, renderAt, serve } from "#app/mock/page.tsx";
-import { ComposeActions } from "#modules/apps/compose-actions.ts";
+import { composeCommandLine } from "#modules/apps/compose-actions.ts";
 
 /** An installed app with one container, `<name>-1`. */
 function project(name: string, status: ProjectStatus, category?: string): ProjectSummary {
@@ -367,7 +367,7 @@ describe("compose commands", () => {
     return {
       id,
       action,
-      commandLine: ComposeActions.commandLine(action),
+      commandLine: composeCommandLine(action),
       apps,
       startedAt: "2026-11-26T10:00:00.000Z",
       report,
