@@ -26,14 +26,20 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
   it can.
 
 - **oxlint**, `web/.oxlintrc.json`, pinned with its `oxlint-tsgolint`. Its type-aware mode runs on typescript-go, the
-  compiler of TypeScript 7. It holds the rules that read types: `no-floating-promises`, `no-misused-promises`,
+  compiler of TypeScript 7. It holds its `correctness` category, with the type-aware rules in it (`no-base-to-string`,
+  `no-redundant-type-constituents`...), and the rules that read types: `no-floating-promises`, `no-misused-promises`,
   `await-thenable`, `no-explicit-any`, `no-unnecessary-type-assertion`, `prefer-promise-reject-errors` and
-  `switch-exhaustiveness-check`, and `no-unused-vars`, since the core rule on Babel sees neither a name used in JSX
-  nor one used only as a type. `npm run lint --prefix web` runs it, warnings as errors. It needs orval's
+  `switch-exhaustiveness-check`. It also holds `no-unused-vars`, since the core rule on Babel sees neither a name used
+  in JSX nor one used only as a type. `unbound-method` is off until #195, which removes the static classes it reads
+  as methods losing their `this`. `npm run lint --prefix web` runs it, warnings as errors. It needs orval's
   `generated.ts`, so it runs after `cargo quoll gen`: CI's `web` job runs it after `cargo quoll build`.
 - One rule, one tool: a rule is in ESLint or in oxlint, never in both.
-- A rule is turned off only on the line that needs it, with its reason:
-  `// eslint-disable-next-line <rule> -- <why>`. oxlint reads the same comments. Never for a whole file.
+- A rule is turned off only on the line that needs it, with its reason, in the comment of the tool that runs it. Never
+  for a whole file.
+  - An ESLint rule: `// eslint-disable-next-line react-hooks/purity -- <why>`.
+  - An oxlint rule: `// oxlint-disable-next-line typescript/no-floating-promises -- <why>`. ESLint ignores that
+    comment. An `eslint-disable` comment would silence oxlint too, but ESLint then fails on a rule it does not
+    define.
 - The ADR's own rules come with the PRs that make the code pass them (decision 10): the static-class selector and
   the root `.ts` imports with #195, the orval hooks and the `api/` imports with the data layer.
 
@@ -83,9 +89,13 @@ As decided with ADR 0002 (decision 7), reversing the "Classes" section of AGENTS
   add noise.
 - **Its rules are errors.** A component that breaks one is compiled wrong, or not at all, so the lint rule is fixed,
   not turned off:
-  - Render is pure. No `Date.now()`, `Math.random()` or ref read during render. The compiler keeps the first
-    render's `Date.now()` for as long as the props it depends on stay the same, so a time written from it drifts:
-    read the clock with `useNow()` (`common/hooks/use-now.ts`), which is state.
+  - Render is pure. No `Math.random()` or ref read during render.
+  - **No function called during render reads the clock**, the component's own code or a helper it calls. The
+    compiler keeps what a call returned for as long as its arguments stay the same: a time written from a clock read
+    in render stops moving. A function that writes a time relative to now takes `now` as a required argument, as
+    `RelativeTime.format(at, now)`, with no `Date.now()` default. A component passes it `useNow()`
+    (`common/hooks/use-now.ts`), the clock as state, read again every 15 seconds; a test or code outside React passes
+    an explicit time. One `useNow()` for a card or a list, handed to its rows, not one per row.
   - An effect synchronizes with something outside React. It does not set state in its body: state that starts over
     when an input changes is reset during render, by comparing with the input it was for (as `use-log-events.ts`
     does), or by a `key` on the component.

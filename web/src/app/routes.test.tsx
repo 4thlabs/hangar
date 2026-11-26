@@ -83,7 +83,7 @@ describe("signing in", () => {
 
     const login = fetch.mock.calls.find(([url]) => url === "/api/auth/login");
 
-    expect(JSON.parse(String(login?.[1]?.body))).toEqual({ email: "ana@example.com", password: "correct horse" });
+    expect(login?.[1]?.body).toBe(JSON.stringify({ email: "ana@example.com", password: "correct horse" }));
   });
 
   it("says a wrong password is one", async () => {

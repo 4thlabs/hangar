@@ -52,11 +52,31 @@ async function source(url: string): Promise<FakeEventSource> {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   focusManager.setFocused(undefined);
 });
 
 describe("the notifications' bell", () => {
+  it("writes the times of the open panel from the clock, which goes on while the panel stays open", async () => {
+    const filedAt = Date.UTC(2026, 10, 26, 8, 0, 0);
+    const createdAt = new Date(filedAt).toISOString();
+    const filed = notification(1, { key: "storeInstalled" }, { seen: true, read: true, createdAt });
+
+    vi.useFakeTimers({ now: filedAt + 5 * 60_000, toFake: ["Date", "setInterval", "clearInterval"] });
+    serve(answers(() => Response.json({ epoch: "first", notifications: [filed] })));
+    renderAt("/apps");
+    fireEvent.click(await screen.findByRole("button", { name: "Notifications" }));
+
+    expect(await screen.findByText("5 minutes ago")).toBeDefined();
+
+    act(() => {
+      vi.advanceTimersByTime(60 * 60_000);
+    });
+
+    expect(screen.getByText("1 hour ago")).toBeDefined();
+  });
+
   it("toasts the unseen once, follows the stream from the newest, and reads them all on close", async () => {
     const fetch = serve(answers(() => Response.json(recent)));
 
