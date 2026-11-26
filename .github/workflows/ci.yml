@@ -61,8 +61,9 @@ jobs:
           BETTER_AUTH_URL: http://localhost:3010
           BETTER_AUTH_SECRET: build-only-secret-at-least-32-characters
 
-  # The Cargo workspace under crates/, beside the Node app, which it does not touch. The image does not
-  # wait for it: until the switch, a failing Rust job must not stop the Node image from publishing.
+  # The Cargo workspace under crates/, beside the Node app, which it does not touch. The image holds its binary, built
+  # in the Dockerfile's `cli` stage, which `image-cli` checks; it does not wait for these tests: until the switch, a
+  # failing Rust test must not stop the Node image from publishing.
   rust:
     name: Rust
     runs-on: ubuntu-latest
@@ -116,6 +117,8 @@ jobs:
       CARGO_TERM_COLOR: always
       RUSTFLAGS: -D warnings
       BINARY: hangar-${{ matrix.target }}
+      # The tag, which the binary prints for `--version`; empty off a tag, for the workspace's version with `-dev`.
+      HANGAR_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
 
     steps:
       - name: Checkout repository
@@ -146,7 +149,12 @@ jobs:
             echo "::error::$binary is linked dynamically"
             exit 1
           fi
-          "$binary" --version
+          version=$("$binary" --version)
+          echo "$version"
+          if [ -n "$HANGAR_VERSION" ] && [ "$version" != "hangar ${HANGAR_VERSION#v}" ]; then
+            echo "::error::$binary prints $version for $HANGAR_VERSION"
+            exit 1
+          fi
 
       - name: Package with its checksum
         run: |
@@ -161,8 +169,9 @@ jobs:
           path: dist/*
           retention-days: 14
 
-  # The release is cut with `gh release create vX.Y.Z`, which pushes the tag: it exists by the time this runs. Its
-  # assets keep no version in their names, so that `releases/latest/download/<name>` always names the newest.
+  # A release cut with `gh release create vX.Y.Z` exists by the time this runs; a tag pushed alone gets one, without
+  # notes, for the maintainer to write. Its assets keep no version in their names, so that
+  # `releases/latest/download/<name>` always names the newest.
   release-cli:
     name: Attach the CLI to the release
     needs: [rust, cli]
@@ -183,11 +192,43 @@ jobs:
       - name: Attach them to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" > /dev/null; then
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes ""
+          fi
+          gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+
+  # The Dockerfile's `cli` stage on every run, as the image job builds it on a push alone: a change that breaks the
+  # build on Alpine fails here, before it stops `edge` or a release from publishing. amd64 alone, arm64 building the
+  # same sources natively.
+  image-cli:
+    name: Build the image's CLI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Its own cache scope: writing the image's would replace that cache with the `cli` stage's layers alone.
+      - name: Build the cli stage
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: cli
+          platforms: linux/amd64
+          push: false
+          cache-from: |
+            type=gha,scope=image-cli
+            type=gha,scope=linux/amd64
+          cache-to: type=gha,mode=max,scope=image-cli
 
   image:
     name: Build ${{ matrix.platform }}
-    needs: ci
+    needs: [ci, image-cli]
     # A merged PR (a push to main) publishes `edge`; a `v*` tag publishes the release.
     if: github.event_name == 'push'
 
@@ -229,6 +270,8 @@ jobs:
         with:
           context: .
           platforms: ${{ matrix.platform }}
+          # The tag, which the binary prints for `--version`; empty on `main`.
+          build-args: HANGAR_VERSION=${{ github.ref_type == 'tag' && github.ref_name || '' }}
           outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
