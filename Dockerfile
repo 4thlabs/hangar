@@ -1,22 +1,34 @@
 # syntax=docker/dockerfile:1
 
 # The Rust binary `hangar`, for `docker exec -it hangar hangar store up`. Alpine's Rust targets musl, which links it
-# statically: the same binary as the release's, built for the platform of the image.
-FROM rust:1-alpine AS cli
+# statically: the same binary as the release's, built for the platform of the image. cargo-chef builds the dependencies
+# in a layer of their own, which the registry cache keeps until Cargo.lock or a manifest changes.
+FROM rust:1-alpine AS chef
 
 # Package versions are coupled to the Alpine base repository.
 # hadolint ignore=DL3018
 RUN apk add --no-cache musl-dev
+RUN cargo install cargo-chef --locked --version 0.1.78
 
 WORKDIR /src
+
+FROM chef AS planner
+
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS cli
+
+COPY --from=planner /src/recipe.json ./
+RUN cargo chef cook --release --locked -p hangar-cli --recipe-path recipe.json
 
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 
-# The target folder is a cache mount, gone after the step: the binary is copied out of it in the same step.
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/src/target \
-    cargo build --release --locked -p hangar-cli \
+# The tag of a release, which the binary prints for `--version`: CI passes it on a `v*` tag alone.
+ARG HANGAR_VERSION=""
+RUN cargo build --release --locked -p hangar-cli \
     && cp target/release/hangar /usr/local/bin/hangar
 
 FROM node:24-alpine AS builder
