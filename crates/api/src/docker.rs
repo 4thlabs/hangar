@@ -138,6 +138,9 @@ pub struct ProjectSummary {
     pub unhealthy_count: usize,
     /// The full ids of its containers, which pick its rows out of the stats.
     pub container_ids: Vec<String>,
+    /// Whether one of its containers runs an image its registry has moved past, by the digests of the image it was
+    /// created from, at the last image check: false until one has answered for it.
+    pub update_available: bool,
 }
 
 /// An installed app as the daemon runs it, with its services and their containers.
@@ -246,8 +249,9 @@ pub struct DockerOverview {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DockerChange {
-    /// The apps: their containers, or which of them are installed, and how `hangar.yml` files them, and the compose
-    /// batches that run on them, as one starts or ends. The projects, each project's detail, and the batches.
+    /// The apps: their containers, or which of them are installed, and how `hangar.yml` files them, the compose
+    /// batches that run on them, as one starts or ends, and which have an update, as an image check ends or the images
+    /// change. The projects, each project's detail, and the batches.
     Containers,
     /// The usage of the whole host.
     Overview,

@@ -694,7 +694,7 @@
         "oneOf": [
           {
             "const": "containers",
-            "description": "The apps: their containers, or which of them are installed, and how `hangar.yml` files them, and the compose\nbatches that run on them, as one starts or ends. The projects, each project's detail, and the batches.",
+            "description": "The apps: their containers, or which of them are installed, and how `hangar.yml` files them, the compose\nbatches that run on them, as one starts or ends, and which have an update, as an image check ends or the images\nchange. The projects, each project's detail, and the batches.",
             "type": "string"
           },
           {
@@ -1970,6 +1970,75 @@
             "type": "object"
           },
           {
+            "description": "No run of a job of this id is kept.",
+            "properties": {
+              "code": {
+                "const": "jobs.unknown_run",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "run": {
+                    "description": "The id asked for.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "run"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A run of a job to cancel that has ended already.",
+            "properties": {
+              "code": {
+                "const": "jobs.ended",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "run": {
+                    "description": "The run's id.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "run"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A run of a job stopped short: the server failed it, and its log says how.",
+            "properties": {
+              "code": {
+                "const": "jobs.crashed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
             "description": "A sign-in by password of an email unknown to `hangar.yml`, or with a wrong password.",
             "properties": {
               "code": {
@@ -2155,6 +2224,136 @@
           "size"
         ],
         "type": "object"
+      },
+      "Job": {
+        "description": "A job the server runs.",
+        "oneOf": [
+          {
+            "const": "image_check",
+            "description": "Asks the registries what they serve for the images the installed apps run, which tells the apps that have an\nupdate: every four hours, at the 17th minute, and once the server starts.",
+            "type": "string"
+          },
+          {
+            "const": "auto_update",
+            "description": "Checks the images again, then updates each app the registry has moved past, `docker compose up -d --pull\nalways`, one at a time: every night at 04:47.",
+            "type": "string"
+          }
+        ]
+      },
+      "JobQueue": {
+        "description": "The queue a job waits its turn in: each runs one job at a time.",
+        "oneOf": [
+          {
+            "const": "default",
+            "description": "The image check and the update of the apps.",
+            "type": "string"
+          }
+        ]
+      },
+      "JobRun": {
+        "description": "A run of a job.",
+        "properties": {
+          "createdAt": {
+            "description": "When it was asked for, on its schedule or by a user, in RFC 3339.",
+            "type": "string"
+          },
+          "endedAt": {
+            "description": "When it ended, in RFC 3339; `None` while it waits or runs.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorDetail"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it failed; `None` for one that did not."
+          },
+          "id": {
+            "description": "Its id, from 1, greater than that of every run before it since the server started.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "job": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Job"
+              }
+            ],
+            "description": "The job it runs."
+          },
+          "queue": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/JobQueue"
+              }
+            ],
+            "description": "The queue it waits in."
+          },
+          "startedAt": {
+            "description": "When it started, in RFC 3339; `None` while it waits, and for one canceled before.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/JobState"
+              }
+            ],
+            "description": "Where it is."
+          }
+        },
+        "required": [
+          "id",
+          "job",
+          "queue",
+          "state",
+          "createdAt",
+          "startedAt",
+          "endedAt",
+          "error"
+        ],
+        "type": "object"
+      },
+      "JobState": {
+        "description": "Where a run is.",
+        "oneOf": [
+          {
+            "const": "waiting",
+            "description": "It waits its turn in its queue.",
+            "type": "string"
+          },
+          {
+            "const": "running",
+            "description": "It runs.",
+            "type": "string"
+          },
+          {
+            "const": "completed",
+            "description": "It ended as it should.",
+            "type": "string"
+          },
+          {
+            "const": "failed",
+            "description": "It failed: its error says why.",
+            "type": "string"
+          },
+          {
+            "const": "canceled",
+            "description": "A user canceled it.",
+            "type": "string"
+          }
+        ]
       },
       "LogEvent": {
         "description": "An event of a container's followed log.",
@@ -2483,6 +2682,67 @@
               "params"
             ],
             "type": "object"
+          },
+          {
+            "description": "An image check found apps whose registry serves a newer image.",
+            "properties": {
+              "key": {
+                "const": "updatesAvailable",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "count": {
+                    "description": "How many.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "count"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "key",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The update of the apps of the night ended.",
+            "properties": {
+              "key": {
+                "const": "autoUpdate",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "failed": {
+                    "description": "The apps it failed to update, comma-separated, as `alpha, gamma`; empty for none.",
+                    "type": "string"
+                  },
+                  "updated": {
+                    "description": "How many apps it updated.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "updated",
+                  "failed"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "key",
+              "params"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -2745,6 +3005,10 @@
             "format": "uint",
             "minimum": 0,
             "type": "integer"
+          },
+          "updateAvailable": {
+            "description": "Whether one of its containers runs an image its registry has moved past, by the digests of the image it was\ncreated from, at the last image check: false until one has answered for it.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -2755,7 +3019,8 @@
           "serviceCount",
           "runningCount",
           "unhealthyCount",
-          "containerIds"
+          "containerIds",
+          "updateAvailable"
         ],
         "type": "object"
       },
@@ -3885,6 +4150,135 @@
         ]
       }
     },
+    "/api/jobs": {
+      "get": {
+        "operationId": "jobs_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobRun"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The runs kept, the newest first: those that wait or run, and the last that ended, 50 in all.",
+        "tags": [
+          "Jobs"
+        ]
+      }
+    },
+    "/api/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "jobs_cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRun"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Cancels the run `id`: one that waits leaves its queue, one that runs stops at its next step, the end of the app it updates for the update of the apps. A 404 for a run that is not kept, a 409 for one that ended.",
+        "tags": [
+          "Jobs"
+        ]
+      }
+    },
+    "/api/jobs/{id}/run": {
+      "post": {
+        "operationId": "jobs_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRun"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Runs the job of the run `id` again, in a new run that waits its turn in its queue: the run of that job that waits or runs already, when there is one. A 404 for a run that is not kept.",
+        "tags": [
+          "Jobs"
+        ]
+      }
+    },
     "/api/notifications": {
       "get": {
         "operationId": "notifications_list",
@@ -4594,6 +4988,10 @@
     {
       "description": "The compose commands of the installed apps, run in batches on the server, whoever reads their output.",
       "name": "Compose"
+    },
+    {
+      "description": "The jobs of the server, run on their schedules or when asked: the last 50 runs, kept in memory.",
+      "name": "Jobs"
     }
   ]
 }

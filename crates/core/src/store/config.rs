@@ -17,6 +17,7 @@ use serde::Deserialize;
 use serde_norway::Value;
 
 pub use backup::Backup;
+pub use cron::{CronError, CronSchedule};
 pub use user::User;
 pub use widget::{Column, FollowedCard, ServiceOptions, Widget, WidgetKind};
 

@@ -11,6 +11,7 @@ mod editor;
 mod env;
 mod error;
 mod health;
+mod jobs;
 mod notifications;
 mod store;
 
@@ -23,5 +24,6 @@ pub use editor::*;
 pub use env::*;
 pub use error::*;
 pub use health::*;
+pub use jobs::*;
 pub use notifications::*;
 pub use store::*;

@@ -80,11 +80,12 @@ impl DockerState {
         let (containers, installed) = tokio::join!(self.containers(), self.installed());
         let containers = containers.map_err(|error| Self::unavailable(&error))?;
         let installed = installed?;
+        let outdated = self.outdated(&containers, installed.ids()).await;
 
         Ok(containers
             .summaries(installed.ids())
             .into_iter()
-            .map(|summary| installed.summary(summary))
+            .map(|summary| installed.summary(summary, &outdated))
             .collect())
     }
 
@@ -102,8 +103,9 @@ impl DockerState {
                 .into(),
                 other => Self::unavailable(&other),
             })?;
+        let outdated = self.outdated(&containers, installed.ids()).await;
 
-        Ok(installed.detail(detail))
+        Ok(installed.detail(detail, &outdated))
     }
 
     /// The followed log of the container `container` of the installed app `project`, ended by [`LogEvent::End`] once
