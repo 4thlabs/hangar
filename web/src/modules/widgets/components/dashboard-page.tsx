@@ -1,6 +1,5 @@
 import { CircleAlertIcon } from "lucide-react";
 import { useWidgetsPlacements, type WidgetPlacement } from "#libs/api";
-import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { ErrorMessage } from "#modules/common/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
@@ -111,13 +110,11 @@ function PlacedWidget({ placement }: { placement: WidgetPlacement }) {
 
 /**
  * The dashboard: the widgets `hangar.yml` places, in their columns, top to bottom in its order. Each card loads on its
- * own, a slow service holding its card alone; Docker's follows the daemon's changes, the others are read as the page
- * opens and as the tab is shown again.
+ * own, a slow service holding its card alone; Docker's is read again as the daemon's changes come, the others as the
+ * page opens and as its tab is shown again.
  */
 export function DashboardPage() {
   const { data: placements, error } = useWidgetsPlacements();
-
-  useDockerChanges();
 
   if (error) {
     return (
