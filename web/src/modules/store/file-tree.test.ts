@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { FileTree } from "./file-tree.ts";
+import { buildFileTree } from "./file-tree.ts";
 
-describe("FileTree", () => {
+describe("buildFileTree", () => {
   it("nests paths into folders, files before folders at each level", () => {
-    const tree = FileTree.build(["config/nginx/site.conf", "miniflux.env", "config/settings.yml", "compose.yml"]);
+    const tree = buildFileTree(["config/nginx/site.conf", "miniflux.env", "config/settings.yml", "compose.yml"]);
 
     expect(tree).toEqual([
       { kind: "file", name: "compose.yml", path: "compose.yml" },
@@ -26,6 +26,6 @@ describe("FileTree", () => {
   });
 
   it("is empty for an app without files", () => {
-    expect(FileTree.build([])).toEqual([]);
+    expect(buildFileTree([])).toEqual([]);
   });
 });

@@ -4,20 +4,18 @@ import { getEditorFilesQueryKey, getStoreAppsQueryKey, useEditorFiles, useEditor
 import { describeError } from "#modules/common/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { AppEditor } from "#modules/store/components/app-editor.tsx";
-import { ComposeFile } from "#modules/store/compose-file.ts";
+import { composeFileName } from "#modules/store/compose-file.ts";
 
 /** How the edit page reads the app: anew each time it opens, and not when the window gets the focus back. */
-class EditPageQuery {
-  static readonly Options = { staleTime: Infinity, refetchOnMount: "always", refetchOnWindowFocus: false } as const;
-}
+const editedFileQuery = { staleTime: Infinity, refetchOnMount: "always", refetchOnWindowFocus: false } as const;
 
 /** `/store/$id/edit`: every file of a store app, its `compose.yml` open first. */
 export function EditAppPage() {
   const { id } = useParams({ from: "/app/store/$id/edit" });
   const queryClient = useQueryClient();
   // Shown from this mount's reads alone: a sync or an install may have changed the files since a page read them.
-  const opened = useEditorFiles(id, { query: EditPageQuery.Options });
-  const compose = useEditorRead(id, { path: ComposeFile.Name }, { query: EditPageQuery.Options });
+  const opened = useEditorFiles(id, { query: editedFileQuery });
+  const compose = useEditorRead(id, { path: composeFileName }, { query: editedFileQuery });
   const isRead = opened.isFetchedAfterMount && compose.isFetchedAfterMount;
 
   // The compose file may rename the app or change its icon, which the page and the store show: the server tells, as

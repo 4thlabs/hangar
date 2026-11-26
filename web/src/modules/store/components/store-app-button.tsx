@@ -12,18 +12,16 @@ type StoreAppButtonProps = {
 };
 
 /** What the button of a card says in each state. Uninstalling keeps its wording and only spins. */
-class ButtonFaces {
-  static create(app: StoreApp, isPending: boolean) {
-    if (app.installed) {
-      return { title: "Uninstall", label: `Uninstall ${app.name}`, icon: isPending ? <Spinner /> : <Trash2Icon /> };
-    }
-
-    if (isPending) {
-      return { title: "Installing…", label: `Installing ${app.name}`, icon: <Spinner /> };
-    }
-
-    return { title: "Install", label: `Install ${app.name}`, icon: <DownloadIcon /> };
+function buttonFace(app: StoreApp, isPending: boolean) {
+  if (app.installed) {
+    return { title: "Uninstall", label: `Uninstall ${app.name}`, icon: isPending ? <Spinner /> : <Trash2Icon /> };
   }
+
+  if (isPending) {
+    return { title: "Installing…", label: `Installing ${app.name}`, icon: <Spinner /> };
+  }
+
+  return { title: "Install", label: `Install ${app.name}`, icon: <DownloadIcon /> };
 }
 
 /** A card's install or uninstall, the latter confirmed first: it takes the app's containers down. */
@@ -54,7 +52,7 @@ export function StoreAppButton({ app }: StoreAppButtonProps) {
   });
 
   const isPending = install.isPending || uninstall.isPending;
-  const face = ButtonFaces.create(app, isPending);
+  const face = buttonFace(app, isPending);
 
   const confirmUninstall = () => {
     setConfirming(false);

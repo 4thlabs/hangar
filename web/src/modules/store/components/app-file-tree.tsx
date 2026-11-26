@@ -3,13 +3,10 @@ import { ChevronDownIcon, ChevronRightIcon, FileIcon, FolderIcon, PlusIcon } fro
 import { useState, type ComponentProps, type FormEvent, type ReactNode } from "react";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
-import { FileTree, type FileTreeFolder, type FileTreeNode } from "#modules/store/file-tree.ts";
+import { buildFileTree, type FileTreeFolder, type FileTreeNode } from "#modules/store/file-tree.ts";
 
-/** How the tree lays out its rows. */
-class TreeLayout {
-  /** Indent per nesting level, in rem: a level must read as such at a glance in a narrow column. */
-  static readonly IndentRem = 0.875;
-}
+/** How the tree lays out its rows: the indent per nesting level, in rem: a level must read as such at a glance in a narrow column. */
+const indentRem = 0.875;
 
 type AppFileTreeProps = {
   paths: string[];
@@ -82,7 +79,7 @@ export function AppFileTree({ paths, selectedPath, unsavedPaths, onSelect, onCre
       </Button>
       <div className={cn("flex-col gap-1", isOpenOnMobile ? "flex" : "hidden", "md:flex")}>
         <p className="px-2 pt-1 text-xs font-medium text-muted-foreground">Files</p>
-        <ul className="flex flex-col">{renderNodes(FileTree.build(paths), 0)}</ul>
+        <ul className="flex flex-col">{renderNodes(buildFileTree(paths), 0)}</ul>
         <NewFileForm onCreate={onCreate} isCreating={isCreating} />
       </div>
     </nav>
@@ -146,7 +143,7 @@ function TreeRow({ depth, className, style, ...props }: TreeRowProps) {
         "flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left font-mono text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [&_svg]:size-3.5 [&_svg]:shrink-0",
         className,
       )}
-      style={{ paddingLeft: `${0.5 + depth * TreeLayout.IndentRem}rem`, ...style }}
+      style={{ paddingLeft: `${0.5 + depth * indentRem}rem`, ...style }}
       {...props}
     />
   );
