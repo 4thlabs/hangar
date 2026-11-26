@@ -50,16 +50,16 @@ the same data directory and the same `.env`. Its page is in `web/`, in English o
 `cargo quoll`, at the tag of the quoll the contract uses:
 
 ```bash
-cargo install --git https://github.com/4thlabs/quoll --tag v0.10.0 quoll-cli --locked
+cargo install --git https://github.com/4thlabs/quoll --tag v0.11.0 quoll-cli --locked
 npm ci --prefix web
-HOST=127.0.0.1 PORT=3011 cargo quoll dev
+cargo quoll dev
 ```
 
 `cargo quoll dev` writes the OpenAPI document and orval's hooks, starts the server, then Vite, which serves the page
 at <http://localhost:5173> and proxies `/api` to the server. A change to a crate rebuilds and restarts the server, a
-change to the contract writes the hooks again. The server listens where `HOST` and `PORT` say, which `cargo quoll
-dev` passes on, as it gives the server no variable of its own: on 3011, the `url` of
-`[[workspace.metadata.quoll.server]]` and the proxy's target, so that it runs beside `npm run dev` on 3010.
+change to the contract writes the hooks again. The server listens on 127.0.0.1:3011, the `HOST` and `PORT` that the
+`env` of `[[workspace.metadata.quoll.server]]` gives it, beside its `url` and the proxy's target, so that it runs
+beside `npm run dev` on 3010.
 
 `cargo quoll build` builds the page in `web/dist`, which the server serves when `HANGAR_PAGE_DIR` names it:
 `HANGAR_PAGE_DIR=web/dist cargo run -p hangar-server`, at <http://localhost:3010>.

@@ -137,16 +137,54 @@ async fn a_page_route_is_served_its_index_once_its_final_slash_is_gone() -> reqw
 }
 
 #[tokio::test]
-async fn a_directory_of_the_page_is_left_to_the_page_so_that_nothing_loops() -> reqwest::Result<()>
+async fn a_directory_of_the_page_with_no_index_loses_its_final_slash_and_nothing_loops()
+-> reqwest::Result<()> {
+    let page = page();
+    let url = serve(&settings(Some(page.path()))).await;
+
+    let slashed = http().get(format!("{url}/assets/")).send().await?;
+    let bare = http().get(format!("{url}/assets")).send().await?;
+
+    assert_eq!(slashed.status(), StatusCode::MOVED_PERMANENTLY);
+    assert_eq!(slashed.headers()[LOCATION], "/assets");
+    assert_eq!(
+        bare.status(),
+        StatusCode::NOT_FOUND,
+        "no file, and no redirect back"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_directory_of_the_page_with_an_index_is_left_to_the_page_so_that_nothing_loops()
+-> reqwest::Result<()> {
+    let page = page();
+    let url = serve(&settings(Some(page.path()))).await;
+
+    std::fs::create_dir(page.path().join("docs")).expect("created");
+    std::fs::write(page.path().join("docs/index.html"), "the docs").expect("written");
+
+    let bare = http().get(format!("{url}/docs")).send().await?;
+    let slashed = http().get(format!("{url}/docs/")).send().await?;
+
+    assert_eq!(bare.status(), StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(bare.headers()[LOCATION], "/docs/");
+    assert_eq!(slashed.status(), StatusCode::OK);
+    assert_eq!(slashed.text().await?, "the docs");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_directory_that_holds_a_compressed_index_alone_is_left_to_the_page() -> reqwest::Result<()>
 {
     let page = page();
     let url = serve(&settings(Some(page.path()))).await;
 
-    let bare = http().get(format!("{url}/assets")).send().await?;
-    let slashed = http().get(format!("{url}/assets/")).send().await?;
+    std::fs::create_dir(page.path().join("docs")).expect("created");
+    std::fs::write(page.path().join("docs/index.html.gz"), "gzipped").expect("written");
 
-    assert_eq!(bare.status(), StatusCode::TEMPORARY_REDIRECT);
-    assert_eq!(bare.headers()[LOCATION], "/assets/");
+    let slashed = http().get(format!("{url}/docs/")).send().await?;
+
     assert_ne!(slashed.status(), StatusCode::MOVED_PERMANENTLY);
     Ok(())
 }

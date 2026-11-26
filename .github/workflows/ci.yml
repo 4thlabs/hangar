@@ -126,7 +126,7 @@ jobs:
 
       # At the tag of the quoll the contract uses; kept in ~/.cargo/bin by the cache.
       - name: Install cargo quoll
-        run: cargo install --git https://github.com/4thlabs/quoll --tag v0.10.0 quoll-cli --locked
+        run: cargo install --git https://github.com/4thlabs/quoll --tag v0.11.0 quoll-cli --locked
 
       # Before the build: orval, which `cargo quoll gen` runs, is one of the page's dependencies.
       - name: Install dependencies

@@ -2212,8 +2212,8 @@ dependencies = [
 
 [[package]]
 name = "quoll"
-version = "0.10.0"
-source = "git+https://github.com/4thlabs/quoll?tag=v0.10.0#9d710716d9970fac97285f7e24f6f33fcf3a08a7"
+version = "0.11.0"
+source = "git+https://github.com/4thlabs/quoll?tag=v0.11.0#a24a943a23b244fce1df6fcd4e0f2a1630b00ea0"
 dependencies = [
  "axum",
  "backon",
@@ -2246,8 +2246,8 @@ dependencies = [
 
 [[package]]
 name = "quoll-macros"
-version = "0.10.0"
-source = "git+https://github.com/4thlabs/quoll?tag=v0.10.0#9d710716d9970fac97285f7e24f6f33fcf3a08a7"
+version = "0.11.0"
+source = "git+https://github.com/4thlabs/quoll?tag=v0.11.0#a24a943a23b244fce1df6fcd4e0f2a1630b00ea0"
 dependencies = [
  "proc-macro2",
  "quote",
