@@ -387,6 +387,8 @@ fn refuses_an_up_that_attaches_on_several_apps() {
     for line in [
         &["store", "Media", "up"][..],
         &["store", "Media", "up", "--build"],
+        &["store", "Media", "up", "-d", "--detach=false"],
+        &["store", "up", "--detach=false"],
     ] {
         let output = run(&mut fixture.hangar(line));
 
