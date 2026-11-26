@@ -52,6 +52,49 @@ const staticOnlyClass = {
 };
 
 /**
+ * ADR 0002, rule 2: orval's `use*` hooks are not imported outside `#libs/api`. A component or a hook calls
+ * `useQuery(xQueries.y())` and `useMutation(xMutations.z())`, on the options of its module's `api/`, which say a read's
+ * policy and what a change makes stale. Held on `modules/`, `routes/` and the wiring at `src/`.
+ */
+const orvalHooks = {
+  regex: "^#libs/api$",
+  importNamePattern: "^use[A-Z]",
+  message:
+    "orval's hooks stay in #libs/api: call useQuery or useMutation on the options of the module's api/ (ADR 0002, decision 1).",
+};
+
+/** Rule 2 too: no `..` segment in a route or the wiring, so that every import is a `#...` specifier the rules read. */
+const parentSegment = {
+  regex: "(^|/)\\.\\.(/|$)",
+  message:
+    "Import with #modules/..., #routes/... or #..., not a .. segment, so that the rules see every import (ADR 0002, decision 10).",
+};
+
+/**
+ * ADR 0002, rule 3: a module's `api/` holds the options of its reads and changes, the keys, and what a change makes
+ * stale. It imports no React and no package of React's, and nothing of a module's `hooks/`, `components/` or `ui/`:
+ * what renders or holds state takes its options, not the other way.
+ */
+const apiPatterns = [
+  { regex: "^react(-[^/]+)?(/|$)", message: "A module's api/ renders nothing: no React (ADR 0002, decision 1)." },
+  {
+    regex: "^(lucide-react(/|$)|@base-ui/)",
+    message: "A module's api/ renders nothing: no icons or components (ADR 0002, decision 1).",
+  },
+  {
+    regex: "^(#modules/[^/]+|\\.)/(hooks|components|ui)/",
+    message:
+      "A module's api/ takes nothing of hooks/, components/ or ui/: they take its options (ADR 0002, decision 1).",
+  },
+];
+
+/** Rule 3 for `import()`, which `no-restricted-imports` does not read: no module's `hooks/`, `components/` or `ui/`. */
+const apiDynamicImport = {
+  selector: importOf("^(#modules\\/[^\\/]+|\\.)\\/(hooks|components|ui)\\/"),
+  message: "A module's api/ loads nothing of hooks/, components/ or ui/ (ADR 0002, decision 1).",
+};
+
+/**
  * ADR 0002, rule 4: a module's `helpers/` and its `messages.ts` are its domain, pure and tested without rendering. They
  * import no React and no package of React's (`react-*`, `lucide-react`, `@base-ui/`), no TanStack, only the types,
  * enums and classes of `#libs/api` (its names that start with a capital: orval's hooks, fetchers and keys, and the
@@ -117,6 +160,7 @@ function modulePatterns(module, { tests }) {
   const allowed = ["libs/", "modules/common/", `modules/${module}/`, ...(tests ? ["mock/"] : [])];
 
   return [
+    orvalHooks,
     {
       regex: `^#(?!${allowed.join("|")})`,
       message: `A module imports only common and #libs: ${module} may not import another module, a route or the wiring (ADR 0002, decision 6). Compose them in a route.`,
@@ -139,7 +183,10 @@ function moduleDynamicImport(module) {
   };
 }
 
-/** For each module: its isolation on every file, its tests' `#mock/` allowed, and rule 4 on its helpers beside it. */
+/**
+ * For each module: its isolation and rule 2 on every file, its tests' `#mock/` allowed, rule 3 on its `api/` and rule 4
+ * on its helpers beside it.
+ */
 const moduleBlocks = pageModules.flatMap(module => [
   {
     files: [`web/src/modules/${module}/**/*.{ts,tsx}`],
@@ -151,6 +198,14 @@ const moduleBlocks = pageModules.flatMap(module => [
   {
     files: [`web/src/modules/${module}/**/*.test.{ts,tsx}`],
     rules: { "no-restricted-imports": ["error", { patterns: modulePatterns(module, { tests: true }) }] },
+  },
+  {
+    files: [`web/src/modules/${module}/api/**/*.{ts,tsx}`],
+    ignores: [`web/src/modules/${module}/api/**/*.test.{ts,tsx}`],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [...modulePatterns(module, { tests: false }), ...apiPatterns] }],
+      "no-restricted-syntax": ["error", staticOnlyClass, moduleDynamicImport(module), apiDynamicImport],
+    },
   },
   {
     files: [`web/src/modules/${module}/helpers/**/*.{ts,tsx}`, `web/src/modules/${module}/messages.ts`],
@@ -216,6 +271,11 @@ export default [
     rules: { ...pageRules, "no-restricted-syntax": ["error", staticOnlyClass] },
   },
   ...moduleBlocks,
+  // Rule 2 on the routes and the wiring, which compose the modules: no orval hook, no `..` segment.
+  {
+    files: ["web/src/routes/**/*.{ts,tsx}", "web/src/*.{ts,tsx}"],
+    rules: { "no-restricted-imports": ["error", { patterns: [orvalHooks, parentSegment] }] },
+  },
   {
     files: ["web/src/modules/*/*.{ts,tsx}"],
     ignores: ["web/src/modules/*/messages.ts", "web/src/modules/*/messages.test.ts"],
