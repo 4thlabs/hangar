@@ -82,8 +82,12 @@ describe("signing in", () => {
     expect(router.state.location.pathname).toBe("/");
 
     const login = fetch.mock.calls.find(([url]) => url === "/api/auth/login");
+    const body = login?.[1]?.body;
 
-    expect(login?.[1]?.body).toBe(JSON.stringify({ email: "ana@example.com", password: "correct horse" }));
+    expect(typeof body === "string" ? JSON.parse(body) : body).toEqual({
+      email: "ana@example.com",
+      password: "correct horse",
+    });
   });
 
   it("says a wrong password is one", async () => {
