@@ -1,7 +1,17 @@
 import { Link } from "@tanstack/react-router";
 import { cn } from "cn";
+import { BoxesIcon, LayoutDashboardIcon, NetworkIcon, SettingsIcon, StoreIcon, type LucideIcon } from "lucide-react";
 import { useCurrentPath } from "#modules/common/hooks/use-current-path.ts";
-import { isNavigationActive, navigationCategories } from "#modules/common/navigations.ts";
+import { isNavigationActive, navigationCategories, type NavigationPath } from "#modules/common/navigations.ts";
+
+/** The icon of each section on the tab bar. */
+const sectionIcons: Readonly<Record<NavigationPath, LucideIcon>> = {
+  "/": LayoutDashboardIcon,
+  "/apps": BoxesIcon,
+  "/cluster": NetworkIcon,
+  "/store": StoreIcon,
+  "/settings": SettingsIcon,
+};
 
 /**
  * Phone tab bar. A second tree is fine here: stateless links only.
@@ -18,6 +28,7 @@ export function MobileTabBar() {
     >
       {items.map(item => {
         const active = isNavigationActive(path, item.href);
+        const Icon = sectionIcons[item.href];
 
         return (
           <Link
@@ -33,7 +44,7 @@ export function MobileTabBar() {
                 : "text-sidebar-foreground/60",
             )}
           >
-            <item.icon className="size-5" />
+            <Icon className="size-5" />
             {item.label}
           </Link>
         );
