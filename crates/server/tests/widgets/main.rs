@@ -1,6 +1,7 @@
 //! The widgets' routes, served on port 0 and called with a session by the client of the contract and by reqwest, on
 //! fake services served on port 0 too, whose answers each test writes.
 
+mod arcane;
 mod frigate;
 mod gluetun;
 

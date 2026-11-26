@@ -1,6 +1,7 @@
 //! The dashboard's widgets: where `hangar.yml` places them, what each loads from its service through a quoll contract
 //! of its own, kept per placement, and the images they show, relayed from their service.
 
+mod arcane;
 mod cache;
 mod error;
 mod frigate;
@@ -178,6 +179,13 @@ impl Loader {
     /// The data of a widget of `kind`, from its service.
     async fn load(self, kind: WidgetKind) -> Result<WidgetData, LoadError> {
         match &kind {
+            WidgetKind::ArcaneGeneralStats { .. } => {
+                let service = self.service(&kind).await?;
+
+                arcane::load(&self.http, &service)
+                    .await
+                    .map(WidgetData::ArcaneGeneralStats)
+            }
             WidgetKind::FrigateEvents { .. } => {
                 let service = self.service(&kind).await?;
 
