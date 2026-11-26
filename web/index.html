@@ -13,18 +13,20 @@
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2e3440" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eceff4" />
     <!--
-      The cookies of Theme and Locale (src/libs/preferences), applied before the first paint, which the page's module
-      runs after: without it a dark page would flash light. The page checks them again, and sets them right, at once.
+      The cookies of Theme (src/libs/preferences), applied before the first paint, which the page's module runs
+      after: without it a dark page would flash light. The page checks them again, and sets them right, at once.
     -->
     <script>
       (() => {
         const cookies = Object.fromEntries(document.cookie.split("; ").map(pair => pair.split("=")));
         const root = document.documentElement;
-        const mode = cookies.theme ?? "system";
+        const mode = ["light", "dark", "system"].includes(cookies.theme) ? cookies.theme : "system";
         const dark = mode === "dark" || (mode === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
 
-        if (/^[a-z]+$/.test(cookies.theme_palette ?? "")) root.dataset.theme = cookies.theme_palette;
-        if (/^[a-z]+$/.test(cookies.locale ?? "")) root.lang = cookies.locale;
+        if (/^[a-z]+$/.test(cookies.theme_palette ?? "")) {
+          root.dataset.theme = cookies.theme_palette;
+        }
+
         root.dataset.colorMode = mode;
         root.classList.toggle("dark", dark);
       })();

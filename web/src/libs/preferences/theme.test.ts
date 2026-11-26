@@ -11,3 +11,12 @@ describe("theme palettes", () => {
     }
   });
 });
+
+describe("theme color modes", () => {
+  // index.html checks the cookie before the page runs, with a list of its own.
+  it("are the ones index.html accepts before the first paint", async () => {
+    const index = await import("node:fs/promises").then(fs => fs.readFile("index.html", "utf8"));
+
+    expect(index).toContain(JSON.stringify(Theme.ColorModes).replaceAll(",", ", "));
+  });
+});
