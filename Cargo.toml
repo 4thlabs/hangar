@@ -11,7 +11,13 @@ repository = "https://github.com/4thlabs/hangar"
 publish = false
 
 [workspace.dependencies]
+futures = "0.3"
 hangar-core = { path = "crates/core" }
+nix = "0.32"
+tempfile = "3"
+thiserror = "2"
+tokio = "1"
+tracing = "0.1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

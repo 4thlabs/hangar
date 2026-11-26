@@ -1,6 +1,6 @@
 [package]
 name = "hangar-cli"
-description = "hangar: Hangar from a shell, on hangar-core; for now it prints its version"
+description = "hangar: Hangar from a shell, on hangar-core: installs the store and brings its apps up and down"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -12,7 +12,22 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+# The `.env` of the working directory, read as the Node CLI's `dotenv/config` reads it.
+dotenvy = "0.15"
+futures.workspace = true
 hangar-core.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-std", "io-util", "macros", "rt", "signal"] }
+tracing.workspace = true
+# The core's logs, on stderr.
+tracing-subscriber = "0.3"
+
+[dev-dependencies]
+tempfile.workspace = true
+
+# SIGINT to the binary's process group, as a terminal's Ctrl-C.
+[target.'cfg(unix)'.dev-dependencies]
+nix = { workspace = true, features = ["process", "signal"] }
 
 [lints]
 workspace = true
