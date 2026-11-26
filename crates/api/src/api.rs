@@ -4,6 +4,12 @@
 quoll::api! {
     /// Hangar's API, which its page calls. Every error is a problem, in English. Every route but those of `Auth` and
     /// `Health` takes a `Session`.
-    pub api Api = "/api" { crate::health::Health, crate::auth::Auth };
+    pub api Api = "/api" {
+        crate::health::Health,
+        crate::auth::Auth,
+        crate::store::Store,
+        crate::config::Config,
+        crate::env::Env,
+    };
 
 }

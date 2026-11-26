@@ -4,8 +4,16 @@
 
 mod api;
 mod auth;
+mod config;
+mod env;
+mod error;
 mod health;
+mod store;
 
 pub use api::*;
 pub use auth::*;
+pub use config::*;
+pub use env::*;
+pub use error::*;
 pub use health::*;
+pub use store::*;
