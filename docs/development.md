@@ -295,8 +295,8 @@ which polled every widget every 30 seconds, is gone. The readers of a key share 
 page that leaves does not cancel it. GitHub's releases and Finnhub's calls are also kept per repository and per symbol,
 as the Waku version keeps them, and shared by every placement. A service that does not answer, or not as the widget
 reads it, is a 502, `widgets.unavailable`, the cause in the server's log; a key that places nothing, the clock or
-Docker's stats, which load nothing here, is a 404. Docker's stats read `GET /api/docker/overview`, which the
-dashboard reads again as the daemon's changes come; the apps due an update come with the image check (#176).
+Docker's stats, which load nothing here, is a 404. Docker's stats read `GET /api/docker/overview`, and the apps
+due an update from `GET /api/docker/apps`, as the image check marks them, both read again as the daemon's changes come.
 
 `GET /api/widgets/<key>/image/<id>` relays a Frigate thumbnail, a Jellyfin poster or a tcg-collector card, so that the
 browser needs neither the service's address nor its key. An id is letters, digits, `_`, `.` and `-`, but not `.` or

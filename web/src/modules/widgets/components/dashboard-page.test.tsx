@@ -143,6 +143,38 @@ describe("/", () => {
     expect(within(docker).getByText("3 unused · 4.2 GB")).toBeDefined();
   });
 
+  it("lists the installed apps the image check found an update for, each linked to its page", async () => {
+    const app = (name: string, updateAvailable: boolean) => ({
+      name,
+      icon: null,
+      category: null,
+      status: "running",
+      serviceCount: 1,
+      runningCount: 1,
+      unhealthyCount: 0,
+      containerIds: [`${name}-1`],
+      updateAvailable,
+    });
+
+    serve({
+      "GET /api/widgets": () => Response.json([placements[1]]),
+      "GET /api/docker/overview": () => Response.json(overview),
+      "GET /api/docker/apps": () =>
+        Response.json([app("miniflux", true), app("frigate", false), app("jellyfin", true)]),
+    });
+
+    renderAt("/");
+
+    const docker = await card("Local");
+    const links = await within(docker).findAllByRole("link");
+
+    expect(within(docker).getByText("Updates available")).toBeDefined();
+    expect(links.map(link => [link.textContent, link.getAttribute("href")])).toEqual([
+      ["jellyfin", "/apps/jellyfin"],
+      ["miniflux", "/apps/miniflux"],
+    ]);
+  });
+
   it("shows a widget whose service failed as unavailable, at once, beside the others", async () => {
     const fetch = serveDashboard();
 
