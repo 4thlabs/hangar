@@ -357,6 +357,95 @@
         ],
         "type": "object"
       },
+      "BeszelServerStats": {
+        "description": "The systems a Beszel hub monitors, as its agents last reported them.",
+        "properties": {
+          "systems": {
+            "description": "Its systems, by name.",
+            "items": {
+              "$ref": "#/components/schemas/BeszelSystem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "systems"
+        ],
+        "type": "object"
+      },
+      "BeszelSystem": {
+        "description": "A system Beszel monitors. Its readings are those of the last report, 0 when it gave none.",
+        "properties": {
+          "cpu": {
+            "description": "The CPU it uses, out of 100.",
+            "format": "double",
+            "type": "number"
+          },
+          "cpuModel": {
+            "description": "Its CPU's model, when it reported it.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "disk": {
+            "description": "The root disk it uses, out of 100.",
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "description": "Its id in the hub.",
+            "type": "string"
+          },
+          "memory": {
+            "description": "The memory it uses, out of 100.",
+            "format": "double",
+            "type": "number"
+          },
+          "name": {
+            "description": "Its name.",
+            "type": "string"
+          },
+          "status": {
+            "description": "`up`, `down`, `paused` or `pending`.",
+            "type": "string"
+          },
+          "temperature": {
+            "description": "Its hottest sensor, in °C, when it has one.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "up": {
+            "description": "Whether it is `up`, the only status whose readings are current.",
+            "type": "boolean"
+          },
+          "uptime": {
+            "description": "How long it has run, in seconds, when it reported it.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "up",
+          "uptime",
+          "cpu",
+          "memory",
+          "disk",
+          "temperature",
+          "cpuModel"
+        ],
+        "type": "object"
+      },
       "ComposeAction": {
         "description": "A compose command the Apps pages run: `up -d` with its options, `restart` or `down`.",
         "oneOf": [
@@ -3813,6 +3902,23 @@
               },
               "type": {
                 "const": "backrest-summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "data"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`beszel-server-stats`.",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/BeszelServerStats"
+              },
+              "type": {
+                "const": "beszel-server-stats",
                 "type": "string"
               }
             },

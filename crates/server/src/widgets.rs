@@ -3,6 +3,7 @@
 
 mod arcane;
 mod backrest;
+mod beszel;
 mod cache;
 mod error;
 mod frigate;
@@ -193,6 +194,13 @@ impl Loader {
                 backrest::load(&self.http, &service)
                     .await
                     .map(WidgetData::BackrestSummary)
+            }
+            WidgetKind::BeszelServerStats { .. } => {
+                let service = self.service(&kind).await?;
+
+                beszel::load(&self.http, &service)
+                    .await
+                    .map(WidgetData::BeszelServerStats)
             }
             WidgetKind::FrigateEvents { .. } => {
                 let service = self.service(&kind).await?;

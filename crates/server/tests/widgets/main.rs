@@ -3,6 +3,7 @@
 
 mod arcane;
 mod backrest;
+mod beszel;
 mod frigate;
 mod gluetun;
 
