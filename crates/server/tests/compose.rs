@@ -901,3 +901,37 @@ async fn refuses_a_batch_while_a_sync_of_the_store_runs() {
 
     assert!(fixture.docker_calls().is_empty(), "the batch never ran");
 }
+
+#[tokio::test]
+async fn tells_the_pages_that_follow_the_changes_of_a_batch_that_starts_and_ends()
+-> quoll::Result<()> {
+    let fixture = Fixture::new();
+    let (_, docker_host) = FakeDaemon::serve().await;
+    let behaviour = Behaviour {
+        hold: Some("alpha"),
+        ..Behaviour::default()
+    };
+    let server = fixture.serve(&docker_host, behaviour).await;
+    let api = server.api();
+    let mut changes = api.docker().changes().await?;
+
+    let running = api.compose().run(&request(update(), &["alpha"])).await?;
+
+    assert_eq!(
+        within("the start's change", changes.next())
+            .await
+            .transpose()?,
+        Some(hangar_api::DockerChange::Containers)
+    );
+
+    fixture.release();
+    all(running).await;
+
+    assert_eq!(
+        within("the end's change", changes.next())
+            .await
+            .transpose()?,
+        Some(hangar_api::DockerChange::Containers)
+    );
+    Ok(())
+}

@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use futures::StreamExt;
-use hangar_api::{ComposeAction, ErrorCode, NotificationLevel, NotificationMessage};
+use hangar_api::{ComposeAction, DockerChange, ErrorCode, NotificationLevel, NotificationMessage};
 use hangar_core::{
     AppOutcome, BatchEvent, Compose, ComposeCommand, ComposeError, DataDir, GlobalEnv, OnFailure,
     Runtime, Secrets, Store,
@@ -109,6 +109,8 @@ impl ComposeState {
 
         tracing::info!(id, command = %command, apps = %kept.apps().join(", "), "a compose batch starts");
         self.keep(&kept);
+        // The pages list the batches again, and disable the buttons of its apps.
+        self.docker.tell(DockerChange::Containers);
         tokio::spawn(Arc::clone(self).watch(Arc::clone(&kept), claim));
 
         Ok(kept)
@@ -254,8 +256,14 @@ impl ComposeState {
         // Before the report: a page told of the end runs a command on the apps at once.
         drop(claim);
         kept.record().await;
+        self.docker.tell(DockerChange::Containers);
+
+        // Let go while it waits: a batch the listing's cap forgets meanwhile frees its output.
+        let id = kept.id();
+
+        drop(kept);
         tokio::time::sleep(Self::KEPT).await;
-        self.batches().remove(&kept.id());
+        self.batches().remove(&id);
     }
 
     /// Tells of the end of each app of `kept`, as the batch's output says it, then of those its reader missed, as the

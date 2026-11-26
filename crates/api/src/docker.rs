@@ -246,8 +246,8 @@ pub struct DockerOverview {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DockerChange {
-    /// The apps: their containers, or which of them are installed, and how `hangar.yml` files them. The projects and each
-    /// project's detail.
+    /// The apps: their containers, or which of them are installed, and how `hangar.yml` files them, and the compose
+    /// batches that run on them, as one starts or ends. The projects, each project's detail, and the batches.
     Containers,
     /// The usage of the whole host.
     Overview,

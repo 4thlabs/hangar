@@ -1,11 +1,16 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { BoxesIcon, CpuIcon, LayersIcon, MemoryStickIcon, PackageOpenIcon, PlayIcon, SquareIcon } from "lucide-react";
+import { useState } from "react";
 import { useDockerProjects, type ProjectSummary } from "#libs/api";
 import { AppsSearchParams, type AppSortColumn } from "#modules/apps/apps-search.ts";
 import { AppsFilterMenus } from "#modules/apps/components/apps-filter-menus.tsx";
 import { AppsTable } from "#modules/apps/components/apps-table.tsx";
+import { ComposeDialogs, ComposeOperationButtons } from "#modules/apps/components/compose-operations.tsx";
 import { ReconnectingNotice } from "#modules/apps/components/reconnecting-notice.tsx";
+import { RunningBatches } from "#modules/apps/components/running-batches.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
+import { ComposeActions } from "#modules/apps/compose-actions.ts";
+import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import { MetricFormat } from "#modules/apps/metric-format.ts";
@@ -104,6 +109,12 @@ export function AppsPage() {
 
   const { isReconnecting } = useDockerChanges();
 
+  // Held by the page, not the table, which goes as a filter or a read again leaves no row: the panel stays.
+  const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
+  const selected = visible.map(project => project.name).filter(name => selection.has(name));
+  const compose = useComposeCommand(selected);
+  const selectionLabel = selected.length === 0 ? "No selection" : `${ComposeActions.count(selected.length)} selected`;
+
   return (
     <main>
       <title>Apps | Hangar</title>
@@ -132,14 +143,28 @@ export function AppsPage() {
       {data && !error && (
         <>
           <AppsTotals projects={projects} />
+          <RunningBatches compose={compose} />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground" aria-live="polite">
+              {selectionLabel}
+            </span>
+            <ComposeOperationButtons compose={compose} size="sm" />
+          </div>
           {visible.length > 0 ? (
-            <AppsTable projects={visible} sort={sort} onSort={onSort} />
+            <AppsTable
+              projects={visible}
+              sort={sort}
+              onSort={onSort}
+              selection={selection}
+              onSelectionChange={setSelection}
+            />
           ) : (
             <NoApps isInstalled={projects.length > 0} />
           )}
         </>
       )}
       {isPending && <p className="text-sm text-muted-foreground">Reading Docker…</p>}
+      <ComposeDialogs compose={compose} subject={ComposeActions.subject(selected)} count={selected.length} />
     </main>
   );
 }
