@@ -340,13 +340,11 @@ pub enum ErrorCode {
     /// A batch of compose commands asked for no app.
     #[serde(rename = "compose.no_apps")]
     NoApps,
-    /// A batch of compose commands asked for more apps than are installed.
-    #[serde(rename = "compose.too_many_apps")]
-    TooManyApps {
-        /// How many apps it asked for, each once.
-        apps: usize,
-        /// How many apps are installed.
-        installed: usize,
+    /// A sync of the store, while compose batches run on the files it pulls and links.
+    #[serde(rename = "store.batch_running")]
+    BatchRunning {
+        /// The apps the batches hold, by id.
+        apps: Vec<String>,
     },
     /// An app that another command holds: a batch of compose commands that runs on it, or its install or uninstall.
     #[serde(rename = "compose.app_busy")]
@@ -460,7 +458,7 @@ impl ErrorCode {
     /// Its params by their names, as `{ "app": "alpha" }`; none for a code that has none.
     pub fn params(&self) -> Map<String, Value> {
         let written = serde_json::to_value(self)
-            .expect("a code holds strings and numbers, which JSON writes");
+            .expect("a code holds strings, numbers and lists of strings, which JSON writes");
 
         match written {
             Value::Object(mut fields) => match fields.remove("params") {
@@ -519,7 +517,7 @@ impl ErrorCode {
             Self::InvalidProject { .. } => "docker.invalid_project",
             Self::UnknownContainer { .. } => "docker.unknown_container",
             Self::NoApps => "compose.no_apps",
-            Self::TooManyApps { .. } => "compose.too_many_apps",
+            Self::BatchRunning { .. } => "store.batch_running",
             Self::AppBusy { .. } => "compose.app_busy",
             Self::BatchUnchecked { .. } => "compose.unchecked",
             Self::ComposeFailed { .. } => "compose.failed",
@@ -557,7 +555,8 @@ impl ErrorCode {
             | Self::AppExists { .. }
             | Self::FileExists { .. }
             | Self::FileAppeared { .. }
-            | Self::AppBusy { .. } => StatusCode::CONFLICT,
+            | Self::AppBusy { .. }
+            | Self::BatchRunning { .. } => StatusCode::CONFLICT,
             Self::ConfigSyntax { .. }
             | Self::ConfigInvalid { .. }
             | Self::InvalidVariableName { .. }
@@ -577,8 +576,7 @@ impl ErrorCode {
             | Self::InvalidFile { .. }
             | Self::ComposeRejected { .. }
             | Self::InvalidProject { .. }
-            | Self::NoApps
-            | Self::TooManyApps { .. } => StatusCode::BAD_REQUEST,
+            | Self::NoApps => StatusCode::BAD_REQUEST,
             Self::AppsUnreadable
             | Self::InstallFailed { .. }
             | Self::UninstallFailed { .. }
@@ -675,11 +673,10 @@ impl ErrorCode {
                 "{project} is not a compose project name: lowercase letters, digits, `_` and `-`, starting with a letter or a digit"
             ),
             Self::NoApps => "a compose command needs at least one app".to_owned(),
-            Self::TooManyApps { apps, installed } => {
-                format!(
-                    "a compose command cannot run on more apps than are installed: {apps} asked, {installed} installed"
-                )
-            }
+            Self::BatchRunning { apps } => format!(
+                "compose commands run on {}: sync the store once they have ended",
+                apps.join(", ")
+            ),
             Self::AppBusy { app } => {
                 format!("another command runs on {app}: try again once it has ended")
             }
@@ -838,9 +835,8 @@ mod tests {
                 project: "llama.cpp".to_owned(),
             },
             ErrorCode::NoApps,
-            ErrorCode::TooManyApps {
-                apps: 3,
-                installed: 2,
+            ErrorCode::BatchRunning {
+                apps: vec![app(), "gamma".to_owned()],
             },
             ErrorCode::AppBusy { app: app() },
             ErrorCode::BatchUnchecked {

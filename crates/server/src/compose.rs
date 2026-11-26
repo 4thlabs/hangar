@@ -80,27 +80,19 @@ impl ComposeState {
     ///
     /// # Errors
     ///
-    /// A 400 for no app, more than are installed or a name compose does not take, a 404 for an app that is not
-    /// installed, a 409 for an app another command holds, and the error of a `hangar.yml` that cannot be read, which
-    /// orders the batch.
+    /// A 400 for no app or a name compose does not take, a 404 for an app that is not installed, a 409 for an app
+    /// another command holds or while a sync of the store runs, and the error of a `hangar.yml` that cannot be read,
+    /// which orders the batch.
     pub(crate) async fn start(
         self: &Arc<Self>,
         action: ComposeAction,
         apps: &[String],
     ) -> quoll::Result<Arc<KeptBatch>> {
         let command = ComposeViews::command(action);
-        let asked: HashSet<&str> = apps.iter().map(String::as_str).collect();
-        let installed = self.installed_count().await?;
 
-        if asked.len() > installed {
-            return Err(ErrorCode::TooManyApps {
-                apps: asked.len(),
-                installed,
-            }
-            .into());
-        }
+        self.require_installed(apps).await?;
 
-        let claim = self.locks.claim(asked.iter().copied())?;
+        let claim = self.locks.claim_batch(apps.iter().map(String::as_str))?;
         let config = self
             .store
             .config()
@@ -122,24 +114,51 @@ impl ComposeState {
         Ok(kept)
     }
 
-    /// How many apps are installed: the links of `app-installed/`, none before the first.
-    async fn installed_count(&self) -> quoll::Result<usize> {
-        let mut entries = match tokio::fs::read_dir(self.data_dir.installed()).await {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
-            Err(error) => return Err(Failure::logged(ErrorCode::AppsUnreadable, &error)),
-        };
-        let mut count = 0;
+    /// Checks each of `apps`, in the order asked, before anything else: a 400, `docker.invalid_project`, for a name
+    /// compose does not take, and a 404, `docker.unknown_project`, for an app that is not installed. A batch then holds
+    /// no more apps than are installed, read once whatever their number.
+    async fn require_installed(&self, apps: &[String]) -> quoll::Result<()> {
+        let installed = self.installed().await?;
 
-        while let Some(_entry) = entries
-            .next_entry()
-            .await
-            .map_err(|error| Failure::logged(ErrorCode::AppsUnreadable, &error))?
-        {
-            count += 1;
+        for app in apps {
+            let code = if !Compose::<Runtime>::is_project_name(app) {
+                ErrorCode::InvalidProject {
+                    project: app.clone(),
+                }
+            } else if !installed.contains(app) {
+                ErrorCode::UnknownProject {
+                    project: app.clone(),
+                }
+            } else {
+                continue;
+            };
+
+            tracing::warn!(app = ?app, code = code.code(), "a compose batch was refused");
+
+            return Err(code.into());
         }
 
-        Ok(count)
+        Ok(())
+    }
+
+    /// The apps installed, by the links of `app-installed/`: none before the first.
+    async fn installed(&self) -> quoll::Result<HashSet<String>> {
+        let unreadable = |error: std::io::Error| Failure::logged(ErrorCode::AppsUnreadable, &error);
+        let mut entries = match tokio::fs::read_dir(self.data_dir.installed()).await {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(HashSet::new()),
+            Err(error) => return Err(unreadable(error)),
+        };
+        let mut installed = HashSet::new();
+
+        while let Some(entry) = entries.next_entry().await.map_err(unreadable)? {
+            // A name that is not UTF-8 is no app's, as an app's id is ASCII.
+            if let Ok(name) = entry.file_name().into_string() {
+                installed.insert(name);
+            }
+        }
+
+        Ok(installed)
     }
 
     /// The values a batch's output may echo, which the page must not see: those of `.env.global`, as it is when the

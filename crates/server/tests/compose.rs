@@ -55,6 +55,15 @@ if [ "$project" = "${HANGAR_TEST_FAIL:-none}" ]; then echo "$project: no such im
 echo " Container $project-web-1  Started" >&2
 "#;
 
+/// The fake `git`: it holds a sync of the store while `HANGAR_TEST_HOLD` is `git`, until `HANGAR_TEST_RELEASE` exists,
+/// then fails, as git does without the network.
+const FAKE_GIT: &str = r#"#!/bin/sh
+if [ "${HANGAR_TEST_HOLD:-none}" = "git" ]; then
+  while [ ! -e "$HANGAR_TEST_RELEASE" ]; do sleep 0.01; done
+fi
+exit 1
+"#;
+
 /// A daemon of no container, which counts how many times it listed them; its events never come.
 #[derive(Default)]
 struct FakeDaemon {
@@ -99,7 +108,7 @@ struct Fixture {
 struct Behaviour {
     /// The app it fails on.
     fail: Option<&'static str>,
-    /// The app it holds until released.
+    /// The app it holds until released, or `git`, for a sync of the store.
     hold: Option<&'static str>,
     /// The value it echoes, which `.env.global` holds.
     secret: Option<&'static str>,
@@ -154,9 +163,11 @@ impl Fixture {
         )
         .expect("written");
         fs::create_dir_all(&bin).expect("created");
-        fs::write(bin.join("docker"), FAKE_DOCKER).expect("written");
-        fs::set_permissions(bin.join("docker"), fs::Permissions::from_mode(0o755))
-            .expect("made executable");
+        for (name, script) in [("docker", FAKE_DOCKER), ("git", FAKE_GIT)] {
+            fs::write(bin.join(name), script).expect("written");
+            fs::set_permissions(bin.join(name), fs::Permissions::from_mode(0o755))
+                .expect("made executable");
+        }
 
         Self {
             log: dir.path().join("docker.log"),
@@ -274,6 +285,19 @@ impl Server {
             }))
             .build::<Api>(&self.url)
             .expect("a client")
+    }
+
+    /// `GET path`'s status and JSON.
+    async fn get(&self, path: &str) -> (StatusCode, Value) {
+        let response = reqwest::Client::new()
+            .get(format!("{}{path}", self.url))
+            .header(COOKIE, &self.cookie)
+            .send()
+            .await
+            .expect("the server answers");
+        let status = response.status();
+
+        (status, response.json().await.expect("JSON"))
     }
 
     /// `POST path`, from the page's origin, its status and JSON.
@@ -558,15 +582,11 @@ async fn refuses_a_batch_with_an_app_it_cannot_run_and_runs_none() {
     assert_eq!(problem["type"], "/problems/compose.no_apps");
 
     let (status, problem) = server
-        .refused(&json!({ "action": restart, "apps": ["alpha", "gamma", "delta", "alpha"] }))
+        .refused(&json!({ "action": restart, "apps": ["alpha", "gamma", "delta"] }))
         .await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST, "three apps, two installed");
-    assert_eq!(problem["type"], "/problems/compose.too_many_apps");
-    assert_eq!(
-        (problem["apps"].clone(), problem["installed"].clone()),
-        (json!(3), json!(2))
-    );
+    assert_eq!(status, StatusCode::NOT_FOUND, "whatever else is installed");
+    assert_eq!(problem["project"], "delta");
 
     assert!(fixture.docker_calls().is_empty(), "docker never ran");
 }
@@ -816,4 +836,68 @@ async fn keeps_the_last_20_batches_that_ended() -> quoll::Result<()> {
 
     assert_eq!(ids, (2..=21).collect::<Vec<_>>(), "the first is forgotten");
     Ok(())
+}
+
+#[tokio::test]
+async fn refuses_a_sync_of_the_store_while_a_batch_runs() -> quoll::Result<()> {
+    let fixture = Fixture::new();
+    let (_, docker_host) = FakeDaemon::serve().await;
+    let behaviour = Behaviour {
+        hold: Some("alpha"),
+        ..Behaviour::default()
+    };
+    let server = fixture.serve(&docker_host, behaviour).await;
+    let running = server
+        .api()
+        .compose()
+        .run(&request(update(), &["alpha"]))
+        .await?;
+
+    let (status, problem) = server.post("/api/store/sync").await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(problem["type"], "/problems/store.batch_running");
+    assert_eq!(problem["apps"], json!(["alpha"]));
+
+    fixture.release();
+    all(running).await;
+
+    let (status, _) = server.post("/api/store/sync").await;
+
+    assert_eq!(status, StatusCode::ACCEPTED, "the batch has ended");
+    Ok(())
+}
+
+#[tokio::test]
+async fn refuses_a_batch_while_a_sync_of_the_store_runs() {
+    let fixture = Fixture::new();
+    let (_, docker_host) = FakeDaemon::serve().await;
+    let behaviour = Behaviour {
+        hold: Some("git"),
+        ..Behaviour::default()
+    };
+    let server = fixture.serve(&docker_host, behaviour).await;
+
+    let (status, _) = server.post("/api/store/sync").await;
+
+    assert_eq!(status, StatusCode::ACCEPTED);
+
+    let (status, problem) = server
+        .refused(&json!({ "action": { "operation": "restart" }, "apps": ["gamma", "alpha"] }))
+        .await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(problem["type"], "/problems/compose.app_busy");
+    assert_eq!(problem["app"], "alpha");
+
+    fixture.release();
+
+    within("the end of the sync", async {
+        while server.get("/api/store").await.1["sync"]["state"] == "running" {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await;
+
+    assert!(fixture.docker_calls().is_empty(), "the batch never ran");
 }

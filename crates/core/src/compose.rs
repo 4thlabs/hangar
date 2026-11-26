@@ -76,6 +76,19 @@ impl<R: CommandRunner> Compose<R> {
         Self { data_dir, runner }
     }
 
+    /// Whether compose takes `name` as a project, which Hangar gives an app's: lowercase letters, digits, `_` and `-`,
+    /// starting with a letter or a digit. A store app may have another id, as `llama.cpp`, that compose cannot run.
+    ///
+    /// ```
+    /// use hangar_core::{Compose, Runtime};
+    ///
+    /// assert!(Compose::<Runtime>::is_project_name("sync-in"));
+    /// assert!(!Compose::<Runtime>::is_project_name("llama.cpp"));
+    /// ```
+    pub fn is_project_name(name: &str) -> bool {
+        ProjectName::is_valid(name)
+    }
+
     /// Runs `command` on the installed app `app`, its output going where `output` says, and waits for its end.
     ///
     /// # Errors

@@ -210,13 +210,15 @@ check (#176), the backups with #177, and a container's console with the terminal
 
 **Apps → Up**, **Restart** and **Down** run `docker compose up -d`, with `--pull always` and `--force-recreate` as Up's
 menu ticks them, `restart` or `down` on the apps selected, or on an app from its page, as a batch: `POST
-/api/docker/compose` checks every app first, a 400 for a name compose does not take or more apps than are installed, a
-404 for an app not installed, and none runs, then runs them one at a time in the order of `hangar.yml`, `down` in
+/api/docker/compose` checks every app first, a 400 for a name compose does not take, a 404 for an app not installed,
+and none runs, then runs them one at a time in the order of `hangar.yml`, `down` in
 reverse, each once, carrying on after an app that fails. Anything but a plain Up asks first. The batch runs on the
 server apart from the request: closing the panel, or the page, stops nothing. A batch holds its apps until it ends, as
 an install or an uninstall holds its own: another batch, an install or an uninstall of one of them is refused with a
 409, `compose.app_busy`, so that an uninstall's `down` and its unlink never let a batch's `up` in between, and the
-pages disable the buttons of an app a batch holds, whichever page started it. Its answer is its output as it comes:
+pages disable the buttons of an app a batch holds, whichever page started it. A sync of the store, which pulls and
+links the files compose reads, is refused while a batch runs, `store.batch_running` naming its apps, and a batch while
+a sync runs, `compose.app_busy`. Its answer is its output as it comes:
 the `batch`, its apps in the order they run, a `started` per app, compose's lines, its `finished` with the app's
 outcome, then an `end` with the report; the panel shows it app by app. A line goes out with the values of
 `.env.global`, as it is when the batch starts, and of the server's environment, of 4 characters or more, replaced by

@@ -75,7 +75,7 @@ export class ErrorMessage {
     "docker.unknown_project": ["project"],
     "docker.invalid_project": ["project"],
     "docker.unknown_container": ["project", "container"],
-    "compose.too_many_apps": ["apps", "installed"],
+    "store.batch_running": ["apps"],
     "compose.app_busy": ["app"],
     "compose.unchecked": ["command"],
     "compose.failed": ["app", "command"],
@@ -132,8 +132,8 @@ export class ErrorMessage {
       `${project} is not a compose project name: lowercase letters, digits, \`_\` and \`-\`, starting with a letter or a digit.`,
     "docker.unknown_container": ({ project, container }) => `The app ${project} has no container ${container}.`,
     "compose.no_apps": () => "A compose command needs at least one app.",
-    "compose.too_many_apps": ({ apps, installed }) =>
-      `A compose command cannot run on more apps than are installed: ${apps} asked, ${installed} installed.`,
+    "store.batch_running": ({ apps }) =>
+      `Compose commands run on ${apps.join(", ")}: sync the store once they have ended.`,
     "compose.app_busy": ({ app }) => `Another command runs on ${app}: try again once it has ended.`,
     "compose.unchecked": ({ command }) => ErrorMessage.hinted(`The batch of ${command} could not be checked.`),
     "compose.failed": ({ app, command }) => ErrorMessage.hinted(`${command} failed on ${app}.`),
