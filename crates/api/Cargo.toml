@@ -12,6 +12,8 @@ server = ["quoll/server"]
 client = ["quoll/client"]
 
 [dependencies]
+# The request a scheme of the contract's own reads its cookies from.
+http.workspace = true
 quoll.workspace = true
 schemars = "1"
 serde.workspace = true

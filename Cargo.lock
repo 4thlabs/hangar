@@ -1081,6 +1081,7 @@ dependencies = [
 name = "hangar-api"
 version = "0.1.0"
 dependencies = [
+ "http",
  "quoll",
  "schemars 1.2.3",
  "serde",

@@ -3,15 +3,15 @@
 use std::time::SystemTime;
 
 use hangar_api::{
-    AuthServer, Credentials, OidcCallback, OidcFlow, Session as SessionScheme, SessionUser,
-    SignInOptions,
+    AuthServer, CookieCredential, Credentials, OidcCallback, OidcFlow, Session as SessionScheme,
+    SessionUser, SignInOptions,
 };
 use hangar_core::User;
 use http::header::{LOCATION, SET_COOKIE};
 use quoll::{Authenticate, Error, Response, Result, Status};
 
 use super::SignedIn;
-use super::cookies::Cookies;
+use super::cookies::ServerCookie;
 use super::oidc::Flow;
 use super::session::Session;
 use crate::App;
@@ -63,9 +63,11 @@ impl App {
     }
 
     /// The redirect of a sign-in through the provider that `refusal` ends, its flow's cookie cleared.
-    fn refused(refusal: Refusal) -> Response<()> {
-        Self::redirect(&format!("/login?error={}", refusal.code()))
-            .header(SET_COOKIE, Cookies::cleared(Flow::COOKIE))
+    fn refused(&self, refusal: Refusal) -> Response<()> {
+        Self::redirect(&format!("/login?error={}", refusal.code())).header(
+            SET_COOKIE,
+            self.auth.cookies.cleared(ServerCookie::OidcFlow),
+        )
     }
 }
 
@@ -83,7 +85,7 @@ impl AuthServer for App {
     }
 
     async fn logout(&self) -> Result<Response<()>> {
-        Ok(Response::new(()).header(SET_COOKIE, Cookies::cleared(Session::COOKIE)))
+        Ok(Response::new(()).header(SET_COOKIE, self.auth.cookies.cleared(ServerCookie::Session)))
     }
 
     async fn session(&self, signed_in: &SignedIn) -> Result<Response<SessionUser>> {
@@ -117,7 +119,7 @@ impl AuthServer for App {
                     error.describe()
                 );
 
-                Ok(Self::refused(Refusal::Unavailable))
+                Ok(self.refused(Refusal::Unavailable))
             }
         }
     }
@@ -135,13 +137,13 @@ impl AuthServer for App {
             .and_then(|cookie| cookie.0.as_ref())
             .filter(|flow| !flow.has_expired(now));
         let Some(flow) = flow else {
-            return Ok(Self::refused(Refusal::Expired));
+            return Ok(self.refused(Refusal::Expired));
         };
 
         if let Some(error) = &callback.error {
             tracing::info!("the OpenID Connect provider refused the sign-in: {error}");
 
-            return Ok(Self::refused(Refusal::Denied));
+            return Ok(self.refused(Refusal::Denied));
         }
 
         let is_this_flow = callback
@@ -149,14 +151,14 @@ impl AuthServer for App {
             .as_deref()
             .is_some_and(|state| flow.has_state(state));
         let Some(code) = callback.code.filter(|_| is_this_flow) else {
-            return Ok(Self::refused(Refusal::Expired));
+            return Ok(self.refused(Refusal::Expired));
         };
         let identity = match oidc.finish(flow, code).await {
             Ok(identity) => identity,
             Err(error) => {
                 tracing::warn!("the OpenID Connect sign-in failed: {}", error.describe());
 
-                return Ok(Self::refused(Refusal::Unavailable));
+                return Ok(self.refused(Refusal::Unavailable));
             }
         };
         let Some(user) = self.auth.referenced(&identity).await else {
@@ -166,12 +168,15 @@ impl AuthServer for App {
                 "the OpenID Connect provider signed in someone hangar.yml does not reference"
             );
 
-            return Ok(Self::refused(Refusal::NotAUser));
+            return Ok(self.refused(Refusal::NotAUser));
         };
         let session = Session::new(&user, now).cookie(&self.auth.cookies, now);
 
         Ok(Self::redirect("/")
-            .header(SET_COOKIE, Cookies::cleared(Flow::COOKIE))
+            .header(
+                SET_COOKIE,
+                self.auth.cookies.cleared(ServerCookie::OidcFlow),
+            )
             .header(SET_COOKIE, session))
     }
 }
@@ -179,15 +184,15 @@ impl AuthServer for App {
 impl Authenticate<SessionScheme> for App {
     type Caller = SignedIn;
 
-    async fn authenticate(&self, sealed: String) -> Result<SignedIn> {
-        self.auth.signed_in(&sealed).await
+    async fn authenticate(&self, cookie: CookieCredential) -> Result<SignedIn> {
+        self.auth.signed_in(&cookie).await
     }
 }
 
 impl Authenticate<OidcFlow> for App {
     type Caller = FlowCookie;
 
-    async fn authenticate(&self, sealed: String) -> Result<FlowCookie> {
-        Ok(FlowCookie(Flow::open(&self.auth.cookies, &sealed)))
+    async fn authenticate(&self, cookie: CookieCredential) -> Result<FlowCookie> {
+        Ok(FlowCookie(Flow::open(&self.auth.cookies, &cookie)))
     }
 }

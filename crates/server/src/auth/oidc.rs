@@ -6,6 +6,7 @@ mod http_client;
 use std::error::Error as StdError;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use hangar_api::CookieCredential;
 use openidconnect::core::{
     CoreAuthenticationFlow, CoreClient, CoreClientAuthMethod, CoreJwsSigningAlgorithm,
     CoreProviderMetadata,
@@ -19,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 use url::Url;
 
-use super::cookies::Cookies;
+use super::cookies::{Cookies, ServerCookie};
 use crate::OidcSettings;
 use http_client::HttpClient;
 
@@ -108,20 +109,17 @@ pub(crate) struct Flow {
 }
 
 impl Flow {
-    /// The cookie of the scheme `OidcFlow` of the contract.
-    pub(crate) const COOKIE: &str = "__Host-hangar-oidc";
-
     /// How long the user has to sign in at the provider.
     const LIFETIME: Duration = Duration::from_secs(10 * 60);
 
     /// The `Set-Cookie` of the flow.
     pub(crate) fn cookie(&self, cookies: &Cookies) -> String {
-        cookies.private(Self::COOKIE, self, Self::LIFETIME)
+        cookies.private(ServerCookie::OidcFlow, self, Self::LIFETIME)
     }
 
-    /// The flow the cookie of value `sealed` holds, if this key encrypted it.
-    pub(crate) fn open(cookies: &Cookies, sealed: &str) -> Option<Self> {
-        cookies.open_private(Self::COOKIE, sealed)
+    /// The flow the cookie of `credential` holds, if this key encrypted it.
+    pub(crate) fn open(cookies: &Cookies, credential: &CookieCredential) -> Option<Self> {
+        cookies.open_private(ServerCookie::OidcFlow, credential)
     }
 
     /// Whether the flow has expired at `now`.
@@ -266,6 +264,8 @@ impl Oidc {
 mod tests {
     use std::time::{Duration, SystemTime};
 
+    use hangar_api::CookieCredential;
+
     use super::{Cookies, Flow};
 
     fn flow(now: SystemTime) -> Flow {
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn keeps_the_flow_encrypted_for_ten_minutes() {
-        let cookies = Cookies::new("0123456789abcdef0123456789abcdef");
+        let cookies = Cookies::new("0123456789abcdef0123456789abcdef", true);
         let now = SystemTime::now();
         let set_cookie = flow(now).cookie(&cookies);
         let cookie = cookie::Cookie::parse(set_cookie).expect("a cookie");
@@ -288,7 +288,11 @@ mod tests {
         assert_eq!(cookie.max_age(), Some(cookie::time::Duration::minutes(10)));
         assert!(!cookie.value().contains("verifier"));
 
-        let opened = Flow::open(&cookies, cookie.value()).expect("opened");
+        let credential = CookieCredential {
+            https: Some(cookie.value().to_owned()),
+            http: None,
+        };
+        let opened = Flow::open(&cookies, &credential).expect("opened");
 
         assert_eq!(opened, flow(now));
         assert!(!opened.has_expired(now + Duration::from_secs(9 * 60)));

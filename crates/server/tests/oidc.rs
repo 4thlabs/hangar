@@ -37,7 +37,7 @@ use url::Url;
 const CLIENT_ID: &str = "hangar";
 const CLIENT_SECRET: &str = "the client's secret";
 const URL: &str = "https://hangar.example.com";
-const CALLBACK: &str = "https://hangar.example.com/api/auth/oidc/callback";
+const CALLBACK_PATH: &str = "/api/auth/oidc/callback";
 
 /// Who the provider says signs in with a code.
 #[derive(Debug, Clone)]
@@ -53,6 +53,7 @@ struct Issued {
     grant: Grant,
     nonce: String,
     challenge: String,
+    redirect_uri: String,
 }
 
 /// The fake provider: its issuer, its key, and the codes it handed out.
@@ -107,7 +108,11 @@ impl Provider {
         let query: HashMap<String, String> = authorize.query_pairs().into_owned().collect();
 
         assert_eq!(query["client_id"], CLIENT_ID);
-        assert_eq!(query["redirect_uri"], CALLBACK);
+        assert!(
+            query["redirect_uri"].ends_with(CALLBACK_PATH),
+            "{}",
+            query["redirect_uri"]
+        );
         assert_eq!(query["response_type"], "code");
         assert_eq!(query["code_challenge_method"], "S256");
         assert!(query["scope"].split(' ').any(|scope| scope == "openid"));
@@ -121,6 +126,7 @@ impl Provider {
                     grant,
                     nonce: query["nonce"].clone(),
                     challenge: query["code_challenge"].clone(),
+                    redirect_uri: query["redirect_uri"].clone(),
                 },
             );
     }
@@ -174,7 +180,7 @@ impl Provider {
         };
         let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(request.code_verifier.as_bytes()));
 
-        if challenge != issued.challenge || request.redirect_uri != CALLBACK {
+        if challenge != issued.challenge || request.redirect_uri != issued.redirect_uri {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(json!({ "error": "invalid_grant" })),
@@ -239,13 +245,20 @@ fn data_dir() -> tempfile::TempDir {
 
 /// Serves the server of the data directory at `root`, signing in through `provider`, on port 0.
 async fn serve(root: &Path, provider: &Provider) -> String {
+    serve_at(root, provider, URL).await
+}
+
+/// Serves the server of the data directory at `root`, its page at `page_url`, signing in through `provider`, on
+/// port 0.
+async fn serve_at(root: &Path, provider: &Provider, page_url: &str) -> String {
+    let page_url = page_url.to_owned();
     let root = root.to_str().expect("a UTF-8 path").to_owned();
     let issuer = provider.issuer.clone();
     let settings = Settings::read(|name| match name {
         "HANGAR_DATA_DIR" => Some(root.clone()),
         "HANGAR_STORE_URL" => Some("https://example.com/store.git".to_owned()),
         "DOMAIN" => Some("example.com".to_owned()),
-        "HANGAR_URL" => Some(URL.to_owned()),
+        "HANGAR_URL" => Some(page_url.clone()),
         "HANGAR_SECRET" => Some("0123456789abcdef0123456789abcdef".to_owned()),
         "HANGAR_OIDC_ISSUER" => Some(issuer.clone()),
         "HANGAR_OIDC_CLIENT_ID" => Some(CLIENT_ID.to_owned()),
@@ -296,7 +309,9 @@ async fn start(url: &str) -> (Url, String) {
 
     assert_eq!(started.status(), StatusCode::SEE_OTHER);
 
-    let flow = cookie(&started, "__Host-hangar-oidc").expect("the flow's cookie");
+    let flow = cookie(&started, "__Host-hangar-oidc")
+        .or_else(|| cookie(&started, "hangar-oidc"))
+        .expect("the flow's cookie");
     let authorize = Url::parse(&location(&started)).expect("a URL");
 
     (authorize, flow)
@@ -520,4 +535,53 @@ async fn a_provider_that_cannot_be_reached_sends_the_browser_back_to_the_login_p
 
     assert_eq!(location(&started), "/login?error=unavailable");
     assert_eq!(options, json!({ "oidc": true }));
+}
+
+#[tokio::test]
+async fn over_plain_http_the_cookies_are_neither_secure_nor_prefixed() {
+    let provider = Provider::serve().await;
+    let dir = data_dir();
+    let url = serve_at(dir.path(), &provider, "http://hangar.lan:3010").await;
+    let (authorize, flow) = start(&url).await;
+
+    assert!(flow.starts_with("hangar-oidc="), "{flow}");
+
+    provider.hand_out(
+        "code-ana",
+        &authorize,
+        Grant {
+            subject: "ana-at-the-provider",
+            email: "ana@example.com",
+            email_verified: true,
+        },
+    );
+
+    let signed_in = callback(&url, "code-ana", &state(&authorize), &flow).await;
+    let set_cookies: Vec<&str> = signed_in
+        .headers()
+        .get_all(SET_COOKIE)
+        .iter()
+        .map(|value| value.to_str().expect("text"))
+        .collect();
+
+    assert_eq!(location(&signed_in), "/");
+    assert!(
+        set_cookies
+            .iter()
+            .all(|set_cookie| !set_cookie.contains("Secure")),
+        "{set_cookies:?}"
+    );
+
+    let session = cookie(&signed_in, "hangar-session").expect("the session's cookie");
+    let user: Value = http()
+        .get(format!("{url}/api/auth/session"))
+        .header(COOKIE, session)
+        .send()
+        .await
+        .expect("the server answers")
+        .json()
+        .await
+        .expect("JSON");
+
+    assert_eq!(user, json!({ "name": "Ana", "email": "ana@example.com" }));
 }

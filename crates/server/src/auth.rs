@@ -14,7 +14,7 @@ mod users;
 
 use std::time::{Duration, Instant, SystemTime};
 
-use hangar_api::Credentials;
+use hangar_api::{CookieCredential, Credentials};
 use hangar_core::{PasswordHash, Runtime, Store, User};
 use http::StatusCode;
 use quoll::Error;
@@ -67,7 +67,7 @@ impl Auth {
         );
 
         Self {
-            cookies: Cookies::new(settings.auth.secret.expose()),
+            cookies: Cookies::new(settings.auth.secret.expose(), settings.auth.is_https()),
             users: Users::new(store),
             failures: FailedSignIns::default(),
             checks: Semaphore::new(Self::CONCURRENT_CHECKS),
@@ -140,9 +140,9 @@ impl Auth {
         Ok((user, cookie))
     }
 
-    /// The session the cookie of value `sealed` holds, for a user `hangar.yml` still lists with the same credentials.
-    pub(crate) async fn signed_in(&self, sealed: &str) -> quoll::Result<SignedIn> {
-        let Some(session) = Session::open(&self.cookies, sealed, SystemTime::now()) else {
+    /// The session the cookie of `credential` holds, for a user `hangar.yml` still lists with the same credentials.
+    pub(crate) async fn signed_in(&self, credential: &CookieCredential) -> quoll::Result<SignedIn> {
+        let Some(session) = Session::open(&self.cookies, credential, SystemTime::now()) else {
             return Err(Error::unauthorized(
                 "the session is not valid or has expired: sign in again",
             ));
@@ -218,23 +218,5 @@ impl std::fmt::Debug for Auth {
             .field("users", &self.users)
             .field("oidc", &self.oidc)
             .finish_non_exhaustive()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::Value;
-
-    use super::Session;
-    use super::oidc::Flow;
-
-    #[test]
-    fn reads_the_cookies_the_schemes_of_the_contract_name() {
-        let document: Value = serde_json::from_str(&hangar_api::Api::openapi().to_json_pretty())
-            .expect("the document is JSON");
-        let schemes = &document["components"]["securitySchemes"];
-
-        assert_eq!(schemes["Session"]["name"], Session::COOKIE);
-        assert_eq!(schemes["OidcFlow"]["name"], Flow::COOKIE);
     }
 }
