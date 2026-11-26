@@ -6,6 +6,7 @@ mod backrest;
 mod beszel;
 mod frigate;
 mod gluetun;
+mod miniflux;
 
 use std::fs;
 use std::path::PathBuf;

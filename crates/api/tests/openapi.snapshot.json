@@ -2886,6 +2886,69 @@
           }
         ]
       },
+      "MinifluxEntries": {
+        "description": "Miniflux's newest entries, and how many are unread.",
+        "properties": {
+          "entries": {
+            "description": "The newest entries, read or not, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/MinifluxEntry"
+            },
+            "type": "array"
+          },
+          "unread": {
+            "description": "How many entries are unread, in every feed.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unread",
+          "entries"
+        ],
+        "type": "object"
+      },
+      "MinifluxEntry": {
+        "description": "An entry of a feed of Miniflux's.",
+        "properties": {
+          "feedTitle": {
+            "description": "The title of its feed.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Its id.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "isUnread": {
+            "description": "Whether it is unread.",
+            "type": "boolean"
+          },
+          "publishedAt": {
+            "description": "When it was published, in RFC 3339, as Miniflux writes it.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Its title.",
+            "type": "string"
+          },
+          "url": {
+            "description": "The page it links to.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "url",
+          "feedTitle",
+          "publishedAt",
+          "isUnread"
+        ],
+        "type": "object"
+      },
       "NewApp": {
         "description": "A new app: its id, and its `compose.yml`.",
         "properties": {
@@ -3953,6 +4016,23 @@
               },
               "type": {
                 "const": "gluetun-vpn-status",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "data"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`miniflux-entries`.",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/MinifluxEntries"
+              },
+              "type": {
+                "const": "miniflux-entries",
                 "type": "string"
               }
             },

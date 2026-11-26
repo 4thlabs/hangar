@@ -8,6 +8,7 @@ mod cache;
 mod error;
 mod frigate;
 mod gluetun;
+mod miniflux;
 mod placement;
 mod routes;
 mod service;
@@ -215,6 +216,13 @@ impl Loader {
                 gluetun::load(&self.http, &service)
                     .await
                     .map(WidgetData::GluetunVpnStatus)
+            }
+            WidgetKind::MinifluxEntries { .. } => {
+                let service = self.service(&kind).await?;
+
+                miniflux::load(&self.http, &service)
+                    .await
+                    .map(WidgetData::MinifluxEntries)
             }
             other => Err(LoadError::refused(format!(
                 "the {} widget loads nothing",
