@@ -51,6 +51,10 @@ pub(crate) enum Failure {
     /// A command run as it is, as `docker compose ls`, failed.
     #[error(transparent)]
     Run(#[from] RunError),
+
+    /// Docker failed a compose command, and has no `compose` command: its plugin is not installed.
+    #[error("docker compose is not installed")]
+    NoCompose(Box<Failure>),
 }
 
 impl Failure {
@@ -62,6 +66,7 @@ impl Failure {
             Self::Store(StoreError::Git { source, .. }) => source.exit_code(),
             Self::Compose(error) => Self::compose_exit_code(error),
             Self::Batch(error) => Self::compose_exit_code(error),
+            Self::NoCompose(failure) => failure.exit_code(),
             _ => 1,
         }
     }
@@ -73,10 +78,20 @@ impl Failure {
         Self::exit(self.exit_code())
     }
 
+    /// Whether a program the command ran exited with an error code, as docker does when it has no `compose`.
+    pub(crate) fn has_exited_with_error(&self) -> bool {
+        self.causes()
+            .any(|cause| matches!(cause.downcast_ref(), Some(RunError::Failed { .. })))
+    }
+
     /// What the binary says of the failure: the failure, then its causes. A compose that exited with a code says
     /// which app failed and the code alone, as its stderr went with a batch's output, or on the terminal it inherited,
     /// already; any other cause, as a `docker` that does not start, is said in full, as it was printed nowhere.
     fn message(&self) -> String {
+        if let Self::NoCompose(failure) = self {
+            return format!("{}: {self}", failure.message());
+        }
+
         let compose = match self {
             Self::Compose(error) => Some(error),
             Self::Batch(error) => Some(error.as_ref()),
@@ -93,16 +108,41 @@ impl Failure {
             return format!("{error}, exit {}", self.exit_code());
         }
 
-        let mut message = self.to_string();
-        let mut source = self.source();
+        let mut messages = Vec::new();
 
-        while let Some(cause) = source {
-            message.push_str(": ");
-            message.push_str(&cause.to_string());
-            source = cause.source();
+        for cause in self.causes() {
+            if let Some(program) = Self::missing_program(cause) {
+                messages.push(format!("{program} is not installed, or not on the PATH"));
+                break;
+            }
+
+            messages.push(cause.to_string());
         }
 
-        message
+        messages.join(": ")
+    }
+
+    /// The failure, then its causes. A run's failure is its own first cause: being transparent, it would skip itself.
+    fn causes(&self) -> impl Iterator<Item = &(dyn Error + 'static)> {
+        let failure: &(dyn Error + 'static) = match self {
+            Self::Run(error) => error,
+            _ => self,
+        };
+
+        std::iter::successors(Some(failure), |&cause| cause.source())
+    }
+
+    /// The program `cause` could not start because the system found no file of that name, in place of the system's
+    /// own "No such file or directory": a `docker` or a `git` that is not installed.
+    fn missing_program<'a>(cause: &'a (dyn Error + 'static)) -> Option<&'a str> {
+        match cause.downcast_ref() {
+            Some(RunError::Spawn { program, source })
+                if source.kind() == io::ErrorKind::NotFound =>
+            {
+                Some(program)
+            }
+            _ => None,
+        }
     }
 
     /// The exit code `code` stands for: a code a process cannot exit with is 1.
@@ -156,22 +196,66 @@ mod tests {
         assert_eq!(Failure::NoTarget.exit_code(), 1);
     }
 
+    fn spawn_error(kind: io::ErrorKind) -> RunError {
+        RunError::Spawn {
+            program: "docker".into(),
+            source: io::Error::from(kind),
+        }
+    }
+
     #[test]
     fn says_why_compose_did_not_start() {
         let batch = Failure::Batch(Arc::new(ComposeError::Failed {
             app: "jellyfin".into(),
             command: ComposeCommand::Restart,
-            source: RunError::Spawn {
-                program: "docker".into(),
-                source: io::Error::from(io::ErrorKind::NotFound),
-            },
+            source: spawn_error(io::ErrorKind::PermissionDenied),
         }));
 
         assert_eq!(
             batch.message(),
-            "docker compose restart failed on jellyfin: could not run docker: entity not found"
+            "docker compose restart failed on jellyfin: could not run docker: permission denied"
         );
         assert_eq!(batch.exit_code(), 1);
+    }
+
+    #[test]
+    fn says_that_a_program_it_does_not_find_is_not_installed() {
+        let batch = Failure::Batch(Arc::new(ComposeError::Failed {
+            app: "jellyfin".into(),
+            command: ComposeCommand::Restart,
+            source: spawn_error(io::ErrorKind::NotFound),
+        }));
+        let list = Failure::Run(spawn_error(io::ErrorKind::NotFound));
+
+        assert_eq!(
+            batch.message(),
+            "docker compose restart failed on jellyfin: docker is not installed, or not on the PATH"
+        );
+        assert_eq!(
+            list.message(),
+            "docker is not installed, or not on the PATH"
+        );
+        assert_eq!(list.exit_code(), 1);
+    }
+
+    #[test]
+    fn says_that_compose_is_not_installed_after_its_failure() {
+        let failure = Failure::Compose(ComposeError::Failed {
+            app: "jellyfin".into(),
+            command: ComposeCommand::Restart,
+            source: failed(1),
+        });
+
+        assert!(failure.has_exited_with_error());
+
+        let no_compose = Failure::NoCompose(Box::new(failure));
+
+        assert_eq!(
+            no_compose.message(),
+            "docker compose restart failed on jellyfin, exit 1: docker compose is not installed"
+        );
+        assert_eq!(no_compose.exit_code(), 1);
+        assert!(!Failure::Run(spawn_error(io::ErrorKind::NotFound)).has_exited_with_error());
     }
 
     #[test]

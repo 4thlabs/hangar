@@ -15,14 +15,15 @@ use nix::sys::signal::{Signal, killpg};
 use nix::unistd::Pid;
 use tempfile::TempDir;
 
-/// The fake `docker`: it logs its arguments, one call per line, and its environment, then prints `<project> done`. It
-/// fails with code 3 on the project `HANGAR_TEST_FAIL` names, prints its stdin on `HANGAR_TEST_STDIN`'s, and prints
+/// The fake `docker`: it logs its arguments, one call per line, and its environment, then prints `<project> done`. With
+/// `HANGAR_TEST_NO_COMPOSE` set, it has no `compose` command and fails every call as docker does. It fails with code 3 on the project `HANGAR_TEST_FAIL` names, prints its stdin on `HANGAR_TEST_STDIN`'s, and prints
 /// `<project> started` then sleeps on `HANGAR_TEST_HANG`'s, on `HANGAR_TEST_GRACEFUL`'s until SIGINT, on which it
 /// exits with 0, on `HANGAR_TEST_DEAF`'s with SIGINT ignored, and on `HANGAR_TEST_STUBBORN`'s with SIGTERM ignored
 /// too.
 const FAKE_DOCKER: &str = r#"#!/bin/sh
 echo "$*" >> "$HANGAR_TEST_LOG"
 env > "$HANGAR_TEST_LOG.env"
+if [ -n "$HANGAR_TEST_NO_COMPOSE" ]; then echo "docker: unknown command: docker $1" >&2; exit 1; fi
 project=""
 previous=""
 for arg in "$@"; do
@@ -272,6 +273,73 @@ fn stops_at_the_first_failure_and_exits_with_its_code() {
         !stderr(&output).contains("no such image"),
         "compose's stderr is not repeated: {}",
         stderr(&output)
+    );
+    assert!(
+        !stderr(&output).contains("not installed"),
+        "compose runs: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn says_that_compose_is_not_installed_once_docker_fails_without_it() {
+    let fixture = Fixture::new();
+
+    let up = run(fixture
+        .hangar(&["store", "up"])
+        .env("HANGAR_TEST_NO_COMPOSE", "1"));
+    let list = run(fixture
+        .hangar(&["store", "ls"])
+        .env("HANGAR_TEST_NO_COMPOSE", "1"));
+
+    assert_eq!(up.status.code(), Some(1));
+    assert!(
+        stderr(&up).contains(
+            "docker compose up -d failed on traefik, exit 1: docker compose is not installed"
+        ),
+        "{}",
+        stderr(&up)
+    );
+    assert_eq!(list.status.code(), Some(1));
+    assert!(
+        stderr(&list).contains("docker exited with code 1: docker compose is not installed"),
+        "{}",
+        stderr(&list)
+    );
+    assert_eq!(
+        fixture.calls().last().map(String::as_str),
+        Some("compose version")
+    );
+}
+
+#[test]
+fn says_that_docker_or_git_is_not_installed_when_it_is_not_on_the_path() {
+    let fixture = Fixture::new();
+    let empty = fixture.dir.path().join("empty");
+
+    fs::create_dir(&empty).expect("the empty folder can be made");
+
+    let up = run(fixture.hangar(&["store", "up"]).env("PATH", &empty));
+    let install = run(fixture
+        .bare(&["store", "install"])
+        .env("PATH", &empty)
+        .env("HANGAR_DATA_DIR", fixture.dir.path().join("fresh"))
+        .env("HANGAR_STORE_URL", "https://example.com/store.git"));
+
+    assert_eq!(up.status.code(), Some(1));
+    assert!(
+        stderr(&up).contains(
+            "docker compose up -d failed on traefik: docker is not installed, or not on the PATH"
+        ),
+        "{}",
+        stderr(&up)
+    );
+    assert_eq!(install.status.code(), Some(1));
+    assert!(
+        stderr(&install)
+            .contains("could not clone the store: git is not installed, or not on the PATH"),
+        "{}",
+        stderr(&install)
     );
 }
 
