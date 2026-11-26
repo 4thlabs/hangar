@@ -299,6 +299,68 @@ describe("/", () => {
     await waitFor(() => expect(calls(fetch, "/api/docker/overview")).toBeGreaterThan(read));
   });
 
+  it("shows the Docker card again once the daemon's changes say its host changed, after it failed", async () => {
+    let isDaemonDown = true;
+
+    const fetch = serve({
+      "GET /api/widgets": () => Response.json([placements[1]]),
+      // A refusal that is not tried again, so that the test waits for no retry.
+      "GET /api/docker/overview": () =>
+        isDaemonDown
+          ? coded(409, "docker.unavailable", "the Docker daemon is not reachable.")
+          : Response.json(overview),
+    });
+
+    renderAt("/");
+
+    expect(await screen.findByText("Local is unavailable")).toBeDefined();
+
+    const changes = await waitFor(() => {
+      const source = FakeEventSource.of("/api/docker/changes");
+
+      expect(source).toBeDefined();
+
+      return source as FakeEventSource;
+    });
+
+    // The feed opens while the daemon is still down: its catch-up read fails again.
+    act(() => changes.open());
+    await waitFor(() => expect(calls(fetch, "/api/docker/overview")).toBe(2));
+
+    isDaemonDown = false;
+    act(() => changes.send("overview"));
+
+    expect(await screen.findByText("Docker 29.0.1")).toBeDefined();
+    expect(calls(fetch, "/api/docker/overview")).toBe(3);
+  });
+
+  it("reads the installed apps of the Docker card along with its host, not after it", async () => {
+    const fetch = serve({
+      "GET /api/widgets": () => Response.json([placements[1]]),
+      "GET /api/docker/overview": () => new Promise<Response>(() => {}),
+      "GET /api/docker/apps": () => Response.json([]),
+    });
+
+    renderAt("/");
+
+    await waitFor(() => expect(calls(fetch, "/api/docker/overview")).toBe(1));
+    await waitFor(() => expect(calls(fetch, "/api/docker/apps")).toBe(1));
+  });
+
+  it("reads a widget that failed again when the dashboard is opened again", async () => {
+    const fetch = serveDashboard();
+    const router = renderAt("/");
+
+    expect(await screen.findByText("Miniflux is unavailable")).toBeDefined();
+    expect(calls(fetch, "/api/widgets/miniflux-entries-1")).toBe(1);
+
+    await act(() => router.navigate({ to: "/settings" }));
+    await act(() => router.navigate({ to: "/" }));
+
+    expect(await screen.findByText("Miniflux is unavailable")).toBeDefined();
+    await waitFor(() => expect(calls(fetch, "/api/widgets/miniflux-entries-1")).toBe(2));
+  });
+
   it("follows no change of the daemon without a Docker card", async () => {
     serveDashboard({ shown: placements.filter(placement => placement.type !== "docker-general-stats") });
     renderAt("/");

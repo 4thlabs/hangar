@@ -26,12 +26,22 @@ export function useLogEvents(url: string) {
     setState: setLines,
     status,
     failure,
+    reset,
     read,
     stop,
   } = useEventStream<LogEvent, readonly string[]>([], { fold: withLines, isEnd: event => event.kind === "end" });
 
   // Bumped to read the log again.
   const [generation, setGeneration] = useState(0);
+  // The read the state above belongs to. A new one starts empty, set during render rather than in the effect, so that
+  // no frame shows the last read's lines and status under the new one.
+  const currentRead = `${generation} ${url}`;
+  const [shownRead, setShownRead] = useState(currentRead);
+
+  if (shownRead !== currentRead) {
+    setShownRead(currentRead);
+    reset([]);
+  }
 
   useEffect(() => {
     read(url, []);

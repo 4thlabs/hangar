@@ -34,8 +34,9 @@ const maxWaiting = 500;
  *
  * @param initial The state before any read.
  * @returns The state, its setter (to clear it), the status, why the stream failed (`null` for a stream cut short
- *   before its end, or none failed), `read(url, seed, request?)`, which reads the stream at `url` from `seed`, a `GET`
- *   unless `request` says otherwise, and `stop`.
+ *   before its end, or none failed), `reset(seed)`, which puts the state before a read back, during a render too,
+ *   `read(url, seed, request?)`, which reads the stream at `url` from `seed`, a `GET` unless `request` says otherwise,
+ *   and `stop`.
  */
 export function useEventStream<T, S>(initial: S | (() => S), options: StreamOptions<T, S>) {
   const [state, setState] = useState(initial);
@@ -48,93 +49,102 @@ export function useEventStream<T, S>(initial: S | (() => S), options: StreamOpti
     latest.current = options;
   });
 
-  // Kept the same from render to render, as the effects that read a stream list them.
-  const read = useCallback((url: string, seed: S, request: RequestInit = {}) => {
-    stopCurrent.current();
-
-    let folded = seed;
-    let waiting: T[] = [];
-    let frame: number | undefined;
-    let hasEnded = false;
-
-    const foldWaiting = () => {
-      if (waiting.length > 0) {
-        folded = latest.current.fold(folded, waiting);
-        waiting = [];
-      }
-    };
-
-    const render = () => {
-      frame = undefined;
-      foldWaiting();
-      setState(folded);
-    };
-
-    const renderNow = () => {
-      if (frame !== undefined) {
-        cancelAnimationFrame(frame);
-      }
-
-      render();
-    };
-
+  // The state before a read: `seed`, connecting, no failure. Called by `read`, or during a render, for a reader whose
+  // input changed, so that no frame shows the last read's state under the new one.
+  const reset = useCallback((seed: S) => {
     setState(seed);
     setStatus("connecting");
     setFailure(null);
-
-    const stop = readEvents<T>(
-      url,
-      {
-        onOpen: () => {
-          setStatus("connected");
-          latest.current.onOpen?.();
-        },
-        onItem: item => {
-          waiting.push(item);
-
-          if (latest.current.isEnd(item)) {
-            hasEnded = true;
-            renderNow();
-            setStatus("ended");
-            latest.current.onEnd?.();
-
-            return;
-          }
-
-          if (waiting.length >= maxWaiting) {
-            foldWaiting();
-          }
-
-          frame ??= requestAnimationFrame(render);
-        },
-        onEnd: error => {
-          renderNow();
-
-          if (hasEnded) {
-            return;
-          }
-
-          if (error !== undefined) {
-            setStatus("error");
-            setFailure(error);
-
-            return;
-          }
-
-          setStatus(latest.current.requiresEnd ? "error" : "ended");
-        },
-      },
-      request,
-    );
-
-    stopCurrent.current = () => {
-      if (frame !== undefined) {
-        cancelAnimationFrame(frame);
-      }
-
-      stop();
-    };
   }, []);
+
+  // Kept the same from render to render, as the effects that read a stream list them.
+  const read = useCallback(
+    (url: string, seed: S, request: RequestInit = {}) => {
+      stopCurrent.current();
+
+      let folded = seed;
+      let waiting: T[] = [];
+      let frame: number | undefined;
+      let hasEnded = false;
+
+      const foldWaiting = () => {
+        if (waiting.length > 0) {
+          folded = latest.current.fold(folded, waiting);
+          waiting = [];
+        }
+      };
+
+      const render = () => {
+        frame = undefined;
+        foldWaiting();
+        setState(folded);
+      };
+
+      const renderNow = () => {
+        if (frame !== undefined) {
+          cancelAnimationFrame(frame);
+        }
+
+        render();
+      };
+
+      reset(seed);
+
+      const stop = readEvents<T>(
+        url,
+        {
+          onOpen: () => {
+            setStatus("connected");
+            latest.current.onOpen?.();
+          },
+          onItem: item => {
+            waiting.push(item);
+
+            if (latest.current.isEnd(item)) {
+              hasEnded = true;
+              renderNow();
+              setStatus("ended");
+              latest.current.onEnd?.();
+
+              return;
+            }
+
+            if (waiting.length >= maxWaiting) {
+              foldWaiting();
+            }
+
+            frame ??= requestAnimationFrame(render);
+          },
+          onEnd: error => {
+            renderNow();
+
+            if (hasEnded) {
+              return;
+            }
+
+            if (error !== undefined) {
+              setStatus("error");
+              setFailure(error);
+
+              return;
+            }
+
+            setStatus(latest.current.requiresEnd ? "error" : "ended");
+          },
+        },
+        request,
+      );
+
+      stopCurrent.current = () => {
+        if (frame !== undefined) {
+          cancelAnimationFrame(frame);
+        }
+
+        stop();
+      };
+    },
+    [reset],
+  );
 
   const stop = useCallback(() => {
     stopCurrent.current();
@@ -143,5 +153,5 @@ export function useEventStream<T, S>(initial: S | (() => S), options: StreamOpti
 
   useEffect(() => stop, [stop]);
 
-  return { state, setState, status, failure, read, stop };
+  return { state, setState, status, failure, reset, read, stop };
 }

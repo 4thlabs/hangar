@@ -16,6 +16,29 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("/settings", () => {
+  it("reads its cards once when its link is hovered, then followed", async () => {
+    const fetch = serve({
+      "GET /api/store": () => Response.json({ url: "https://example.com/store.git", installed: true, sync: null }),
+      "GET /api/jobs": () => Response.json([]),
+    });
+
+    const reads = (url: string) => fetch.mock.calls.filter(([called]) => called === url).length;
+
+    renderAt("/store");
+
+    const link = (await screen.findAllByRole("link", { name: "Settings" }))[0]!;
+
+    fireEvent.mouseEnter(link);
+    await waitFor(() => expect(reads("/api/store")).toBe(1));
+    fireEvent.click(link);
+
+    expect(await screen.findByRole("button", { name: "Update" })).toBeDefined();
+    expect(reads("/api/store")).toBe(1);
+    expect(reads("/api/jobs")).toBe(1);
+  });
+});
+
 describe("/settings#store", () => {
   it("starts a sync, and says it runs until it ends", async () => {
     let status: StoreStatus = { url: "https://example.com/store.git", installed: true, sync: null };
