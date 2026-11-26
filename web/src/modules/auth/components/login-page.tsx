@@ -3,7 +3,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { CircleAlertIcon, KeyRoundIcon } from "lucide-react";
 import { useState, type SubmitEvent } from "react";
 import { getAuthOidcLoginUrl, getAuthSessionQueryKey, useAuthLogin, useAuthOptions } from "#libs/api";
-import { SignInMessages } from "#modules/auth/sign-in-messages.ts";
+import { describeSignInFailure, isSignInRefusal, signInRefusals } from "#modules/auth/sign-in-messages.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
@@ -22,11 +22,7 @@ export function LoginPage() {
   const login = useAuthLogin();
   const { data: options } = useAuthOptions();
 
-  const [error, setError] = useState<string | null>(() => {
-    const refusal = SignInMessages.refusal(refused);
-
-    return refusal ? SignInMessages.Refusals[refusal] : null;
-  });
+  const [error, setError] = useState<string | null>(() => (isSignInRefusal(refused) ? signInRefusals[refused] : null));
 
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,7 +45,7 @@ export function LoginPage() {
       queryClient.setQueryData(getAuthSessionQueryKey(), user);
       await navigate({ to: "/", replace: true });
     } catch (failure) {
-      setError(SignInMessages.ofPassword(failure));
+      setError(describeSignInFailure(failure));
     }
   }
 
