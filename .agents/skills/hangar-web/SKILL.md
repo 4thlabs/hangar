@@ -58,12 +58,13 @@ src/libs/                          the API client, formats, preferences
 - Modules by domain, pages by route. **A module never imports another**: the route files compose them. What two
   modules really share goes down into `common` (the compose vocabulary, the Docker changes feed), and only then.
 - No barrel. Tests sit next to their code; a page's beside its route file (`routes/_app/apps.test.tsx`).
-- No file sits directly under a module but `messages.ts`: ESLint refuses any other.
+- No file sits directly under a module but `messages.ts` and its test, nor directly under `modules/`: ESLint refuses
+  any other.
 - `libs/` holds what has no React and no page domain.
 - A file is named after its main export: `apps-view.ts` exports `appsView`.
 - The ADR's lint rules, which come with its PRs, are core ESLint (`no-restricted-syntax`, `no-restricted-imports`):
   typescript-eslint does not load on TypeScript 7. In `modules/`, import with `#modules/...`, never `../`, so that the
-  rules see every import: ESLint refuses `../` there.
+  rules see every import: ESLint refuses a `..` segment there.
 
 ### `#libs/api`: the client, said once
 
@@ -201,7 +202,8 @@ loader: ({ context }) => context.queryClient.ensureQueryData(appsQueries.project
 - One file per route under `web/src/routes/`, `export const Route = createFileRoute(...)`. The generator writes the
   path from the file's name: rename the file, never the string. `_app.tsx` is the shell, a layout route with no path
   of its own, whose `beforeLoad` requires the session for every page under `_app/`, and whose pieces are in
-  `routes/-shell/` (`app-layout`, `navbar`, `navbar-mobile`, `searchbar`, `user-menu`, `app-error-page`).
+  `routes/-shell/` (`app-layout`, `navbar`, `navbar-mobile`, `searchbar`, `user-menu`, `user-avatar`, `app-error-page`,
+  `navigations`, `use-current-path`).
   `_app/$.tsx` is the not-found page of any other path, `_app/-not-found-page.tsx` its component.
 - A page beside another at a longer path is `x_.y.tsx` (`apps_.$project.tsx`, `store_.new.tsx`): `x.y.tsx` would be a
   child of `x.tsx`, rendered in its `Outlet`, which a page has not.

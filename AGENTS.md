@@ -52,9 +52,9 @@ libs/                          the API client, formats, preferences
 ```
 
 A module imports only `common`, `#libs/...` and its own files, and `common` no other module: the routes compose the
-modules. ESLint holds it, with `#modules/...` imports and no `../`, along with rule 4 on `helpers/` and `messages.ts`
-(no React, no TanStack, only types from `api/`, `hooks/`, `components/`, `ui/`) and no other file directly under a
-module.
+modules. ESLint holds it, with `#modules/...` imports and no `..` segment, along with rule 4 on `helpers/` and
+`messages.ts` (no React, no TanStack, only types from `api/`, `hooks/`, `components/`, `ui/`) and no other file directly
+under a module than `messages.ts` and its test.
 
 ## Import mapping
 
