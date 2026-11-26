@@ -49,13 +49,22 @@ impl WidgetsState {
 
         Ok(placed
             .into_iter()
-            .map(|placement| self.placement(placement, &apps))
+            .filter_map(|placement| self.placement(placement, &apps))
             .collect())
     }
 
-    /// A placement as the page reads it, its link that of its app among `apps`.
-    fn placement(&self, placement: Placement, apps: &[StoreApp]) -> WidgetPlacement {
+    /// A placement as the page reads it, its link that of its app among `apps`; `None`, logged, for a widget the
+    /// contract has no type of, which the page could not show: the others still are.
+    fn placement(&self, placement: Placement, apps: &[StoreApp]) -> Option<WidgetPlacement> {
         let kind = &placement.widget.kind;
+        let Some(widget) = Self::widget_type(kind) else {
+            tracing::warn!(
+                widget = kind.name(),
+                "leaving a widget the contract has no type of off the dashboard"
+            );
+
+            return None;
+        };
         let link = Service::options(kind).map(|(app, options)| {
             let container = apps
                 .iter()
@@ -65,31 +74,32 @@ impl WidgetsState {
             Service::link(container, &self.domain, options)
         });
 
-        WidgetPlacement {
+        Some(WidgetPlacement {
             key: placement.key,
-            widget: Self::widget_type(kind),
+            widget,
             column: placement.widget.column.number(),
             link,
-        }
+        })
     }
 
-    /// The `type` of a widget of `kind`, as the contract writes it.
-    fn widget_type(kind: &WidgetKind) -> WidgetType {
+    /// The `type` of a widget of `kind`, as the contract writes it; `None` for a kind the core has and the contract
+    /// not yet: `WidgetKind` may grow.
+    fn widget_type(kind: &WidgetKind) -> Option<WidgetType> {
         match kind {
-            WidgetKind::Clock => WidgetType::Clock,
-            WidgetKind::DockerGeneralStats => WidgetType::DockerGeneralStats,
-            WidgetKind::ArcaneGeneralStats { .. } => WidgetType::ArcaneGeneralStats,
-            WidgetKind::BackrestSummary { .. } => WidgetType::BackrestSummary,
-            WidgetKind::BeszelServerStats { .. } => WidgetType::BeszelServerStats,
-            WidgetKind::ForgejoCi { .. } => WidgetType::ForgejoCi,
-            WidgetKind::FrigateEvents { .. } => WidgetType::FrigateEvents,
-            WidgetKind::GluetunVpnStatus { .. } => WidgetType::GluetunVpnStatus,
-            WidgetKind::MinifluxEntries { .. } => WidgetType::MinifluxEntries,
-            WidgetKind::JellyfinLatest { .. } => WidgetType::JellyfinLatest,
-            WidgetKind::TcgCollectorCards { .. } => WidgetType::TcgCollectorCards,
-            WidgetKind::GithubReleases { .. } => WidgetType::GithubReleases,
-            WidgetKind::StockPrices { .. } => WidgetType::StockPrices,
-            other => unreachable!("the contract has no type for {}", other.name()),
+            WidgetKind::Clock => Some(WidgetType::Clock),
+            WidgetKind::DockerGeneralStats => Some(WidgetType::DockerGeneralStats),
+            WidgetKind::ArcaneGeneralStats { .. } => Some(WidgetType::ArcaneGeneralStats),
+            WidgetKind::BackrestSummary { .. } => Some(WidgetType::BackrestSummary),
+            WidgetKind::BeszelServerStats { .. } => Some(WidgetType::BeszelServerStats),
+            WidgetKind::ForgejoCi { .. } => Some(WidgetType::ForgejoCi),
+            WidgetKind::FrigateEvents { .. } => Some(WidgetType::FrigateEvents),
+            WidgetKind::GluetunVpnStatus { .. } => Some(WidgetType::GluetunVpnStatus),
+            WidgetKind::MinifluxEntries { .. } => Some(WidgetType::MinifluxEntries),
+            WidgetKind::JellyfinLatest { .. } => Some(WidgetType::JellyfinLatest),
+            WidgetKind::TcgCollectorCards { .. } => Some(WidgetType::TcgCollectorCards),
+            WidgetKind::GithubReleases { .. } => Some(WidgetType::GithubReleases),
+            WidgetKind::StockPrices { .. } => Some(WidgetType::StockPrices),
+            _ => None,
         }
     }
 
