@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import type { ComposeAction } from "#libs/api";
 import { ComposeOutputSheet } from "#modules/apps/components/compose-output-sheet.tsx";
+import type { ComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
+import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import {
   composeCommandLine,
   confirmationDescription,
@@ -18,9 +20,7 @@ import {
   upFlagSpecs,
   type ComposeOperation,
   type UpFlag,
-} from "#modules/apps/helpers/compose-actions.ts";
-import type { ComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
-import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
+} from "#modules/common/helpers/compose-actions.ts";
 import { ButtonGroup } from "#modules/common/ui/button-group.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import {

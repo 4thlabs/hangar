@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
-import { composeCommandLine, composeLabel, composeSubject } from "#modules/apps/helpers/compose-actions.ts";
 import type { AppRun, AppRunStatus } from "#modules/apps/helpers/compose-output.ts";
 import type { ComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import type { ComposeStreamStatus } from "#modules/apps/hooks/use-compose-stream.ts";
+import { composeCommandLine, composeLabel, composeSubject } from "#modules/common/helpers/compose-actions.ts";
 import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "#modules/common/ui/sheet.tsx";
