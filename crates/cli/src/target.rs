@@ -12,18 +12,24 @@ pub(crate) enum Target {
 }
 
 impl Target {
-    /// The apps the target covers in `config`. A name that is no category is taken for an app, and a category with no
-    /// app as well, as the Node CLI takes them; the batch then says whether it is installed.
+    /// The apps the target covers in `config`, once each. A name that is no category is taken for an app, and a
+    /// category with no app as well, as the Node CLI takes them; compose then says whether it is installed.
     pub(crate) fn apps(&self, config: &Config) -> Vec<String> {
         let Self::Named(name) = self else {
             return config.stacks().into_iter().map(str::to_owned).collect();
         };
-        let apps: Vec<String> = config
+        let mut apps: Vec<String> = Vec::new();
+        let stacks = config
             .categories
             .iter()
             .filter(|category| category.name == *name)
-            .flat_map(|category| category.stacks.iter().cloned())
-            .collect();
+            .flat_map(|category| &category.stacks);
+
+        for stack in stacks {
+            if !apps.contains(stack) {
+                apps.push(stack.clone());
+            }
+        }
 
         if apps.is_empty() {
             return vec![name.clone()];
@@ -46,6 +52,7 @@ categories:
   - { name: Network, color: blue, stacks: [traefik, gluetun] }
   - { name: Media, color: purple, stacks: [jellyfin, traefik] }
   - { name: Empty, color: grey, stacks: [] }
+  - { name: Twice, color: red, stacks: [gluetun, gluetun] }
 ",
         )
         .expect("the categories parse")
@@ -65,6 +72,11 @@ categories:
             Target::Named("Media".into()).apps(&config()),
             ["jellyfin", "traefik"]
         );
+    }
+
+    #[test]
+    fn covers_an_app_its_category_lists_twice_once() {
+        assert_eq!(Target::Named("Twice".into()).apps(&config()), ["gluetun"]);
     }
 
     #[test]

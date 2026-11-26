@@ -1,4 +1,4 @@
-//! `hangar store up` and `down` against a real Docker, through the `docker compose` CLI and the daemon `DOCKER_HOST`
+//! `hangar store up`, `down` and the commands it passes through against a real Docker, through the `docker compose` CLI and the daemon `DOCKER_HOST`
 //! names, else Docker's own socket. The test brings a project of its own up and down, and takes it down when it is
 //! dropped, even by a failed test.
 //!
@@ -8,8 +8,9 @@
 #![cfg(unix)]
 
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 
 use tempfile::TempDir;
 
@@ -35,8 +36,9 @@ struct Fixture {
 }
 
 impl Fixture {
-    /// The fixture, once a daemon answers and `docker compose` runs; none outside CI otherwise.
-    fn new() -> Option<Self> {
+    /// The fixture, its project named after `test`, so that the tests run at once, once a daemon answers and
+    /// `docker compose` runs; none outside CI otherwise.
+    fn new(test: &str) -> Option<Self> {
         if let Err(reason) = Self::docker(&["version"]) {
             return Self::skip(&format!("no Docker daemon answers: {reason}"));
         }
@@ -47,7 +49,7 @@ impl Fixture {
 
         let dir = tempfile::tempdir().expect("a temporary directory can be made");
         let data = dir.path().to_owned();
-        let app = format!("hangar-test-cli-{}", std::process::id());
+        let app = format!("hangar-test-cli-{test}-{}", std::process::id());
         let folder = data.join("app-installed").join(&app);
         let config = data.join("app-store/config");
 
@@ -96,19 +98,40 @@ impl Fixture {
 
     /// `hangar` with `args`, on the fixture's data directory.
     fn hangar(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_hangar"))
-            .args(args)
-            .current_dir(&self.data)
-            .env("HANGAR_DATA_DIR", &self.data)
+        self.command(args)
             .output()
             .expect("the binary was built for this test")
     }
 
+    /// `hangar` with `args`, on the fixture's data directory, to be run.
+    fn command(&self, args: &[&str]) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_hangar"));
+
+        command
+            .args(args)
+            .current_dir(&self.data)
+            .env("HANGAR_DATA_DIR", &self.data);
+        command
+    }
+
     /// The ids of the project's containers, running or not.
     fn containers(&self) -> Vec<String> {
+        self.listed(&[])
+    }
+
+    /// The ids of the project's running containers.
+    fn running(&self) -> Vec<String> {
+        self.listed(&["--filter", "status=running"])
+    }
+
+    /// The ids of the project's containers that `filters` keep.
+    fn listed(&self, filters: &[&str]) -> Vec<String> {
         let label = format!("label=com.docker.compose.project={}", self.app);
-        let ids = Self::docker(&["ps", "--all", "--quiet", "--filter", &label])
-            .expect("the daemon lists its containers");
+        let mut args = vec!["ps", "--all", "--quiet", "--filter", &label];
+
+        args.extend(filters);
+
+        let ids = Self::docker(&args).expect("the daemon lists its containers");
 
         ids.lines().map(str::to_owned).collect()
     }
@@ -126,7 +149,7 @@ impl Drop for Fixture {
 
 #[test]
 fn brings_every_listed_app_up_then_takes_its_category_down() {
-    let Some(fixture) = Fixture::new() else {
+    let Some(fixture) = Fixture::new("up") else {
         return;
     };
 
@@ -147,4 +170,63 @@ fn brings_every_listed_app_up_then_takes_its_category_down() {
         String::from_utf8_lossy(&down.stderr)
     );
     assert!(fixture.containers().is_empty(), "no container is left");
+}
+
+#[test]
+fn passes_exec_through_with_its_stdin_and_its_code_then_stops_a_category() {
+    let Some(fixture) = Fixture::new("exec") else {
+        return;
+    };
+
+    let up = fixture.hangar(&["store", "up"]);
+
+    assert!(
+        up.status.success(),
+        "{}",
+        String::from_utf8_lossy(&up.stderr)
+    );
+
+    let script = r#"read line; echo "got $line"; exit 3"#;
+    let mut exec = fixture
+        .command(&[
+            "store",
+            &fixture.app,
+            "exec",
+            "-T",
+            "sleeper",
+            "sh",
+            "-c",
+            script,
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the binary was built for this test");
+
+    exec.stdin
+        .take()
+        .expect("stdin is piped")
+        .write_all(b"hangar\n")
+        .expect("the binary's stdin can be written");
+
+    let exec = exec.wait_with_output().expect("the binary exits");
+
+    assert_eq!(
+        exec.status.code(),
+        Some(3),
+        "{}",
+        String::from_utf8_lossy(&exec.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&exec.stdout), "got hangar\n");
+
+    let stop = fixture.hangar(&["store", "Tests", "stop", "--timeout", "1"]);
+
+    assert!(
+        stop.status.success(),
+        "{}",
+        String::from_utf8_lossy(&stop.stderr)
+    );
+    assert_eq!(fixture.containers().len(), 1, "the container is kept");
+    assert!(fixture.running().is_empty(), "the container is stopped");
 }

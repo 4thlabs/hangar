@@ -4,7 +4,7 @@
 #![cfg(unix)]
 
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -16,9 +16,9 @@ use nix::unistd::Pid;
 use tempfile::TempDir;
 
 /// The fake `docker`: it logs its arguments, one call per line, and its environment, then prints `<project> done`. It
-/// fails with code 3 on the project `HANGAR_TEST_FAIL` names, and prints `<project> started` then sleeps on
-/// `HANGAR_TEST_HANG`'s, on `HANGAR_TEST_DEAF`'s with SIGINT ignored, and on `HANGAR_TEST_STUBBORN`'s with SIGTERM
-/// ignored too.
+/// fails with code 3 on the project `HANGAR_TEST_FAIL` names, prints its stdin on `HANGAR_TEST_STDIN`'s, and prints
+/// `<project> started` then sleeps on `HANGAR_TEST_HANG`'s, on `HANGAR_TEST_DEAF`'s with SIGINT ignored, and on
+/// `HANGAR_TEST_STUBBORN`'s with SIGTERM ignored too.
 const FAKE_DOCKER: &str = r#"#!/bin/sh
 echo "$*" >> "$HANGAR_TEST_LOG"
 env > "$HANGAR_TEST_LOG.env"
@@ -30,6 +30,7 @@ for arg in "$@"; do
 done
 case "$project" in
   "${HANGAR_TEST_FAIL:-none}") echo "$project: no such image" >&2; exit 3 ;;
+  "${HANGAR_TEST_STDIN:-none}") exec cat ;;
   "${HANGAR_TEST_HANG:-none}") echo "$project started"; exec sleep 30 ;;
   "${HANGAR_TEST_DEAF:-none}") trap '' INT; echo "$project started"; exec sleep 30 ;;
   "${HANGAR_TEST_STUBBORN:-none}") trap '' INT TERM; echo "$project started"; exec sleep 30 ;;
@@ -250,14 +251,107 @@ fn refuses_an_app_that_is_not_installed() {
 }
 
 #[test]
-fn refuses_a_command_it_does_not_run_and_names_the_node_cli() {
+fn passes_any_other_command_through_on_one_app_with_the_terminal() {
+    let fixture = Fixture::new();
+    let mut child = fixture
+        .hangar(&["store", "jellyfin", "exec", "web", "sh", "-c", "echo $HOME"])
+        .env("HANGAR_TEST_STDIN", "jellyfin")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the binary was built for this test");
+
+    child
+        .stdin
+        .take()
+        .expect("stdin is piped")
+        .write_all(b"typed in the terminal\n")
+        .expect("the binary's stdin can be written");
+
+    let output = child.wait_with_output().expect("the binary exits");
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(stdout(&output), "typed in the terminal\n");
+    assert_eq!(
+        fixture.calls(),
+        [fixture.call("jellyfin", "exec web sh -c echo $HOME")]
+    );
+}
+
+#[test]
+fn exits_with_the_code_of_a_command_passed_through_its_stderr_left_on_the_terminal() {
     let fixture = Fixture::new();
 
-    let output = run(&mut fixture.hangar(&["store", "jellyfin", "logs", "-f"]));
+    let output = run(fixture
+        .hangar(&["store", "jellyfin", "logs", "-f"])
+        .env("HANGAR_TEST_FAIL", "jellyfin"));
+
+    assert_eq!(output.status.code(), Some(3));
+    assert_eq!(stdout(&output), "");
+    assert!(
+        stderr(&output).contains("jellyfin: no such image"),
+        "{}",
+        stderr(&output)
+    );
+    assert!(
+        stderr(&output).contains("docker compose logs -f failed on jellyfin, exit 3"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn passes_a_command_through_on_several_apps_in_the_order_of_its_name() {
+    let fixture = Fixture::new();
+
+    let stop = run(&mut fixture.hangar(&["store", "Media", "stop", "--timeout", "1"]));
+    let start = run(&mut fixture.hangar(&["store", "Media", "start"]));
+
+    assert!(stop.status.success(), "{}", stderr(&stop));
+    assert!(start.status.success(), "{}", stderr(&start));
+    assert_eq!(
+        fixture.projects(),
+        ["jellyfin", "traefik", "traefik", "jellyfin"]
+    );
+    assert_eq!(
+        fixture.calls()[0],
+        fixture.call("jellyfin", "stop --timeout 1")
+    );
+    assert_eq!(stop.stdout, b"jellyfin done\ntraefik done\n");
+}
+
+#[test]
+fn passes_the_arguments_of_store_up_and_down_through_up_detached() {
+    let fixture = Fixture::new();
+
+    let up = run(&mut fixture.hangar(&["store", "up", "--build"]));
+    let down = run(&mut fixture.hangar(&["store", "down", "--volumes"]));
+
+    assert!(up.status.success(), "{}", stderr(&up));
+    assert!(down.status.success(), "{}", stderr(&down));
+    assert_eq!(
+        fixture.calls(),
+        [
+            fixture.call("traefik", "up -d --build"),
+            fixture.call("gluetun", "up -d --build"),
+            fixture.call("jellyfin", "up -d --build"),
+            fixture.call("jellyfin", "down --volumes"),
+            fixture.call("gluetun", "down --volumes"),
+            fixture.call("traefik", "down --volumes"),
+        ]
+    );
+}
+
+#[test]
+fn refuses_an_up_that_attaches_on_several_apps() {
+    let fixture = Fixture::new();
+
+    let output = run(&mut fixture.hangar(&["store", "Media", "up", "--build"]));
 
     assert_eq!(output.status.code(), Some(1));
     assert!(
-        stderr(&output).contains("run `node bin/cli.js store jellyfin logs -f`"),
+        stderr(&output).contains("docker compose up --build is not detached"),
         "{}",
         stderr(&output)
     );
@@ -389,6 +483,25 @@ fn a_first_ctrl_c_ends_the_running_app_and_starts_no_other() {
 
     assert_eq!(status.code(), Some(130));
     assert_eq!(fixture.projects(), ["traefik"]);
+}
+
+#[test]
+fn a_ctrl_c_reaches_a_command_passed_through_which_ends_on_it() {
+    let fixture = Fixture::new();
+    let mut child = spawn_in_its_own_group(
+        fixture
+            .hangar(&["store", "jellyfin", "logs", "-f"])
+            .env("HANGAR_TEST_HANG", "jellyfin"),
+    );
+    let mut stdout = BufReader::new(child.stdout.take().expect("stdout is piped")).lines();
+
+    wait_for(&mut stdout, "jellyfin started");
+    ctrl_c(&child);
+
+    let status = child.wait().expect("the binary exits");
+
+    assert_eq!(status.code(), Some(130));
+    assert_eq!(fixture.calls(), [fixture.call("jellyfin", "logs -f")]);
 }
 
 #[test]
