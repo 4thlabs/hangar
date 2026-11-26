@@ -4,20 +4,21 @@
 mod http_client;
 
 use std::error::Error as StdError;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use hangar_api::CookieCredential;
 use openidconnect::core::{
-    CoreAuthenticationFlow, CoreClient, CoreClientAuthMethod, CoreJwsSigningAlgorithm,
+    CoreAuthenticationFlow, CoreClient, CoreClientAuthMethod, CoreIdToken, CoreJwsSigningAlgorithm,
     CoreProviderMetadata,
 };
 use openidconnect::{
-    AuthType, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointMaybeSet,
-    EndpointNotSet, EndpointSet, IssuerUrl, Nonce, PkceCodeChallenge, PkceCodeVerifier,
-    RedirectUrl, Scope, TokenResponse,
+    AuthType, AuthorizationCode, ClaimsVerificationError, ClientId, ClientSecret, CsrfToken,
+    EndpointMaybeSet, EndpointNotSet, EndpointSet, IssuerUrl, Nonce, PkceCodeChallenge,
+    PkceCodeVerifier, RedirectUrl, Scope, SignatureVerificationError, TokenResponse,
 };
 use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
+use tokio::sync::Mutex;
 use url::Url;
 
 use super::cookies::{Cookies, ServerCookie};
@@ -77,12 +78,51 @@ impl OidcError {
     }
 }
 
-/// The provider, discovered again at each sign-in: a sign-in is rare, and its keys, which a provider rotates, are
-/// always its current ones.
+/// The provider, its discovery document and its keys kept five minutes.
+///
+/// The sign-in's start needs no session: discovering at each one would let a loop of requests make the server call
+/// the provider as often. One discovery runs at a time, the others waiting for its answer, and it is kept five
+/// minutes. An ID token whose signature the kept keys refuse, as after the provider rotated its keys, is checked again
+/// once against keys discovered anew, unless the kept ones are less than thirty seconds old.
 #[derive(Debug)]
 pub(crate) struct Oidc {
     settings: OidcSettings,
     http: HttpClient,
+    discovered: Mutex<Option<Discovered>>,
+}
+
+/// The client of the provider, and when its discovery answered.
+#[derive(Debug)]
+struct Discovered {
+    client: ProviderClient,
+    at: Instant,
+}
+
+impl Discovered {
+    /// How long a discovery is kept.
+    const FRESHNESS: Duration = Duration::from_secs(5 * 60);
+    /// How long after a discovery the keys are not discovered anew, even for a token they refuse: a burst of
+    /// callbacks signed with a key the provider just rotated in causes one discovery, not one each.
+    const REDISCOVERY_PAUSE: Duration = Duration::from_secs(30);
+
+    /// Whether the kept discovery serves a call that asks `refresh` at `now`.
+    fn serves(&self, refresh: Refresh, now: Instant) -> bool {
+        let age = now.saturating_duration_since(self.at);
+
+        match refresh {
+            Refresh::IfStale => age < Self::FRESHNESS,
+            Refresh::Now => age < Self::REDISCOVERY_PAUSE,
+        }
+    }
+}
+
+/// Whether the kept discovery of the provider may be used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Refresh {
+    /// Kept while it is fresh.
+    IfStale,
+    /// Discovered anew, as the keys kept refused a token's signature, unless the kept one has just been discovered.
+    Now,
 }
 
 /// Who the provider says signed in, once their ID token is checked.
@@ -153,11 +193,16 @@ impl Oidc {
         CoreJwsSigningAlgorithm::EdDsa,
     ];
 
+    /// How long a discovery may take, the lock held: past it, the requests waiting for it get an error, and the
+    /// discovery kept, if any, stays.
+    const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(10);
+
     /// The provider of `settings`.
     pub(crate) fn new(settings: OidcSettings) -> Self {
         Self {
             settings,
             http: HttpClient::new(),
+            discovered: Mutex::new(None),
         }
     }
 
@@ -168,7 +213,7 @@ impl Oidc {
 
     /// Starts a sign-in at `now`: the provider's URL to send the browser to, and the flow its cookie keeps.
     pub(crate) async fn start(&self, now: SystemTime) -> Result<(Url, Flow), OidcError> {
-        let client = self.client().await?;
+        let client = self.client(Refresh::IfStale).await?;
         let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
         let (url, state, nonce) = client
             .authorize_url(
@@ -191,9 +236,10 @@ impl Oidc {
     }
 
     /// Ends the sign-in of `flow`: exchanges `code` for the tokens, with the PKCE verifier, and checks the ID token,
-    /// its signature, issuer, audience, expiry and nonce.
+    /// its signature, issuer, audience, expiry and nonce, against the provider's keys discovered anew when the kept
+    /// ones refuse it.
     pub(crate) async fn finish(&self, flow: &Flow, code: String) -> Result<Identity, OidcError> {
-        let client = self.client().await?;
+        let client = self.client(Refresh::IfStale).await?;
         let token = client
             .exchange_code(AuthorizationCode::new(code))
             .map_err(|error| OidcError::new("the provider has no token endpoint", error))?
@@ -204,12 +250,45 @@ impl Oidc {
         let id_token = token
             .id_token()
             .ok_or_else(|| OidcError::alone("the provider answered no ID token"))?;
+        let nonce = Nonce::new(flow.nonce.clone());
+
+        match Self::identity(&client, id_token, &nonce) {
+            Ok(identity) => return Ok(identity),
+            Err(error) if !Self::is_signed_with_other_keys(&error) => {
+                return Err(OidcError::new("the ID token does not hold", error));
+            }
+            Err(_) => {}
+        }
+
+        let rediscovered = self.client(Refresh::Now).await?;
+
+        Self::identity(&rediscovered, id_token, &nonce)
+            .map_err(|error| OidcError::new("the ID token does not hold", error))
+    }
+
+    /// Whether the keys refused the token's signature, as a token signed with a key the provider rotated in: its key
+    /// id is none of theirs, or its signature does not check. Any other failure, an expired token, a wrong nonce or
+    /// audience, is refused as it is.
+    fn is_signed_with_other_keys(error: &ClaimsVerificationError) -> bool {
+        matches!(
+            error,
+            ClaimsVerificationError::SignatureVerification(
+                SignatureVerificationError::NoMatchingKey
+                    | SignatureVerificationError::CryptoError(_)
+            )
+        )
+    }
+
+    /// Who `id_token` says signed in, once `client`'s keys check it.
+    fn identity(
+        client: &ProviderClient,
+        id_token: &CoreIdToken,
+        nonce: &Nonce,
+    ) -> Result<Identity, ClaimsVerificationError> {
         let verifier = client
             .id_token_verifier()
             .set_allowed_algs(Self::ALGORITHMS);
-        let claims = id_token
-            .claims(&verifier, &Nonce::new(flow.nonce.clone()))
-            .map_err(|error| OidcError::new("the ID token does not hold", error))?;
+        let claims = id_token.claims(&verifier, nonce)?;
         let verified_email = claims
             .email()
             .filter(|_| claims.email_verified() == Some(true))
@@ -221,8 +300,35 @@ impl Oidc {
         })
     }
 
+    /// The client of the provider: the one kept while it serves `refresh`, or else one discovered. The lock is held
+    /// across the discovery, so that the callers that wait for it take its answer, and the discovery bounded by
+    /// [`DISCOVERY_TIMEOUT`](Self::DISCOVERY_TIMEOUT).
+    async fn client(&self, refresh: Refresh) -> Result<ProviderClient, OidcError> {
+        let mut discovered = self.discovered.lock().await;
+        let kept = discovered
+            .as_ref()
+            .filter(|kept| kept.serves(refresh, Instant::now()));
+
+        if let Some(kept) = kept {
+            return Ok(kept.client.clone());
+        }
+
+        let client = tokio::time::timeout(Self::DISCOVERY_TIMEOUT, self.discover())
+            .await
+            .map_err(|elapsed| {
+                OidcError::new("the provider's discovery took longer than 10 s", elapsed)
+            })??;
+
+        *discovered = Some(Discovered {
+            client: client.clone(),
+            at: Instant::now(),
+        });
+
+        Ok(client)
+    }
+
     /// The client of the provider, from its discovery document and its keys.
-    async fn client(&self) -> Result<ProviderClient, OidcError> {
+    async fn discover(&self) -> Result<ProviderClient, OidcError> {
         let issuer = IssuerUrl::new(self.settings.issuer.clone())
             .map_err(|error| OidcError::new("the issuer is not a URL", error))?;
         let metadata = CoreProviderMetadata::discover_async(issuer, &self.http)
@@ -266,7 +372,18 @@ mod tests {
 
     use hangar_api::CookieCredential;
 
-    use super::{Cookies, Flow};
+    use std::time::Instant;
+
+    use openidconnect::core::{
+        CoreClient, CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreResponseType,
+        CoreSubjectIdentifierType,
+    };
+    use openidconnect::{
+        AuthUrl, ClaimsVerificationError, ClientId, EmptyAdditionalProviderMetadata, IssuerUrl,
+        JsonWebKeySetUrl, ResponseTypes, SignatureVerificationError,
+    };
+
+    use super::{Cookies, Discovered, Flow, Oidc, Refresh};
 
     fn flow(now: SystemTime) -> Flow {
         Flow {
@@ -297,6 +414,64 @@ mod tests {
         assert_eq!(opened, flow(now));
         assert!(!opened.has_expired(now + Duration::from_secs(9 * 60)));
         assert!(opened.has_expired(now + Duration::from_secs(10 * 60)));
+    }
+
+    #[test]
+    fn keeps_a_discovery_five_minutes_and_discovers_anew_past_thirty_seconds() {
+        let at = Instant::now();
+        let discovered = Discovered {
+            client: client(),
+            at,
+        };
+        let second = Duration::from_secs(1);
+
+        assert!(discovered.serves(Refresh::IfStale, at + 299 * second));
+        assert!(!discovered.serves(Refresh::IfStale, at + 300 * second));
+        assert!(
+            discovered.serves(Refresh::Now, at + 29 * second),
+            "a burst takes the keys just discovered"
+        );
+        assert!(!discovered.serves(Refresh::Now, at + 30 * second));
+    }
+
+    #[test]
+    fn discovers_anew_for_a_signature_alone() {
+        let unknown_key = ClaimsVerificationError::SignatureVerification(
+            SignatureVerificationError::NoMatchingKey,
+        );
+        let bad_signature = ClaimsVerificationError::SignatureVerification(
+            SignatureVerificationError::CryptoError("bad signature".to_owned()),
+        );
+
+        assert!(Oidc::is_signed_with_other_keys(&unknown_key));
+        assert!(Oidc::is_signed_with_other_keys(&bad_signature));
+
+        for error in [
+            ClaimsVerificationError::Expired("expired".to_owned()),
+            ClaimsVerificationError::InvalidNonce("nonce".to_owned()),
+            ClaimsVerificationError::InvalidAudience("audience".to_owned()),
+            ClaimsVerificationError::SignatureVerification(
+                SignatureVerificationError::DisallowedAlg("HS256".to_owned()),
+            ),
+        ] {
+            assert!(!Oidc::is_signed_with_other_keys(&error), "{error:?}");
+        }
+    }
+
+    /// A client of a provider, as a discovery gives one.
+    fn client() -> super::ProviderClient {
+        let issuer = IssuerUrl::new("https://auth.example.com".to_owned()).expect("a URL");
+        let metadata = CoreProviderMetadata::new(
+            issuer,
+            AuthUrl::new("https://auth.example.com/authorize".to_owned()).expect("a URL"),
+            JsonWebKeySetUrl::new("https://auth.example.com/jwks".to_owned()).expect("a URL"),
+            vec![ResponseTypes::new(vec![CoreResponseType::Code])],
+            vec![CoreSubjectIdentifierType::Public],
+            vec![CoreJwsSigningAlgorithm::EdDsa],
+            EmptyAdditionalProviderMetadata {},
+        );
+
+        CoreClient::from_provider_metadata(metadata, ClientId::new("hangar".to_owned()), None)
     }
 
     #[test]

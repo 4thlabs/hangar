@@ -35,7 +35,7 @@ sha2 = "0.10"
 # The `state` of a sign-in through the provider, compared in constant time.
 subtle = "2"
 thiserror.workspace = true
-tokio = { workspace = true, features = ["fs", "macros", "rt-multi-thread", "sync"] }
+tokio = { workspace = true, features = ["fs", "macros", "rt-multi-thread", "sync", "time"] }
 # quoll's `body_limit` around the routes of signing in alone, applied from a middleware.
 tower-layer = "0.3"
 tower-service = "0.3"
