@@ -1,4 +1,4 @@
-import { sparklinePolylines } from "#modules/widgets/sparkline.ts";
+import { sparklinePolylines } from "#modules/widgets/helpers/sparkline.ts";
 
 type WidgetSparklineProps = {
   /** The series, oldest first; a null is a gap in the curve. */

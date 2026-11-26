@@ -1,8 +1,8 @@
 import type { JellyfinLatest } from "#libs/api";
 import { ScrollArea } from "#modules/common/ui/scroll-area.tsx";
-import { widgetLook } from "#modules/widgets/widget-appearance.ts";
-import { formatInteger } from "#modules/widgets/widget-format.ts";
-import { widgetImageUrl } from "#modules/widgets/widget-image.ts";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { formatInteger } from "#modules/widgets/helpers/widget-format.ts";
+import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
 import { WidgetCard, WidgetContent, WidgetEmptyState, WidgetHeader, WidgetMetadata } from "../widget.tsx";
 
 type JellyfinCardProps = {

@@ -2,8 +2,8 @@ import { cn } from "cn";
 import type { BackrestHealth, BackrestSummary } from "#libs/api";
 import { compactRelativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { widgetLook } from "#modules/widgets/widget-appearance.ts";
-import { formatBytes, formatCount, formatInteger } from "#modules/widgets/widget-format.ts";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { formatBytes, formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 import {
   WidgetCard,
   WidgetContent,

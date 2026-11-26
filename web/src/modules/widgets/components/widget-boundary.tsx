@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from "react";
-import type { WidgetLook } from "#modules/widgets/widget-appearance.ts";
+import type { WidgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { WidgetError } from "./widget-states.tsx";
 
 type WidgetBoundaryProps = {

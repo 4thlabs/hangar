@@ -3,7 +3,7 @@ import { useWidgetsPlacements, type WidgetPlacement } from "#libs/api";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
-import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { ArcaneCard } from "./cards/arcane-card.tsx";
 import { BackrestCard } from "./cards/backrest-card.tsx";
 import { BeszelCard } from "./cards/beszel-card.tsx";

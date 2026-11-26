@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { useEffect, useState } from "react";
-import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { WidgetCard, WidgetContent } from "../widget.tsx";
 
 // How the clock writes the time, the month and the day.

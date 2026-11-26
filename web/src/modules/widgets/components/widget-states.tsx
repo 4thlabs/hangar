@@ -1,7 +1,7 @@
 import { CircleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
-import type { WidgetLook } from "#modules/widgets/widget-appearance.ts";
+import type { WidgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { WidgetCard, WidgetContent, WidgetHeader } from "./widget.tsx";
 
 /** The card of a widget whose data is not in yet, of the size it will have. */

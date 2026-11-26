@@ -3,8 +3,8 @@ import { ExternalLinkIcon } from "lucide-react";
 import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
 import { compactRelativeTime, relativeTime } from "#libs/format";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
-import type { WidgetIcon } from "#modules/widgets/widget-appearance.ts";
-import { formatInteger } from "#modules/widgets/widget-format.ts";
+import type { WidgetIcon } from "#modules/widgets/helpers/widget-appearance.ts";
+import { formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 import { WidgetIconImage } from "./widget-icon.tsx";
 
 export function WidgetCard({ className, ...props }: ComponentProps<typeof Card>) {

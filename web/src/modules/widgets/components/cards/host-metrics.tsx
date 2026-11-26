@@ -1,5 +1,5 @@
 import type { ContainerCounts, ImageCounts, VolumeCounts } from "#libs/api";
-import { formatBytes, formatInteger } from "#modules/widgets/widget-format.ts";
+import { formatBytes, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 import { WidgetMetric, WidgetMetricGrid } from "../widget.tsx";
 
 type HostMetricsProps = {

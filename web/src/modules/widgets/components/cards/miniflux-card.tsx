@@ -1,8 +1,8 @@
 import { cn } from "cn";
 import type { MinifluxEntries } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { widgetLook } from "#modules/widgets/widget-appearance.ts";
-import { formatInteger } from "#modules/widgets/widget-format.ts";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 import {
   WidgetCard,
   WidgetContent,
