@@ -1,8 +1,8 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useParams } from "@tanstack/react-router";
-import { getEditorFilesQueryKey, getStoreAppsQueryKey, useEditorFiles, useEditorRead, type SavedFile } from "#libs/api";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
+import { storeQueries } from "#modules/store/api/store-queries.ts";
 import { AppEditor } from "#modules/store/components/app-editor.tsx";
 import { composeFileName } from "#modules/store/helpers/compose-file.ts";
 
@@ -14,26 +14,14 @@ export const Route = createFileRoute("/_app/store_/$id/edit")({
   component: EditAppPage,
 });
 
-/** How the edit page reads the app: anew each time it opens, and not when the window gets the focus back. */
-const editedFileQuery = { staleTime: Infinity, refetchOnMount: "always", refetchOnWindowFocus: false } as const;
-
 /** `/store/$id/edit`: every file of a store app, its `compose.yml` open first. */
 function EditAppPage() {
   const { id } = useParams({ from: "/_app/store_/$id/edit" });
-  const queryClient = useQueryClient();
-  // Shown from this mount's reads alone: a sync or an install may have changed the files since a page read them.
-  const opened = useEditorFiles(id, { query: editedFileQuery });
-  const compose = useEditorRead(id, { path: composeFileName }, { query: editedFileQuery });
+  // Shown from this mount's reads alone: a sync or an install may have changed the files since a page read them. Not
+  // warmed by a loader, for the same reason.
+  const opened = useQuery(storeQueries.files(id));
+  const compose = useQuery(storeQueries.file(id, composeFileName));
   const isRead = opened.isFetchedAfterMount && compose.isFetchedAfterMount;
-
-  // The compose file may rename the app or change its icon, which the page and the store show: the server tells, as
-  // a symlink or another case may lead to it. The drafts stay, as the editor is keyed on the app alone.
-  const onSaved = ({ composeChanged }: SavedFile) => {
-    if (composeChanged) {
-      void queryClient.invalidateQueries({ queryKey: getEditorFilesQueryKey(id) });
-      void queryClient.invalidateQueries({ queryKey: getStoreAppsQueryKey() });
-    }
-  };
 
   return (
     <main>
@@ -57,7 +45,7 @@ function EditAppPage() {
         </Alert>
       )}
       {isRead && opened.data && compose.data && (
-        <AppEditor id={id} files={opened.data.files} initialFile={compose.data} onSaved={onSaved} />
+        <AppEditor id={id} files={opened.data.files} initialFile={compose.data} />
       )}
     </main>
   );

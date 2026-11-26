@@ -1,20 +1,15 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { SaveIcon } from "lucide-react";
-import { getConfigReadQueryKey, getStoreAppsQueryKey, useConfigRead, useConfigSave } from "#libs/api";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
+import { Region } from "#modules/common/components/region.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { useYamlEditor } from "#modules/common/hooks/use-yaml-editor.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
+import { settingsMutations, settingsQueries } from "#modules/settings/api/settings-queries.ts";
 
 /** `hangar.yml`, edited as it is written, and checked by the server before it is saved. */
 export function ConfigSettingsCard() {
-  // Read anew each time the tab opens, as a sync or an install may have changed the file since, and shown from that
-  // read alone; not when the window gets the focus back, which would load the file over what is being typed.
-  const { data, dataUpdatedAt, isFetchedAfterMount, error } = useConfigRead({
-    query: { staleTime: Infinity, refetchOnMount: "always", refetchOnWindowFocus: false },
-  });
-
   return (
     <Card className="w-full">
       <CardHeader>
@@ -24,39 +19,49 @@ export function ConfigSettingsCard() {
           before it is written.
         </CardDescription>
       </CardHeader>
+      <Region failure="Could not show the configuration">
+        <ConfigContent />
+      </Region>
+    </Card>
+  );
+}
+
+/**
+ * The file, read anew each time the tab opens and shown from that read alone. Read with `useQuery`, not a suspense
+ * query: one that suspends reads the file, then `refetchOnMount: "always"` reads it again as it mounts.
+ */
+function ConfigContent() {
+  const { data, dataUpdatedAt, isFetchedAfterMount, error } = useQuery(settingsQueries.config());
+
+  return (
+    <>
       {error && (
         <CardContent>
           <p className="text-sm text-destructive">{describeError(error)}</p>
         </CardContent>
       )}
       {data && isFetchedAfterMount && <ConfigEditor key={dataUpdatedAt} source={data.source} />}
-    </Card>
+    </>
   );
 }
 
 /** The file being edited, and its save. */
 function ConfigEditor({ source }: { source: string }) {
-  const queryClient = useQueryClient();
   const { editor, value, setRefusal } = useYamlEditor({ source, className: "h-[60vh]" });
+  const save = useMutation(settingsMutations.saveConfig());
 
-  const save = useConfigSave({
-    mutation: {
-      onSuccess: async () => {
-        setRefusal(null);
-        toastSuccess("Configuration saved", "The configuration was saved.");
-        // The file as written, and the apps it links, are read again; the save stays pending until they are, so
-        // that the editor, which takes no typing meanwhile, opens on what was saved.
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: getConfigReadQueryKey() }),
-          queryClient.invalidateQueries({ queryKey: getStoreAppsQueryKey() }),
-        ]);
-      },
-      onError: failure => {
-        setRefusal(describeError(failure));
-        toastFailure("Configuration rejected", failure);
-      },
-    },
-  });
+  // Awaited, as a save reads the file again before it ends, which opens a new editor: this one's callbacks would go
+  // with it.
+  async function handleSave() {
+    try {
+      await save.mutateAsync({ data: { source: value } });
+      setRefusal(null);
+      toastSuccess("Configuration saved", "The configuration was saved.");
+    } catch (failure) {
+      setRefusal(describeError(failure));
+      toastFailure("Configuration rejected", failure);
+    }
+  }
 
   return (
     <>
@@ -70,7 +75,7 @@ function ConfigEditor({ source }: { source: string }) {
           pending={save.isPending}
           pendingLabel="Saving…"
           icon={<SaveIcon data-icon="inline-start" />}
-          onClick={() => save.mutate({ data: { source: value } })}
+          onClick={() => void handleSave()}
         >
           Save
         </PendingButton>

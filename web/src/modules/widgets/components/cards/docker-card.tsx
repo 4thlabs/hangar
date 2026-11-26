@@ -1,5 +1,7 @@
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useDockerOverview, useDockerProjects } from "#libs/api";
+import { dockerQueries } from "#modules/common/api/docker-queries.ts";
+import { Region } from "#modules/common/components/region.tsx";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { useDockerChanges } from "#modules/common/hooks/use-docker-changes.ts";
 import { WidgetError, WidgetSkeleton } from "#modules/widgets/components/widget-states.tsx";
@@ -16,28 +18,35 @@ import { HostMetrics } from "./host-metrics.tsx";
 
 /**
  * The containers, images and volumes of the Docker host Hangar runs on, and the installed apps the image check found
- * behind their registry, from the Docker routes: the card follows the daemon's changes, and reads them again as they
- * change. The card never asks a registry itself.
+ * behind their registry, from the Docker routes, in its own region: the card follows the daemon's changes, and reads
+ * them again as they change. The card never asks a registry itself.
  */
 export function DockerCard() {
   const look = widgetLook("docker-general-stats");
-  const { data: overview, error } = useDockerOverview();
-  const { data: projects } = useDockerProjects();
+
+  // Followed while the host is read too: a change meanwhile reads it again.
+  useDockerChanges();
+
+  return (
+    <Region
+      fallback={<WidgetSkeleton look={look} />}
+      failure={({ error }) => <WidgetError look={look} reason={describeError(error)} />}
+    >
+      <DockerHost />
+    </Region>
+  );
+}
+
+/** The card, once the host is read; the updates come when the apps are read, and none while they are not. */
+function DockerHost() {
+  const look = widgetLook("docker-general-stats");
+  const { data: overview } = useSuspenseQuery(dockerQueries.overview());
+  const { data: projects } = useQuery(dockerQueries.projects());
 
   const outdated = (projects ?? [])
     .filter(project => project.updateAvailable)
     .map(project => project.name)
     .sort();
-
-  useDockerChanges();
-
-  if (error) {
-    return <WidgetError look={look} reason={describeError(error)} />;
-  }
-
-  if (overview === undefined) {
-    return <WidgetSkeleton look={look} />;
-  }
 
   return (
     <WidgetCard className={look.className}>

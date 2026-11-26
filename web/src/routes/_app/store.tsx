@@ -1,9 +1,10 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { PlusIcon } from "lucide-react";
-import { useStoreApps } from "#libs/api";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { searchByName } from "#modules/common/helpers/search-by-name.ts";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
+import { storeQueries } from "#modules/store/api/store-queries.ts";
 import { StoreAppCard } from "#modules/store/components/store-app-card.tsx";
 import { StoreFilterMenu } from "#modules/store/components/store-filter-menu.tsx";
 import { parseStoreFilters, validateStoreSearch } from "#modules/store/helpers/store-search.ts";
@@ -19,7 +20,7 @@ export const Route = createFileRoute("/_app/store")({
 function StorePage() {
   const search = useSearch({ from: "/_app/store" });
   const filters = parseStoreFilters(search.filter);
-  const { data, error, isPending } = useStoreApps(filters.length > 0 ? { filter: filters } : undefined);
+  const { data, error, isPending } = useQuery(storeQueries.apps(filters));
   const apps = searchByName(search.q ?? "", data?.apps ?? []);
   const total = (data?.counts.installed ?? 0) + (data?.counts.available ?? 0);
 

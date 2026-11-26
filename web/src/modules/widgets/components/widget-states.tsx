@@ -34,3 +34,8 @@ export function WidgetError({ look, reason }: { look: WidgetLook; reason?: strin
     </WidgetCard>
   );
 }
+
+/** The card of a widget that threw as it rendered, on data its service gave in a shape it does not expect. */
+export function WidgetCardFailure({ look }: { look: WidgetLook }) {
+  return <WidgetError look={look} reason="The card could not show what its service answered." />;
+}
