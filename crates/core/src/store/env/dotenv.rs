@@ -49,7 +49,7 @@ impl Dotenv {
     }
 
     /// Whether JavaScript's `trim` and `\s` take `character` for a blank.
-    pub(super) fn is_space(character: char) -> bool {
+    pub(crate) fn is_space(character: char) -> bool {
         matches!(
             character,
             '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | ' ' | '\u{A0}' | '\u{1680}' | '\u{2000}'

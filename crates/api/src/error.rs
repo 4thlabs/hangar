@@ -135,6 +135,156 @@ pub enum ErrorCode {
     /// The sync of the store stopped short: the server failed it, and its log says how.
     #[serde(rename = "store.sync_crashed")]
     SyncCrashed,
+
+    /// An app to create whose id the store has already: its folder, or anything in its place.
+    #[serde(rename = "editor.app_exists")]
+    AppExists {
+        /// The id.
+        app: String,
+    },
+
+    /// An id that cannot name an app.
+    #[serde(rename = "editor.invalid_app_id")]
+    InvalidAppId {
+        /// The id asked for.
+        app: String,
+    },
+
+    /// A path of an app's file that is not one: empty, absolute, with an empty segment or one that starts with a dot, as `..` or a hidden file.
+    #[serde(rename = "editor.invalid_path")]
+    InvalidPath {
+        /// The path, as it was given.
+        path: String,
+    },
+
+    /// A path of an app's file that goes through a file as if it were a folder.
+    #[serde(rename = "editor.through_file")]
+    ThroughFile {
+        /// The path in the app's folder.
+        path: String,
+    },
+
+    /// A path of an app's file that leads out of its folder, through a symlink.
+    #[serde(rename = "editor.outside_app")]
+    OutsideApp {
+        /// The app.
+        app: String,
+        /// The path in the app's folder.
+        path: String,
+    },
+
+    /// A path of an app's file through a symlink to nothing, which a write would create wherever it points.
+    #[serde(rename = "editor.broken_symlink")]
+    BrokenSymlink {
+        /// The path in the app's folder, up to the symlink.
+        path: String,
+    },
+
+    /// An app has no file at this path.
+    #[serde(rename = "editor.no_such_file")]
+    NoSuchFile {
+        /// The app.
+        app: String,
+        /// The path in the app's folder.
+        path: String,
+    },
+
+    /// Something that is not a regular file sits at this path, as a folder.
+    #[serde(rename = "editor.not_a_file")]
+    NotAFile {
+        /// The path in the app's folder.
+        path: String,
+    },
+
+    /// A file too large for the editor, which sends it whole: over 1 MiB.
+    #[serde(rename = "editor.too_large")]
+    TooLarge {
+        /// The path in the app's folder.
+        path: String,
+        /// Its size, in bytes.
+        size: u64,
+    },
+
+    /// A binary file, which the editor does not open.
+    #[serde(rename = "editor.binary")]
+    BinaryFile {
+        /// The path in the app's folder.
+        path: String,
+    },
+
+    /// A file that is not UTF-8, which a save from the editor would corrupt.
+    #[serde(rename = "editor.not_utf8")]
+    NotUtf8Text {
+        /// The path in the app's folder.
+        path: String,
+    },
+
+    /// A file to create where something is already, a hidden file included.
+    #[serde(rename = "editor.file_exists")]
+    FileExists {
+        /// The path in the app's folder.
+        path: String,
+    },
+
+    /// A file found missing as it was saved, which something else created first: it is left as it is.
+    #[serde(rename = "editor.file_appeared")]
+    FileAppeared {
+        /// The path in the app's folder.
+        path: String,
+    },
+
+    /// A YAML or `.env` file that does not parse, which is not written.
+    #[serde(rename = "editor.invalid_file")]
+    InvalidFile {
+        /// The path in the app's folder.
+        path: String,
+        /// What the parser says, in English.
+        reason: String,
+    },
+
+    /// Docker rejects a compose file, by `docker compose config` or `docker stack config`: it is not written. The complaint is about the operator's own file, and is the only way to say what to fix in it.
+    #[serde(rename = "editor.compose_rejected")]
+    ComposeRejected {
+        /// The path in the app's folder.
+        path: String,
+        /// Docker's complaint, its last lines, the app's files named by their paths in its folder and the credentials of a URL taken out.
+        complaint: String,
+    },
+
+    /// Docker could not check a compose file, as when it did not start: it is not written.
+    #[serde(rename = "editor.unchecked")]
+    FileUnchecked {
+        /// The path in the app's folder.
+        path: String,
+    },
+
+    /// An app's files could not be listed.
+    #[serde(rename = "editor.files_unreadable")]
+    FilesUnreadable {
+        /// The app.
+        app: String,
+    },
+
+    /// A file of an app could not be read.
+    #[serde(rename = "editor.read_failed")]
+    FileReadFailed {
+        /// The path in the app's folder.
+        path: String,
+    },
+
+    /// A file of an app could not be created or written.
+    #[serde(rename = "editor.save_failed")]
+    FileSaveFailed {
+        /// The path in the app's folder.
+        path: String,
+    },
+
+    /// An app could not be created.
+    #[serde(rename = "editor.create_failed")]
+    AppCreateFailed {
+        /// The id.
+        app: String,
+    },
 }
 
 /// An error as a body carries it, where a problem does not: its code, its params, and its English message, which the
@@ -198,20 +348,55 @@ impl ErrorCode {
             Self::UpdatedAndRemoved { .. } => "env.updated_and_removed",
             Self::SyncRunning => "store.sync_running",
             Self::SyncCrashed => "store.sync_crashed",
+            Self::AppExists { .. } => "editor.app_exists",
+            Self::InvalidAppId { .. } => "editor.invalid_app_id",
+            Self::InvalidPath { .. } => "editor.invalid_path",
+            Self::ThroughFile { .. } => "editor.through_file",
+            Self::OutsideApp { .. } => "editor.outside_app",
+            Self::BrokenSymlink { .. } => "editor.broken_symlink",
+            Self::NoSuchFile { .. } => "editor.no_such_file",
+            Self::NotAFile { .. } => "editor.not_a_file",
+            Self::TooLarge { .. } => "editor.too_large",
+            Self::BinaryFile { .. } => "editor.binary",
+            Self::NotUtf8Text { .. } => "editor.not_utf8",
+            Self::FileExists { .. } => "editor.file_exists",
+            Self::FileAppeared { .. } => "editor.file_appeared",
+            Self::InvalidFile { .. } => "editor.invalid_file",
+            Self::ComposeRejected { .. } => "editor.compose_rejected",
+            Self::FileUnchecked { .. } => "editor.unchecked",
+            Self::FilesUnreadable { .. } => "editor.files_unreadable",
+            Self::FileReadFailed { .. } => "editor.read_failed",
+            Self::FileSaveFailed { .. } => "editor.save_failed",
+            Self::AppCreateFailed { .. } => "editor.create_failed",
         }
     }
 
     /// The status the server answers it with.
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::UnknownApp { .. } => StatusCode::NOT_FOUND,
-            Self::StoreNotInstalled | Self::SyncRunning => StatusCode::CONFLICT,
+            Self::UnknownApp { .. } | Self::NoSuchFile { .. } => StatusCode::NOT_FOUND,
+            Self::StoreNotInstalled
+            | Self::SyncRunning
+            | Self::AppExists { .. }
+            | Self::FileExists { .. }
+            | Self::FileAppeared { .. } => StatusCode::CONFLICT,
             Self::ConfigSyntax { .. }
             | Self::ConfigInvalid { .. }
             | Self::InvalidVariableName { .. }
             | Self::LineBreak { .. }
             | Self::UnwritableValue { .. }
-            | Self::UpdatedAndRemoved { .. } => StatusCode::BAD_REQUEST,
+            | Self::UpdatedAndRemoved { .. }
+            | Self::InvalidAppId { .. }
+            | Self::InvalidPath { .. }
+            | Self::ThroughFile { .. }
+            | Self::OutsideApp { .. }
+            | Self::BrokenSymlink { .. }
+            | Self::NotAFile { .. }
+            | Self::TooLarge { .. }
+            | Self::BinaryFile { .. }
+            | Self::NotUtf8Text { .. }
+            | Self::InvalidFile { .. }
+            | Self::ComposeRejected { .. } => StatusCode::BAD_REQUEST,
             Self::AppsUnreadable
             | Self::InstallFailed { .. }
             | Self::UninstallFailed { .. }
@@ -221,7 +406,12 @@ impl ErrorCode {
             | Self::ConfigSaveFailed
             | Self::EnvUnreadable
             | Self::EnvSaveFailed
-            | Self::SyncCrashed => StatusCode::INTERNAL_SERVER_ERROR,
+            | Self::SyncCrashed
+            | Self::FileUnchecked { .. }
+            | Self::FilesUnreadable { .. }
+            | Self::FileReadFailed { .. }
+            | Self::FileSaveFailed { .. }
+            | Self::AppCreateFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -260,6 +450,40 @@ impl ErrorCode {
                 "the store is being synced: try again once its sync has ended".to_owned()
             }
             Self::SyncCrashed => Self::hinted("the sync of the store stopped short"),
+            Self::AppExists { app } => format!("the app {app} already exists"),
+            Self::InvalidAppId { app } => format!(
+                "{app} is not an app id: lowercase letters, digits, `.`, `_` and `-`, starting with a letter or a digit"
+            ),
+            Self::InvalidPath { path } => format!("invalid file path: {path}"),
+            Self::ThroughFile { path } => format!("{path} goes through a file, not a folder"),
+            Self::OutsideApp { app, path } => format!("{path} leads outside the app {app}"),
+            Self::BrokenSymlink { path } => format!("{path} is a broken symlink"),
+            Self::NoSuchFile { app, path } => format!("the app {app} has no file {path}"),
+            Self::NotAFile { path } => format!("{path} is not a file"),
+            Self::TooLarge { path, size } => {
+                format!("{path} is too large to edit here: {size} bytes, 1 MiB at most")
+            }
+            Self::BinaryFile { path } => format!("{path} is not a text file"),
+            Self::NotUtf8Text { path } => {
+                format!("{path} is not UTF-8 text: saving it from the editor would corrupt it")
+            }
+            Self::FileExists { path } => format!("{path} already exists"),
+            Self::FileAppeared { path } => {
+                format!("{path} appeared while it was being saved: reopen it before saving again")
+            }
+            Self::InvalidFile { path, reason } => format!("{path} is not valid: {reason}"),
+            Self::ComposeRejected { path, complaint } => {
+                format!("docker rejects {path}:\n{complaint}")
+            }
+            Self::FileUnchecked { path } => Self::hinted(&format!("docker could not check {path}")),
+            Self::FilesUnreadable { app } => {
+                Self::hinted(&format!("the files of {app} could not be listed"))
+            }
+            Self::FileReadFailed { path } => Self::hinted(&format!("{path} could not be read")),
+            Self::FileSaveFailed { path } => Self::hinted(&format!("{path} could not be saved")),
+            Self::AppCreateFailed { app } => {
+                Self::hinted(&format!("the app {app} could not be created"))
+            }
         }
     }
 
@@ -316,6 +540,63 @@ mod tests {
             ErrorCode::UpdatedAndRemoved { name: name() },
             ErrorCode::SyncRunning,
             ErrorCode::SyncCrashed,
+            ErrorCode::AppExists { app: app() },
+            ErrorCode::InvalidAppId { app: app() },
+            ErrorCode::InvalidPath {
+                path: "path".to_owned(),
+            },
+            ErrorCode::ThroughFile {
+                path: "path".to_owned(),
+            },
+            ErrorCode::OutsideApp {
+                app: app(),
+                path: "path".to_owned(),
+            },
+            ErrorCode::BrokenSymlink {
+                path: "path".to_owned(),
+            },
+            ErrorCode::NoSuchFile {
+                app: app(),
+                path: "path".to_owned(),
+            },
+            ErrorCode::NotAFile {
+                path: "path".to_owned(),
+            },
+            ErrorCode::TooLarge {
+                path: "path".to_owned(),
+                size: 1_048_577,
+            },
+            ErrorCode::BinaryFile {
+                path: "path".to_owned(),
+            },
+            ErrorCode::NotUtf8Text {
+                path: "path".to_owned(),
+            },
+            ErrorCode::FileExists {
+                path: "path".to_owned(),
+            },
+            ErrorCode::FileAppeared {
+                path: "path".to_owned(),
+            },
+            ErrorCode::InvalidFile {
+                path: "path".to_owned(),
+                reason: "reason".to_owned(),
+            },
+            ErrorCode::ComposeRejected {
+                path: "path".to_owned(),
+                complaint: "complaint".to_owned(),
+            },
+            ErrorCode::FileUnchecked {
+                path: "path".to_owned(),
+            },
+            ErrorCode::FilesUnreadable { app: app() },
+            ErrorCode::FileReadFailed {
+                path: "path".to_owned(),
+            },
+            ErrorCode::FileSaveFailed {
+                path: "path".to_owned(),
+            },
+            ErrorCode::AppCreateFailed { app: app() },
         ]
     }
 

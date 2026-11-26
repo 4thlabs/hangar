@@ -28,6 +28,7 @@ mod data_dir;
 mod disk;
 mod env;
 mod error;
+mod files;
 mod yaml;
 
 use std::io;
@@ -41,6 +42,7 @@ pub use config::{
 pub use data_dir::DataDir;
 pub use env::{Dotenv, GlobalEnv};
 pub use error::StoreError;
+pub use files::{AppFiles, SavedFile};
 pub use yaml::YamlError;
 
 pub(crate) use disk::Disk;
@@ -513,5 +515,15 @@ mod tests {
         assert_send(store.save_config("categories: []\n"));
         assert_send(store.env().ensure());
         assert_send(store.env().write(BTreeMap::new(), &[]));
+        assert_send(store.files("jellyfin"));
+        assert_send(store.create_app("jellyfin", "services: {}\n"));
+
+        let files =
+            super::AppFiles::new(&store, "jellyfin", "/data/app-store/store/jellyfin".into());
+
+        assert_send(files.list());
+        assert_send(files.read("compose.yml"));
+        assert_send(files.create("compose.yml"));
+        assert_send(files.write("compose.yml", "services: {}\n"));
     }
 }

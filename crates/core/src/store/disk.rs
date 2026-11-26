@@ -183,7 +183,7 @@ impl Disk {
     }
 
     /// Removes a file a failed write left: the write's error is the one returned, and this one is logged.
-    async fn discard(path: &Path) {
+    pub(crate) async fn discard(path: &Path) {
         if let Err(error) = tokio::fs::remove_file(path).await {
             tracing::warn!(path = %path.display(), %error, "could not remove the file of a failed write");
         }
