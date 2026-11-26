@@ -16,6 +16,8 @@ fn settings(page: Option<&Path>) -> Settings {
         "HANGAR_DATA_DIR" => Some("/srv/hangar".to_owned()),
         "HANGAR_STORE_URL" => Some("https://example.com/store.git".to_owned()),
         "DOMAIN" => Some("example.com".to_owned()),
+        "HANGAR_URL" => Some("https://hangar.example.com".to_owned()),
+        "HANGAR_SECRET" => Some("0123456789abcdef0123456789abcdef".to_owned()),
         "HANGAR_PAGE_DIR" => page.clone(),
         _ => None,
     })
@@ -24,7 +26,8 @@ fn settings(page: Option<&Path>) -> Settings {
 
 /// Serves the server of `settings` on port 0, and gives its URL.
 async fn serve(settings: &Settings) -> String {
-    let router = hangar_server::server(settings).into_router(hangar_server::router(App));
+    let router =
+        hangar_server::server(settings).into_router(hangar_server::router(App::new(settings)));
 
     quoll::test::spawn(router).await
 }

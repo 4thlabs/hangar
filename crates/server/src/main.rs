@@ -54,8 +54,12 @@ async fn serve(settings: &Settings) -> ExitCode {
         ),
     }
 
+    let app = App::new(settings);
+
+    app.start().await;
+
     let served = hangar_server::server(settings)
-        .serve(address, hangar_server::router(App))
+        .serve(address, hangar_server::router(app))
         .await;
 
     match served {
