@@ -152,7 +152,7 @@ describe("/apps", () => {
     expect(fetch.mock.calls.filter(([url]) => url === "/api/docker/apps")).toHaveLength(2);
   });
 
-  it("follows the changes again after a wait once they are lost, says so meanwhile, and reads the apps again", async () => {
+  it("reads the apps again each time the changes open, then after a wait once they are lost, saying so meanwhile", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
 
     const fetch = serve({ "GET /api/docker/apps": () => Response.json(projects) });
@@ -165,7 +165,8 @@ describe("/apps", () => {
 
     act(() => lost.open());
 
-    expect(reads()).toBe(1);
+    // A change before the stream opened is not in it.
+    await waitFor(() => expect(reads()).toBe(2));
 
     act(() => lost.fail());
 
@@ -181,7 +182,7 @@ describe("/apps", () => {
 
     act(() => back.open());
 
-    await waitFor(() => expect(reads()).toBe(2));
+    await waitFor(() => expect(reads()).toBe(3));
     expect(screen.queryByText(notice)).toBeNull();
   });
 
