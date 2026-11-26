@@ -52,7 +52,7 @@ services:
     /// Installs the app `id`, unless it is already: links it, then seeds the variables its files reference. A 409 while
     /// a compose batch holds it.
     async fn install(&self, id: &str) -> Result<StoreApp> {
-        let _claim = self.locks.claim([id])?;
+        let _claim = self.locks.claim_change(id)?;
         let _change = self.change().await?;
         let Some(app) = self.find(id).await? else {
             return Err(Self::unknown(id));
@@ -84,7 +84,7 @@ services:
     /// by its link alone, as the core's `uninstall_app` does. A 409 while a compose batch holds it, which would bring
     /// back what `down` took down; a batch is refused while this runs.
     async fn uninstall(&self, id: &str) -> Result<StoreApp> {
-        let _claim = self.locks.claim([id])?;
+        let _claim = self.locks.claim_change(id)?;
         let _change = self.change().await?;
         let app = match self.store.apps().await {
             Ok(apps) => apps.into_iter().find(|app| app.id == id).map(Self::view),
@@ -216,7 +216,7 @@ impl StoreServer for App {
     }
 
     async fn sync(&self, _: &SignedIn) -> Result<Response<StoreSync>> {
-        Ok(Response::new(self.store.start_sync().await))
+        Ok(Response::new(self.store.start_sync().await?))
     }
 
     async fn apps(&self, _: &SignedIn, filter: Vec<AppFilter>) -> Result<Response<StoreApps>> {

@@ -11,6 +11,7 @@ use hangar_core::StoreError;
 
 use super::StoreState;
 use super::command_log::CommandLog;
+use crate::app_locks::SyncClaim;
 use crate::failure::Failure;
 use crate::notifications::Notification;
 use crate::timestamp::Timestamp;
@@ -27,8 +28,13 @@ impl StoreState {
     /// Starts a sync, and answers it running; while one runs, answers that one, and starts none.
     ///
     /// Detached: a clone or a pull is as long as the network makes it, and the request does not wait for it. Its end
-    /// is kept, for `GET /store`, and notified.
-    pub(crate) async fn start_sync(self: &Arc<Self>) -> StoreSync {
+    /// is kept, for `GET /store`, and notified. No compose batch runs beside it, as it pulls and links the files a
+    /// batch's compose reads.
+    ///
+    /// # Errors
+    ///
+    /// A 409, `store.batch_running`, naming the apps compose batches hold.
+    pub(crate) async fn start_sync(self: &Arc<Self>) -> Result<StoreSync, ErrorCode> {
         let state = Arc::clone(self);
 
         self.start_sync_with(
@@ -37,8 +43,8 @@ impl StoreState {
         .await
     }
 
-    /// Starts a sync that runs `work`, unless one runs; `work` is dropped unpolled then.
-    async fn start_sync_with<W>(self: &Arc<Self>, work: W) -> StoreSync
+    /// Starts a sync that runs `work`, unless one runs or a compose batch does; `work` is dropped unpolled then.
+    async fn start_sync_with<W>(self: &Arc<Self>, work: W) -> Result<StoreSync, ErrorCode>
     where
         W: Future<Output = Result<(), StoreError>> + Send + 'static,
     {
@@ -49,9 +55,10 @@ impl StoreState {
         if self.gate.is_syncing()
             && let Some(running) = self.last_sync()
         {
-            return running;
+            return Ok(running);
         }
 
+        let claim = self.locks.claim_sync()?;
         let operation = if self.store.is_installed().await {
             SyncOperation::Update
         } else {
@@ -69,9 +76,9 @@ impl StoreState {
         self.gate.begin_sync(|| {
             self.sync.send_replace(Some(started.clone()));
         });
-        tokio::spawn(Arc::clone(self).sync(operation, work));
+        tokio::spawn(Arc::clone(self).sync(operation, work, claim));
 
-        started
+        Ok(started)
     }
 
     /// Resolves once no sync runs.
@@ -89,11 +96,12 @@ impl StoreState {
         ended.clone()
     }
 
-    /// Runs `work`, the sync `operation`, once the changes in before it are done, then records its outcome and notifies it.
+    /// Runs `work`, the sync `operation`, once the changes in before it are done, then records its outcome and notifies it;
+    /// compose batches run again from then on, which `claim` kept out.
     ///
     /// In a task of its own, so that a panic in it ends the sync as a failure rather than leave it running until the
     /// server restarts, which no other sync could start before.
-    async fn sync<W>(self: Arc<Self>, operation: SyncOperation, work: W)
+    async fn sync<W>(self: Arc<Self>, operation: SyncOperation, work: W, claim: SyncClaim)
     where
         W: Future<Output = Result<(), StoreError>> + Send + 'static,
     {
@@ -122,6 +130,8 @@ impl StoreState {
             }
         };
 
+        // Before its end is published: a page told of it may start a batch at once.
+        drop(claim);
         self.finish(operation, outcome);
     }
 
@@ -268,7 +278,7 @@ mod tests {
             .state(fixture.remote.to_str().expect("UTF-8"), Runtime::new())
             .await;
 
-        let started = state.start_sync().await;
+        let started = state.start_sync().await.expect("no batch runs");
 
         assert_eq!(started.operation, SyncOperation::Install);
         assert_eq!(started.state, SyncState::Running);
@@ -288,7 +298,10 @@ mod tests {
             "the variables of the installed apps are seeded"
         );
 
-        assert_eq!(state.start_sync().await.operation, SyncOperation::Update);
+        assert_eq!(
+            state.start_sync().await.expect("no batch runs").operation,
+            SyncOperation::Update
+        );
         assert_eq!(
             state.sync_ended().await.expect("a sync").state,
             SyncState::Succeeded
@@ -324,7 +337,7 @@ mod tests {
             .state(missing.to_str().expect("UTF-8"), Runtime::new())
             .await;
 
-        state.start_sync().await;
+        state.start_sync().await.expect("no batch runs");
 
         let failed = state.sync_ended().await.expect("a sync");
 
@@ -372,8 +385,8 @@ mod tests {
             .state("https://example.com/store.git", runtime)
             .await;
 
-        let first = state.start_sync().await;
-        let second = state.start_sync().await;
+        let first = state.start_sync().await.expect("no batch runs");
+        let second = state.start_sync().await.expect("no batch runs");
 
         assert_eq!(second, first, "the sync running is answered");
 
@@ -409,7 +422,10 @@ mod tests {
             .state(fixture.remote.to_str().expect("UTF-8"), Runtime::new())
             .await;
 
-        state.start_sync_with(panicking()).await;
+        state
+            .start_sync_with(panicking())
+            .await
+            .expect("no batch runs");
 
         let crashed = state.sync_ended().await.expect("a sync");
 
@@ -424,7 +440,7 @@ mod tests {
         );
 
         assert_eq!(
-            state.start_sync().await.state,
+            state.start_sync().await.expect("no batch runs").state,
             SyncState::Running,
             "a sync starts again"
         );
@@ -447,7 +463,8 @@ mod tests {
                 released.await.expect("the test lets the sync end");
                 Ok(())
             })
-            .await;
+            .await
+            .expect("no batch runs");
 
         let refused = state.change().await.expect_err("a sync runs");
 

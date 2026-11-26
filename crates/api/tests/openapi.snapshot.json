@@ -1830,30 +1830,24 @@
             "type": "object"
           },
           {
-            "description": "A batch of compose commands asked for more apps than are installed.",
+            "description": "A sync of the store, while compose batches run on the files it pulls and links.",
             "properties": {
               "code": {
-                "const": "compose.too_many_apps",
+                "const": "store.batch_running",
                 "type": "string"
               },
               "params": {
                 "properties": {
                   "apps": {
-                    "description": "How many apps it asked for, each once.",
-                    "format": "uint",
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "installed": {
-                    "description": "How many apps are installed.",
-                    "format": "uint",
-                    "minimum": 0,
-                    "type": "integer"
+                    "description": "The apps the batches hold, by id.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
-                  "apps",
-                  "installed"
+                  "apps"
                 ],
                 "type": "object"
               }
@@ -4557,7 +4551,7 @@
             "Session": []
           }
         ],
-        "summary": "Clones the store, or pulls it once cloned, then links the apps `hangar.yml` lists and seeds `.env.global`, apart from the request: the sync running, which `GET /store` reads again, and notified once it ends. While one runs, the answer is that one, and no other starts.",
+        "summary": "Clones the store, or pulls it once cloned, then links the apps `hangar.yml` lists and seeds `.env.global`, apart from the request: the sync running, which `GET /store` reads again, and notified once it ends. While one runs, the answer is that one, and no other starts. A 409 while compose batches run, which hold their apps' files.",
         "tags": [
           "Store"
         ]

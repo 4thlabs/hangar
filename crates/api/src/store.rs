@@ -116,7 +116,8 @@ quoll::group! {
 
         /// Clones the store, or pulls it once cloned, then links the apps `hangar.yml` lists and seeds `.env.global`,
         /// apart from the request: the sync running, which `GET /store` reads again, and notified once it ends. While
-        /// one runs, the answer is that one, and no other starts.
+        /// one runs, the answer is that one, and no other starts. A 409 while compose batches run, which hold their
+        /// apps' files.
         POST "/store/sync" => sync() -> Accepted<StoreSync>;
 
         /// The store's apps, by id, those of the filters given, or all of them, and how many each filter keeps.
