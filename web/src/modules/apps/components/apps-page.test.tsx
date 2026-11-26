@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComposeAction, ComposeReport, ProjectDetail, ProjectStatus, ProjectSummary } from "#libs/api";
-import { coded, events, FakeEventSource, problem, renderAt, serve } from "#app/mock/page.tsx";
+import { coded, events, FakeEventSource, problem, renderAt, serve } from "#mock/page.tsx";
 import { composeCommandLine } from "#modules/apps/helpers/compose-actions.ts";
 
 /** An installed app with one container, `<name>-1`. */

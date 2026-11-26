@@ -6,8 +6,8 @@ import "@fontsource-variable/nunito";
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createPage } from "#app/page.ts";
-import { AppProviders } from "#modules/common/components/app-providers.tsx";
+import { AppProviders } from "#app-providers.tsx";
+import { createPage } from "#page.ts";
 
 const root = document.getElementById("root");
 

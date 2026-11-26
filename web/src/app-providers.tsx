@@ -1,9 +1,9 @@
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import type { Preferences } from "#libs/preferences";
-import { ThemeEffects } from "#modules/common/components/theme-effects.tsx";
 import { PreferencesContext } from "#modules/common/hooks/use-preferences.ts";
 import { Toaster } from "#modules/common/ui/toast.tsx";
+import { ThemeEffects } from "#theme-effects.tsx";
 
 type AppProvidersProps = {
   children: ReactNode;

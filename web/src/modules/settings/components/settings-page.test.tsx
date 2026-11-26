@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JobRun, StoreStatus, StoreSync } from "#libs/api";
-import { coded, problem, renderAt, serve } from "#app/mock/page.tsx";
+import { coded, problem, renderAt, serve } from "#mock/page.tsx";
 
 const running: StoreSync = {
   operation: "update",
