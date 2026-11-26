@@ -16,6 +16,21 @@ impl WidgetsState {
     /// service the same call on each visit.
     const IMAGE_CACHE: &str = "private, max-age=86400";
 
+    /// The types of image the relay sends: rasters, which hold no script.
+    const RASTER_TYPES: [&str; 5] = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+        "image/avif",
+    ];
+
+    /// What quoll calls the bytes of an answer that gives no `Content-Type`.
+    const NO_TYPE: &str = "application/octet-stream";
+
+    /// The type of an image its service gives none, as the Waku version sent it.
+    const DEFAULT_TYPE: &str = "image/jpeg";
+
     /// The widgets `hangar.yml` places, with their links. What the widgets no longer placed loaded is forgotten.
     async fn placements(&self) -> Result<Vec<WidgetPlacement>> {
         let config = self
@@ -96,13 +111,14 @@ impl WidgetsState {
             key: key.to_owned(),
             image: id.to_owned(),
         };
+
         if !Self::is_image_id(id) {
             return Err(unknown().into());
         }
 
         let placement = self.loading(key).await?;
         let kind = &placement.widget.kind;
-        let fetched = self.loader().image(kind, id).await.map_err(|error| {
+        let fetched = self.loader(key).image(kind, id).await.map_err(|error| {
             Failure::logged(
                 ErrorCode::WidgetUnavailable {
                     widget: kind.name().to_owned(),
@@ -112,18 +128,31 @@ impl WidgetsState {
         })?;
         let image = fetched.ok_or_else(unknown)?;
 
-        // A service answers its errors as pages, or a proxy in front of it does: the browser gets an image, or none.
-        if !image.content_type().starts_with("image/") {
-            tracing::warn!(
-                key,
-                content_type = image.content_type(),
-                "a widget's service answered an image that is none"
-            );
+        Self::raster(image).ok_or_else(|| unknown().into())
+    }
 
-            return Err(unknown().into());
+    /// `image` as the relay sends it: a raster image, of a type of [`RASTER_TYPES`](Self::RASTER_TYPES), or one of no
+    /// type, which the services give their JPEGs, as JPEG. Anything else is refused and logged: a page of errors the
+    /// service or a proxy answers, or an SVG, which may hold a script that would run on Hangar's origin, with its
+    /// session, opened at the relay's URL.
+    fn raster(image: Bytes) -> Option<Bytes> {
+        if image.has_type(Self::NO_TYPE) {
+            return Some(image.with_content_type(Self::DEFAULT_TYPE));
         }
 
-        Ok(image)
+        if Self::RASTER_TYPES
+            .iter()
+            .any(|raster| image.has_type(raster))
+        {
+            return Some(image);
+        }
+
+        tracing::warn!(
+            content_type = image.content_type(),
+            "a widget's service answered an image the relay does not send"
+        );
+
+        None
     }
 }
 
@@ -147,6 +176,8 @@ impl WidgetsServer for App {
 
 #[cfg(test)]
 mod tests {
+    use quoll::Bytes;
+
     use super::WidgetsState;
 
     #[test]
@@ -157,6 +188,28 @@ mod tests {
 
         for id in ["", ".", "..", "a/b", "a b", "a%2Fb", "é"] {
             assert!(!WidgetsState::is_image_id(id), "{id}");
+        }
+    }
+
+    #[test]
+    fn relays_a_raster_image_whatever_the_case_of_its_type_and_one_of_no_type_as_a_jpeg() {
+        let relayed = |content_type: &str| {
+            WidgetsState::raster(Bytes::from(vec![1, 2]).with_content_type(content_type))
+                .map(|image| image.content_type().to_owned())
+        };
+
+        assert_eq!(relayed("Image/PNG"), Some("Image/PNG".to_owned()));
+        assert_eq!(
+            relayed("image/webp; q=1"),
+            Some("image/webp; q=1".to_owned())
+        );
+        assert_eq!(
+            relayed("application/octet-stream"),
+            Some("image/jpeg".to_owned())
+        );
+
+        for refused in ["image/svg+xml", "text/html", "image/x-icon"] {
+            assert_eq!(relayed(refused), None, "{refused}");
         }
     }
 }

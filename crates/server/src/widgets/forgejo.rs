@@ -8,7 +8,7 @@ use futures::future::BoxFuture;
 use futures::{FutureExt, StreamExt, stream};
 use hangar_api::{ForgejoCi, ForgejoRepository, ForgejoRun};
 use jiff::Timestamp;
-use reqwest_middleware::ClientWithMiddleware;
+use quoll::client;
 use serde::Deserialize;
 
 use super::error::LoadError;
@@ -16,25 +16,19 @@ use super::service::Service;
 use crate::failure::Failure;
 
 quoll::api! {
-    /// Forgejo's API, under `/api/v1`. Its key, an access token, goes in `Authorization: token ...`.
+    /// Forgejo's API, under `/api/v1`. Its key, an access token, goes in `Authorization: Bearer ...`, which Forgejo
+    /// reads as it reads `token ...`.
     #[server(none)]
     api ForgejoApi = "/api/v1";
 
+    #[auth(Bearer)]
     group Forgejo {
-        GET "/repos/search?limit={limit}&page={page}"
-            => search(header("Authorization") key: Option<&str>, limit: u32, page: u32) -> Search;
+        GET "/repos/search?limit={limit}&page={page}" => search(limit: u32, page: u32) -> Search;
         GET "/users/{owner}/repos?limit={limit}&page={page}"
-            => owned(owner: &str, header("Authorization") key: Option<&str>, limit: u32, page: u32) -> Vec<Repository>;
+            => owned(owner: &str, limit: u32, page: u32) -> Vec<Repository>;
         /// Forgejo reads `limit` only beside a `page`.
         GET "/repos/{owner}/{name}/actions/runs?status={status}&limit={limit}&page={page}"
-            => runs(
-                owner: &str,
-                name: &str,
-                header("Authorization") key: Option<&str>,
-                status: Vec<&str>,
-                limit: u32,
-                page: u32,
-            ) -> Runs;
+            => runs(owner: &str, name: &str, status: Vec<&str>, limit: u32, page: u32) -> Runs;
     }
 }
 
@@ -97,20 +91,33 @@ const RECENT: usize = 3;
 /// How many repositories are asked for their runs at once.
 const CONCURRENT_CALLS: usize = 8;
 
-/// The repositories of the Forgejo of `service`, those of `owners` or every one its key sees, and the runs that have
+/// The client of a placement's service, built once for its address and its key.
+#[derive(Debug, Clone)]
+pub(super) struct Client(ForgejoApiClient);
+
+impl Client {
+    /// The client of the service `service`, with its key.
+    ///
+    /// # Errors
+    ///
+    /// When the client cannot be built, or the key cannot be sent.
+    pub(super) fn new(service: &Service) -> Result<Self, LoadError> {
+        build(service).map(Self)
+    }
+}
+
+/// The client of the Forgejo of `service`, with its token.
+fn build(service: &Service) -> Result<ForgejoApiClient, LoadError> {
+    service.client::<ForgejoApi>("Forgejo", service.key().map(client::bearer))
+}
+
+/// The repositories of the Forgejo of `client`, those of `owners` or every one its key sees, and the runs that have
 /// not finished in each.
 pub(super) async fn load(
-    http: &ClientWithMiddleware,
-    service: &Service,
+    client: &Client,
     owners: Option<&[String]>,
 ) -> Result<ForgejoCi, LoadError> {
-    let client = ForgejoApi::client_with(http.clone(), &service.api)
-        .map_err(LoadError::call("reach Forgejo"))?;
-    let token = service.key().map(|key| format!("token {key}"));
-    let forgejo = Calls {
-        client: &client,
-        token: token.as_deref(),
-    };
+    let forgejo = Calls { client: &client.0 };
     let repositories = match owners {
         None => forgejo.every_repository().await?,
         Some(owners) => {
@@ -137,9 +144,18 @@ pub(super) async fn load(
     Ok(summary(repositories, active_runs))
 }
 
-/// The card of `repositories` and of the runs found in them.
-fn summary(repositories: Vec<Repository>, mut active_runs: Vec<ForgejoRun>) -> ForgejoCi {
-    active_runs.sort_by_key(|run| (run.is_queued, Reverse(moment(&run.since))));
+/// A run that has not finished, and when it was created, which orders the card.
+struct Active {
+    created: Timestamp,
+    run: ForgejoRun,
+}
+
+/// The card of `repositories` and of the runs found in them: running first, then newest first, by when they were
+/// created, as the Waku version orders them.
+fn summary(repositories: Vec<Repository>, mut active_runs: Vec<Active>) -> ForgejoCi {
+    active_runs.sort_by_key(|active| (active.run.is_queued, Reverse(active.created)));
+
+    let active_runs = active_runs.into_iter().map(|active| active.run).collect();
 
     let repository_count = repositories.len() as u64;
     // Archiving bumps `updated_at` too, and an archived repository is not where the work is.
@@ -225,10 +241,9 @@ async fn settle<T>(parts: Vec<Part<'_, T>>) -> Result<Vec<T>, LoadError> {
     }
 }
 
-/// The calls of the card, with the token of the key.
+/// The calls of the card.
 struct Calls<'a> {
     client: &'a ForgejoApiClient,
-    token: Option<&'a str>,
 }
 
 impl Calls<'_> {
@@ -240,7 +255,7 @@ impl Calls<'_> {
             let found = self
                 .client
                 .forgejo()
-                .search(self.token, PAGE_SIZE, page)
+                .search(PAGE_SIZE, page)
                 .await
                 .map_err(LoadError::call("search Forgejo's repositories"))?
                 .data;
@@ -265,7 +280,7 @@ impl Calls<'_> {
             let found = self
                 .client
                 .forgejo()
-                .owned(owner, self.token, PAGE_SIZE, page)
+                .owned(owner, PAGE_SIZE, page)
                 .await
                 .map_err(LoadError::call(format!(
                     "list the repositories of {owner} on Forgejo"
@@ -283,7 +298,7 @@ impl Calls<'_> {
     }
 
     /// The runs of `repository` that have not finished.
-    async fn active_runs(&self, repository: &Repository) -> Result<Vec<ForgejoRun>, LoadError> {
+    async fn active_runs(&self, repository: &Repository) -> Result<Vec<Active>, LoadError> {
         let Some((owner, name)) = repository.full_name.split_once('/') else {
             return Err(LoadError::refused(format!(
                 "Forgejo names a repository {}, with no owner",
@@ -293,14 +308,7 @@ impl Calls<'_> {
         let runs = self
             .client
             .forgejo()
-            .runs(
-                owner,
-                name,
-                self.token,
-                ACTIVE_STATUSES.to_vec(),
-                PAGE_SIZE,
-                1,
-            )
+            .runs(owner, name, ACTIVE_STATUSES.to_vec(), PAGE_SIZE, 1)
             .await
             .map_err(LoadError::call(format!(
                 "list the runs of {} on Forgejo",
@@ -319,15 +327,18 @@ impl Calls<'_> {
                     &run.created
                 };
 
-                ForgejoRun {
-                    id: run.id,
-                    repository: repository.full_name.clone(),
-                    since: rfc3339(since),
-                    is_queued: run.status != RUNNING,
-                    title: run.title,
-                    status: run.status,
-                    reference: run.prettyref,
-                    url: run.html_url,
+                Active {
+                    created: moment(&run.created),
+                    run: ForgejoRun {
+                        id: run.id,
+                        repository: repository.full_name.clone(),
+                        since: rfc3339(since),
+                        is_queued: run.status != RUNNING,
+                        title: run.title,
+                        status: run.status,
+                        reference: run.prettyref,
+                        url: run.html_url,
+                    },
                 }
             })
             .collect())

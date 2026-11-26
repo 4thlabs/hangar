@@ -1,7 +1,7 @@
 //! `backrest-summary`: Backrest's repositories and how their backups went, from its summary dashboard.
 
 use hangar_api::{BackrestHealth, BackrestRepository, BackrestSummary};
-use reqwest_middleware::ClientWithMiddleware;
+use quoll::client;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 
@@ -10,14 +10,16 @@ use super::service::Service;
 use super::time::Moment;
 
 quoll::api! {
-    /// Backrest's Connect-RPC API, at the root: every call, a read too, is a `POST` of JSON. Its key, when it is
-    /// given one, goes in `X-API-Key`.
+    /// Backrest's Connect-RPC API, at the root: every call, a read too, is a `POST` of JSON.
     #[server(none)]
     api BackrestApi = "";
 
+    /// A key, when Backrest is given one.
+    scheme ApiKey = header "X-API-Key";
+
+    #[auth(ApiKey)]
     group Backrest {
-        POST "/v1.Backrest/GetSummaryDashboard"
-            => summary(header("X-API-Key") key: Option<&str>, request: &Empty) -> Summary;
+        POST "/v1.Backrest/GetSummaryDashboard" => summary(request: &Empty) -> Summary;
     }
 }
 
@@ -126,16 +128,32 @@ impl RepoSummary {
     }
 }
 
-/// The repositories of the Backrest of `service`.
-pub(super) async fn load(
-    http: &ClientWithMiddleware,
-    service: &Service,
-) -> Result<BackrestSummary, LoadError> {
-    let client = BackrestApi::client_with(http.clone(), &service.api)
-        .map_err(LoadError::call("reach Backrest"))?;
+/// The client of a placement's service, built once for its address and its key.
+#[derive(Debug, Clone)]
+pub(super) struct Client(BackrestApiClient);
+
+impl Client {
+    /// The client of the service `service`, with its key.
+    ///
+    /// # Errors
+    ///
+    /// When the client cannot be built, or the key cannot be sent.
+    pub(super) fn new(service: &Service) -> Result<Self, LoadError> {
+        build(service).map(Self)
+    }
+}
+
+/// The client of the Backrest of `service`, with its key.
+fn build(service: &Service) -> Result<BackrestApiClient, LoadError> {
+    service.client::<BackrestApi>("Backrest", service.key().map(client::key::<ApiKey>))
+}
+
+/// The repositories of the Backrest of `client`.
+pub(super) async fn load(client: &Client) -> Result<BackrestSummary, LoadError> {
     let summary = client
+        .0
         .backrest()
-        .summary(service.key(), &Empty {})
+        .summary(&Empty {})
         .await
         .map_err(LoadError::call("read Backrest's summary"))?;
 

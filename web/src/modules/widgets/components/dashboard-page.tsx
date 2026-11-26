@@ -3,6 +3,7 @@ import { useWidgetsPlacements, type WidgetPlacement } from "#libs/api";
 import { ErrorMessage } from "#modules/common/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
+import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
 import { ArcaneCard } from "./cards/arcane-card.tsx";
 import { BackrestCard } from "./cards/backrest-card.tsx";
 import { BeszelCard } from "./cards/beszel-card.tsx";
@@ -17,6 +18,7 @@ import { MinifluxCard } from "./cards/miniflux-card.tsx";
 import { StockCard } from "./cards/stock-card.tsx";
 import { TcgCollectorCard } from "./cards/tcg-collector-card.tsx";
 import { LoadedWidget } from "./loaded-widget.tsx";
+import { WidgetBoundary } from "./widget-boundary.tsx";
 
 /** The three columns of the dashboard, each placed in one grid, as wide screens make room for them. */
 class DashboardColumns {
@@ -116,9 +118,12 @@ function PlacedWidget({ placement }: { placement: WidgetPlacement }) {
 export function DashboardPage() {
   const { data: placements, error } = useWidgetsPlacements();
 
+  const title = <title>Dashboard | Hangar</title>;
+
   if (error) {
     return (
       <main>
+        {title}
         <Alert variant="destructive">
           <CircleAlertIcon aria-hidden="true" />
           <AlertTitle>Could not read the dashboard</AlertTitle>
@@ -131,6 +136,7 @@ export function DashboardPage() {
   if (placements === undefined) {
     return (
       <main aria-busy="true">
+        {title}
         <Skeleton className="h-40 w-full" />
       </main>
     );
@@ -138,7 +144,7 @@ export function DashboardPage() {
 
   return (
     <main className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[1fr_3fr_1fr]">
-      <title>Dashboard | Hangar</title>
+      {title}
       {DashboardColumns.Numbers.map(column => {
         const inColumn = placements.filter(placement => placement.column === column);
 
@@ -149,7 +155,9 @@ export function DashboardPage() {
         return (
           <div key={column} className={DashboardColumns.ClassNames[column]}>
             {inColumn.map(placement => (
-              <PlacedWidget key={placement.key} placement={placement} />
+              <WidgetBoundary key={placement.key} look={WidgetAppearance.get(placement.type)}>
+                <PlacedWidget placement={placement} />
+              </WidgetBoundary>
             ))}
           </div>
         );

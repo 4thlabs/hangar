@@ -29,9 +29,14 @@ async fn systems(headers: HeaderMap, Query(query): Query<HashMap<String, String>
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
+    // PocketBase pages its lists by 30 unless asked otherwise.
     assert_eq!(
-        (query["sort"].as_str(), query["fields"].as_str()),
-        ("name", "id,name,status,info")
+        (
+            query["sort"].as_str(),
+            query["fields"].as_str(),
+            query["perPage"].as_str()
+        ),
+        ("name", "id,name,status,info", "100")
     );
 
     Json(json!({

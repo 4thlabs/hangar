@@ -83,6 +83,7 @@ export class WidgetAppearance {
       title: "Gluetun",
       errorDescription: "The VPN status could not be read.",
       icon: WidgetIcon.dashboard("gluetun"),
+      className: "min-h-32",
     },
     "miniflux-entries": {
       title: "Miniflux",

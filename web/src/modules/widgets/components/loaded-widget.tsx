@@ -14,19 +14,21 @@ type LoadedWidgetProps<Type extends LoadingWidgetType> = {
 
 /**
  * A widget that loads its data: its skeleton while the data comes, its error when its service did not answer, and its
- * card once loaded. Each widget waits for its own: a slow service holds its card alone.
+ * card once loaded. Each widget waits for its own: a slow service holds its card alone. A card that has data keeps it
+ * when it is read again and that fails, as when the tab comes back while the server restarts: the server keeps the
+ * last answer of a service for 15 minutes, and says when it is too old.
  */
 export function LoadedWidget<Type extends LoadingWidgetType>({ placement, type, children }: LoadedWidgetProps<Type>) {
   const look = WidgetAppearance.get(type);
   const { data, error } = useWidgetData(placement.key, type);
 
+  if (data !== undefined) {
+    return children(data);
+  }
+
   if (error) {
     return <WidgetError look={look} reason={ErrorMessage.describe(error)} />;
   }
 
-  if (data === undefined) {
-    return <WidgetSkeleton look={look} />;
-  }
-
-  return children(data);
+  return <WidgetSkeleton look={look} />;
 }

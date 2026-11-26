@@ -284,8 +284,9 @@ placement of the same options taking `-2`. Each card then reads `GET /api/widget
 holding its card alone. A widget's service is a quoll contract of its own in `crates/server/src/widgets/`, called at
 its `url`, else `https://<container>.<DOMAIN>`, the container's that the store's app declares, with its key from
 `.env.global`, `<CONTAINER>_API_KEY` under either prefix of the container's name, `SYNCIN_` or `SYNC_IN_`; GitHub's
-releases with `GITHUB_TOKEN`, and Finnhub's stocks with `FINNHUB_API_KEY`. Every call goes through one client, given 10
-seconds and tried again once.
+releases with `GITHUB_TOKEN`, and Finnhub's stocks with `FINNHUB_API_KEY`. Each placement's service gets a client of
+its own, which sends the key as its contract's scheme says, built at its first load and again once its address or its
+key changes; GitHub's and Finnhub's are built as the server starts. A call is given 10 seconds and tried again once.
 
 What a placement loaded is kept by its key: fresh for its `ttl`, 60 seconds unless `hangar.yml` says, then served while
 it loads again behind its reader for 15 minutes more, which is also how long a service that stopped answering keeps
@@ -298,9 +299,11 @@ Docker's stats, which load nothing here, is a 404. Docker's stats read `GET /api
 dashboard reads again as the daemon's changes come; the apps due an update come with the image check (#176).
 
 `GET /api/widgets/<key>/image/<id>` relays a Frigate thumbnail, a Jellyfin poster or a tcg-collector card, so that the
-browser needs neither the service's address nor its key. An id is letters, digits, `_`, `.` and `-`, checked rather
-than escaped, as it goes in the service's path; an answer that is not an image, a page of a proxy say, is a 404 like a
-missing image. The browser keeps an image a day, `Cache-Control: private, max-age=86400`.
+browser needs neither the service's address nor its key. An id is letters, digits, `_`, `.` and `-`, but not `.` or
+`..`, checked rather than escaped, as it goes in the service's path. Only a raster image is relayed, JPEG, PNG, WebP,
+GIF or AVIF, and one of no type as a JPEG: anything else, a page of a proxy or an SVG, which may hold a script that
+would run on Hangar's origin, is a 404 like a missing image. The answer carries `X-Content-Type-Options: nosniff`, and
+the browser keeps it a day, `Cache-Control: private, max-age=86400`.
 
 ## Database
 
@@ -359,8 +362,11 @@ On the Rust server, a widget is:
 
 1. Its options in the core's `WidgetKind`, read from `hangar.yml` in `crates/core/src/store/config/widget.rs`.
 2. Its data in the contract, a variant of `hangar_api::WidgetData`, and its type in `WidgetType`.
-3. Its service's contract and its load in `crates/server/src/widgets/<app>.rs`, `#[server(none)]`, its key sent in a
-   header the route takes, listed in `Loader::load`, and in `Service::options` for a widget of a store app.
+3. Its service's contract and its load in `crates/server/src/widgets/<app>.rs`, `#[server(none)]`, its key a scheme
+   of the contract, `client::key` or `client::bearer` in its `Client::new`, listed in `Loader::load`, and in
+   `Service::options` for a widget of a store app. A key that goes in `Authorization` in a form of its own, as
+   Beszel's raw token and Jellyfin's `MediaBrowser Token="..."`, goes through `Service::authorization`: quoll's header
+   schemes leave that header to its `Bearer` and `Basic`.
 4. Its card in `web/src/modules/widgets/components/cards/`, its title and icon in `widget-appearance.ts`, placed by
    `DashboardPage`.
 5. A test in `crates/server/tests/widgets/`, against its service faked on port 0.

@@ -1,7 +1,8 @@
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { focusManager } from "@tanstack/react-query";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DockerOverview, WidgetData, WidgetPlacement } from "#libs/api";
-import { coded, renderAt, serve } from "#app/mock/page.tsx";
+import { getWidgetsDataQueryKey, type DockerOverview, type WidgetData, type WidgetPlacement } from "#libs/api";
+import { coded, FakeEventSource, renderAt, serve } from "#app/mock/page.tsx";
 
 const placements: WidgetPlacement[] = [
   { key: "clock-1", type: "clock", column: 1, link: null },
@@ -42,11 +43,19 @@ const overview: DockerOverview = {
   volumes: { total: 8, inUse: 6, unused: 2 },
 };
 
-/** The server of the dashboard of `placements`, Miniflux's service failing. */
-function serveDashboard() {
+/** The server of the dashboard of `placements`, Miniflux's service failing, and gluetun's when `isGluetunDown` says. */
+function serveDashboard({
+  shown = placements,
+  isGluetunDown = () => false,
+}: { shown?: WidgetPlacement[]; isGluetunDown?: () => boolean } = {}) {
   return serve({
-    "GET /api/widgets": () => Response.json(placements),
-    "GET /api/widgets/gluetun-vpn-status-1": () => Response.json(gluetun),
+    "GET /api/widgets": () => Response.json(shown),
+    "GET /api/widgets/gluetun-vpn-status-1": () =>
+      isGluetunDown()
+        ? coded(502, "widgets.unavailable", "the gluetun-vpn-status widget could not be loaded.", {
+            widget: "gluetun-vpn-status",
+          })
+        : Response.json(gluetun),
     "GET /api/widgets/frigate-events-1": () => Response.json(frigate),
     "GET /api/widgets/miniflux-entries-1": () =>
       coded(502, "widgets.unavailable", "the miniflux-entries widget could not be loaded. See the server's log.", {
@@ -68,6 +77,11 @@ async function card(title: string): Promise<HTMLElement> {
 
     return loaded as HTMLElement;
   });
+}
+
+/** How many times the page called `url`. */
+function calls(fetch: ReturnType<typeof serve>, url: string) {
+  return fetch.mock.calls.filter(([called]) => called === url).length;
 }
 
 afterEach(() => {
@@ -138,5 +152,76 @@ describe("/", () => {
     expect(screen.getByText("Its service did not answer. See the server's log.")).toBeDefined();
     expect(fetch.mock.calls.filter(([url]) => url === "/api/widgets/miniflux-entries-1")).toHaveLength(1);
     expect(screen.getByText("Your VPN is connected!")).toBeDefined();
+  });
+
+  it("shows a card that cannot render what its service answered as unavailable, beside the others", async () => {
+    serve({
+      "GET /api/widgets": () =>
+        Response.json([placements[2], { key: "stock-prices-1", type: "stock-prices", column: 3, link: null }]),
+      "GET /api/widgets/gluetun-vpn-status-1": () => Response.json(gluetun),
+      "GET /api/widgets/stock-prices-1": () => Response.json({ type: "stock-prices", data: {} }),
+    });
+
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    renderAt("/");
+
+    expect(await screen.findByText("Stocks is unavailable")).toBeDefined();
+    expect(screen.getByText("The card could not show what its service answered.")).toBeDefined();
+    expect(await screen.findByText("Your VPN is connected!")).toBeDefined();
+  });
+
+  it("keeps a card's data when reading it again fails", async () => {
+    let isGluetunDown = false;
+    const fetch = serveDashboard({ isGluetunDown: () => isGluetunDown });
+
+    const router = renderAt("/");
+    const { queryClient } = router.options.context;
+
+    await screen.findByText("Your VPN is connected!");
+
+    isGluetunDown = true;
+    act(() => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+
+    await waitFor(() => expect(calls(fetch, "/api/widgets/gluetun-vpn-status-1")).toBe(2));
+    await waitFor(() =>
+      expect(queryClient.getQueryState(getWidgetsDataQueryKey("gluetun-vpn-status-1"))?.status).toBe("error"),
+    );
+
+    expect(screen.getByText("Your VPN is connected!")).toBeDefined();
+    expect(screen.queryByText("Gluetun is unavailable")).toBeNull();
+    act(() => focusManager.setFocused(undefined));
+  });
+
+  it("reads Docker's host again as the daemon's changes come", async () => {
+    const fetch = serveDashboard();
+
+    renderAt("/");
+    await card("Local");
+
+    const changes = await waitFor(() => {
+      const source = FakeEventSource.of("/api/docker/changes");
+
+      expect(source).toBeDefined();
+
+      return source as FakeEventSource;
+    });
+
+    const read = calls(fetch, "/api/docker/overview");
+
+    act(() => changes.send("overview"));
+
+    await waitFor(() => expect(calls(fetch, "/api/docker/overview")).toBeGreaterThan(read));
+  });
+
+  it("follows no change of the daemon without a Docker card", async () => {
+    serveDashboard({ shown: placements.filter(placement => placement.type !== "docker-general-stats") });
+    renderAt("/");
+
+    await card("Frigate");
+
+    expect(FakeEventSource.sources.map(source => source.url)).not.toContain("/api/docker/changes");
   });
 });

@@ -1,21 +1,24 @@
 //! `miniflux-entries`: Miniflux's newest entries, and how many are unread.
 
 use hangar_api::{MinifluxEntries, MinifluxEntry};
-use reqwest_middleware::ClientWithMiddleware;
+use quoll::client;
 use serde::Deserialize;
 
 use super::error::LoadError;
 use super::service::Service;
 
 quoll::api! {
-    /// Miniflux's API, under `/v1`. Its key, an API token, goes in `X-Auth-Token`.
+    /// Miniflux's API, under `/v1`.
     #[server(none)]
     api MinifluxApi = "/v1";
 
+    /// A Miniflux API token.
+    scheme Token = header "X-Auth-Token";
+
+    #[auth(Token)]
     group Miniflux {
         GET "/entries?status={status}&order={order}&direction={direction}&limit={limit}"
             => entries(
-                header("X-Auth-Token") key: Option<&str>,
                 status: Option<&str>,
                 order: Option<&str>,
                 direction: Option<&str>,
@@ -54,24 +57,33 @@ const ENTRIES: u32 = 8;
 /// The status of an entry not read yet, and the filter of those.
 const UNREAD: &str = "unread";
 
-/// The newest entries of the Miniflux of `service`, and the count of the unread ones, asked at once: Miniflux gives
+/// The client of a placement's service, built once for its address and its key.
+#[derive(Debug, Clone)]
+pub(super) struct Client(MinifluxApiClient);
+
+impl Client {
+    /// The client of the service `service`, with its key.
+    ///
+    /// # Errors
+    ///
+    /// When the client cannot be built, or the key cannot be sent.
+    pub(super) fn new(service: &Service) -> Result<Self, LoadError> {
+        build(service).map(Self)
+    }
+}
+
+/// The client of the Miniflux of `service`, with its token.
+fn build(service: &Service) -> Result<MinifluxApiClient, LoadError> {
+    service.client::<MinifluxApi>("Miniflux", service.key().map(client::key::<Token>))
+}
+
+/// The newest entries of the Miniflux of `client`, and the count of the unread ones, asked at once: Miniflux gives
 /// the count of a filter whatever its limit, so one unread entry is enough to count them.
-pub(super) async fn load(
-    http: &ClientWithMiddleware,
-    service: &Service,
-) -> Result<MinifluxEntries, LoadError> {
-    let client = MinifluxApi::client_with(http.clone(), &service.api)
-        .map_err(LoadError::call("reach Miniflux"))?;
-    let miniflux = client.miniflux();
+pub(super) async fn load(client: &Client) -> Result<MinifluxEntries, LoadError> {
+    let miniflux = client.0.miniflux();
     let (newest, unread) = tokio::join!(
-        miniflux.entries(
-            service.key(),
-            None,
-            Some("published_at"),
-            Some("desc"),
-            ENTRIES
-        ),
-        miniflux.entries(service.key(), Some(UNREAD), None, None, 1)
+        miniflux.entries(None, Some("published_at"), Some("desc"), ENTRIES),
+        miniflux.entries(Some(UNREAD), None, None, 1)
     );
     let newest = newest.map_err(LoadError::call("list Miniflux's newest entries"))?;
     let unread = unread.map_err(LoadError::call("count Miniflux's unread entries"))?;

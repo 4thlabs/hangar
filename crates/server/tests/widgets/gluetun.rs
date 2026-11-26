@@ -10,7 +10,7 @@ use hangar_api::{GluetunVpnStatus, WidgetData};
 use http::StatusCode;
 use serde_json::{Value, json};
 
-use super::Fixture;
+use super::{Calls, Fixture};
 
 /// A gluetun on port 0 whose control server answers `public_ip` to its key alone; its URL.
 async fn gluetun(public_ip: Value) -> String {
@@ -82,4 +82,68 @@ async fn reads_a_field_left_out_or_of_another_kind_as_empty() -> quoll::Result<(
         empty
     );
     Ok(())
+}
+
+#[tokio::test]
+async fn tries_a_call_again_once_after_a_503() -> quoll::Result<()> {
+    let calls = Calls::default();
+    let router = axum::Router::new()
+        .route(
+            "/v1/publicip/ip",
+            get(|State(calls): State<Calls>| async move {
+                calls.count();
+
+                if calls.get() == 1 {
+                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                }
+
+                Json(json!({ "public_ip": "203.0.113.7" })).into_response()
+            }),
+        )
+        .with_state(calls.clone());
+    let url = quoll::test::spawn(router).await;
+    let fixture = Fixture::new(&format!(
+        "  - {{ type: gluetun-vpn-status, column: 1, url: '{url}' }}\n"
+    ));
+    let server = fixture.serve().await;
+    let key = server.key("gluetun-vpn-status").await;
+
+    let data = server.api().widgets().data(&key).await?;
+
+    assert!(
+        matches!(data, WidgetData::GluetunVpnStatus(status) if status.public_ip == "203.0.113.7")
+    );
+    assert_eq!(calls.get(), 2, "the 503, then the call tried again");
+    Ok(())
+}
+
+#[tokio::test]
+async fn fails_after_a_second_503() {
+    let calls = Calls::default();
+    let router = axum::Router::new()
+        .route(
+            "/v1/publicip/ip",
+            get(|State(calls): State<Calls>| async move {
+                calls.count();
+
+                StatusCode::SERVICE_UNAVAILABLE
+            }),
+        )
+        .with_state(calls.clone());
+    let url = quoll::test::spawn(router).await;
+    let fixture = Fixture::new(&format!(
+        "  - {{ type: gluetun-vpn-status, column: 1, url: '{url}' }}\n"
+    ));
+    let server = fixture.serve().await;
+    let key = server.key("gluetun-vpn-status").await;
+
+    let error = server
+        .api()
+        .widgets()
+        .data(&key)
+        .await
+        .expect_err("gluetun failed twice");
+
+    assert_eq!(error.status(), Some(StatusCode::BAD_GATEWAY));
+    assert_eq!(calls.get(), 2, "tried again once, no more");
 }

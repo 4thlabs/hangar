@@ -2,8 +2,14 @@
 //! version resolves them.
 
 use std::fmt;
+use std::time::Duration;
 
 use hangar_core::{Runtime, ServiceOptions, Store, WidgetKind};
+use http::header::{AUTHORIZATION, HeaderValue};
+use quoll::Route;
+use quoll::client::{self, Builder, Contract};
+use reqwest::Request;
+use reqwest_middleware::Middleware;
 
 use super::error::LoadError;
 
@@ -21,6 +27,80 @@ pub(crate) struct Service {
 impl Service {
     /// The variable of `.env.global` a service's key is in, after its container's prefix.
     const KEY_SUFFIX: &str = "API_KEY";
+
+    /// How long a call to a service may take, whatever it is: one that hangs fails its card rather than hold it.
+    const DEADLINE: Duration = Duration::from_secs(10);
+
+    /// How many times a call is tried again: once, which gets past a dropped connection without holding the card
+    /// behind a dead service.
+    const RETRIES: u32 = 1;
+
+    /// What the server calls the services as.
+    const USER_AGENT: &str = concat!("hangar/", env!("CARGO_PKG_VERSION"));
+
+    /// The builder of every widget's client: tried again once, given 10 seconds.
+    pub(crate) fn builder() -> Builder {
+        client::builder()
+            .with(client::user_agent(Self::USER_AGENT))
+            .with(client::retry(Self::RETRIES))
+            .with(client::timeout(Self::DEADLINE))
+    }
+
+    /// The client of the contract `A` at this service's address, with `credential`, which sends its key, when it has
+    /// one; `name` names the service in the error.
+    ///
+    /// # Errors
+    ///
+    /// When the client cannot be built, as when the system's TLS settings do not load.
+    pub(crate) fn client<A: Contract>(
+        &self,
+        name: &str,
+        credential: Option<impl Middleware>,
+    ) -> Result<A::Client, LoadError> {
+        let builder = match credential {
+            Some(credential) => Self::builder().with(credential),
+            None => Self::builder(),
+        };
+
+        self.build::<A>(builder, name)
+    }
+
+    /// The credential that sends `value` as the `Authorization` of each call of a client, for a service whose key goes
+    /// there in a form of its own: Beszel's raw token, Jellyfin's `MediaBrowser Token="..."`. quoll's header schemes
+    /// leave `Authorization` to its `Bearer` and `Basic`, and send a key as it is: until a scheme can say the form of
+    /// its value, the header is written here. The value is marked sensitive, as quoll marks a key's.
+    ///
+    /// # Errors
+    ///
+    /// When `value` cannot be a header's, as one with a line break; it is not named.
+    pub(crate) fn authorization(value: &str, name: &str) -> Result<impl Middleware, LoadError> {
+        let mut header = HeaderValue::from_str(value).map_err(|_| {
+            LoadError::refused(format!("the key of {name} cannot be sent in a header"))
+        })?;
+
+        header.set_sensitive(true);
+
+        Ok(client::on_request(
+            move |request: &mut Request, _: &Route| {
+                request.headers_mut().insert(AUTHORIZATION, header.clone());
+            },
+        ))
+    }
+
+    /// The client of the contract `A` at this service's address, for a service that takes no key.
+    ///
+    /// # Errors
+    ///
+    /// When the client cannot be built.
+    pub(crate) fn keyless_client<A: Contract>(&self, name: &str) -> Result<A::Client, LoadError> {
+        self.build::<A>(Self::builder(), name)
+    }
+
+    fn build<A: Contract>(&self, builder: Builder, name: &str) -> Result<A::Client, LoadError> {
+        builder
+            .build::<A>(&self.api)
+            .map_err(LoadError::call(format!("build the client of {name}")))
+    }
 
     /// The store app a widget of `kind` reads, and where its declaration says it is; `None` for a widget that reads
     /// none, as the clock or GitHub's releases.
