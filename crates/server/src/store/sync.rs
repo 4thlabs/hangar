@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use hangar_api::{ErrorCode, StoreSync, SyncOperation, SyncState};
+use hangar_api::{ErrorCode, ErrorDetail, StoreSync, SyncOperation, SyncState};
 use hangar_core::StoreError;
 
 use super::StoreState;
@@ -25,6 +25,19 @@ impl StoreState {
     /// Detached: a clone or a pull is as long as the network makes it, and the request does not wait for it. Its end
     /// is kept, for `GET /store`, and notified.
     pub(crate) async fn start_sync(self: &Arc<Self>) -> StoreSync {
+        let state = Arc::clone(self);
+
+        self.start_sync_with(
+            async move { state.store.install(CommandLog::lines("git", "store")).await },
+        )
+        .await
+    }
+
+    /// Starts a sync that runs `work`, unless one runs; `work` is dropped unpolled then.
+    async fn start_sync_with<W>(self: &Arc<Self>, work: W) -> StoreSync
+    where
+        W: Future<Output = Result<(), StoreError>> + Send + 'static,
+    {
         let operation = if self.store.is_installed().await {
             SyncOperation::Update
         } else {
@@ -52,12 +65,18 @@ impl StoreState {
         });
 
         if is_new {
-            let state = Arc::clone(self);
-
-            tokio::spawn(async move { state.sync(operation).await });
+            tokio::spawn(Arc::clone(self).sync(operation, work));
         }
 
         running
+    }
+
+    /// Whether a sync runs, which a change of the store does not wait for.
+    pub(crate) fn is_syncing(&self) -> bool {
+        self.sync
+            .borrow()
+            .as_ref()
+            .is_some_and(|sync| sync.state == SyncState::Running)
     }
 
     /// Resolves once no sync runs.
@@ -75,43 +94,58 @@ impl StoreState {
         ended.clone()
     }
 
-    /// Runs the sync `operation`, then records its outcome and notifies it.
-    async fn sync(&self, operation: SyncOperation) {
-        let outcome = self.store.install(CommandLog::lines("git", "store")).await;
-        let (state, error, level, message) = match (&outcome, operation) {
-            (Ok(()), SyncOperation::Install) => (
-                SyncState::Succeeded,
-                None,
-                Level::Success,
-                Message::StoreInstalled,
-            ),
-            (Ok(()), SyncOperation::Update) => (
-                SyncState::Succeeded,
-                None,
-                Level::Success,
-                Message::StoreUpdated,
-            ),
-            (Err(error), SyncOperation::Install) => (
-                SyncState::Failed,
-                Some(Self::describe(error, ErrorCode::CloneFailed)),
-                Level::Error,
-                Message::StoreInstallFailed,
-            ),
-            (Err(error), SyncOperation::Update) => (
-                SyncState::Failed,
-                Some(Self::describe(error, ErrorCode::PullFailed)),
-                Level::Error,
-                Message::StoreUpdateFailed,
-            ),
+    /// Runs `work`, the sync `operation`, holding the store's changes back, then records its outcome and notifies it.
+    ///
+    /// In a task of its own, so that a panic in it ends the sync as a failure rather than leave it running until the
+    /// server restarts, which no other sync could start before.
+    async fn sync<W>(self: Arc<Self>, operation: SyncOperation, work: W)
+    where
+        W: Future<Output = Result<(), StoreError>> + Send + 'static,
+    {
+        let state = Arc::clone(&self);
+        let run = tokio::spawn(async move {
+            let _changes = state.changes.lock().await;
+
+            work.await
+        });
+        let failed = match operation {
+            SyncOperation::Install => ErrorCode::CloneFailed,
+            SyncOperation::Update => ErrorCode::PullFailed,
+        };
+        let outcome = match run.await {
+            Ok(Ok(())) => {
+                tracing::info!(?operation, "the store is synced");
+                Ok(())
+            }
+            Ok(Err(error)) => {
+                tracing::error!(?operation, error = %Failure::chain(&error), "the store sync failed");
+                Err(Self::describe(&error, failed))
+            }
+            Err(error) => {
+                tracing::error!(?operation, %error, "the store sync stopped short");
+                Err(ErrorCode::SyncCrashed)
+            }
         };
 
-        match &outcome {
-            Ok(()) => tracing::info!(?operation, "the store is synced"),
-            Err(error) => {
-                tracing::error!(?operation, error = %Failure::chain(error), "the store sync failed");
-            }
-        }
+        self.finish(operation, outcome);
+    }
 
+    /// Records the end of the sync `operation`, and notifies it.
+    fn finish(&self, operation: SyncOperation, outcome: Result<(), ErrorCode>) {
+        let message = match (&outcome, operation) {
+            (Ok(()), SyncOperation::Install) => Message::StoreInstalled,
+            (Ok(()), SyncOperation::Update) => Message::StoreUpdated,
+            (Err(_), SyncOperation::Install) => Message::StoreInstallFailed,
+            (Err(_), SyncOperation::Update) => Message::StoreUpdateFailed,
+        };
+        let (state, level, error) = match outcome {
+            Ok(()) => (SyncState::Succeeded, Level::Success, None),
+            Err(code) => (
+                SyncState::Failed,
+                Level::Error,
+                Some(ErrorDetail::from(code)),
+            ),
+        };
         let finished_at = Self::now();
 
         self.sync.send_modify(|latest| {
@@ -130,15 +164,11 @@ impl StoreState {
 
     /// Why a sync failed, for the page: for an invalid `hangar.yml`, the field at fault, which the user is to fix;
     /// else `failed`, which sends them to the log. Never git's output, which may hold the URL's credentials.
-    ///
-    /// The page reads the code's English message: the sync's `error` gets its code with the problems' (quoll#140).
-    fn describe(error: &StoreError, failed: ErrorCode) -> String {
-        let code = match error {
+    fn describe(error: &StoreError, failed: ErrorCode) -> ErrorCode {
+        match error {
             StoreError::Config { source, .. } => Failure::config(source),
             _ => failed,
-        };
-
-        code.message()
+        }
     }
 
     /// Now, in RFC 3339, to the millisecond.
@@ -152,8 +182,8 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
-    use hangar_api::{SyncOperation, SyncState};
-    use hangar_core::Runtime;
+    use hangar_api::{ErrorCode, ErrorDetail, SyncOperation, SyncState};
+    use hangar_core::{Runtime, StoreError};
 
     use crate::Settings;
     use crate::notifications::{Level, Message};
@@ -284,8 +314,11 @@ mod tests {
 
         assert_eq!(failed.state, SyncState::Failed);
         assert_eq!(
-            failed.error.as_deref(),
-            Some("the store could not be cloned. See the server's log.")
+            failed.error,
+            Some(ErrorDetail {
+                code: ErrorCode::CloneFailed,
+                message: "the store could not be cloned. See the server's log.".to_owned(),
+            })
         );
         assert_eq!(
             state.notifier.sent()[0].message,
@@ -340,5 +373,63 @@ mod tests {
             "git ran once"
         );
         assert_eq!(state.notifier.sent().len(), 1, "one notification");
+    }
+
+    /// A sync whose work panics, as a store whose code has a bug would.
+    async fn panicking() -> Result<(), StoreError> {
+        panic!("the store panicked")
+    }
+
+    #[tokio::test]
+    async fn a_sync_that_panics_fails_and_another_can_start() {
+        let fixture = Fixture::new();
+        let state = fixture.state(fixture.remote.to_str().expect("UTF-8"), Runtime::new());
+
+        state.start_sync_with(panicking()).await;
+
+        let crashed = state.sync_ended().await.expect("a sync");
+
+        assert_eq!(crashed.state, SyncState::Failed);
+        assert_eq!(
+            crashed.error.map(|error| error.code),
+            Some(ErrorCode::SyncCrashed)
+        );
+        assert_eq!(
+            state.notifier.sent()[0].message,
+            Message::StoreInstallFailed
+        );
+
+        assert_eq!(
+            state.start_sync().await.state,
+            SyncState::Running,
+            "a sync starts again"
+        );
+        assert_eq!(
+            state.sync_ended().await.expect("a sync").state,
+            SyncState::Succeeded
+        );
+    }
+
+    #[tokio::test]
+    async fn a_change_of_the_store_is_refused_while_a_sync_runs() {
+        let fixture = Fixture::new();
+        let state = fixture.state(fixture.remote.to_str().expect("UTF-8"), Runtime::new());
+        let (release, released) = tokio::sync::oneshot::channel::<()>();
+
+        state
+            .start_sync_with(async move {
+                released.await.expect("the test lets the sync end");
+                Ok(())
+            })
+            .await;
+
+        let refused = state.change().await.expect_err("a sync runs");
+
+        assert_eq!(refused.status(), Some(http::StatusCode::CONFLICT));
+
+        release.send(()).expect("the sync waits");
+        state.sync_ended().await;
+
+        assert!(state.change().await.is_ok(), "the sync has ended");
     }
 }

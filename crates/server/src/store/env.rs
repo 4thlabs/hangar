@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use hangar_api::{EnvChanges, EnvServer, ErrorCode, GlobalVariables};
-use hangar_core::{GlobalEnv, StoreError};
+use hangar_core::StoreError;
 use http::header::CACHE_CONTROL;
 use quoll::{Response, Result};
 
@@ -12,22 +12,20 @@ use crate::auth::SignedIn;
 use crate::failure::Failure;
 
 /// What the browser may put in `.env.global`. Every container reads the file: a line break in a value would add a
-/// variable, and a name compose does not take would break every stack.
+/// variable. The names are the core's to check, against the file: a new one must be one compose takes, and one the
+/// file holds already may be set or removed whatever it is.
 #[derive(Debug)]
 struct EnvCheck;
 
 impl EnvCheck {
     /// Refuses `changes` that would not be written as they are asked.
     fn check(changes: &EnvChanges) -> Result<()> {
-        let names = changes.updates.keys().chain(&changes.remove);
-
-        if let Some(name) = names
-            .into_iter()
-            .find(|name| !GlobalEnv::is_variable_name(name))
+        if let Some(name) = changes
+            .remove
+            .iter()
+            .find(|name| changes.updates.contains_key(*name))
         {
-            tracing::warn!(name = ?name, "a global variable of an invalid name was refused");
-
-            return Err(ErrorCode::InvalidVariableName { name: name.clone() }.into());
+            return Err(ErrorCode::UpdatedAndRemoved { name: name.clone() }.into());
         }
 
         if let Some((name, _)) = changes
@@ -72,6 +70,11 @@ impl EnvServer for App {
             Ok(variables) => Ok(Self::variables(variables)),
             Err(StoreError::UnwritableValue { key }) => {
                 Err(ErrorCode::UnwritableValue { name: key }.into())
+            }
+            Err(StoreError::InvalidVariable { key }) => {
+                tracing::warn!(name = ?key, "a global variable of an invalid name was refused");
+
+                Err(ErrorCode::InvalidVariableName { name: key }.into())
             }
             Err(error) => Err(Failure::logged(ErrorCode::EnvSaveFailed, &error)),
         }

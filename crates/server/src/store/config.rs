@@ -21,6 +21,8 @@ impl ConfigServer for App {
     }
 
     async fn save(&self, _: &SignedIn, config: ConfigSource) -> Result<Response<()>> {
+        let _change = self.store.change().await?;
+
         match self.store.store.save_config(&config.source).await {
             Ok(_) => Ok(Response::new(())),
             // The user's to fix: the field at fault, as the editor shows it under the file.
