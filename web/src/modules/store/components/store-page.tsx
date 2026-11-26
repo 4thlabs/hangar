@@ -6,7 +6,7 @@ import { searchByName } from "#modules/common/helpers/search-by-name.ts";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { StoreAppCard } from "#modules/store/components/store-app-card.tsx";
 import { StoreFilterMenu } from "#modules/store/components/store-filter-menu.tsx";
-import { parseStoreFilters } from "#modules/store/store-search.ts";
+import { parseStoreFilters } from "#modules/store/helpers/store-search.ts";
 
 /** `/store`: the store's apps, the filters of the URL applied by the server, then its `q` by name. */
 export function StorePage() {

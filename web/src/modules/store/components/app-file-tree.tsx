@@ -3,7 +3,7 @@ import { ChevronDownIcon, ChevronRightIcon, FileIcon, FolderIcon, PlusIcon } fro
 import { useState, type ComponentProps, type FormEvent, type ReactNode } from "react";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
-import { buildFileTree, type FileTreeFolder, type FileTreeNode } from "#modules/store/file-tree.ts";
+import { buildFileTree, type FileTreeFolder, type FileTreeNode } from "#modules/store/helpers/file-tree.ts";
 
 /** How the tree lays out its rows: the indent per nesting level, in rem: a level must read as such at a glance in a narrow column. */
 const indentRem = 0.875;
