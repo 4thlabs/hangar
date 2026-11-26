@@ -156,7 +156,8 @@ impl EditableFile {
     /// # Errors
     ///
     /// Returns [`StoreError::NotAFile`] when it is not a regular file, a symlink swapped in after its path was
-    /// resolved included, [`StoreError::FileAppeared`] when something took its place as it was created, and
+    /// resolved included, [`StoreError::FileAppeared`] when something took its place as it was created,
+    /// [`StoreError::Interrupted`], which names the copy kept, when the rewrite failed once the copy was whole, and
     /// [`StoreError::Io`] when it cannot be written.
     pub(super) async fn write(file: &Path, path: &str, source: &str) -> Result<(), StoreError> {
         let mut options = Self::rewriting();
@@ -174,9 +175,36 @@ impl EditableFile {
         let copy = Self::copy_beside(file, source).await?;
         let rewritten = Self::rewrite(handle, source).await;
 
-        Disk::discard(&copy).await;
+        Self::settle(file, path, copy, rewritten).await
+    }
 
-        rewritten.map_err(|error| StoreError::io("write", file, error))
+    /// The end of a rewrite of `file`, at `path`, whose new text `copy` holds whole: the copy is removed once the file
+    /// holds it too, and kept otherwise, as the file may be left half written and the copy is then all there is of the
+    /// operator's text.
+    async fn settle(
+        file: &Path,
+        path: &str,
+        copy: PathBuf,
+        rewritten: io::Result<()>,
+    ) -> Result<(), StoreError> {
+        let Err(source) = rewritten else {
+            Disk::discard(&copy).await;
+
+            return Ok(());
+        };
+
+        tracing::error!(
+            file = %file.display(),
+            copy = %copy.display(),
+            error = %source,
+            "a file of an app could not be rewritten: its new text is kept in the copy"
+        );
+
+        Err(StoreError::Interrupted {
+            path: path.to_owned(),
+            copy,
+            source,
+        })
     }
 
     /// Creates `file`, the file at `path`, holding `source`; one left half written is removed.
@@ -451,6 +479,37 @@ mod tests {
                 .await
                 .contains(&"settings.yml".to_owned())
         );
+    }
+
+    #[tokio::test]
+    async fn keeps_the_copy_of_a_rewrite_that_failed_and_names_it_and_removes_one_that_went_through()
+     {
+        let dir = tempfile::tempdir().expect("a temporary directory can be made");
+        let file = dir.path().join("settings.yml");
+        let copy = dir.path().join(".settings.yml.1-1.saving");
+
+        std::fs::write(&copy, "a: 2\n").expect("written");
+
+        let failed = std::io::Error::from_raw_os_error(nix::libc::ENOSPC);
+        let error = EditableFile::settle(&file, "settings.yml", copy.clone(), Err(failed))
+            .await
+            .expect_err("the rewrite failed");
+
+        assert!(
+            matches!(error, StoreError::Interrupted { ref copy, .. } if copy.ends_with(".settings.yml.1-1.saving")),
+            "{error:?}"
+        );
+        assert!(
+            error.to_string().contains(".settings.yml.1-1.saving"),
+            "{error}"
+        );
+        assert_eq!(std::fs::read_to_string(&copy).expect("kept"), "a: 2\n");
+
+        EditableFile::settle(&file, "settings.yml", copy.clone(), Ok(()))
+            .await
+            .expect("the rewrite went through");
+
+        assert!(!copy.exists(), "removed once the file holds it");
     }
 
     #[tokio::test]

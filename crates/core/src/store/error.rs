@@ -212,6 +212,19 @@ pub enum StoreError {
         path: String,
     },
 
+    /// A file whose rewrite in place failed once its new text was written whole beside it, as when the disk filled:
+    /// the file may be left half written, and the copy, hidden beside it, is kept.
+    #[error("could not write {path}: its new text is kept in {}", copy.display())]
+    Interrupted {
+        /// The path in the app's folder.
+        path: String,
+        /// The copy that holds the new text.
+        copy: PathBuf,
+        /// The system's error.
+        #[source]
+        source: io::Error,
+    },
+
     /// A YAML or `.env` file that does not parse: it is not written.
     #[error("{path} is not valid: {reason}")]
     InvalidFile {

@@ -124,8 +124,9 @@ impl<'a, R: CommandRunner> AppFiles<'a, R> {
     /// Returns the errors of the path's check, as [`read`](Self::read) does; [`StoreError::InvalidFile`] for a YAML or
     /// `.env` file that does not parse; [`StoreError::Rejected`], with Docker's complaint, for a compose file Docker
     /// refuses, and [`StoreError::Unchecked`] for one it could not check; [`StoreError::NotAFile`] and
-    /// [`StoreError::FileAppeared`] when something else took the file's place; and [`StoreError::Io`] when it cannot
-    /// be written, or `.env.global` read for `docker stack config`.
+    /// [`StoreError::FileAppeared`] when something else took the file's place; [`StoreError::Interrupted`], naming the
+    /// copy that keeps the new text, when the file was left half written; and [`StoreError::Io`] when it cannot be
+    /// written, or `.env.global` read for `docker stack config`.
     pub async fn write(&self, path: &str, source: &str) -> Result<SavedFile, StoreError> {
         let location = self.locate(path).await?;
 
