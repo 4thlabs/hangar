@@ -24,6 +24,14 @@ pub enum ComposeError {
         app: String,
     },
 
+    /// A command passed as its arguments starts with an option rather than its name, which compose would take for one
+    /// of its own, as `-p` or `-f` that would override the app's project or file.
+    #[error("{option} comes before the compose command: put it after the command's name")]
+    OptionBeforeCommand {
+        /// The option.
+        option: String,
+    },
+
     /// A batch was asked for no app.
     #[error("a batch needs at least one app")]
     EmptyBatch,

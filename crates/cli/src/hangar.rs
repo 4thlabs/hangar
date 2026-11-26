@@ -12,20 +12,24 @@ use tokio::io::AsyncWriteExt;
 use crate::environment::Environment;
 use crate::failure::Failure;
 use crate::request::ComposeRequest;
+use crate::terminal::Terminal;
 
 /// The commands of `hangar store`, run by one runtime, which Ctrl-C interrupts.
 #[derive(Debug)]
 pub(crate) struct Hangar {
     runtime: Runtime,
     environment: Environment,
+    terminal: Terminal,
 }
 
 impl Hangar {
-    /// The commands, their children run by `runtime`, their variables read from `environment`.
-    pub(crate) fn new(runtime: Runtime, environment: Environment) -> Self {
+    /// The commands, their children run by `runtime`, their variables read from `environment`; a child that inherits
+    /// the terminal is handed `terminal`.
+    pub(crate) fn new(runtime: Runtime, environment: Environment, terminal: Terminal) -> Self {
         Self {
             runtime,
             environment,
+            terminal,
         }
     }
 
@@ -43,9 +47,9 @@ impl Hangar {
 
     /// Runs a compose command on the apps of its target.
     ///
-    /// A command passed through, on one app, inherits the terminal, as compose run by hand: its colours, its TTY and
-    /// its stdin, for `logs -f`, `exec` or an `up` that attaches. Any other runs as one batch that stops at the first
-    /// failure, as the Node CLI does, its output printed as it comes.
+    /// A command passed through, on one app, inherits the terminal, as compose run by hand: its colours, its TTY, its
+    /// stdin and its Ctrl-C, for `logs -f`, `exec` or an `up` that attaches. Any other runs as one batch that stops at
+    /// the first failure, as the Node CLI does, its output printed as it comes.
     pub(crate) async fn compose(&self, request: ComposeRequest) -> Result<(), Failure> {
         let data_dir = self.environment.data_dir()?;
         // Only `hangar.yml` is read: the URL serves an install alone.
@@ -58,7 +62,9 @@ impl Hangar {
         if let ComposeCommand::Args(_) = request.command
             && let [app] = apps.as_slice()
         {
-            return Ok(compose.run(app, request.command, Output::Inherit).await?);
+            let run = compose.run(app, request.command, Output::Inherit);
+
+            return Ok(self.terminal.hand_over(run).await?);
         }
 
         let batch = compose

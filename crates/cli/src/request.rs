@@ -20,36 +20,39 @@ impl ComposeRequest {
     /// `GlobalCommand`.
     const ON_EVERY_APP: [&str; 3] = ["up", "down", "pull"];
 
-    /// `store <target> <command> [args...]`, the target first: `up`, `down` and `pull` are themselves the command, on
-    /// every app.
+    /// `store <target> [command] [args...]`, the target first: `up`, `down` and `pull` are themselves the command, on
+    /// every app. A target with no command runs `docker compose` alone, as the Node CLI does, which prints its help.
     ///
     /// # Errors
     ///
-    /// Returns [`Failure::NoCommand`] when no command follows the target.
+    /// Returns [`Failure::NoTarget`] when `args` is empty.
     pub(crate) fn parse(args: &[String]) -> Result<Self, Failure> {
         let Some((name, rest)) = args.split_first() else {
-            return Err(Failure::NoCommand);
+            return Err(Failure::NoTarget);
         };
 
         if Self::ON_EVERY_APP.contains(&name.as_str()) {
             return Ok(Self::on_every_app(name, rest));
         }
 
-        let Some((command, options)) = rest.split_first() else {
-            return Err(Failure::NoCommand);
+        let command = match rest.split_first() {
+            Some((command, options)) => Self::command(command, options),
+            None => ComposeCommand::Args(Vec::new()),
         };
 
         Ok(Self {
             target: Target::Named(name.clone()),
-            command: Self::command(command, options),
+            command,
         })
     }
 
     /// `store <command> [args...]`, on every app the categories list. `up` is always detached, as the Node CLI's
     /// `store up` passes `-d`: it would attach to the first app and never get to the others.
     pub(crate) fn on_every_app(command: &str, args: &[String]) -> Self {
-        let is_detached = args.iter().any(|arg| arg == "-d" || arg == "--detach");
-        let detach = (command == "up" && !is_detached).then(|| "-d".to_owned());
+        let line = std::iter::once(command.to_owned()).chain(args.iter().cloned());
+        let detach = ComposeCommand::Args(line.collect())
+            .is_attached()
+            .then(|| "-d".to_owned());
         let options: Vec<String> = detach.into_iter().chain(args.iter().cloned()).collect();
 
         Self {
@@ -59,25 +62,24 @@ impl ComposeRequest {
     }
 
     /// The command `name` with its `options`: a command Hangar types, as the Apps page runs it, when it is one, any
-    /// other passed to compose as it is.
+    /// other passed to compose as it is. An `up` that is not detached is passed through, and attaches to its app as
+    /// compose's does.
     fn command(name: &str, options: &[String]) -> ComposeCommand {
+        let line = std::iter::once(name.to_owned()).chain(options.iter().cloned());
+        let passed = ComposeCommand::Args(line.collect());
         let typed = match name {
-            "up" => Self::up_options(options).map(ComposeCommand::Up),
+            "up" if !passed.is_attached() => Self::up_options(options).map(ComposeCommand::Up),
             "down" if options.is_empty() => Some(ComposeCommand::Down),
             "restart" if options.is_empty() => Some(ComposeCommand::Restart),
             "pull" if options.is_empty() => Some(ComposeCommand::Pull),
             _ => None,
         };
 
-        typed.unwrap_or_else(|| {
-            let line = std::iter::once(name.to_owned()).chain(options.iter().cloned());
-
-            ComposeCommand::Args(line.collect())
-        })
+        typed.unwrap_or(passed)
     }
 
-    /// The options of a typed `up`, which always runs detached, so `-d` changes nothing; `None` when another
-    /// argument makes it a command passed as it is.
+    /// The options of a typed `up`, detached, so `-d` changes nothing; `None` when another argument makes it a command
+    /// passed as it is.
     fn up_options(options: &[String]) -> Option<UpOptions> {
         let mut up = UpOptions::default();
         let mut options = options.iter();
@@ -139,7 +141,7 @@ mod tests {
     }
 
     #[test]
-    fn reads_the_options_of_up_and_detaches_all_the_same() {
+    fn types_an_up_that_is_detached_and_reads_its_options() {
         let up = |line: &[&str]| parse(line).expect("up takes its options").command;
         let pull_and_recreate = UpOptions {
             pull: true,
@@ -147,7 +149,7 @@ mod tests {
         };
 
         assert_eq!(
-            up(&["jellyfin", "up"]),
+            up(&["jellyfin", "up", "-d"]),
             ComposeCommand::Up(UpOptions::default())
         );
         assert_eq!(
@@ -164,6 +166,18 @@ mod tests {
             ]),
             ComposeCommand::Up(pull_and_recreate)
         );
+    }
+
+    #[test]
+    fn passes_an_up_that_is_not_detached_through_to_attach_as_the_node_cli() {
+        let up = |line: &[&str]| parse(line).expect("up runs").command;
+
+        assert_eq!(up(&["jellyfin", "up"]), passed(&["up"]));
+        assert_eq!(
+            up(&["Media", "up", "--force-recreate"]),
+            passed(&["up", "--force-recreate"])
+        );
+        assert_eq!(up(&["jellyfin", "up", "--wait"]), passed(&["up", "--wait"]));
     }
 
     #[test]
@@ -206,14 +220,18 @@ mod tests {
 
         assert_eq!(up(&["--build"]), passed(&["up", "-d", "--build"]));
         assert_eq!(
-            up(&["--build", "--detach"]),
-            passed(&["up", "--build", "--detach"])
+            up(&["--build", "--wait"]),
+            passed(&["up", "--build", "--wait"])
         );
         assert_eq!(up(&[]), ComposeCommand::Up(UpOptions::default()));
     }
 
     #[test]
-    fn needs_a_command_after_the_target() {
-        assert!(matches!(parse(&["jellyfin"]), Err(Failure::NoCommand)));
+    fn runs_compose_alone_on_a_target_with_no_command() {
+        let request = parse(&["jellyfin"]).expect("compose alone runs");
+
+        assert_eq!(request.target, Target::Named("jellyfin".into()));
+        assert_eq!(request.command, passed(&[]));
+        assert!(matches!(parse(&[]), Err(Failure::NoTarget)));
     }
 }

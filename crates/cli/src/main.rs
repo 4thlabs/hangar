@@ -9,6 +9,7 @@ mod hangar;
 mod interrupts;
 mod request;
 mod target;
+mod terminal;
 
 use std::io::IsTerminal;
 use std::process::ExitCode;
@@ -21,6 +22,7 @@ use environment::Environment;
 use failure::Failure;
 use hangar::Hangar;
 use interrupts::Interrupts;
+use terminal::Terminal;
 
 fn main() -> ExitCode {
     let cli = match Cli::try_parse() {
@@ -52,9 +54,10 @@ fn main() -> ExitCode {
         let cancellation = CancellationToken::new();
         let runtime = Runtime::with_cancellation(cancellation.clone())
             .envs(environment.file_variables().clone());
-        let hangar = Hangar::new(runtime.clone(), environment);
+        let terminal = Terminal::default();
+        let hangar = Hangar::new(runtime.clone(), environment, terminal.clone());
 
-        Interrupts::new(runtime, cancellation)
+        Interrupts::new(runtime, cancellation, terminal)
             .run(cli.run(&hangar))
             .await
     });

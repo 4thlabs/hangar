@@ -1,6 +1,6 @@
-//! `hangar store up`, `down` and the commands it passes through against a real Docker, through the `docker compose` CLI and the daemon `DOCKER_HOST`
-//! names, else Docker's own socket. The test brings a project of its own up and down, and takes it down when it is
-//! dropped, even by a failed test.
+//! `hangar store up`, `down` and the commands it passes through against a real Docker, through the `docker compose` CLI
+//! and the daemon `DOCKER_HOST` names, else Docker's own socket. The test brings a project of its own up and down, and
+//! takes it down when it is dropped, even by a failed test.
 //!
 //! When no daemon answers, or no `docker compose` runs, the test says it is skipped and passes, unless `CI` is set:
 //! CI's runners have Docker.
