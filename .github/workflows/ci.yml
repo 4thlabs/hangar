@@ -98,8 +98,8 @@ jobs:
         run: cargo doc --workspace --all-features --no-deps --locked
 
   # The Rust server's page, in web/: the TypeScript written from the contract of the commit, type-checked and bundled,
-  # linted with its types, then its tests. A change of the contract that breaks the page breaks the pull request. Like `rust`, the image
-  # does not wait for it until the switch.
+  # linted with its types, then its tests. A change of the contract that breaks the page breaks the pull request. Like
+  # `rust`, the image does not wait for it until the switch.
   web:
     name: Web
     runs-on: ubuntu-latest

@@ -5,7 +5,6 @@ import { AppDetailPage } from "#modules/apps/components/app-detail-page.tsx";
 import { AppsPage } from "#modules/apps/components/apps-page.tsx";
 import { LoginPage } from "#modules/auth/components/login-page.tsx";
 import { SessionGuard } from "#modules/auth/session-guard.ts";
-import type { SignInRefusal } from "#modules/auth/sign-in-messages.ts";
 import { AppLayout } from "#modules/common/components/app-layout.tsx";
 import { NotFoundPage } from "#modules/common/components/not-found-page.tsx";
 import { PendingPage } from "#modules/common/components/pending-page.tsx";
@@ -19,8 +18,11 @@ import { DashboardPage } from "#modules/widgets/components/dashboard-page.tsx";
 /** What every route reads: the page's query client, which keeps the session. */
 type RouterContext = { queryClient: QueryClient };
 
-/** The search of `/login`: why a sign-in through the provider came back, if it did. */
-type LoginSearch = { error?: SignInRefusal | string };
+/**
+ * The search of `/login`: why a sign-in through the provider came back, if it did. Any text, which
+ * `SignInMessages.refusal` reads as a `SignInRefusal` or none.
+ */
+type LoginSearch = { error?: string };
 
 /**
  * The page's routes, the paths of the Waku version's `pages/`. The frame of `(app)/_layout.tsx` is `app`, a route

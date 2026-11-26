@@ -33,7 +33,15 @@ export function LoginPage() {
     setError(null);
 
     const form = new FormData(event.currentTarget);
-    const credentials = { email: String(form.get("email")), password: String(form.get("password")) };
+
+    // A text input's entry is a string; only a file input's is a `File`.
+    const textOf = (name: string) => {
+      const entry = form.get(name);
+
+      return typeof entry === "string" ? entry : "";
+    };
+
+    const credentials = { email: textOf("email"), password: textOf("password") };
 
     try {
       const user = await login.mutateAsync({ data: credentials });
