@@ -283,8 +283,8 @@ done
 
     /// The installed apps, the image each runs, the digest of the image it runs, and the digest its registry serves:
     /// `gamma` and `alpha` run an image the registry has moved past, `beta` the one it serves, and `delta` one its
-    /// `compose.yml` builds, its registry digest its own id as on containerd's store, of a name a registry serves
-    /// another image of.
+    /// `compose.yml` builds, its registry digest its own id as on containerd's store, which the daemon keeps, of a name
+    /// a registry serves another image of.
     const APPS: [(&str, &str, &str, &str); 4] = [
         (
             "alpha",
@@ -308,6 +308,12 @@ done
             .route("/v1.44/containers/json", get(containers))
             .route("/v1.44/containers/{id}/json", get(inspect))
             .route("/v1.44/images/json", get(images))
+            .route(
+                "/v1.44/info",
+                get(|| async {
+                    Json(json!({ "DriverStatus": [["driver-type", "io.containerd.snapshotter.v1"]] }))
+                }),
+            )
             .route("/v1.44/distribution/{reference}/json", get(distribution));
         let url = quoll::test::spawn(router).await;
 

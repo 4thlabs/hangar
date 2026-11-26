@@ -207,6 +207,10 @@ pub(crate) struct SystemInfo {
     pub(crate) containers_stopped: u64,
     /// The memory of the host, in bytes.
     pub(crate) mem_total: u64,
+    /// What the storage driver says of itself, in pairs: `["driver-type", "io.containerd.snapshotter.v1"]` with
+    /// containerd's image store.
+    #[serde(deserialize_with = "null_as_default")]
+    pub(crate) driver_status: Vec<Vec<String>>,
 }
 
 /// What `GET /system/df` says of the disk the images and volumes take.

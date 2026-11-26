@@ -21,13 +21,14 @@ const LOOKAHEAD_DAYS: usize = 366 * 100;
 ///
 /// ```
 /// use hangar_core::CronSchedule;
-/// use jiff::Zoned;
+/// use jiff::Timestamp;
+/// use jiff::tz::TimeZone;
 ///
 /// let image_check: CronSchedule = "17 */4 * * *".parse()?;
-/// let now: Zoned = "2026-11-26T09:30:00+00:00[UTC]".parse()?;
+/// let now = "2026-11-26T09:30:00Z".parse::<Timestamp>()?.to_zoned(TimeZone::UTC);
 /// let next = image_check.next_after(&now).expect("a time that comes");
 ///
-/// assert_eq!(next.to_string(), "2026-11-26T12:17:00+00:00[UTC]");
+/// assert_eq!(next.timestamp().to_string(), "2026-11-26T12:17:00Z");
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]

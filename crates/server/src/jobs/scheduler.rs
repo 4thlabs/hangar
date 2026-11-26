@@ -441,9 +441,16 @@ mod tests {
             released: Semaphore::new(0),
             outcome: Mutex::new(Outcome::Succeeds),
         };
-        let origin: Zoned = "2026-11-26T09:30:00+00:00[UTC]".parse().expect("a time");
+        let origin = utc("2026-11-26T09:30:00Z");
 
         (Scheduler::new(runner, Clock::starting_at(origin)), starts)
+    }
+
+    /// `time`, written in RFC 3339, in UTC: no time zone database is needed to read it.
+    fn utc(time: &str) -> Zoned {
+        time.parse::<jiff::Timestamp>()
+            .expect("a time")
+            .to_zoned(jiff::tz::TimeZone::UTC)
     }
 
     /// The run `id` as kept.
@@ -627,8 +634,8 @@ mod tests {
     #[test]
     fn fires_once_at_a_time_when_the_clock_is_set_back_after_it() {
         let cron = CronSchedule::parse("17 */4 * * *").expect("a valid cron");
-        let fired: Zoned = "2026-11-26T12:17:00+00:00[UTC]".parse().expect("a time");
-        let set_back: Zoned = "2026-11-26T12:16:59+00:00[UTC]".parse().expect("a time");
+        let fired = utc("2026-11-26T12:17:00Z");
+        let set_back = utc("2026-11-26T12:16:59Z");
         let next = Scheduler::<FakeRunner>::next_fire(&cron, &set_back, Some(&fired))
             .expect("a time that comes");
 
