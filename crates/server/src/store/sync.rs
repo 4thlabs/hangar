@@ -38,6 +38,19 @@ impl StoreState {
     where
         W: Future<Output = Result<(), StoreError>> + Send + 'static,
     {
+        // One start at a time, so that whether the store is cloned is read while no sync runs: once one clone ends,
+        // the next start reads an update.
+        let _starting = self.starting.lock().await;
+
+        if let Some(running) = self
+            .sync
+            .borrow()
+            .clone()
+            .filter(|sync| sync.state == SyncState::Running)
+        {
+            return running;
+        }
+
         let operation = if self.store.is_installed().await {
             SyncOperation::Update
         } else {
@@ -50,25 +63,12 @@ impl StoreState {
             finished_at: None,
             error: None,
         };
-        let mut running = started.clone();
 
-        // Checked and set under the channel's lock: of two requests at once, one starts the sync, the other gets it.
-        let is_new = self.sync.send_if_modified(|latest| match latest {
-            Some(sync) if sync.state == SyncState::Running => {
-                running = sync.clone();
-                false
-            }
-            _ => {
-                *latest = Some(started.clone());
-                true
-            }
-        });
+        self.sync.send_replace(Some(started.clone()));
 
-        if is_new {
-            tokio::spawn(Arc::clone(self).sync(operation, work));
-        }
+        tokio::spawn(Arc::clone(self).sync(operation, work));
 
-        running
+        started
     }
 
     /// Whether a sync runs, which a change of the store does not wait for.

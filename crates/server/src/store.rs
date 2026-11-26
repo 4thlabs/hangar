@@ -27,6 +27,9 @@ pub(crate) struct StoreState {
     /// Held by a sync for its whole run, and by each change of the store for its own: a save of `hangar.yml` during a
     /// pull could fail the pull or be lost, an install racing the links of a sync could fail though it installed.
     changes: Mutex<()>,
+    /// Held while a sync starts, from the check that none runs to the one started: what it reads of the store, cloned
+    /// or not, is then what no other sync is changing.
+    starting: Mutex<()>,
     notifier: Notifier,
 }
 
@@ -42,6 +45,7 @@ impl StoreState {
             compose: Compose::new(settings.data_dir.clone(), runtime),
             sync: watch::Sender::new(None),
             changes: Mutex::new(()),
+            starting: Mutex::new(()),
             notifier: Notifier::default(),
         })
     }
@@ -57,6 +61,13 @@ impl StoreState {
             return Err(ErrorCode::SyncRunning.into());
         }
 
-        Ok(self.changes.lock().await)
+        // A sync marks itself running before it takes the lock: a lock held while one runs is the sync's, and the
+        // change is refused rather than wait for it. Held by another change, it is soon free, and the lock is fair: a
+        // sync that starts meanwhile queues after this change.
+        match self.changes.try_lock() {
+            Ok(change) => Ok(change),
+            Err(_) if self.is_syncing() => Err(ErrorCode::SyncRunning.into()),
+            Err(_) => Ok(self.changes.lock().await),
+        }
     }
 }

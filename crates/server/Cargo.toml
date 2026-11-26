@@ -28,6 +28,8 @@ openidconnect = { version = "4", default-features = false }
 # The decoded path of a request, which the trailing-slash redirect compares with the page's directories.
 percent-encoding = "2"
 quoll = { workspace = true, features = ["server"] }
+# The credentials of a URL, taken out of a command's output before the log writes it.
+regex = "1"
 # The provider's discovery, keys and token endpoint, over rustls with the platform's roots, as quoll's client.
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 serde.workspace = true

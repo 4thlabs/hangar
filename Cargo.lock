@@ -1144,6 +1144,7 @@ dependencies = [
  "openidconnect",
  "percent-encoding",
  "quoll",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
