@@ -32,6 +32,12 @@ describe("JobText", () => {
     expect(JobText.failure(run)).toBeUndefined();
   });
 
+  it("reads the runs again each second while one waits or runs, every 30 seconds otherwise", () => {
+    expect(JobText.pollMs([run])).toBe(1000);
+    expect(JobText.pollMs([{ ...run, state: "completed" }])).toBe(30_000);
+    expect(JobText.pollMs([])).toBe(30_000);
+  });
+
   it("says a time it has none of as a dash", () => {
     expect(JobText.time(null)).toBe("—");
     expect(JobText.time(run.createdAt)).toContain("2026");
