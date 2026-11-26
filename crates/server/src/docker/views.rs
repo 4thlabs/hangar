@@ -1,4 +1,7 @@
-//! What the core reads of Docker becomes on the wire, with what the store adds to it: each app's icon and category.
+//! What the core reads of Docker becomes on the wire, with what the store adds to it, each app's icon and category,
+//! and whether it has an update.
+
+use std::collections::BTreeSet;
 
 use hangar_api::{
     AppCategory, ContainerCounts, ContainerHealth, ContainerMetrics, ContainerState,
@@ -19,9 +22,13 @@ impl Installed {
         self.apps.iter().map(|app| app.id.as_str())
     }
 
-    /// `summary`, with the icon of its app and the first category that lists it: nothing stops `hangar.yml` from
-    /// listing an app twice.
-    pub(crate) fn summary(&self, summary: hangar_core::ComposeProjectSummary) -> ProjectSummary {
+    /// `summary`, with the icon of its app, the first category that lists it, as nothing stops `hangar.yml` from
+    /// listing an app twice, and whether it is among the `outdated` apps.
+    pub(crate) fn summary(
+        &self,
+        summary: hangar_core::ComposeProjectSummary,
+        outdated: &BTreeSet<String>,
+    ) -> ProjectSummary {
         let icon = self
             .apps
             .iter()
@@ -37,6 +44,7 @@ impl Installed {
             });
 
         ProjectSummary {
+            update_available: outdated.contains(&summary.name),
             name: summary.name,
             icon,
             category,
@@ -48,10 +56,14 @@ impl Installed {
         }
     }
 
-    /// `detail`, its summary with what the store adds.
-    pub(crate) fn detail(&self, detail: hangar_core::ComposeProjectDetail) -> ProjectDetail {
+    /// `detail`, its summary with what the store adds, and whether it is among the `outdated` apps.
+    pub(crate) fn detail(
+        &self,
+        detail: hangar_core::ComposeProjectDetail,
+        outdated: &BTreeSet<String>,
+    ) -> ProjectDetail {
         ProjectDetail {
-            summary: self.summary(detail.summary),
+            summary: self.summary(detail.summary, outdated),
             services: detail.services.into_iter().map(Views::service).collect(),
         }
     }

@@ -24,9 +24,9 @@ getrandom = "0.4"
 hangar-api = { workspace = true, features = ["server"] }
 hangar-core.workspace = true
 http.workspace = true
-# The times of a store sync, of the notifications and of a compose batch, in RFC 3339, as the core writes those of
-# `.env.global`.
-jiff = { version = "0.2", default-features = false, features = ["std"] }
+# The times of a store sync, of the notifications, of a compose batch and of a job, in RFC 3339, as the core writes
+# those of `.env.global`, and the server's time zone, `TZ` or `/etc/localtime`, which the crons of the jobs are read in.
+jiff = { version = "0.2", default-features = false, features = ["std", "tz-system", "tzdb-zoneinfo"] }
 # The sign-in through an OpenID Connect provider. Its default features pull reqwest 0.12: the server gives it a client
 # on reqwest 0.13, quoll's.
 openidconnect = { version = "4", default-features = false }

@@ -1,5 +1,5 @@
 //! Docker, through its Engine API: the containers of each compose project, their logs and stats, the images they run,
-//! the usage of the whole host, and the daemon's events.
+//! what their registries serve now, the usage of the whole host, and the daemon's events.
 //!
 //! [`Docker`] is the client. Each of its reads is fresh, never cached: caching them belongs to the server, which
 //! follows [`Docker::events`] to know when a read went stale.
@@ -28,6 +28,7 @@ mod host;
 mod images;
 mod logs;
 mod overview;
+mod registry;
 mod stats;
 
 pub use compose::{
@@ -38,6 +39,7 @@ pub use error::{DaemonError, DockerError};
 pub use events::DockerChange;
 pub use images::{ImageDigests, RunningImage};
 pub use overview::{ContainerCounts, DockerOverview, ImageCounts, VolumeCounts};
+pub use registry::RegistryDigests;
 pub use stats::{ContainerMetrics, StatsFrame};
 
 use engine::EngineClient;

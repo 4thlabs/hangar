@@ -1,14 +1,19 @@
-//! The cron expressions of the backups, checked as node-cron 4.6's `validate` checks them, which the Waku version
-//! schedules with: a schedule one version accepts, the other does too.
+//! The cron expressions of `hangar.yml` and of the server's jobs, checked as node-cron 4.6's `validate` checks them,
+//! which the Waku version schedules with: a schedule one version accepts, the other does too. [`CronSchedule`] fires
+//! them as node-cron does.
 //!
 //! node-cron rewrites an expression before it checks it: it resolves a nickname (`@daily`), adds the seconds to an
 //! expression of five fields, turns the names of months and days into numbers, `*` into the field's range, and each
 //! range into its values. This follows the same steps, quirks included: a range that wraps (`50-10`) is valid, a step
 //! of 0 is not, and day 7 is Sunday.
 
+mod schedule;
+
 use std::sync::LazyLock;
 
 use regex::Regex;
+
+pub use schedule::{CronError, CronSchedule};
 
 /// The nicknames node-cron accepts, and what they stand for.
 const NICKNAMES: [(&str, &str); 7] = [
@@ -105,6 +110,12 @@ pub(super) struct Cron;
 impl Cron {
     /// Whether node-cron's `validate` accepts `expression`.
     pub(super) fn is_valid(expression: &str) -> bool {
+        Self::fields(expression).is_some()
+    }
+
+    /// The six fields of `expression` as node-cron rewrites them, seconds first, when its `validate` accepts it:
+    /// what node-cron matches the time with.
+    fn fields(expression: &str) -> Option<Vec<Vec<Token>>> {
         let resolved = Self::resolve_nickname(expression);
         let has_allowed_characters = !resolved.is_empty()
             && resolved.chars().all(|character| {
@@ -112,7 +123,7 @@ impl Cron {
             });
 
         if !has_allowed_characters {
-            return false;
+            return None;
         }
 
         let raw: Vec<&str> = resolved
@@ -121,7 +132,7 @@ impl Cron {
             .collect();
 
         if raw.len() != 5 && raw.len() != 6 {
-            return false;
+            return None;
         }
 
         let mut patterns: Vec<String> = raw.iter().map(|field| (*field).to_owned()).collect();
@@ -131,14 +142,15 @@ impl Cron {
         }
 
         let fields = Self::convert(patterns.clone());
-
-        Self::are_valid_values(&fields[0], 0, 59)
+        let is_valid = Self::are_valid_values(&fields[0], 0, 59)
             && Self::are_valid_values(&fields[1], 0, 59)
             && Self::are_valid_values(&fields[2], 0, 23)
             && Self::is_valid_day_of_month(&fields[3], &patterns[3])
             && Self::are_valid_values(&fields[4], 1, 12)
             && Self::is_valid_week_day(&fields[5])
-            && Self::is_possible_day_of_month(&fields[3], &fields[4])
+            && Self::is_possible_day_of_month(&fields[3], &fields[4]);
+
+        is_valid.then_some(fields)
     }
 
     /// The expression a nickname stands for, or `expression` itself.

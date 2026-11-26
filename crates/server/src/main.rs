@@ -64,6 +64,7 @@ async fn serve(settings: &Settings, docker: Docker) -> ExitCode {
     let app = App::new(settings, docker).await;
 
     app.start().await;
+    app.start_jobs();
 
     let served = hangar_server::server(settings)
         .serve(address, hangar_server::router(app.clone()))

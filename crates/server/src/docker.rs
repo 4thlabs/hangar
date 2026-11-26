@@ -1,37 +1,47 @@
 //! Docker, read through a cache that the daemon's events keep fresh: the containers of the compose projects, which
-//! the projects and each project's detail are made of, and the usage of the whole host. A page follows what changed,
-//! once the cache holds it, or once the store installed or uninstalled an app, and reads it again. The logs and the
-//! stats are streams of the daemon's, never kept.
+//! the projects and each project's detail are made of, the registry digests of the images on the host, and the usage
+//! of the whole host. What the registries served at the last image check tells which apps have an update. A page
+//! follows what changed, once the cache holds it, or once the store installed or uninstalled an app, and reads it
+//! again. The logs and the stats are streams of the daemon's, never kept.
 
 mod cache;
 mod routes;
 mod stats;
 mod views;
 
-use std::sync::Arc;
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use futures::StreamExt;
 use hangar_api::DockerChange;
-use hangar_core::{ComposeContainers, Docker, DockerOverview, Runtime, Store};
+use hangar_core::{
+    ComposeContainers, Docker, DockerOverview, ImageDigests, RegistryDigests, Runtime, Store,
+};
 use tokio::sync::broadcast;
 
 use crate::Settings;
 use crate::failure::Failure;
 use cache::{Cached, Loaded, Policy};
 
-/// What the Docker routes run on: the client of the daemon, the store, which says what is installed, and what the
-/// cache keeps of the daemon. Shared: `App` holds it in an `Arc`.
+/// What the Docker routes run on: the client of the daemon, the store, which says what is installed, what the cache
+/// keeps of the daemon, and what the registries served at the last image check. Shared: `App` holds it in an `Arc`.
 #[derive(Debug)]
 pub(crate) struct DockerState {
     docker: Docker,
     store: Store<Runtime>,
     containers: Arc<Cached<ComposeContainers>>,
+    /// The registry digests of the images on the host, which the containers' are read in.
+    images: Arc<Cached<ImageDigests>>,
+    /// What the registries served at the last image check; none before the first.
+    registry: Mutex<Arc<RegistryDigests>>,
     overview: Arc<Cached<DockerOverview>>,
     changes: DockerChanges,
     /// Set while the events of the containers wait out their batch.
     containers_batch: AtomicBool,
+    /// Set while the events of the images wait out their batch.
+    images_batch: AtomicBool,
     /// Set while the events of the overview wait out their batch.
     overview_batch: AtomicBool,
     is_following: AtomicBool,
@@ -80,6 +90,21 @@ impl DockerState {
                 Self::notifier(&changes, DockerChange::Containers),
             )
         };
+        let images = {
+            let docker = docker.clone();
+
+            // Read with the containers: a change of the images changes which apps have an update.
+            Cached::new(
+                "images",
+                Self::CONTAINERS,
+                move || {
+                    let docker = docker.clone();
+
+                    async move { docker.image_digests().await }
+                },
+                Self::notifier(&changes, DockerChange::Containers),
+            )
+        };
         let overview = {
             let docker = docker.clone();
 
@@ -103,9 +128,12 @@ impl DockerState {
                 runtime,
             ),
             containers,
+            images,
+            registry: Mutex::new(Arc::default()),
             overview,
             changes,
             containers_batch: AtomicBool::new(false),
+            images_batch: AtomicBool::new(false),
             overview_batch: AtomicBool::new(false),
             is_following: AtomicBool::new(false),
         })
@@ -129,6 +157,43 @@ impl DockerState {
     /// The usage of the whole host, as kept.
     pub(crate) async fn overview(&self) -> Loaded<DockerOverview> {
         self.overview.get().await
+    }
+
+    /// Keeps what the registries served at an image check, and tells the pages that follow the changes when it
+    /// changes which apps have an update.
+    pub(crate) fn keep_registry_digests(&self, digests: RegistryDigests) {
+        let previous = std::mem::replace(&mut *self.registry(), Arc::new(digests));
+
+        if *previous != **self.registry() {
+            self.changes.send(DockerChange::Containers);
+        }
+    }
+
+    /// The apps among `installed` that one of `containers` runs an image of that the registry has moved past, at the
+    /// last image check: none before the first, nor while the images cannot be read, as the update badge must not fail
+    /// a page.
+    pub(crate) async fn outdated<'a>(
+        &self,
+        containers: &ComposeContainers,
+        installed: impl IntoIterator<Item = &'a str>,
+    ) -> BTreeSet<String> {
+        let registry = Arc::clone(&self.registry());
+
+        if registry.is_empty() {
+            return BTreeSet::new();
+        }
+
+        // The cache logs a failed read.
+        let Ok(digests) = self.images.get().await else {
+            return BTreeSet::new();
+        };
+
+        registry.outdated(&containers.running_images(installed, &digests))
+    }
+
+    /// What the registries served at the last image check, whatever a panic left it: it is replaced whole.
+    fn registry(&self) -> std::sync::MutexGuard<'_, Arc<RegistryDigests>> {
+        self.registry.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Reads the containers again after a change this server made, as a compose command, and resolves once the cache
@@ -164,12 +229,12 @@ impl DockerState {
 
             // The events no longer say what changed: the pages, which follow what the cache changes, would wait forever.
             this.containers.poll();
+            this.images.poll();
             this.overview.poll();
         });
     }
 
-    /// Reloads what `change` makes stale once its batch ends, opening one unless it is open. The images and the swarm
-    /// are not kept yet.
+    /// Reloads what `change` makes stale once its batch ends, opening one unless it is open. The swarm is not kept yet.
     fn schedule(self: &Arc<Self>, change: hangar_core::DockerChange) {
         let this = Arc::clone(self);
 
@@ -186,7 +251,13 @@ impl DockerState {
                     this.overview.refresh();
                 });
             }
-            hangar_core::DockerChange::Images | hangar_core::DockerChange::Swarm => {}
+            hangar_core::DockerChange::Images => {
+                Self::batch(&self.images_batch, Self::CONTAINERS_BATCH, move || {
+                    this.images_batch.store(false, Ordering::SeqCst);
+                    this.images.refresh();
+                });
+            }
+            hangar_core::DockerChange::Swarm => {}
         }
     }
 

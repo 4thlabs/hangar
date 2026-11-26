@@ -44,17 +44,27 @@ impl Failure {
 
     /// The answer of `code`, once `error`, its cause, is logged whole beside it.
     pub(crate) fn logged(code: ErrorCode, error: &dyn StdError) -> Error {
+        Self::logged_code(code, error).into()
+    }
+
+    /// `code`, once `error`, its cause, is logged whole beside it: what a job that failed keeps for the page.
+    pub(crate) fn logged_code(code: ErrorCode, error: &dyn StdError) -> ErrorCode {
         tracing::error!(code = code.code(), error = %Self::chain(error), "{}", code.message());
 
-        code.into()
+        code
     }
 
     /// The answer of a store's `error`: for an invalid `hangar.yml`, its field at fault, which is the user's to fix and
     /// not logged; for any other, `failed`, once `error` is logged whole.
     pub(crate) fn store(failed: ErrorCode, error: &StoreError) -> Error {
+        Self::store_code(failed, error).into()
+    }
+
+    /// The code of a store's `error`, as [`store`](Self::store) answers it.
+    pub(crate) fn store_code(failed: ErrorCode, error: &StoreError) -> ErrorCode {
         match error {
-            StoreError::Config { source, .. } => Self::config(source).into(),
-            other => Self::logged(failed, other),
+            StoreError::Config { source, .. } => Self::config(source),
+            other => Self::logged_code(failed, other),
         }
     }
 

@@ -62,6 +62,18 @@ pub enum NotificationMessage {
         /// The options of `up`, comma-separated, as `pull,forceRecreate`; empty for none.
         flags: String,
     },
+    /// An image check found apps whose registry serves a newer image.
+    UpdatesAvailable {
+        /// How many.
+        count: u64,
+    },
+    /// The update of the apps of the night ended.
+    AutoUpdate {
+        /// How many apps it updated.
+        updated: u64,
+        /// The apps it failed to update, comma-separated, as `alpha, gamma`; empty for none.
+        failed: String,
+    },
 }
 
 /// A notification, as the page shows it.

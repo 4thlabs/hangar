@@ -372,6 +372,21 @@ pub enum ErrorCode {
         /// The id asked for.
         batch: u64,
     },
+    /// No run of a job of this id is kept.
+    #[serde(rename = "jobs.unknown_run")]
+    UnknownJobRun {
+        /// The id asked for.
+        run: u64,
+    },
+    /// A run of a job to cancel that has ended already.
+    #[serde(rename = "jobs.ended")]
+    JobEnded {
+        /// The run's id.
+        run: u64,
+    },
+    /// A run of a job stopped short: the server failed it, and its log says how.
+    #[serde(rename = "jobs.crashed")]
+    JobCrashed,
     /// A sign-in by password of an email unknown to `hangar.yml`, or with a wrong password.
     #[serde(rename = "auth.invalid_credentials")]
     InvalidCredentials,
@@ -522,6 +537,9 @@ impl ErrorCode {
             Self::BatchUnchecked { .. } => "compose.unchecked",
             Self::ComposeFailed { .. } => "compose.failed",
             Self::UnknownBatch { .. } => "compose.unknown_batch",
+            Self::UnknownJobRun { .. } => "jobs.unknown_run",
+            Self::JobEnded { .. } => "jobs.ended",
+            Self::JobCrashed => "jobs.crashed",
             Self::InvalidCredentials => "auth.invalid_credentials",
             Self::TooManySignIns => "auth.too_many_sign_ins",
             Self::SessionExpired => "auth.session_expired",
@@ -541,6 +559,7 @@ impl ErrorCode {
             | Self::UnknownProject { .. }
             | Self::UnknownContainer { .. }
             | Self::UnknownBatch { .. }
+            | Self::UnknownJobRun { .. }
             | Self::NoOidcProvider => StatusCode::NOT_FOUND,
             Self::InvalidCredentials
             | Self::SessionExpired
@@ -556,7 +575,8 @@ impl ErrorCode {
             | Self::FileExists { .. }
             | Self::FileAppeared { .. }
             | Self::AppBusy { .. }
-            | Self::BatchRunning { .. } => StatusCode::CONFLICT,
+            | Self::BatchRunning { .. }
+            | Self::JobEnded { .. } => StatusCode::CONFLICT,
             Self::ConfigSyntax { .. }
             | Self::ConfigInvalid { .. }
             | Self::InvalidVariableName { .. }
@@ -593,7 +613,8 @@ impl ErrorCode {
             | Self::FileSaveFailed { .. }
             | Self::AppCreateFailed { .. }
             | Self::ComposeFailed { .. }
-            | Self::BatchUnchecked { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            | Self::BatchUnchecked { .. }
+            | Self::JobCrashed => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -687,6 +708,9 @@ impl ErrorCode {
                 Self::hinted(&format!("{command} failed on {app}"))
             }
             Self::UnknownBatch { batch } => format!("no compose batch {batch} is kept"),
+            Self::UnknownJobRun { run } => format!("no run {run} of a job is kept"),
+            Self::JobEnded { run } => format!("the run {run} of a job has ended already"),
+            Self::JobCrashed => Self::hinted("the job stopped short"),
             Self::UnknownContainer { project, container } => {
                 format!("the app {project} has no container {container}")
             }
@@ -847,6 +871,9 @@ mod tests {
                 command: "docker compose up -d".to_owned(),
             },
             ErrorCode::UnknownBatch { batch: 7 },
+            ErrorCode::UnknownJobRun { run: 7 },
+            ErrorCode::JobEnded { run: 7 },
+            ErrorCode::JobCrashed,
             ErrorCode::UnknownContainer {
                 project: app(),
                 container: "0123456789ab".to_owned(),

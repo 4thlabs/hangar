@@ -21,16 +21,17 @@ pub use docker::{
     ComposeContainer, ComposeContainers, ComposeProjectDetail, ComposeProjectSummary,
     ComposeService, ContainerCounts, ContainerDetails, ContainerMetrics, ContainerState,
     DaemonError, Docker, DockerChange, DockerError, DockerOverview, Health, ImageCounts,
-    ImageDigests, ProjectStatus, PublishedPort, RunningImage, StatsFrame, VolumeCounts,
+    ImageDigests, ProjectStatus, PublishedPort, RegistryDigests, RunningImage, StatsFrame,
+    VolumeCounts,
 };
 pub use environment::Environment;
 pub use password::{PasswordError, PasswordHash};
 pub use runtime::{Command, CommandRunner, Output, RunError, Runtime};
 pub use secrets::Secrets;
 pub use store::{
-    AppFiles, Backup, Category, Column, Config, ConfigError, DataDir, Dotenv, FollowedCard,
-    GlobalEnv, SavedFile, ServiceOptions, Store, StoreApp, StoreError, User, Widget, WidgetKind,
-    YamlError,
+    AppFiles, Backup, Category, Column, Config, ConfigError, CronError, CronSchedule, DataDir,
+    Dotenv, FollowedCard, GlobalEnv, SavedFile, ServiceOptions, Store, StoreApp, StoreError, User,
+    Widget, WidgetKind, YamlError,
 };
 pub use tokio_util::sync::CancellationToken;
 pub use version::VERSION;

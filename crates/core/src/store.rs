@@ -36,8 +36,8 @@ use std::path::Path;
 
 pub use app::StoreApp;
 pub use config::{
-    Backup, Category, Column, Config, ConfigError, FollowedCard, ServiceOptions, User, Widget,
-    WidgetKind,
+    Backup, Category, Column, Config, ConfigError, CronError, CronSchedule, FollowedCard,
+    ServiceOptions, User, Widget, WidgetKind,
 };
 pub use data_dir::DataDir;
 pub use env::{Dotenv, GlobalEnv};

@@ -5,7 +5,8 @@
 //! apart from the request that starts it. The Docker routes read a cache of the daemon that its events keep fresh. The
 //! notifications are one list for every user, kept in a JSON file of the data directory and pushed as they are filed,
 //! and the compose commands of the Apps pages run in batches on their own, their output streamed and kept for a page
-//! that comes back.
+//! that comes back. The jobs run on their crons in the server's process, one at a time per queue: the image check, which
+//! tells the Docker pages the apps that have an update, and the update of those apps, every night.
 
 mod app;
 mod app_locks;
@@ -14,6 +15,7 @@ mod compose;
 mod docker;
 mod failure;
 mod health;
+mod jobs;
 mod notifications;
 mod settings;
 mod store;

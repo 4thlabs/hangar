@@ -13,6 +13,7 @@ use crate::app_locks::AppLocks;
 use crate::auth::{Auth, AuthBodyLimit, OriginCheck};
 use crate::compose::ComposeState;
 use crate::docker::{DockerChanges, DockerState};
+use crate::jobs::{Clock, HangarJobs, Jobs, Updates};
 use crate::notifications::Notifier;
 use crate::store::StoreState;
 use crate::trailing_slash::TrailingSlash;
@@ -25,6 +26,7 @@ pub struct App {
     pub(crate) docker: Arc<DockerState>,
     pub(crate) notifier: Notifier,
     pub(crate) compose: Arc<ComposeState>,
+    pub(crate) jobs: Arc<Jobs>,
 }
 
 impl App {
@@ -41,7 +43,20 @@ impl App {
         let docker_changes = DockerChanges::new();
         let notifier = Notifier::load(&settings.data_dir).await;
         let locks = Arc::new(AppLocks::default());
-        let docker = DockerState::new(settings, runtime.clone(), docker, docker_changes.clone());
+        let docker_state = DockerState::new(
+            settings,
+            runtime.clone(),
+            docker.clone(),
+            docker_changes.clone(),
+        );
+        let updates = Updates::new(
+            settings,
+            runtime.clone(),
+            docker,
+            Arc::clone(&docker_state),
+            notifier.clone(),
+            Arc::clone(&locks),
+        );
 
         Self {
             auth: Arc::new(Auth::new(settings)),
@@ -55,12 +70,13 @@ impl App {
             compose: ComposeState::new(
                 settings,
                 runtime,
-                Arc::clone(&docker),
+                Arc::clone(&docker_state),
                 notifier.clone(),
                 locks,
             ),
-            docker,
+            docker: docker_state,
             notifier,
+            jobs: HangarJobs::scheduler(updates, Clock::System),
         }
     }
 
@@ -69,6 +85,12 @@ impl App {
     pub async fn start(&self) {
         self.docker.follow();
         self.auth.start().await;
+    }
+
+    /// Starts the jobs' crons, and an image check at once: apart from [`start`](Self::start), so that a test of the
+    /// routes runs no job it does not ask for.
+    pub fn start_jobs(&self) {
+        HangarJobs::start(&self.jobs);
     }
 
     /// Ends the state once the server has stopped serving: what was changed of the notifications and is not saved yet
@@ -89,7 +111,8 @@ pub fn router(app: App) -> axum::Router {
         env: app.clone(),
         docker: app.clone(),
         notifications: app.clone(),
-        compose: app,
+        compose: app.clone(),
+        jobs: app,
     })
 }
 

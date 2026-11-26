@@ -41,6 +41,9 @@ quoll::api! {
 
     pub(crate) group Images {
         GET "/images/json" => list() -> Vec<ImageSummary>;
+        /// What the registry serves for `reference`, asked by the daemon with its credentials: a call to the registry,
+        /// which counts against its rate limit.
+        GET "/distribution/{reference}/json" => distribution(reference: &str) -> DistributionInspection;
     }
 }
 
@@ -237,6 +240,21 @@ pub(crate) struct ImageSummary {
     /// `name@sha256:...`, one per registry it was pulled from or pushed to; none for an image built here.
     #[serde(deserialize_with = "null_as_default")]
     pub(crate) repo_digests: Vec<String>,
+}
+
+/// What `GET /distribution/{reference}/json` says the registry serves for a reference.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase", default)]
+pub(crate) struct DistributionInspection {
+    pub(crate) descriptor: Descriptor,
+}
+
+/// The manifest, or the index of manifests, a registry serves for a reference.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub(crate) struct Descriptor {
+    /// `sha256:...`, as the `RepoDigests` of an image pulled from it end with.
+    pub(crate) digest: String,
 }
 
 /// An event of `GET /events`: the kind of what it happened to, and that thing's attributes.
