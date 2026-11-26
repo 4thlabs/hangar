@@ -1,4 +1,4 @@
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 import { toast } from "#modules/common/ui/toast.tsx";
 
 // The toasts a change ends with: what was done, or why it was not.

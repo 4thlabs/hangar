@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { readEvents, type LogEvent } from "#libs/api";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 
 /** Where a followed log is. */
 export type LogStatus = "connecting" | "connected" | "ended" | "error";

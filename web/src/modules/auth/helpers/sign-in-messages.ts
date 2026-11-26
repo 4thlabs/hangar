@@ -1,5 +1,5 @@
 import { ApiError } from "#libs/api";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 
 /** Why a sign-in through the provider ended back on `/login`, as the server's `error` says it. */
 export type SignInRefusal = "unavailable" | "expired" | "denied" | "not-a-user";

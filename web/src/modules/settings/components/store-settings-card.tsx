@@ -12,7 +12,7 @@ import {
 } from "#libs/api";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";

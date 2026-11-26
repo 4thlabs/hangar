@@ -1,7 +1,7 @@
 import type { ProjectStatus, ProjectSummary } from "#libs/api";
 import { appStatuses, type AppSortColumn, type AppsSort, type AppUpdate } from "#modules/apps/helpers/apps-search.ts";
-import { searchByName } from "#modules/common/search-by-name.ts";
-import { sortRows } from "#modules/common/table-sort.ts";
+import { searchByName } from "#modules/common/helpers/search-by-name.ts";
+import { sortRows } from "#modules/common/helpers/table-sort.ts";
 
 /** What narrows the apps' table: the query, the statuses, the categories and the sides of the update filter ticked, and
  * the order. */

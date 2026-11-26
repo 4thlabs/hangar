@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { WidgetPlacement } from "#libs/api";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 import { useWidgetData, type LoadingWidgetType, type WidgetDataOf } from "#modules/widgets/hooks/use-widget-data.ts";
 import { widgetLook } from "#modules/widgets/widget-appearance.ts";
 import { WidgetBoundary } from "./widget-boundary.tsx";

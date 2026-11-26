@@ -1,5 +1,5 @@
 import type { Job, JobRun, JobState } from "#libs/api";
-import { describeErrorDetail } from "#modules/common/error-message.ts";
+import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
 
 // What the jobs' card says of the server's jobs and their runs.
 

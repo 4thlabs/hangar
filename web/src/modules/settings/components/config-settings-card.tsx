@@ -3,7 +3,7 @@ import { SaveIcon } from "lucide-react";
 import { getConfigReadQueryKey, getStoreAppsQueryKey, useConfigRead, useConfigSave } from "#libs/api";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 import { useYamlEditor } from "#modules/common/hooks/use-yaml-editor.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 
