@@ -9,7 +9,7 @@ use hangar_core::{
 };
 use tokio::io::AsyncWriteExt;
 
-use crate::environment::Environment;
+use crate::environment::Variables;
 use crate::failure::Failure;
 use crate::request::ComposeRequest;
 use crate::terminal::Terminal;
@@ -18,17 +18,17 @@ use crate::terminal::Terminal;
 #[derive(Debug)]
 pub(crate) struct Hangar {
     runtime: Runtime,
-    environment: Environment,
+    variables: Variables,
     terminal: Terminal,
 }
 
 impl Hangar {
-    /// The commands, their children run by `runtime`, their variables read from `environment`; a child that inherits
+    /// The commands, their children run by `runtime`, their variables read from `variables`; a child that inherits
     /// the terminal is handed `terminal`.
-    pub(crate) fn new(runtime: Runtime, environment: Environment, terminal: Terminal) -> Self {
+    pub(crate) fn new(runtime: Runtime, variables: Variables, terminal: Terminal) -> Self {
         Self {
             runtime,
-            environment,
+            variables,
             terminal,
         }
     }
@@ -37,8 +37,8 @@ impl Hangar {
     /// seeds `.env.global`.
     pub(crate) async fn install(&self) -> Result<(), Failure> {
         let store = Store::new(
-            self.environment.store_url()?,
-            self.environment.data_dir()?,
+            self.variables.store_url()?,
+            self.variables.data_dir()?,
             self.runtime.clone(),
         );
 
@@ -51,7 +51,7 @@ impl Hangar {
     /// stdin and its Ctrl-C, for `logs -f`, `exec` or an `up` that attaches. Any other runs as one batch that stops at
     /// the first failure, as the Node CLI does, its output printed as it comes, and says when docker has no compose.
     pub(crate) async fn compose(&self, request: ComposeRequest) -> Result<(), Failure> {
-        let data_dir = self.environment.data_dir()?;
+        let data_dir = self.variables.data_dir()?;
         // Only `hangar.yml` is read: the URL serves an install alone.
         let config = Store::new(String::new(), data_dir.clone(), self.runtime.clone())
             .config()
