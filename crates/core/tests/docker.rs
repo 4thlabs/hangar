@@ -435,3 +435,34 @@ async fn reports_every_change_then_those_of_a_compose_container() {
 
     assert_eq!(connected, DockerChange::ALL);
 }
+
+#[tokio::test]
+async fn gives_the_digests_of_the_image_a_container_runs_and_the_usage_of_the_host() {
+    let Some(mut project) = Project::new("images").await else {
+        return;
+    };
+
+    project.running("web").await;
+
+    let docker = docker();
+    let containers = docker.containers().await.expect("the containers");
+    let digests = docker.image_digests().await.expect("the digests");
+    let overview = docker.overview().await.expect("the overview");
+    let running = containers.running_images([project.name.as_str()], &digests);
+
+    assert_eq!(running.len(), 1);
+    assert_eq!(running[0].image, format!("{IMAGE}:{TAG}"));
+    assert!(
+        running[0]
+            .digests
+            .iter()
+            .any(|digest| digest.starts_with(&format!("{IMAGE}@sha256:"))),
+        "a pulled image has its registry's digest: {running:?}"
+    );
+    assert!(!overview.version.is_empty());
+    assert!(overview.containers.running >= 1, "{overview:?}");
+    assert!(
+        overview.images.total >= 1 && overview.images.size > 0,
+        "{overview:?}"
+    );
+}

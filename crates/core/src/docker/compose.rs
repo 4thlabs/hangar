@@ -248,6 +248,7 @@ mod tests {
             service: "web".to_owned(),
             replica: Some(1),
             image: "nginx:alpine".to_owned(),
+            image_id: "sha256:alpine".to_owned(),
             state: ContainerState::Running,
             details: Some(ContainerDetails {
                 health: None,

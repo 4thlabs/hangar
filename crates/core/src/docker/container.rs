@@ -43,6 +43,9 @@ pub struct ComposeContainer {
     pub replica: Option<u32>,
     /// The image as compose runs it, such as `nginx:alpine`.
     pub image: String,
+    /// The id of the image it was created from, `sha256:...`: a pull moves the reference, not the image a container
+    /// runs until it is recreated.
+    pub image_id: String,
     /// What it is doing.
     pub state: ContainerState,
     /// What its inspection adds to its list entry; none when it was not inspected, as by
@@ -145,6 +148,7 @@ impl ComposeContainer {
                 .get(CONTAINER_NUMBER_LABEL)
                 .and_then(|number| number.parse().ok()),
             image: summary.image,
+            image_id: summary.image_id,
             state: ContainerState::from_daemon(&summary.state),
             details: inspection.map(ContainerDetails::from_daemon),
             listed_health: Health::from_status(&summary.status),
@@ -402,6 +406,7 @@ mod tests {
             "Id": "a".repeat(FULL_ID),
             "Names": ["/alpha-web-1"],
             "Image": "nginx:alpine",
+            "ImageID": "sha256:alpine",
             "State": "running",
             "Status": "Up 2 minutes",
             "Labels": all,
@@ -443,6 +448,7 @@ mod tests {
             service: "web".to_owned(),
             replica: Some(1),
             image: "nginx:alpine".to_owned(),
+            image_id: "sha256:alpine".to_owned(),
             state: ContainerState::Running,
             details,
             listed_health: None,
