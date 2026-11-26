@@ -1,0 +1,100 @@
+{
+  "components": {
+    "responses": {
+      "Problem": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "An error, as an RFC 9457 problem."
+      }
+    },
+    "schemas": {
+      "Problem": {
+        "description": "An RFC 9457 problem: what went wrong with a request, the body of every error, as `application/problem+json`.",
+        "properties": {
+          "detail": {
+            "description": "What went wrong with this request.",
+            "type": "string"
+          },
+          "instance": {
+            "description": "A URI naming this occurrence of the problem.",
+            "format": "uri-reference",
+            "type": "string"
+          },
+          "status": {
+            "description": "The status of the answer.",
+            "maximum": 599,
+            "minimum": 100,
+            "type": "integer"
+          },
+          "title": {
+            "description": "A short summary of the kind of problem.",
+            "type": "string"
+          },
+          "type": {
+            "default": "about:blank",
+            "description": "A URI naming the kind of problem: `about:blank` for a problem that says no more than its status.",
+            "format": "uri-reference",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ServerHealth": {
+        "description": "What the health route answers: the server is up, at this version.",
+        "properties": {
+          "version": {
+            "description": "The version of the server, as its crates give it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Hangar's API, which its page calls. Every error is a problem, in English.",
+    "title": "hangar-api",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.1",
+  "paths": {
+    "/api/health": {
+      "get": {
+        "operationId": "health_check",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerHealth"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Answers 200 while the server serves: the healthcheck of the image.",
+        "tags": [
+          "Health"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "The server's health, which needs no session.",
+      "name": "Health"
+    }
+  ]
+}
