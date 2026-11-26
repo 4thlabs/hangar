@@ -171,7 +171,7 @@ cargo test --workspace --all-features --locked
 cargo doc --workspace --all-features --no-deps --locked
 ```
 
-What CI's `web` job runs, with [`cargo quoll`](https://github.com/4thlabs/quoll/blob/v0.10.0/docs/guides/typescript.md)
+What CI's `web` job runs, with [`cargo quoll`](https://github.com/4thlabs/quoll/blob/v0.11.0/docs/guides/typescript.md)
 installed at the tag of the quoll the contract uses:
 
 ```bash
@@ -183,9 +183,8 @@ npm test --prefix web
 A change to the contract rewrites its snapshot: `SNAPSHOT=overwrite cargo test -p hangar-api --test openapi`, and
 the diff is reviewed.
 
-`cargo run -p hangar-cli -- <args>` runs the binary, and `HOST=127.0.0.1 PORT=3011 cargo quoll dev` the server,
-orval and Vite, beside the Waku version's `npm run dev`. The Docker image builds the binary in its `cli` stage, on
-Alpine, and ships it at `/usr/local/bin/hangar`; nothing else of the workspace goes into the image. CI's `cli` job
-builds it static for the host, x86_64 and aarch64 musl, and a `v*` tag attaches it to its release. A build given
-`HANGAR_VERSION`, the tag, prints it for `--version`, its `v` left out; any other prints the workspace's version with
-`-dev`.
+`cargo run -p hangar-cli -- <args>` runs the binary, and `cargo quoll dev` the server, orval and Vite, beside the
+Waku version's `npm run dev`. The Docker image builds the binary in its `cli` stage, on Alpine, and ships it at
+`/usr/local/bin/hangar`; nothing else of the workspace goes into the image. CI's `cli` job builds it static for the
+host, x86_64 and aarch64 musl, and a `v*` tag attaches it to its release. A build given `HANGAR_VERSION`, the tag,
+prints it for `--version`, its `v` left out; any other prints the workspace's version with `-dev`.

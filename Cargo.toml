@@ -17,7 +17,7 @@ hangar-api = { path = "crates/api" }
 hangar-core = { path = "crates/core" }
 http = "1"
 nix = "0.32"
-quoll = { git = "https://github.com/4thlabs/quoll", tag = "v0.10.0" }
+quoll = { git = "https://github.com/4thlabs/quoll", tag = "v0.11.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
@@ -48,11 +48,12 @@ output = "web/openapi.json"
 after = [["npx", "--no", "orval"]]
 
 # Run by `cargo quoll dev`, ready once its url accepts a connection, on a port of its own beside the Waku version's
-# 3010. The page's vite.config.ts proxies `/api` to this url: the two change together. `cargo quoll dev` passes the
-# server no variable: it inherits its own, `HOST=127.0.0.1 PORT=3011 cargo quoll dev`, as docs/development.md says.
+# 3010. The page's vite.config.ts proxies `/api` to this url, and `env` tells the server to listen there: the three
+# change together.
 [[workspace.metadata.quoll.server]]
 package = "hangar-server"
 url = "http://127.0.0.1:3011"
+env = { HOST = "127.0.0.1", PORT = "3011" }
 
 # The page: `dev` runs beside the server in `cargo quoll dev`, `build` after the document in `cargo quoll build`.
 [workspace.metadata.quoll.web]
