@@ -31,13 +31,16 @@ impl ErrorCode {
             params.remove(member);
         }
 
-        let mut written = Map::from_iter([("code".to_owned(), Value::from(code))]);
+        let without_params = Map::from_iter([("code".to_owned(), Value::from(code))]);
+        let mut with_params = without_params.clone();
 
-        if !params.is_empty() {
-            written.insert("params".to_owned(), Value::Object(params));
-        }
+        with_params.insert("params".to_owned(), Value::Object(params));
 
-        serde_json::from_value(Value::Object(written)).ok()
+        // A code that has params reads them and ignores a member of no param; one that has none takes no `params` at
+        // all, whatever members its problem carries.
+        serde_json::from_value(Value::Object(with_params))
+            .or_else(|_| serde_json::from_value(Value::Object(without_params)))
+            .ok()
     }
 }
 
@@ -52,6 +55,22 @@ mod tests {
 
             assert_eq!(ErrorCode::read(&answered), Some(code));
         }
+    }
+
+    #[test]
+    fn reads_a_code_whatever_members_its_problem_carries_beside_its_params() {
+        let unknown = ErrorCode::UnknownApp {
+            app: "alpha".to_owned(),
+        };
+        let with_params = quoll::Error::from(unknown.clone()).with_member("since", "0.2.0");
+        let without_params =
+            quoll::Error::from(ErrorCode::SyncRunning).with_member("since", "0.2.0");
+
+        assert_eq!(ErrorCode::read(&with_params.into_answered()), Some(unknown));
+        assert_eq!(
+            ErrorCode::read(&without_params.into_answered()),
+            Some(ErrorCode::SyncRunning)
+        );
     }
 
     #[test]

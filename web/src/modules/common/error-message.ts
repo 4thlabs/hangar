@@ -10,12 +10,26 @@ type ParamsOf<Code extends ErrorCode> =
 /** The words of each code, from its params, and the seconds its answer's `Retry-After` says to wait, if any. */
 type Words = { [Code in ErrorCode]: (params: ParamsOf<Code>, retryAfter: number | undefined) => string };
 
+/** The codes that have params. */
+type CodeWithParams = { [Code in ErrorCode]: ParamsOf<Code> extends undefined ? never : Code }[ErrorCode];
+
+/** The names of `Names` in any order, each once: a list of them that leaves one out is a type error. */
+type EveryName<Names, All = Names> = [Names] extends [never]
+  ? []
+  : Names extends Names
+    ? [Names, ...EveryName<Exclude<All, Names>>]
+    : never;
+
+/** The names of the params of each code that has some, which its words need. */
+type ParamNames = { [Code in CodeWithParams]: EveryName<keyof ParamsOf<Code>> };
+
 /**
  * What the page says of an error of the server's. Each has a stable code and its params beside the server's English
  * message: this is the one place that keys the words by the code, which a catalog will word in another language. A
  * problem carries them as its `type` and its members, which `ApiError.detail` reads; a body that holds an error, as
- * the sync's, carries them whole, an `ErrorDetail`. A code this page does not know, from a server newer than it, is
- * said in the server's own message.
+ * the sync's, carries them whole, an `ErrorDetail`. A code this page does not know, from a server newer than it, or
+ * one without a param its words need, from another version or a member quoll left out, is said in the server's own
+ * message.
  */
 export class ErrorMessage {
   /** What the page says when the server could not be reached, or answered nothing it reads. */
@@ -26,6 +40,42 @@ export class ErrorMessage {
 
   /** A wait in whole minutes, in English: `15 minutes`. */
   private static readonly Minutes = new Intl.NumberFormat("en", { style: "unit", unit: "minute", unitDisplay: "long" });
+
+  private static readonly ParamNames: ParamNames = {
+    "store.unknown_app": ["app"],
+    "store.install_failed": ["app"],
+    "store.uninstall_failed": ["app"],
+    "config.syntax": ["reason"],
+    "config.invalid": ["field", "reason"],
+    "env.invalid_name": ["name"],
+    "env.line_break": ["name"],
+    "env.unwritable_value": ["name"],
+    "env.updated_and_removed": ["name"],
+    "editor.app_exists": ["app"],
+    "editor.invalid_app_id": ["app"],
+    "editor.invalid_path": ["path"],
+    "editor.through_file": ["path"],
+    "editor.outside_app": ["app", "path"],
+    "editor.hidden_file": ["path"],
+    "editor.broken_symlink": ["path"],
+    "editor.no_such_file": ["app", "path"],
+    "editor.not_a_file": ["path"],
+    "editor.too_large": ["path", "size"],
+    "editor.binary": ["path"],
+    "editor.not_utf8": ["path"],
+    "editor.file_exists": ["path"],
+    "editor.file_appeared": ["path"],
+    "editor.invalid_file": ["path", "reason"],
+    "editor.compose_rejected": ["path", "complaint"],
+    "editor.unchecked": ["path"],
+    "editor.files_unreadable": ["app"],
+    "editor.read_failed": ["path"],
+    "editor.save_failed": ["path"],
+    "editor.create_failed": ["app"],
+    "docker.unknown_project": ["project"],
+    "docker.unknown_container": ["project", "container"],
+    "auth.cross_origin": ["origin"],
+  };
 
   private static readonly Words: Words = {
     "store.unknown_app": ({ app }) => `The store has no app ${app}.`,
@@ -103,15 +153,27 @@ export class ErrorMessage {
     return ErrorMessage.worded(detail, undefined);
   }
 
-  /** The words of the code of `detail`, or its message for a code this page does not know. */
+  /** The words of the code of `detail`, or its message for a code this page does not know or whose params it lacks. */
   private static worded(detail: ErrorDetail, retryAfter: number | undefined): string {
-    if (!Object.hasOwn(ErrorMessage.Words, detail.code)) {
+    const params: Record<string, unknown> | undefined = "params" in detail ? detail.params : undefined;
+    const isKnown = Object.hasOwn(ErrorMessage.Words, detail.code);
+
+    if (!isKnown || !ErrorMessage.hasParams(detail.code, params)) {
       return ErrorMessage.sentence(detail.message);
     }
 
     const words = ErrorMessage.Words[detail.code] as (params: unknown, retryAfter: number | undefined) => string;
 
-    return words("params" in detail ? detail.params : undefined, retryAfter);
+    return words(params, retryAfter);
+  }
+
+  /** Whether `params` holds each param the words of `code` need. */
+  private static hasParams(code: ErrorCode, params: Record<string, unknown> | undefined): boolean {
+    const names: readonly string[] = Object.hasOwn(ErrorMessage.ParamNames, code)
+      ? ErrorMessage.ParamNames[code as CodeWithParams]
+      : [];
+
+    return names.every(name => params?.[name] !== undefined && params[name] !== null);
   }
 
   /** What a 429 of the sign-in says: the wait its `Retry-After` gives, in minutes. */

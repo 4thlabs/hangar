@@ -108,12 +108,12 @@ HANGAR_URL=http://localhost:5173
 
 `HANGAR_URL` is an origin, `https://hangar.example.com`, with no path: the page is served at the root of its host.
 
-Ten sign-ins by password for one email in fifteen minutes that did not succeed refuse that email with a 429 until
-the oldest is fifteen minutes old, which its `Retry-After` says in seconds, and the page in minutes. An attempt is counted as it starts, so that requests sent at once cannot get past
-the limit, and forgotten with the others of its email once one succeeds. The limit is per email: behind the reverse
-proxy every request comes from its address. The users `hangar.yml` lists are counted apart from the emails it does
-not, which are bounded: guesses on unknown emails never refuse a user. The routes of `/api/auth` read a body of 16 KiB
-at most.
+Ten sign-ins by password for one email in fifteen minutes that did not succeed refuse that email with a 429 until the
+oldest is fifteen minutes old, which its `Retry-After` says in seconds, and the page in minutes. An attempt is counted
+as it starts, so that requests sent at once cannot get past the limit, and forgotten with the others of its email once
+one succeeds. The limit is per email: behind the reverse proxy every request comes from its address. The users
+`hangar.yml` lists are counted apart from the emails it does not, which are bounded: guesses on unknown emails never
+refuse a user. The routes of `/api/auth` read a body of 16 KiB at most.
 
 For the identity provider, register a confidential client whose redirect URL is the callback,
 `<HANGAR_URL>/api/auth/oidc/callback`, and give the server its issuer, as the provider writes it in its discovery
