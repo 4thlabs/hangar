@@ -30,17 +30,50 @@ is git-ignored.
 | `npm run db:migrate`              | Applies the migrations to `HANGAR_DB_HOST`     |
 | `npm run db:studio`               | Opens Drizzle Studio on the database           |
 
-CI runs `typecheck`, `test` and `build` on every pull request and push to `main`, and its `rust` job checks
-the Cargo workspace (see the Rust section of [`AGENTS.md`](../AGENTS.md)). Its `cli` job builds the static
-`hangar` binary for the host, and `image-cli` the Dockerfile's `cli` stage, which puts it in the image. Each push to
-`main` (a merged pull request) and each `v*` tag also builds the image for `amd64` and `arm64` and
-publishes it to `ghcr.io/4thlabs/hangar`: as `edge` for `main`, as the release tags for a `v*` tag.
+CI runs `typecheck`, `test` and `build` on every pull request and push to `main`, its `rust` job checks
+the Cargo workspace, and its `web` job builds and tests the Rust server's page (see the Rust section of
+[`AGENTS.md`](../AGENTS.md)). Its `cli` job builds the static `hangar` binary for the host, and `image-cli`
+the Dockerfile's `cli` stage, which puts it in the image. Each push to `main` (a merged pull request) and
+each `v*` tag also builds the image for `amd64` and `arm64` and publishes it to `ghcr.io/4thlabs/hangar`:
+as `edge` for `main`, as the release tags for a `v*` tag.
 
 A release is cut with `gh release create vX.Y.Z --notes "…"`, which pushes the tag. The `v*` tag
 then attaches the binaries of the `cli` job to its release, with their checksums
 (`hangar-x86_64-unknown-linux-musl`, `hangar-aarch64-unknown-linux-musl`, and each one's `.sha256`).
 A tag pushed alone, with `git push`, gets a release without notes, which `gh release edit vX.Y.Z
 --notes "…"` fills in.
+
+## The Rust server
+
+The server rewritten in Rust (see the Rust section of [`AGENTS.md`](../AGENTS.md)) runs beside the Waku version, on
+the same data directory and the same `.env`. Its page is in `web/`. You need Rust, and `cargo quoll`, at the tag of
+the quoll the contract uses:
+
+```bash
+cargo install --git https://github.com/4thlabs/quoll --tag v0.10.0 quoll-cli --locked
+npm ci --prefix web
+cargo quoll dev
+```
+
+`cargo quoll dev` writes the OpenAPI document and orval's hooks, starts the server on port 3010, then Vite, which
+serves the page at <http://localhost:5173> and proxies `/api` to the server. A change to a crate rebuilds and
+restarts the server, a change to the contract writes the hooks again.
+
+`cargo quoll build` builds the page in `web/dist`, which the server serves when `HANGAR_PAGE_DIR` names it:
+`HANGAR_PAGE_DIR=web/dist cargo run -p hangar-server`, at <http://localhost:3010>.
+
+The server reads its settings from the environment, then from the `.env` of the directory it runs in, as the
+`hangar` binary does; an empty variable is not set. A value missing or bad stops it at the start, with every variable
+at fault named.
+
+| Variable                                                | What it is                                              |
+| ------------------------------------------------------- | ------------------------------------------------------- |
+| `HANGAR_DATA_DIR`                                       | The data directory, required                            |
+| `HANGAR_STORE_URL`                                      | The git URL of the store, required                      |
+| `DOMAIN`                                                | The domain the apps are served under, required          |
+| `GITHUB_TOKEN`, `FINNHUB_API_KEY`                       | The keys of the widgets that call those services        |
+| `HANGAR_SSH_HOST`, `HANGAR_SSH_USER`, `HANGAR_SSH_PORT` | The host the terminal signs in to; a port 1–65535       |
+| `HANGAR_PAGE_DIR`                                       | The page to serve beside the API, with its `index.html` |
 
 ## Database
 

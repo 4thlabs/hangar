@@ -27,7 +27,8 @@ follows quoll's docs.
 - `hangar-core` (`crates/core`) holds what Hangar does: running commands, the store, compose and Docker. It depends
   on no web framework, so that the binary and the server both run on it, and on quoll with its feature `client`
   alone, never `server`: the APIs it calls, as Docker's Engine API, are quoll contracts. `hangar-cli` (`crates/cli`)
-  is the binary `hangar`, on the core.
+  is the binary `hangar`, on the core. `hangar-api` (`crates/api`) is the server's contract, written as quoll's docs
+  say, one `quoll::group!` per area; `hangar-server` (`crates/server`) implements it, on the core.
 - One subject per module, in `name.rs`, with its submodules in `name/`. There is no `mod.rs`.
 - `lib.rs` holds the crate's docs, its modules and what it re-exports; the code lives in the modules. `main.rs`
   holds `main`, which calls the rest.
