@@ -19,6 +19,15 @@ afterEach(() => {
 });
 
 describe("/store", () => {
+  it("links each app to its editor", async () => {
+    serve({ "GET /api/store/apps": () => Response.json(listing) });
+    renderAt("/store");
+
+    const edit = await screen.findByRole("link", { name: "Edit Miniflux" });
+
+    expect(edit.getAttribute("href")).toBe("/store/miniflux/edit");
+  });
+
   it("lists the store's apps by name", async () => {
     serve({ "GET /api/store/apps": () => Response.json(listing) });
     renderAt("/store");
@@ -116,5 +125,48 @@ describe("/store/new", () => {
 
     expect(await screen.findByLabelText("Identifier")).toBeDefined();
     await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("name: My app"));
+  });
+
+  it("creates the app under the id typed in, then opens its editor", async () => {
+    const created: unknown[] = [];
+
+    serve({
+      "GET /api/store/new-app": () => Response.json({ compose: "name: My app\nservices: {}\n" }),
+      "POST /api/store/apps": body => {
+        created.push(body);
+
+        return Response.json(app("my-app", "My app", false), { status: 201 });
+      },
+      "GET /api/store/apps/my-app/files": () => Response.json({ app: app("my-app", "My app", false), files: [] }),
+      "GET /api/store/apps/my-app/file?path=compose.yml": () =>
+        Response.json({ path: "compose.yml", source: "name: My app\nservices: {}\n" }),
+    });
+
+    const router = renderAt("/store/new");
+    const save = await screen.findByRole("button", { name: "Save" });
+
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Identifier"), { target: { value: "My-App" } });
+    await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("name: My app"));
+    fireEvent.click(save);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/store/my-app/edit"));
+    expect(created).toEqual([{ id: "my-app", compose: "name: My app\nservices: {}\n" }]);
+  });
+
+  it("shows why compose refused the new app under the editor", async () => {
+    serve({
+      "GET /api/store/new-app": () => Response.json({ compose: "services: {}\n" }),
+      "POST /api/store/apps": () => problem(400, "docker rejects compose.yml:\nservices.web must be a mapping"),
+    });
+
+    renderAt("/store/new");
+    fireEvent.change(await screen.findByLabelText("Identifier"), { target: { value: "web" } });
+    await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("services"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const refusals = await screen.findAllByText(/services\.web must be a mapping/);
+
+    expect(refusals.some(refusal => refusal.tagName === "PRE")).toBe(true);
   });
 });
