@@ -42,12 +42,18 @@ fn write_config(root: &Path, source: &str) {
 
 /// Serves the server of the data directory at `root` on port 0, and gives its URL.
 async fn serve(root: &Path) -> String {
+    serve_at(root, URL).await
+}
+
+/// Serves the server of the data directory at `root`, its page at `page_url`, on port 0, and gives its URL.
+async fn serve_at(root: &Path, page_url: &str) -> String {
+    let page_url = page_url.to_owned();
     let root = root.to_str().expect("a UTF-8 path").to_owned();
     let settings = Settings::read(|name| match name {
         "HANGAR_DATA_DIR" => Some(root.clone()),
         "HANGAR_STORE_URL" => Some("https://example.com/store.git".to_owned()),
         "DOMAIN" => Some("example.com".to_owned()),
-        "HANGAR_URL" => Some(URL.to_owned()),
+        "HANGAR_URL" => Some(page_url.clone()),
         "HANGAR_SECRET" => Some(SECRET.to_owned()),
         _ => None,
     })
@@ -492,4 +498,45 @@ async fn the_options_say_no_provider_is_configured_and_its_routes_are_404() {
         json!({ "oidc": false })
     );
     assert_eq!(oidc.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn over_plain_http_the_session_is_neither_secure_nor_prefixed() {
+    let dir = data_dir();
+    let url = serve_at(dir.path(), "http://hangar.lan:3010").await;
+    let over_https = serve(dir.path()).await;
+
+    let signed_in = reqwest::Client::new()
+        .post(format!("{url}/api/auth/login"))
+        .header(ORIGIN, "http://hangar.lan:3010")
+        .json(&json!({ "email": "ana@example.com", "password": "correct horse" }))
+        .send()
+        .await
+        .expect("the server answers");
+    let set_cookie = signed_in.headers()[SET_COOKIE]
+        .to_str()
+        .expect("text")
+        .to_owned();
+    let cookie = Cookie::parse(set_cookie.clone()).expect("a cookie");
+    let plain = format!("{}={}", cookie.name(), cookie.value());
+
+    assert_eq!(cookie.name(), "hangar-session");
+    assert!(!set_cookie.contains("Secure"), "{set_cookie}");
+    assert!(
+        set_cookie.contains("HttpOnly") && set_cookie.contains("SameSite=Lax"),
+        "{set_cookie}"
+    );
+    assert_eq!(session(&url, &plain).await.status(), StatusCode::OK);
+
+    let prefixed = session_of(&login(&over_https, "ana@example.com", "correct horse").await);
+
+    assert_eq!(
+        session(&url, &prefixed).await.status(),
+        StatusCode::UNAUTHORIZED,
+        "a cookie of the other scheme is no session"
+    );
+    assert_eq!(
+        session(&over_https, &plain).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
 }

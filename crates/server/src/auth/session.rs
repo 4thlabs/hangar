@@ -5,11 +5,12 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use hangar_api::CookieCredential;
 use hangar_core::User;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::cookies::Cookies;
+use super::cookies::{Cookies, ServerCookie};
 
 /// A session, as its cookie holds it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,9 +26,6 @@ pub(crate) struct Session {
 }
 
 impl Session {
-    /// The cookie of the scheme `Session` of the contract.
-    pub(crate) const COOKIE: &str = "__Host-hangar-session";
-
     /// How long a session lasts: seven days, as Better Auth's do in the Waku version.
     pub(crate) const LIFETIME: Duration = Duration::from_secs(7 * DAY);
 
@@ -64,12 +62,16 @@ impl Session {
     pub(crate) fn cookie(&self, cookies: &Cookies, now: SystemTime) -> String {
         let lifetime = Duration::from_secs(self.expires.saturating_sub(Self::seconds(now)));
 
-        cookies.signed(Self::COOKIE, self, lifetime)
+        cookies.signed(ServerCookie::Session, self, lifetime)
     }
 
-    /// The session the cookie of value `sealed` holds, if it was signed with this key and has not expired at `now`.
-    pub(crate) fn open(cookies: &Cookies, sealed: &str, now: SystemTime) -> Option<Self> {
-        let session: Self = cookies.open_signed(Self::COOKIE, sealed)?;
+    /// The session the cookie of `credential` holds, if it was signed with this key and has not expired at `now`.
+    pub(crate) fn open(
+        cookies: &Cookies,
+        credential: &CookieCredential,
+        now: SystemTime,
+    ) -> Option<Self> {
+        let session: Self = cookies.open_signed(ServerCookie::Session, credential)?;
         let now = Self::seconds(now);
 
         (now < session.expires && now < session.end()).then_some(session)
@@ -127,6 +129,7 @@ mod tests {
     use std::time::{Duration, SystemTime};
 
     use cookie::Cookie;
+    use hangar_api::CookieCredential;
     use hangar_core::{PasswordHash, User};
 
     use super::{Cookies, DAY, Session};
@@ -134,7 +137,7 @@ mod tests {
     const HOUR: Duration = Duration::from_secs(60 * 60);
 
     fn cookies() -> Cookies {
-        Cookies::new("0123456789abcdef0123456789abcdef")
+        Cookies::new("0123456789abcdef0123456789abcdef", true)
     }
 
     /// Ana, with a password.
@@ -148,12 +151,17 @@ mod tests {
         users.into_iter().next().expect("Ana")
     }
 
-    /// The value the session's `Set-Cookie` sets at `now`.
-    fn sealed(session: &Session, now: SystemTime) -> String {
-        Cookie::parse(session.cookie(&cookies(), now))
+    /// The credential of a request that sends back the session's cookie set at `now`.
+    fn sealed(session: &Session, now: SystemTime) -> CookieCredential {
+        let value = Cookie::parse(session.cookie(&cookies(), now))
             .expect("a cookie")
             .value()
-            .to_owned()
+            .to_owned();
+
+        CookieCredential {
+            https: Some(value),
+            http: None,
+        }
     }
 
     #[test]

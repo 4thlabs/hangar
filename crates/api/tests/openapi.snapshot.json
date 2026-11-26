@@ -147,13 +147,13 @@
     },
     "securitySchemes": {
       "OidcFlow": {
-        "description": "The sign-in through the provider, from its start to its callback: a cookie the server encrypts, which holds\nthe state, the nonce and the PKCE verifier for ten minutes.",
+        "description": "The sign-in through the provider, from its start to its callback: a cookie the server encrypts, which holds the state, the nonce and the PKCE verifier for ten minutes. Over plain HTTP, it is `hangar-oidc`.",
         "in": "cookie",
         "name": "__Host-hangar-oidc",
         "type": "apiKey"
       },
       "Session": {
-        "description": "The session of the page: a cookie the server signs, `HttpOnly`, `Secure` and `SameSite=Lax`, which a subdomain\ncannot set.",
+        "description": "The session of the page: a cookie the server signs, `HttpOnly` and `SameSite=Lax`. Over plain HTTP, where a browser keeps no `Secure` cookie, it is `hangar-session`, neither `Secure` nor `__Host-`.",
         "in": "cookie",
         "name": "__Host-hangar-session",
         "type": "apiKey"

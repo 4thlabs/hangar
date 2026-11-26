@@ -33,6 +33,12 @@ pub struct OidcSettings {
 }
 
 impl AuthSettings {
+    /// Whether the page is served over HTTPS, and its cookies are `Secure` with the prefix `__Host-`: over plain
+    /// HTTP a browser keeps neither, and the page is for a trusted network only.
+    pub fn is_https(&self) -> bool {
+        self.url.scheme() == "https"
+    }
+
     /// The variable of the page's URL.
     pub const URL: &str = "HANGAR_URL";
     /// The variable of the cookies' secret.
@@ -193,6 +199,7 @@ mod tests {
             read(&[("HANGAR_URL", "https://hangar.example.com"), SECRET]).expect("valid");
 
         assert_eq!(settings.url.as_str(), "https://hangar.example.com/");
+        assert!(settings.is_https());
         assert_eq!(settings.secret.expose(), SECRET.1);
         assert!(settings.oidc.is_none());
     }

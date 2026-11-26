@@ -94,10 +94,13 @@ version, but never past thirty days from the sign-in. Signing out clears the coo
 `hangar.yml`, or whose `passwordHash` or `oidcSubject` changed, is signed out at their next request; changing
 `HANGAR_SECRET` signs everyone out.
 
-The cookies are `__Host-`, `Secure`, `HttpOnly` and `SameSite=Lax`: a browser keeps them over HTTPS, and on
-`http://localhost`, which it takes as secure, but not over plain HTTP to another host. A `POST` or any other request
-that changes something is refused with a 403 from another origin than `HANGAR_URL`'s, as Better Auth refuses one from
-another origin than `BETTER_AUTH_URL`'s. Under `cargo quoll dev`, the page's origin is Vite's:
+The cookies are `HttpOnly` and `SameSite=Lax`. When `HANGAR_URL` is `https`, they are `Secure` too, with the prefix
+`__Host-` (`__Host-hangar-session`), which a page of a subdomain, as the apps Hangar serves, cannot set. Over plain
+HTTP, a LAN address or `http://localhost` under `cargo quoll dev`, a browser keeps neither, Safari on `localhost`
+included: they are `hangar-session` and `hangar-oidc`, neither `Secure` nor `__Host-`, and anyone on the network
+can read them. **Plain HTTP is for a trusted network only**: anywhere else, serve Hangar over HTTPS. A `POST` or any
+other request that changes something is refused with a 403 from another origin than `HANGAR_URL`'s, as Better Auth
+refuses one from `BETTER_AUTH_URL`'s. Under `cargo quoll dev`, the page's origin is Vite's:
 
 ```bash
 HANGAR_URL=http://localhost:5173
