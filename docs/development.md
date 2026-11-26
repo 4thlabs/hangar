@@ -185,7 +185,7 @@ everything is read again, and when the daemon refuses them for good, each value 
 A reread that changes what the cache holds is pushed to the page on `GET /api/docker/changes`, as are an install, an
 uninstall, a saved `hangar.yml` and the end of a store sync, which change the apps listed; the page reads again what it
 shows, and no longer reloads every 30 seconds. When that stream is lost, the page says so and connects again, after a
-wait from a second doubled up to 30 seconds, then reads everything again. The stats, a frame a second, and the log of a
+wait from a second doubled up to 30 seconds, then reads everything again. The stats of the installed apps' containers, a frame a second, and the log of a
 container, its last 200 lines then followed, are streamed from the daemon, never kept; a log ends with an `end` event
 once its container stops, and an app Hangar did not install, or an id that is not one of a container of the app, is a 404. A daemon that does not answer is a 503, `docker.unavailable`. The update badge and its filter come with the image
 check (#176), the compose commands with #173, the backups with #177, and a container's console with the terminal.

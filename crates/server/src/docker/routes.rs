@@ -1,6 +1,10 @@
 //! The routes of the group `Docker`: the projects and a project's detail, read from the cache, the usage of the host,
 //! the logs and the stats streamed from the daemon, and what changed in the cache.
 
+use std::collections::HashSet;
+use std::error::Error as StdError;
+use std::sync::Arc;
+
 use futures::{StreamExt, stream};
 use hangar_api::{
     DockerChange, DockerOverview, DockerServer, ErrorCode, LogEvent, ProjectDetail, ProjectSummary,
@@ -8,10 +12,10 @@ use hangar_api::{
 };
 use hangar_core::DockerError;
 use quoll::{Error, Events, Response, Result};
-use std::error::Error as StdError;
 use tokio::sync::broadcast::error::RecvError;
 
 use super::DockerState;
+use super::stats::InstalledStats;
 use super::views::{Installed, Views};
 use crate::App;
 use crate::auth::SignedIn;
@@ -51,8 +55,23 @@ impl DockerState {
         .into())
     }
 
+    /// The ids of the containers of the installed apps, as the cache keeps them.
+    pub(super) async fn installed_containers(&self) -> Result<HashSet<String>> {
+        let (containers, installed) = tokio::join!(self.containers(), self.installed());
+        let containers = containers.map_err(|error| Self::unavailable(&error))?;
+        let installed = installed?;
+        let projects: HashSet<&str> = installed.ids().collect();
+
+        Ok(containers
+            .as_slice()
+            .iter()
+            .filter(|container| projects.contains(container.project.as_str()))
+            .map(|container| container.id.clone())
+            .collect())
+    }
+
     /// The answer of a failed read of the daemon, once logged whole.
-    fn unavailable(error: &dyn StdError) -> Error {
+    pub(super) fn unavailable(error: &dyn StdError) -> Error {
         Failure::logged(ErrorCode::DockerUnavailable, error)
     }
 
@@ -115,20 +134,17 @@ impl DockerState {
         Ok(Events::try_new(events))
     }
 
-    /// A frame of the usage of the running containers every second, its first sampled before the answer, so that a
-    /// daemon that does not answer is a 503 rather than an empty stream.
-    async fn stats(&self) -> Result<Events<StatsFrame>> {
+    /// A frame of the usage of the running containers of the installed apps every second, its first sampled before
+    /// the answer, so that a daemon that does not answer is a 503 rather than an empty stream. The daemon samples every
+    /// compose project of the host: the others are none of the page's, as for the logs.
+    async fn stats(self: &Arc<Self>) -> Result<Events<StatsFrame>> {
         let frames = self
             .docker
             .stats()
             .await
             .map_err(|error| Self::unavailable(&error))?;
 
-        Ok(Events::try_new(frames.map(|frame| {
-            frame
-                .map(Views::frame)
-                .map_err(|error| Self::unavailable(&error))
-        })))
+        Ok(Events::try_new(InstalledStats::follow(self, frames).await?))
     }
 
     /// What changes in the cache from now on. A page that falls too far behind reads everything again.

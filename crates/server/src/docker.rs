@@ -5,6 +5,7 @@
 
 mod cache;
 mod routes;
+mod stats;
 mod views;
 
 use std::sync::Arc;

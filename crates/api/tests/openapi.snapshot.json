@@ -1966,7 +1966,7 @@
         "type": "object"
       },
       "StatsFrame": {
-        "description": "The resource usage of the running containers of every compose project on the host, those of apps Hangar did not\ninstall among them: a page keeps the ids its apps list.",
+        "description": "The resource usage of the running containers of the installed apps: a page keeps the ids of those it shows.",
         "properties": {
           "containers": {
             "additionalProperties": {
@@ -2710,7 +2710,7 @@
             "Session": []
           }
         ],
-        "summary": "The resource usage of the running containers of every compose project, a frame every second. Each stream measures its CPU shares from its own samples: the first frame has none. It does not end; a daemon that fails ends it with a problem.",
+        "summary": "The resource usage of the running containers of the installed apps, a frame every second. Each stream measures its CPU shares from its own samples: the first frame has none. It does not end; a daemon that fails ends it with a problem.",
         "tags": [
           "Docker"
         ]

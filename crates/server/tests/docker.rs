@@ -528,7 +528,8 @@ async fn answers_404_for_the_log_of_a_container_of_another_app() {
 }
 
 #[tokio::test]
-async fn streams_the_usage_of_the_running_containers() -> quoll::Result<()> {
+async fn streams_the_usage_of_the_running_containers_of_the_installed_apps_alone()
+-> quoll::Result<()> {
     let fixture = Fixture::new();
     let (_, docker_host, _events) = FakeDaemon::serve().await;
     let (server, _) = fixture.serve(docker(&docker_host)).await;
@@ -537,12 +538,53 @@ async fn streams_the_usage_of_the_running_containers() -> quoll::Result<()> {
     let frame = next("a frame", &mut frames).await?;
     let alpha = frame.containers[&alpha_id()];
 
-    assert_eq!(frame.containers.len(), 2, "every compose project's");
+    assert_eq!(
+        frame.containers.keys().collect::<Vec<_>>(),
+        [&alpha_id()],
+        "beta is not installed"
+    );
     assert_eq!(alpha.cpu_percent, None, "the first frame has no CPU share");
     assert_eq!(
         (alpha.memory_usage, alpha.memory_limit),
         (Some(2_048), Some(4_096))
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn streams_the_usage_of_an_app_installed_while_it_is_followed() -> quoll::Result<()> {
+    let fixture = Fixture::new();
+    let (_, docker_host, _events) = FakeDaemon::serve().await;
+    let (server, _) = fixture.serve(docker(&docker_host)).await;
+    let mut frames = server.api().docker().stats().await?;
+
+    assert!(
+        !next("a frame", &mut frames)
+            .await?
+            .containers
+            .contains_key(&beta_id())
+    );
+
+    let installed = reqwest::Client::new()
+        .post(format!("{}/api/store/apps/beta/install", server.url))
+        .header(COOKIE, &server.cookie)
+        .header(ORIGIN, URL)
+        .send()
+        .await
+        .expect("the server answers");
+
+    assert_eq!(installed.status(), StatusCode::OK);
+
+    // A frame a second: the one after the install has beta.
+    within("beta's usage", async {
+        while !next("a frame", &mut frames)
+            .await
+            .expect("a frame")
+            .containers
+            .contains_key(&beta_id())
+        {}
+    })
+    .await;
     Ok(())
 }
 
