@@ -2,6 +2,7 @@
 //! fake services served on port 0 too, whose answers each test writes.
 
 mod frigate;
+mod gluetun;
 
 use std::fs;
 use std::path::PathBuf;
