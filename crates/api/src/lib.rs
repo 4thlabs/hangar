@@ -5,6 +5,7 @@
 mod api;
 mod auth;
 mod config;
+mod docker;
 mod editor;
 mod env;
 mod error;
@@ -14,6 +15,7 @@ mod store;
 pub use api::*;
 pub use auth::*;
 pub use config::*;
+pub use docker::*;
 pub use editor::*;
 pub use env::*;
 pub use error::*;

@@ -17,6 +17,8 @@ base64 = "0.22"
 # The jars axum-extra's `SignedCookieJar` and `PrivateCookieJar` wrap, under quoll's handlers, which take no extractor:
 # HMAC-signed and AES-GCM-encrypted cookies, their keys derived from `HANGAR_SECRET` with HKDF.
 cookie = { version = "0.18", features = ["key-expansion", "private", "signed"] }
+# The loads of the Docker cache, shared by the readers that wait for one, and the streams of the Docker routes.
+futures.workspace = true
 hangar-api = { workspace = true, features = ["server"] }
 hangar-core.workspace = true
 http.workspace = true
@@ -55,12 +57,12 @@ axum = { version = "0.8", default-features = false, features = ["form", "http1",
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # The key the fake provider signs with, made from fixed bytes: no key is committed.
 ed25519-dalek = { version = "3", features = ["pem"] }
-# The sign-ins a test sends at once.
-futures.workspace = true
 hangar-api = { workspace = true, features = ["client"] }
 http.workspace = true
 reqwest = { version = "0.13", default-features = false, features = ["json", "query"] }
 tempfile.workspace = true
+# Time paused in the tests of the Docker cache.
+tokio = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true

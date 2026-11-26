@@ -4,7 +4,7 @@
 use std::error::Error;
 use std::process::ExitCode;
 
-use hangar_core::Environment;
+use hangar_core::{Docker, Environment};
 use hangar_server::{App, Settings};
 
 fn main() -> ExitCode {
@@ -29,6 +29,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let docker = match Docker::connect() {
+        Ok(docker) => docker,
+        Err(error) => {
+            tracing::error!("{}", with_sources(&error));
+            return ExitCode::FAILURE;
+        }
+    };
     let tokio = match tokio::runtime::Runtime::new() {
         Ok(tokio) => tokio,
         Err(error) => {
@@ -37,11 +44,11 @@ fn main() -> ExitCode {
         }
     };
 
-    tokio.block_on(serve(&settings))
+    tokio.block_on(serve(&settings, docker))
 }
 
 /// Serves until told to stop.
-async fn serve(settings: &Settings) -> ExitCode {
+async fn serve(settings: &Settings, docker: Docker) -> ExitCode {
     let address = settings.address;
 
     match &settings.page {
@@ -54,7 +61,7 @@ async fn serve(settings: &Settings) -> ExitCode {
         ),
     }
 
-    let app = App::new(settings);
+    let app = App::new(settings, docker);
 
     app.start().await;
 

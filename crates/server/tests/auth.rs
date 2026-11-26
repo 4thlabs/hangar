@@ -58,8 +58,8 @@ async fn serve_at(root: &Path, page_url: &str) -> String {
         _ => None,
     })
     .expect("the settings are valid");
-    let router =
-        hangar_server::server(&settings).into_router(hangar_server::router(App::new(&settings)));
+    let router = hangar_server::server(&settings)
+        .into_router(hangar_server::router(App::new(&settings, docker())));
 
     quoll::test::spawn(router).await
 }
@@ -539,4 +539,9 @@ async fn over_plain_http_the_session_is_neither_secure_nor_prefixed() {
         session(&over_https, &plain).await.status(),
         StatusCode::UNAUTHORIZED
     );
+}
+
+/// A client of no daemon: these tests call no Docker route.
+fn docker() -> hangar_core::Docker {
+    hangar_core::Docker::with_host("tcp://127.0.0.1:9").expect("a client")
 }

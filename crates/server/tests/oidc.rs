@@ -294,8 +294,8 @@ async fn serve_at(root: &Path, provider: &Provider, page_url: &str) -> String {
         _ => None,
     })
     .expect("the settings are valid");
-    let router =
-        hangar_server::server(&settings).into_router(hangar_server::router(App::new(&settings)));
+    let router = hangar_server::server(&settings)
+        .into_router(hangar_server::router(App::new(&settings, docker())));
 
     quoll::test::spawn(router).await
 }
@@ -701,4 +701,9 @@ async fn a_burst_of_tokens_of_a_key_just_rotated_in_does_not_discover_the_provid
     }
 
     assert_eq!(provider.discoveries.load(Ordering::SeqCst), 1);
+}
+
+/// A client of no daemon: these tests call no Docker route.
+fn docker() -> hangar_core::Docker {
+    hangar_core::Docker::with_host("tcp://127.0.0.1:9").expect("a client")
 }

@@ -137,7 +137,7 @@ impl Fixture {
             ("HANGAR_TEST_LOG", self.log.display().to_string()),
             ("HANGAR_TEST_FAIL", fail.unwrap_or("none").to_owned()),
         ]);
-        let app = App::with_runtime(&settings, runtime);
+        let app = App::with_runtime(&settings, runtime, docker());
         let router = hangar_server::server(&settings).into_router(hangar_server::router(app));
         let url = quoll::test::spawn(router).await;
         let login = reqwest::Client::new()
@@ -1044,4 +1044,9 @@ async fn answers_an_app_created_that_the_store_cannot_list_by_its_id() {
             .join("app-store/store/delta/compose.yml")
             .exists()
     );
+}
+
+/// A client of no daemon: these tests call no Docker route.
+fn docker() -> hangar_core::Docker {
+    hangar_core::Docker::with_host("tcp://127.0.0.1:9").expect("a client")
 }

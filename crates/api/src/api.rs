@@ -11,6 +11,7 @@ quoll::api! {
         crate::editor::Editor,
         crate::config::Config,
         crate::env::Env,
+        crate::docker::Docker,
     };
 
 }

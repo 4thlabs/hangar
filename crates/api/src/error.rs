@@ -292,6 +292,26 @@ pub enum ErrorCode {
         /// The id.
         app: String,
     },
+
+    /// The Docker daemon could not be reached, or answered with an error.
+    #[serde(rename = "docker.unavailable")]
+    DockerUnavailable,
+
+    /// No installed app of this name.
+    #[serde(rename = "docker.unknown_project")]
+    UnknownProject {
+        /// The name asked for.
+        project: String,
+    },
+
+    /// No container of the app has this id.
+    #[serde(rename = "docker.unknown_container")]
+    UnknownContainer {
+        /// The app.
+        project: String,
+        /// The id asked for.
+        container: String,
+    },
 }
 
 /// An error as a body carries it, where a problem does not: its code, its params, and its English message, which the
@@ -376,13 +396,20 @@ impl ErrorCode {
             Self::FileReadFailed { .. } => "editor.read_failed",
             Self::FileSaveFailed { .. } => "editor.save_failed",
             Self::AppCreateFailed { .. } => "editor.create_failed",
+            Self::DockerUnavailable => "docker.unavailable",
+            Self::UnknownProject { .. } => "docker.unknown_project",
+            Self::UnknownContainer { .. } => "docker.unknown_container",
         }
     }
 
     /// The status the server answers it with.
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::UnknownApp { .. } | Self::NoSuchFile { .. } => StatusCode::NOT_FOUND,
+            Self::UnknownApp { .. }
+            | Self::NoSuchFile { .. }
+            | Self::UnknownProject { .. }
+            | Self::UnknownContainer { .. } => StatusCode::NOT_FOUND,
+            Self::DockerUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             Self::StoreNotInstalled
             | Self::SyncRunning
             | Self::AppExists { .. }
@@ -493,6 +520,11 @@ impl ErrorCode {
             Self::FileSaveFailed { path } => Self::hinted(&format!("{path} could not be saved")),
             Self::AppCreateFailed { app } => {
                 Self::hinted(&format!("the app {app} could not be created"))
+            }
+            Self::DockerUnavailable => Self::hinted("the Docker daemon could not be read"),
+            Self::UnknownProject { project } => format!("no app {project} is installed"),
+            Self::UnknownContainer { project, container } => {
+                format!("the app {project} has no container {container}")
             }
         }
     }
@@ -610,6 +642,12 @@ mod tests {
                 path: "path".to_owned(),
             },
             ErrorCode::AppCreateFailed { app: app() },
+            ErrorCode::DockerUnavailable,
+            ErrorCode::UnknownProject { project: app() },
+            ErrorCode::UnknownContainer {
+                project: app(),
+                container: "0123456789ab".to_owned(),
+            },
         ]
     }
 
