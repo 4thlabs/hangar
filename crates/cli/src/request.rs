@@ -224,6 +224,11 @@ mod tests {
             passed(&["up", "--build", "--wait"])
         );
         assert_eq!(up(&[]), ComposeCommand::Up(UpOptions::default()));
+        assert_eq!(
+            up(&["--detach=false"]),
+            passed(&["up", "-d", "--detach=false"]),
+            "the last value wins: the batch refuses it"
+        );
     }
 
     #[test]

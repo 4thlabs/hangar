@@ -93,8 +93,9 @@ impl ComposeCommand {
     }
 
     /// Whether the command attaches to its app and runs until it is stopped: an [`Args`](Self::Args) `up` that
-    /// nothing detaches, neither `-d`, `--detach` nor `--wait`, as a flag, with a true value or in a group of short
-    /// flags, as `-dV`. The typed [`Up`](Self::Up) is always detached.
+    /// nothing detaches, neither `--detach` nor `--wait`, as a flag, with a true value or as `-d` in a group of short
+    /// flags (`-dV`). The last value of each flag wins, as compose reads them. The typed [`Up`](Self::Up) is always
+    /// detached.
     ///
     /// ```
     /// use hangar_core::ComposeCommand;
@@ -102,15 +103,31 @@ impl ComposeCommand {
     /// let up = |line: &[&str]| ComposeCommand::Args(line.iter().map(|word| word.to_string()).collect());
     ///
     /// assert!(up(&["up", "--build"]).is_attached());
+    /// assert!(up(&["up", "-d", "--detach=false"]).is_attached());
     /// assert!(!up(&["up", "--build", "--wait"]).is_attached());
     /// ```
     pub fn is_attached(&self) -> bool {
         let Self::Args(args) = self else {
             return false;
         };
-        let is_detached = args.iter().any(|arg| Self::detaches(arg));
+        let mut detach = false;
+        let mut wait = false;
 
-        args.first().is_some_and(|name| name == "up") && !is_detached
+        for arg in args {
+            if Self::is_short_detach(arg) {
+                detach = true;
+            }
+
+            if let Some(value) = Self::flag_value(arg, "detach") {
+                detach = value;
+            }
+
+            if let Some(value) = Self::flag_value(arg, "wait") {
+                wait = value;
+            }
+        }
+
+        args.first().is_some_and(|name| name == "up") && !detach && !wait
     }
 
     /// The word starting with `-` that an [`Args`](Self::Args) holds before its command's name, which compose would
@@ -125,21 +142,25 @@ impl ComposeCommand {
             .filter(|word| word.starts_with('-'))
     }
 
-    /// Whether `arg` detaches an `up`: `--detach` or `--wait`, which detaches too, alone or with a true value, as
-    /// `pflag` reads a boolean, or a group of short flags holding `d`, as `-d` or `-dV`.
-    fn detaches(arg: &str) -> bool {
-        if let Some(long) = arg.strip_prefix("--") {
-            let (name, value) = match long.split_once('=') {
-                Some((name, value)) => (name, Some(value)),
-                None => (long, None),
-            };
+    /// The value `arg` gives the boolean flag `--<name>`, alone or as `--<name>=<value>`, as `pflag` reads it; `None`
+    /// when it is another argument.
+    fn flag_value(arg: &str, name: &str) -> Option<bool> {
+        let value = arg.strip_prefix("--")?.strip_prefix(name)?;
 
-            return matches!(name, "detach" | "wait") && value.is_none_or(Self::is_true);
+        if value.is_empty() {
+            return Some(true);
         }
 
-        arg.strip_prefix('-').is_some_and(|group| {
-            group.contains('d') && group.chars().all(|flag| flag.is_ascii_alphabetic())
-        })
+        value.strip_prefix('=').map(Self::is_true)
+    }
+
+    /// Whether `arg` is a group of short flags holding `-d`, as `-d` or `-dV`.
+    fn is_short_detach(arg: &str) -> bool {
+        let Some(group) = arg.strip_prefix('-') else {
+            return false;
+        };
+
+        group.contains('d') && group.chars().all(|flag| flag.is_ascii_alphabetic())
     }
 
     /// Whether `pflag` reads `value` as true.
@@ -239,6 +260,10 @@ mod tests {
             &["up", "--wait=0"],
             &["up", "-V"],
             &["up", "--dry-run"],
+            &["up", "-d", "--detach=false"],
+            &["up", "--wait", "--wait=false"],
+            &["up", "--wait-timeout", "5"],
+            &["up", "--detach-keys", "ctrl-d"],
         ] {
             assert!(args(line).is_attached(), "{line:?}");
         }
@@ -251,6 +276,8 @@ mod tests {
             &["up", "--wait=1"],
             &["up", "-dV"],
             &["up", "-Vd"],
+            &["up", "--detach=false", "-d"],
+            &["up", "--detach=false", "--wait"],
         ] {
             assert!(!args(line).is_attached(), "{line:?}");
         }
