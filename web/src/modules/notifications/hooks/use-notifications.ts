@@ -54,7 +54,8 @@ export function useNotifications() {
   const queryClient = useQueryClient();
   const { data, isSuccess } = useNotificationsList();
   const { mutate: markSeen } = useNotificationsSeen();
-  const { mutate: markRead } = useNotificationsRead();
+  // Kept alive, as the bell is read when a notification's link is followed too, which unloads the page.
+  const { mutate: markRead } = useNotificationsRead({ request: { keepalive: true } });
   const notifications = useMemo(() => data?.notifications ?? [], [data]);
   const epoch = data?.epoch;
 

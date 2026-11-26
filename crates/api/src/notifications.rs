@@ -58,6 +58,9 @@ pub struct Notification {
     pub message: NotificationMessage,
     /// The page it leads to, as `/settings`; `None` for none.
     pub href: Option<String>,
+    /// What it is about, as `backup:alpha`: a newer notification of the same key replaces it, on the server and in a
+    /// page that holds it. `None` for one that nothing replaces.
+    pub dedupe_key: Option<String>,
     /// Whether a page has shown it already, as a toast: a page opened after does not show it again so. The pages open
     /// when it is filed each show it.
     pub seen: bool,

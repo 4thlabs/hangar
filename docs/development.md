@@ -181,8 +181,10 @@ anew each time they start again from 1, as after a file put aside.
 The navbar's bell reads the newest 30 and their epoch from `GET /api/notifications`, then follows
 `GET /api/notifications/events?since=<id>&epoch=<epoch>`, which opens with the server's epoch, then gives those filed
 after the newest it holds, then each new one as it is filed, pushed in process; a page of another epoch is given every
-one kept, and drops what it held. Each page open shows a new one as a toast, which marks it seen, so that a page opened
-after does not; it counts as unread until a user closes the bell, which marks every one read, for everyone.
+one kept, and drops what it held. A notification carries its dedupe key, by which the page drops the older one it
+replaced. Each page open shows a new one as a toast, which marks it seen, so that a page opened after does not; it
+counts as unread until a user closes the bell, or follows the link of one of its notifications, which marks every one
+read, for everyone.
 
 ### Docker
 
