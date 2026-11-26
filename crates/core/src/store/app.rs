@@ -25,6 +25,9 @@ pub struct StoreApp {
     pub container_name: String,
     /// Whether its main service sets `traefik.enable=true`, so that `<container>.<DOMAIN>` serves it.
     pub routed: bool,
+    /// The services of its `compose.yml` that compose builds, with a `build` of their own: their image comes from no
+    /// registry, whatever its name.
+    pub built_services: Vec<String>,
 }
 
 impl StoreApp {
@@ -74,7 +77,21 @@ impl StoreApp {
             swarm_ready,
             container_name: field(service, "container_name").unwrap_or_else(|| id.to_owned()),
             routed: service.is_some_and(Self::is_routed),
+            built_services: Self::built_services(compose),
         }
+    }
+
+    /// The services of `compose` that declare a `build`.
+    fn built_services(compose: &Value) -> Vec<String> {
+        let Some(Value::Mapping(services)) = compose.get("services") else {
+            return Vec::new();
+        };
+
+        services
+            .iter()
+            .filter(|(_, service)| service.get("build").is_some_and(|build| !build.is_null()))
+            .filter_map(|(name, _)| name.as_str().map(str::to_owned))
+            .collect()
     }
 
     /// The main service: the one named after the app, else the first one declared.
@@ -236,11 +253,22 @@ mod tests {
     }
 
     #[test]
+    fn lists_the_services_compose_builds() {
+        let built = app(
+            "acme",
+            "services:\n  api:\n    build: ./api\n    image: acme/api:dev\n  web:\n    build:\n      context: web\n  db:\n    image: postgres\n  cache:\n    build: null\n",
+        );
+
+        assert_eq!(built.built_services, ["api", "web"]);
+    }
+
+    #[test]
     fn presents_a_compose_file_that_is_not_a_mapping_with_the_defaults() {
         let listed = app("odd-app", "[web]\n");
 
         assert_eq!(listed.name, "Odd-app");
         assert_eq!(listed.container_name, "odd-app");
         assert!(!listed.routed);
+        assert!(listed.built_services.is_empty());
     }
 }

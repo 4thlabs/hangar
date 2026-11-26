@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JobRun, StoreStatus, StoreSync } from "#libs/api";
 import { coded, problem, renderAt, serve } from "#app/mock/page.tsx";
@@ -159,44 +159,60 @@ describe("/settings#jobs", () => {
     error: { code: "docker.unavailable", message: "the Docker daemon could not be read. See the server's log." },
   };
 
-  const update: JobRun = {
-    ...check,
-    id: 2,
-    job: "auto_update",
-    state: "running",
-    endedAt: null,
-    error: null,
-  };
+  const update: JobRun = { ...check, id: 2, job: "auto_update", state: "completed", error: null };
+
+  /** The job of each row the table lists, in its order. */
+  const rows = () =>
+    screen
+      .getAllByRole("row")
+      .slice(1)
+      .map(row => within(row).getAllByRole("cell")[0]?.textContent);
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("lists the runs, the newest first, and says why one failed", async () => {
     serve({ "GET /api/jobs": () => Response.json([update, check]) });
     renderAt("/settings#jobs");
 
-    expect(await screen.findByText("Update of the apps")).toBeDefined();
-    expect(screen.getByText("Image check")).toBeDefined();
+    await screen.findByText("Update of the apps");
+
+    expect(rows()).toEqual(["Update of the apps", "Image check"]);
     expect(screen.getByText("Failed")).toBeDefined();
     expect(screen.getByText("The Docker daemon could not be read. See the server's log.")).toBeDefined();
     // A run that ended cannot be canceled.
     expect(screen.queryByRole("button", { name: "Cancel the image check" })).toBeNull();
   });
 
-  it("runs a job again and cancels a run, then reads the runs again", async () => {
+  it("names a job it does not know as the server does", async () => {
+    const newer = { ...check, job: "backup" } as unknown as JobRun;
+
+    serve({ "GET /api/jobs": () => Response.json([newer]) });
+    renderAt("/settings#jobs");
+
+    expect(await screen.findByText("backup")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Run the backup again" })).toBeDefined();
+  });
+
+  it("reads the runs again once a job is asked for again, then once a run is canceled", async () => {
+    // The card's polling stands still: what it shows next comes from its own reads.
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+
     let runs = [update, check];
-    const asked: string[] = [];
+    const waiting: JobRun = { ...check, id: 3, state: "waiting", startedAt: null, endedAt: null, error: null };
 
     serve({
       "GET /api/jobs": () => Response.json(runs),
       "POST /api/jobs/1/run": () => {
-        asked.push("run 1");
-        runs = [{ ...check, id: 3, state: "waiting", startedAt: null, endedAt: null, error: null }, ...runs];
+        runs = [waiting, ...runs];
+
+        return Response.json(waiting);
+      },
+      "POST /api/jobs/3/cancel": () => {
+        runs = runs.map(run => (run.id === 3 ? { ...run, state: "canceled" } : run));
 
         return Response.json(runs[0]);
-      },
-      "POST /api/jobs/2/cancel": () => {
-        asked.push("cancel 2");
-        runs = runs.map(run => (run.id === 2 ? { ...run, state: "canceled" } : run));
-
-        return Response.json(runs.find(run => run.id === 2));
       },
     });
 
@@ -206,18 +222,26 @@ describe("/settings#jobs", () => {
 
     expect(await screen.findByText("Image check waits its turn.")).toBeDefined();
     expect(await screen.findByText("Waiting")).toBeDefined();
+    expect(rows()).toEqual(["Image check", "Update of the apps", "Image check"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel the update of the apps" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel the image check" }));
 
-    expect(await screen.findByText("Update of the apps stops.")).toBeDefined();
+    expect(await screen.findByText("Image check stops.")).toBeDefined();
     expect(await screen.findByText("Canceled")).toBeDefined();
-    expect(asked).toEqual(["run 1", "cancel 2"]);
   });
 
-  it("says why a cancel was refused", async () => {
+  it("says why a cancel was refused, and reads the runs again", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+
+    let runs: JobRun[] = [{ ...update, state: "running", endedAt: null }];
+
     serve({
-      "GET /api/jobs": () => Response.json([update]),
-      "POST /api/jobs/2/cancel": () => coded(409, "jobs.ended", "the run 2 of a job has ended already", { run: 2 }),
+      "GET /api/jobs": () => Response.json(runs),
+      "POST /api/jobs/2/cancel": () => {
+        runs = [update];
+
+        return coded(409, "jobs.ended", "the run 2 of a job has ended already", { run: 2 });
+      },
     });
 
     renderAt("/settings#jobs");
@@ -225,5 +249,7 @@ describe("/settings#jobs", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Cancel the update of the apps" }));
 
     expect(await screen.findByText("This run of a job has ended already.")).toBeDefined();
+    expect(await screen.findByText("Completed")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Cancel the update of the apps" })).toBeNull();
   });
 });

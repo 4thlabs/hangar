@@ -9,7 +9,8 @@ use std::time::Duration;
 use futures::FutureExt;
 use hangar_api::{ErrorCode, ErrorDetail, Job, JobQueue, JobRun, JobState};
 use hangar_core::{CancellationToken, CronSchedule};
-use tokio::sync::Notify;
+use jiff::Zoned;
+use tokio::sync::{Notify, watch};
 use tokio::task::AbortHandle;
 
 use super::Clock;
@@ -38,6 +39,8 @@ pub(crate) struct Scheduler<R> {
     queues: Mutex<HashMap<JobQueue, Arc<Notify>>>,
     /// The task of each cron, by the job it asks for.
     crons: Mutex<HashMap<Job, AbortHandle>>,
+    /// Told each time a run is asked for, starts, ends or is canceled.
+    changed: watch::Sender<()>,
 }
 
 /// The runs kept, by id, and the id of the next.
@@ -64,17 +67,22 @@ impl<R: JobRunner> Scheduler<R> {
     /// How many runs are kept: those that wait or run, and the last that ended.
     const KEPT: usize = 50;
 
-    /// A scheduler of the jobs that `runner` runs, its crons read in the time of `clock`.
+    /// A scheduler of the jobs that `runner` runs, its crons read in the time of `clock`. The ids of its runs start
+    /// from the time it starts, in milliseconds since 1970: a page that holds the id of a run of the server before a
+    /// restart names no run of this one.
     pub(crate) fn new(runner: R, clock: Clock) -> Arc<Self> {
+        let first_id = u64::try_from(clock.now().timestamp().as_millisecond()).unwrap_or(1);
+
         Arc::new(Self {
             runner,
             clock,
             runs: Mutex::new(Runs {
                 kept: BTreeMap::new(),
-                next_id: 1,
+                next_id: first_id.max(1),
             }),
             queues: Mutex::new(HashMap::new()),
             crons: Mutex::new(HashMap::new()),
+            changed: watch::Sender::new(()),
         })
     }
 
@@ -91,8 +99,10 @@ impl<R: JobRunner> Scheduler<R> {
 
     /// Asks for `job` each time `cron` fires.
     async fn fire(self: Arc<Self>, job: Job, cron: &CronSchedule) {
+        let mut fired = None;
+
         loop {
-            let Some(next) = cron.next_after(&self.clock.now()) else {
+            let Some(next) = Self::next_fire(cron, &self.clock.now(), fired.as_ref()) else {
                 tracing::warn!(?job, %cron, "a job's cron fires no more");
                 return;
             };
@@ -115,7 +125,19 @@ impl<R: JobRunner> Scheduler<R> {
 
             tracing::info!(?job, %cron, "a job's cron fires");
             self.enqueue(job);
+            fired = Some(next);
         }
+    }
+
+    /// When `cron` fires next after `now`, and after the time it `fired` at last: a clock set back once it fired does
+    /// not fire it twice at that time.
+    fn next_fire(cron: &CronSchedule, now: &Zoned, fired: Option<&Zoned>) -> Option<Zoned> {
+        let after = match fired {
+            Some(fired) if fired > now => fired,
+            _ => now,
+        };
+
+        cron.next_after(after)
     }
 
     /// Asks for `job` now: a new run, which waits its turn in its queue, or the run of it that waits or runs already.
@@ -151,6 +173,7 @@ impl<R: JobRunner> Scheduler<R> {
             view
         };
 
+        self.changed.send_replace(());
         self.queued(queue).notify_one();
         run
     }
@@ -207,7 +230,12 @@ impl<R: JobRunner> Scheduler<R> {
 
         tracing::info!(id, job = ?run.job, "a job is canceled");
 
-        Ok(Self::view(id, run))
+        let view = Self::view(id, run);
+
+        drop(runs);
+        self.changed.send_replace(());
+
+        Ok(view)
     }
 
     /// The queue `job` waits its turn in.
@@ -263,7 +291,12 @@ impl<R: JobRunner> Scheduler<R> {
         run.state = JobState::Running;
         run.started_at = Some(now);
 
-        Some((*id, run.job, run.cancel.clone()))
+        let started = (*id, run.job, run.cancel.clone());
+
+        drop(runs);
+        self.changed.send_replace(());
+
+        Some(started)
     }
 
     /// Ends the run `id` as `ran` says, canceled when `cancel` was cancelled, whatever it gave.
@@ -294,6 +327,9 @@ impl<R: JobRunner> Scheduler<R> {
             run.ended_at = Some(now);
             run.error = error;
         }
+
+        drop(runs);
+        self.changed.send_replace(());
     }
 
     /// The run `id` as the page reads it.
@@ -419,8 +455,10 @@ mod tests {
             .expect("the run is kept")
     }
 
-    /// Waits until the run `id` is in `state`.
+    /// Waits until the run `id` is in `state`, as the scheduler tells each change.
     async fn reaches(scheduler: &Scheduler<FakeRunner>, id: u64, state: JobState) -> JobRun {
+        let mut changed = scheduler.changed.subscribe();
+
         loop {
             let run = run(scheduler, id);
 
@@ -428,7 +466,7 @@ mod tests {
                 return run;
             }
 
-            tokio::time::sleep(Duration::from_millis(1)).await;
+            changed.changed().await.expect("the scheduler lives");
         }
     }
 
@@ -448,7 +486,8 @@ mod tests {
             "2026-11-26T12:17:00+00:00[UTC]"
         );
 
-        let first = reaches(&scheduler, 1, JobState::Completed).await;
+        let first = scheduler.list()[0].id;
+        let first = reaches(&scheduler, first, JobState::Completed).await;
 
         assert_eq!(first.created_at, "2026-11-26T12:17:00.000Z");
         assert_eq!(starts.recv().await, Some(Job::ImageCheck));
@@ -558,15 +597,42 @@ mod tests {
 
         scheduler.runner.released.add_permits(55);
 
+        let mut asked = Vec::new();
+
         for _ in 0..55 {
             let run = scheduler.enqueue(Job::ImageCheck);
 
             reaches(&scheduler, run.id, JobState::Completed).await;
+            asked.push(run.id);
         }
 
         let kept: Vec<u64> = scheduler.list().iter().map(|run| run.id).collect();
+        let last: Vec<u64> = asked[5..].iter().rev().copied().collect();
 
-        assert_eq!(kept, (6..=55).rev().collect::<Vec<u64>>());
+        assert_eq!(kept, last);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn numbers_its_runs_from_the_time_it_starts() {
+        let (scheduler, _starts) = scheduler();
+
+        let first = scheduler.enqueue(Job::ImageCheck);
+        let second = scheduler.enqueue(Job::AutoUpdate);
+
+        // 2026-11-26T09:30:00Z, in milliseconds: a server that starts later numbers its runs past it.
+        assert_eq!(first.id, 1_795_685_400_000);
+        assert_eq!(second.id, first.id + 1);
+    }
+
+    #[test]
+    fn fires_once_at_a_time_when_the_clock_is_set_back_after_it() {
+        let cron = CronSchedule::parse("17 */4 * * *").expect("a valid cron");
+        let fired: Zoned = "2026-11-26T12:17:00+00:00[UTC]".parse().expect("a time");
+        let set_back: Zoned = "2026-11-26T12:16:59+00:00[UTC]".parse().expect("a time");
+        let next = Scheduler::<FakeRunner>::next_fire(&cron, &set_back, Some(&fired))
+            .expect("a time that comes");
+
+        assert_eq!(next.to_string(), "2026-11-26T16:17:00+00:00[UTC]");
     }
 
     #[tokio::test(start_paused = true)]

@@ -6,9 +6,9 @@
 use std::fmt;
 use std::str::FromStr;
 
-use jiff::Zoned;
-use jiff::civil::{Date, Time};
+use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::TimeZone;
+use jiff::{SignedDuration, Timestamp, Zoned};
 
 use super::{Cron, LAST_DAY_OFFSET, LAST_WEEK_DAY, NEAREST_WEEKDAY, NTH_WEEK_DAY, Token};
 
@@ -100,8 +100,10 @@ impl CronSchedule {
     }
 
     /// The first time it fires after `after`, past the second `after` is in, in `after`'s time zone; `None` when it
-    /// fires in none of the next hundred years. A time the clock skips, as when it moves forward an hour, is not one:
-    /// that day, it does not fire then.
+    /// fires in none of the next hundred years. A time the clock skips or repeats is read as node-cron reads it: a time
+    /// skipped, as when the clock moves forward an hour, reads as the one an hour after, which fires only when the
+    /// expression lists it too; a time repeated, as when the clock moves back an hour, fires once, at its occurrence
+    /// of the offset that the time read as UTC has, the later east of UTC, the earlier west of it.
     pub fn next_after(&self, after: &Zoned) -> Option<Zoned> {
         let time_zone = after.time_zone().clone();
         let start = after.timestamp().as_second();
@@ -123,6 +125,43 @@ impl CronSchedule {
         }
 
         None
+    }
+
+    /// Whether `zoned`, a time it fires at as node-cron reads a local time, is one it fires at.
+    fn fires_at(&self, zoned: &Zoned) -> bool {
+        let local = zoned.datetime();
+
+        self.fires_on(local.date())
+            && self.hours.contains(&local.hour())
+            && self.minutes.contains(&local.minute())
+            && self.seconds.contains(&local.second())
+    }
+
+    /// The time `local` is in `time_zone`, as node-cron's `localTimeToTimestamp` reads it: `local` read as UTC, less
+    /// the offset of the zone then; when the offset is another at the time that gives, the one of the two that reads
+    /// back as `local`, else the later.
+    fn read_as_node_cron(local: DateTime, time_zone: &TimeZone) -> Option<Zoned> {
+        let guess = local.to_zoned(TimeZone::UTC).ok()?.timestamp();
+        let less = |offset: jiff::tz::Offset| {
+            guess.checked_sub(SignedDuration::from_secs(i64::from(offset.seconds())))
+        };
+        let first_offset = time_zone.to_offset(guess);
+        let first = less(first_offset).ok()?;
+        let second_offset = time_zone.to_offset(first);
+        let reads_back = |time: Timestamp| time.to_zoned(time_zone.clone()).datetime() == local;
+        let chosen = if second_offset == first_offset || reads_back(first) {
+            first
+        } else {
+            let second = less(second_offset).ok()?;
+
+            if reads_back(second) {
+                second
+            } else {
+                first.max(second)
+            }
+        };
+
+        Some(chosen.to_zoned(time_zone.clone()))
     }
 
     /// The numbers of a field, in order, each once: node-cron matches the time with them alone.
@@ -166,14 +205,12 @@ impl CronSchedule {
                         continue;
                     }
 
-                    let local = date.to_datetime(time);
-                    let Ok(zoned) = local.to_zoned(time_zone.clone()) else {
+                    let Some(zoned) = Self::read_as_node_cron(date.to_datetime(time), time_zone)
+                    else {
                         continue;
                     };
-                    // A time the clock skips reads as another: it is not one.
-                    let exists = zoned.datetime() == local;
 
-                    if exists && zoned.timestamp().as_second() > start {
+                    if zoned.timestamp().as_second() > start && self.fires_at(&zoned) {
                         return Some(zoned);
                     }
                 }
@@ -391,20 +428,108 @@ mod tests {
         );
     }
 
-    #[test]
-    fn does_not_fire_at_a_time_the_clock_skips() {
-        // Central Europe moves from 02:00 to 03:00 on 2026-03-29: 02:30 does not exist that day.
-        let paris = TimeZone::posix("CET-1CEST,M3.5.0,M10.5.0/3").expect("a POSIX time zone");
-        let after = jiff::civil::date(2026, 3, 29)
-            .at(0, 0, 0, 0)
-            .to_zoned(paris)
-            .expect("a time of the zone");
-        let next = CronSchedule::parse("30 2 * * *")
-            .expect("a valid expression")
-            .next_after(&after)
-            .expect("a time that comes");
+    /// When node-cron 4.6 says each expression fires next after a time, in UTC, in central Europe, Sydney or New York,
+    /// around the times their clocks skip or repeat, run on node-cron itself with `TZ` set.
+    const NODE_CRON_ACROSS_CLOCK_CHANGES: [(&str, &str, &str, &str); 11] = [
+        // Paris repeats 02:00 to 03:00 on 2026-10-25: 02:30 is 00:30Z, then 01:30Z.
+        (
+            PARIS,
+            "30 2 * * *",
+            "2026-10-24T22:00:00Z",
+            "2026-10-25T01:30:00Z",
+        ),
+        (
+            PARIS,
+            "50 2 * * *",
+            "2026-10-25T01:05:00Z",
+            "2026-10-25T01:50:00Z",
+        ),
+        // Paris skips 02:00 to 03:00 on 2026-03-29.
+        (
+            PARIS,
+            "30 2 * * *",
+            "2026-03-28T23:00:00Z",
+            "2026-03-30T00:30:00Z",
+        ),
+        (
+            PARIS,
+            "* * * * *",
+            "2026-03-29T00:59:30Z",
+            "2026-03-29T01:00:00Z",
+        ),
+        (
+            PARIS,
+            "0 3 * * *",
+            "2026-03-28T23:00:00Z",
+            "2026-03-29T01:00:00Z",
+        ),
+        // 01:30 read as UTC is past the change: its offset reads it as 00:30, the offset before as 01:30.
+        (
+            PARIS,
+            "30 1 * * *",
+            "2026-03-28T22:00:00Z",
+            "2026-03-29T00:30:00Z",
+        ),
+        // Sydney skips 02:00 to 03:00 on 2026-10-04, and repeats 02:00 to 03:00 on 2026-04-05.
+        (
+            SYDNEY,
+            "30 1 * * *",
+            "2026-10-03T12:00:00Z",
+            "2026-10-03T15:30:00Z",
+        ),
+        (
+            SYDNEY,
+            "30 2 * * *",
+            "2026-04-04T14:00:00Z",
+            "2026-04-04T16:30:00Z",
+        ),
+        // New York repeats 01:00 to 02:00 on 2026-11-01: 01:30 is 05:30Z, then 06:30Z.
+        (
+            NEW_YORK,
+            "30 1 * * *",
+            "2026-11-01T04:00:00Z",
+            "2026-11-01T05:30:00Z",
+        ),
+        (
+            NEW_YORK,
+            "50 1 * * *",
+            "2026-11-01T06:05:00Z",
+            "2026-11-02T06:50:00Z",
+        ),
+        // New York skips 02:00 to 03:00 on 2026-03-08.
+        (
+            NEW_YORK,
+            "30 2 * * *",
+            "2026-03-08T05:00:00Z",
+            "2026-03-09T06:30:00Z",
+        ),
+    ];
 
-        assert_eq!(next.datetime().to_string(), "2026-03-30T02:30:00");
+    /// Central Europe's time, as a POSIX `TZ` writes it.
+    const PARIS: &str = "CET-1CEST,M3.5.0,M10.5.0/3";
+
+    /// Sydney's time, as a POSIX `TZ` writes it.
+    const SYDNEY: &str = "AEST-10AEDT,M10.1.0,M4.1.0/3";
+
+    /// New York's time, as a POSIX `TZ` writes it.
+    const NEW_YORK: &str = "EST5EDT,M3.2.0,M11.1.0";
+
+    #[test]
+    fn fires_when_node_cron_does_across_the_changes_of_the_clock() {
+        for (zone, expression, after, fires) in NODE_CRON_ACROSS_CLOCK_CHANGES {
+            let time_zone = TimeZone::posix(zone).expect("a POSIX time zone");
+            let after: jiff::Timestamp = after.parse().expect("a time");
+            let next = CronSchedule::parse(expression)
+                .expect("a valid expression")
+                .next_after(&after.to_zoned(time_zone))
+                .expect("a time that comes");
+
+            assert_eq!(
+                next.timestamp().to_string(),
+                fires,
+                "{expression:?} after {after} in {zone}"
+            );
+        }
     }
 
     #[test]

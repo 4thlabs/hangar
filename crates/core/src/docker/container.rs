@@ -41,7 +41,8 @@ pub struct ComposeContainer {
     pub service: String,
     /// Its index among the replicas of its service, from 1, when compose gave it a readable one.
     pub replica: Option<u32>,
-    /// The image as compose runs it, such as `nginx:alpine`.
+    /// The image as compose runs it, such as `nginx:alpine`, as the container was created with it: the daemon's list
+    /// names it by its id once the reference names a newer image, which its inspection does not.
     pub image: String,
     /// The id of the image it was created from, `sha256:...`: a pull moves the reference, not the image a container
     /// runs until it is recreated.
@@ -138,6 +139,11 @@ impl ComposeContainer {
             .first()
             .map(|name| name.trim_start_matches('/').to_owned())
             .unwrap_or_default();
+        let image = inspection
+            .as_ref()
+            .map(|inspection| inspection.config.image.clone())
+            .filter(|image| !image.is_empty())
+            .unwrap_or(summary.image);
 
         Some(Self {
             id: summary.id,
@@ -147,7 +153,7 @@ impl ComposeContainer {
             replica: labels
                 .get(CONTAINER_NUMBER_LABEL)
                 .and_then(|number| number.parse().ok()),
-            image: summary.image,
+            image,
             image_id: summary.image_id,
             state: ContainerState::from_daemon(&summary.state),
             details: inspection.map(ContainerDetails::from_daemon),
@@ -455,6 +461,25 @@ mod tests {
             // Only the published ones, by host port.
             ports: vec![port(80, 8080), port(443, 8443)],
         }
+    }
+
+    #[test]
+    fn names_the_image_as_the_container_was_created_with_it_once_the_reference_moved_on() {
+        // A pull of `nginx:alpine` for another app moved the reference: the list names the image by its id.
+        let mut moved = summary(&[]);
+
+        moved.image = "sha256:alpine".to_owned();
+
+        let mut inspected = inspection(None);
+
+        inspected.config.image = "nginx:alpine".to_owned();
+
+        let container = ComposeContainer::from_daemon(moved.clone(), Some(inspected))
+            .expect("a compose container");
+        let uninspected = ComposeContainer::from_daemon(moved, None).expect("a compose container");
+
+        assert_eq!(container.image, "nginx:alpine");
+        assert_eq!(uninspected.image, "sha256:alpine");
     }
 
     #[test]

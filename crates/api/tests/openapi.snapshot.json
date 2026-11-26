@@ -2276,7 +2276,7 @@
             "description": "Why it failed; `None` for one that did not."
           },
           "id": {
-            "description": "Its id, from 1, greater than that of every run before it since the server started.",
+            "description": "Its id, greater than that of every run before it: the first run's is the time the server started, in\nmilliseconds since 1970, so that the id of a run of the server before a restart names no run of this one.",
             "format": "uint64",
             "minimum": 0,
             "type": "integer"

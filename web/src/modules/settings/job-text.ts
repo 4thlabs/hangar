@@ -24,6 +24,16 @@ export class JobText {
   /** A time of a run, in English. */
   private static readonly Time = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "medium" });
 
+  /** The name of `job`; the one the server gives for a job this page does not know, from a newer server. */
+  static name(job: string): string {
+    return Object.hasOwn(JobText.Names, job) ? JobText.Names[job as Job] : job;
+  }
+
+  /** The label of `state`; the one the server gives for a state this page does not know. */
+  static state(state: string): string {
+    return Object.hasOwn(JobText.States, state) ? JobText.States[state as JobState] : state;
+  }
+
   /** Whether `run` still waits or runs, which a cancel stops. */
   static isActive(run: JobRun): boolean {
     return run.state === "waiting" || run.state === "running";
@@ -41,7 +51,7 @@ export class JobText {
 
   /** What the toast of a job asked for again says: its run waits its turn, or already runs. */
   static askedAgain(asked: JobRun): string {
-    const name = JobText.Names[asked.job];
+    const name = JobText.name(asked.job);
 
     return asked.state === "running" ? `${name} runs.` : `${name} waits its turn.`;
   }
