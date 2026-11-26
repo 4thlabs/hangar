@@ -4,8 +4,8 @@ use std::pin::pin;
 
 use futures::StreamExt;
 use hangar_core::{
-    AppStatus, BatchEvent, Command, CommandRunner, Compose, ComposeBatch, OnFailure, Output,
-    Runtime, Store,
+    AppStatus, BatchEvent, Command, CommandRunner, Compose, ComposeBatch, ComposeCommand,
+    OnFailure, Output, Runtime, Store,
 };
 use tokio::io::AsyncWriteExt;
 
@@ -41,8 +41,11 @@ impl Hangar {
         Ok(store.install(Output::Inherit).await?)
     }
 
-    /// Runs a compose command on the apps of its target, one batch that stops at the first failure, as the Node CLI
-    /// does, and prints their output as it comes.
+    /// Runs a compose command on the apps of its target.
+    ///
+    /// A command passed through, on one app, inherits the terminal, as compose run by hand: its colours, its TTY and
+    /// its stdin, for `logs -f`, `exec` or an `up` that attaches. Any other runs as one batch that stops at the first
+    /// failure, as the Node CLI does, its output printed as it comes.
     pub(crate) async fn compose(&self, request: ComposeRequest) -> Result<(), Failure> {
         let data_dir = self.environment.data_dir()?;
         // Only `hangar.yml` is read: the URL serves an install alone.
@@ -50,7 +53,15 @@ impl Hangar {
             .config()
             .await?;
         let apps = request.target.apps(&config);
-        let batch = Compose::new(data_dir, self.runtime.clone())
+        let compose = Compose::new(data_dir, self.runtime.clone());
+
+        if let ComposeCommand::Args(_) = request.command
+            && let [app] = apps.as_slice()
+        {
+            return Ok(compose.run(app, request.command, Output::Inherit).await?);
+        }
+
+        let batch = compose
             .batch(request.command, &apps, &config, OnFailure::Stop)
             .await?;
 

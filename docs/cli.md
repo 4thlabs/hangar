@@ -115,7 +115,7 @@ Runs `docker stack ls`: the stacks running in the swarm, deployed by Hangar or n
 
 `hangar`, the crate `hangar-cli` of the Cargo workspace, runs the `store` commands above on the Rust
 core, with the same invocations: same targets, same order, same `docker compose` calls. The Node CLI
-stays until the switch, and is still the one for what the binary does not run yet.
+stays until the switch, and is still the one for `swarm`.
 
 ```bash
 cargo build --release -p hangar-cli     # target/release/hangar
@@ -134,24 +134,41 @@ its variables on to `docker` and `git`. It needs only what a command uses: `HANG
 | `store down`                                       | `down` on every listed stack, in reverse order                       |
 | `store pull`                                       | `pull` on every listed stack, all at once                            |
 | `store <target> up\|down\|restart\|pull`           | the command on a stack or a category, options as above               |
+| `store <target> <command> [args...]`               | any other compose command, its arguments passed as they are          |
 | `store ls [args...]`                               | `docker compose ls`, with the arguments                              |
+
+A command with an argument the table does not list, as `down --volumes` or `up --build`, is
+passed through as well. Passed through, a command runs in the order of its name, as with the Node
+CLI: `up`, `start` and `restart` in the category order, `down` and `stop` in reverse, stopping at
+the first failure, any other on every stack at once, reporting the first failure at the end. `store
+up` adds `-d`, and an `up` without `-d` runs on a single stack alone.
+
+```bash
+cargo run -p hangar-cli -- store jellyfin logs -f
+cargo run -p hangar-cli -- store jellyfin exec jellyfin sh
+cargo run -p hangar-cli -- store Media stop
+```
 
 Where it differs from the Node CLI:
 
-- `up` is always detached: `store jellyfin up` without `-d` detaches all the same, where the Node CLI
-  attaches to the stack, and so does `store Media up`, which the Node CLI refuses.
-- It runs `up`, `down`, `restart` and `pull` alone, `up` with the options above and the others with
-  none. Any other command or argument (`logs -f`, `ps`, `stop`, `down --volumes`…) is refused with
-  the Node CLI's command line for it, exit code 1.
+- `up` with the options of the table is always detached: `store jellyfin up` without `-d` detaches
+  all the same, where the Node CLI attaches to the stack, and so does `store Media up`, which the
+  Node CLI refuses. With any other argument, `up` is passed through, and attaches without `-d`.
+- `store <target>` with no command is refused, where the Node CLI runs `docker compose` alone.
 - It has no `swarm` command yet.
 - Every stack is checked before any runs: a listed stack that is not installed fails the command
   before the others run, where the Node CLI runs those before it.
 - On a category, a stack listed in several categories runs at its first place in `hangar.yml`.
+- Any command but one passed through on a single stack prints compose's output on stdout, as
+  below, where the Node CLI hands it the terminal.
 
-The output of `docker compose` is printed as it comes, stdout and stderr together on stdout, the
-lines of `pull`'s stacks interleaved as the Node CLI shows them. Compose prints its progress as plain
-lines rather than redrawing it, its output being piped. `store install` and `store ls` print on the
-terminal, as git and compose print there.
+A command passed through on a single stack is given the terminal, as `docker compose` run by hand:
+its stdin, its TTY and its colours, so that `exec`, `logs -f` and an attached `up` work as with
+compose itself, and its exit code is compose's. Any other command prints the output of `docker
+compose` as it comes, stdout and stderr together on stdout, the lines of the stacks that run at once
+interleaved as the Node CLI shows them. Compose prints its progress as plain lines rather than
+redrawing it, its output being piped. `store install` and `store ls` print on the terminal, as git
+and compose print there.
 
 Like the Node CLI, `up`, `restart` and `down` stop at the first failure, and `pull` runs on every
 stack and reports the first failure at the end. The binary exits with the failed command's own code,

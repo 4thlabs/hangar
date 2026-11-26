@@ -28,6 +28,14 @@ pub enum ComposeError {
     #[error("a batch needs at least one app")]
     EmptyBatch,
 
+    /// A batch was asked for an `up` that is not detached on several apps: it attaches to the first one and never
+    /// gets to the others.
+    #[error("{command} is not detached: it runs on one app alone, add -d to run it on several")]
+    AttachedBatch {
+        /// The command.
+        command: ComposeCommand,
+    },
+
     /// A path given to compose is not UTF-8, which its arguments need.
     #[error("{} is not a UTF-8 path", path.display())]
     NotUtf8 {

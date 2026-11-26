@@ -24,13 +24,13 @@ enum Commands {
     #[command(
         arg_required_else_help = true,
         after_help = "\
-hangar store <target> <command> [args...] runs a compose command on a target: an app by its id, a category of \
-hangar.yml, or `pull` for every listed app. The commands are up, down, restart and pull.
+hangar store <target> <command> [args...] runs any compose command on a target: an app by its id, a category of \
+hangar.yml, or `pull` for every listed app. The arguments are passed to docker compose as they are.
 
 Examples:
   hangar store up --pull always
   hangar store Media restart
-  hangar store jellyfin down"
+  hangar store jellyfin logs -f"
     )]
     Store {
         #[command(subcommand)]
@@ -46,14 +46,14 @@ enum StoreCommand {
 
     /// Brings every listed app up, always detached, in the order of hangar.yml.
     Up {
-        /// `-d`, `--pull always` or `--force-recreate`.
+        /// Passed to `docker compose up -d`.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
     /// Takes every listed app down, in reverse order.
     Down {
-        /// None: `down` takes no argument here yet.
+        /// Passed to `docker compose down`.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -79,12 +79,12 @@ impl Cli {
             StoreCommand::Install => hangar.install().await,
             StoreCommand::Up { args } => {
                 hangar
-                    .compose(ComposeRequest::on_every_app("up", &args)?)
+                    .compose(ComposeRequest::on_every_app("up", &args))
                     .await
             }
             StoreCommand::Down { args } => {
                 hangar
-                    .compose(ComposeRequest::on_every_app("down", &args)?)
+                    .compose(ComposeRequest::on_every_app("down", &args))
                     .await
             }
             StoreCommand::Ls { args } => hangar.list(&args).await,

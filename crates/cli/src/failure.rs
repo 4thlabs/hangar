@@ -26,17 +26,8 @@ pub(crate) enum Failure {
     Startup(#[source] io::Error),
 
     /// No command follows the target.
-    #[error("name a command after the target: up, down, restart or pull")]
+    #[error("name a compose command after the target, as up or logs -f")]
     NoCommand,
-
-    /// A command or an argument that the Rust binary does not run yet, which the Node CLI does.
-    #[error("{what} is not in the Rust binary yet: run `{node_command}`")]
-    Unsupported {
-        /// The command or the argument, quoted.
-        what: String,
-        /// The same command line, for the Node CLI.
-        node_command: String,
-    },
 
     /// The store failed.
     #[error(transparent)]
@@ -82,15 +73,22 @@ impl Failure {
         Self::exit(self.exit_code())
     }
 
-    /// What the binary says of the failure: the failure, then its causes. A batch whose compose exited with a code
-    /// says which app failed and the code alone, as compose's stderr went with its output already; any other cause,
-    /// as a `docker` that does not start, is said in full, as it was printed nowhere.
+    /// What the binary says of the failure: the failure, then its causes. A compose that exited with a code says
+    /// which app failed and the code alone, as its stderr went with a batch's output, or on the terminal it inherited,
+    /// already; any other cause, as a `docker` that does not start, is said in full, as it was printed nowhere.
     fn message(&self) -> String {
-        if let Self::Batch(error) = self
-            && let ComposeError::Failed {
+        let compose = match self {
+            Self::Compose(error) => Some(error),
+            Self::Batch(error) => Some(error.as_ref()),
+            _ => None,
+        };
+
+        if let Some(
+            error @ ComposeError::Failed {
                 source: RunError::Failed { .. },
                 ..
-            } = error.as_ref()
+            },
+        ) = compose
         {
             return format!("{error}, exit {}", self.exit_code());
         }
@@ -174,6 +172,25 @@ mod tests {
             "docker compose restart failed on jellyfin: could not run docker: entity not found"
         );
         assert_eq!(batch.exit_code(), 1);
+    }
+
+    #[test]
+    fn says_which_app_a_command_passed_through_failed_on_and_its_code() {
+        let logs = Failure::Compose(ComposeError::Failed {
+            app: "jellyfin".into(),
+            command: ComposeCommand::Args(vec!["logs".into(), "-f".into()]),
+            source: RunError::Failed {
+                program: "docker".into(),
+                code: 130,
+                stderr: String::new(),
+            },
+        });
+
+        assert_eq!(logs.exit_code(), 130);
+        assert_eq!(
+            logs.message(),
+            "docker compose logs -f failed on jellyfin, exit 130"
+        );
     }
 
     #[test]

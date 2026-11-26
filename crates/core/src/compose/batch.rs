@@ -152,8 +152,8 @@ impl ComposeBatch {
     }
 
     /// The command the batch runs.
-    pub fn command(&self) -> ComposeCommand {
-        self.shared.command
+    pub fn command(&self) -> &ComposeCommand {
+        &self.shared.command
     }
 
     /// The apps, in the order the command runs on them; at once for `pull`.

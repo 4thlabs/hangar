@@ -200,8 +200,9 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
     ///
     /// # Errors
     ///
-    /// Returns [`ComposeError::EmptyBatch`] when `apps` is empty, and the errors of [`run`](Self::run) that come
-    /// before compose runs, for the first app that has one.
+    /// Returns [`ComposeError::EmptyBatch`] when `apps` is empty, [`ComposeError::AttachedBatch`] for an `up` that is
+    /// not detached on several apps, and the errors of [`run`](Self::run) that come before compose runs, for the first
+    /// app that has one.
     ///
     /// # Panics
     ///
@@ -213,17 +214,21 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
         config: &Config,
         on_failure: OnFailure,
     ) -> Result<ComposeBatch, ComposeError> {
-        let apps = Self::ordered(command, apps, config)?;
+        let apps = Self::ordered(&command, apps, config)?;
+
+        if command.is_attached() && apps.len() > 1 {
+            return Err(ComposeError::AttachedBatch { command });
+        }
 
         for app in &apps {
             self.installed_file(app).await?;
         }
 
-        let (batch, recorder) = ComposeBatch::new(command, apps.clone());
+        let (batch, recorder) = ComposeBatch::new(command.clone(), apps.clone());
         let compose = self.clone();
         let task = tokio::spawn(async move {
             compose
-                .run_batch(command, &apps, on_failure, recorder)
+                .run_batch(&command, &apps, on_failure, recorder)
                 .await;
         });
 
@@ -250,7 +255,7 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
 
     /// `apps` once each, in the order a batch of `command` runs them in.
     fn ordered(
-        command: ComposeCommand,
+        command: &ComposeCommand,
         apps: &[impl AsRef<str>],
         config: &Config,
     ) -> Result<Vec<Arc<str>>, ComposeError> {
@@ -286,7 +291,7 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
     /// run on as not run.
     async fn run_batch(
         &self,
-        command: ComposeCommand,
+        command: &ComposeCommand,
         apps: &[Arc<str>],
         on_failure: OnFailure,
         recorder: BatchRecorder,
@@ -316,7 +321,7 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
     async fn run_recorded(
         &self,
         app: &Arc<str>,
-        command: ComposeCommand,
+        command: &ComposeCommand,
         recorder: &BatchRecorder,
     ) -> bool {
         let (sender, mut receiver) = mpsc::channel(Self::LINES);
@@ -328,7 +333,10 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
 
         recorder.started(app);
 
-        let (result, ()) = tokio::join!(self.run(app, command, Output::Lines(sender)), forwarding);
+        let (result, ()) = tokio::join!(
+            self.run(app, command.clone(), Output::Lines(sender)),
+            forwarding
+        );
         let status = match result {
             Ok(()) => AppStatus::Succeeded,
             Err(error) => {
@@ -566,6 +574,43 @@ categories:
     }
 
     #[tokio::test]
+    async fn passes_a_command_given_as_its_arguments_as_they_are() {
+        let (_dir, data_dir) = installed(&["alpha-app"]);
+        let compose = Compose::new(data_dir.clone(), FakeRunner::new());
+        let exec = ComposeCommand::Args(
+            ["exec", "web", "sh", "-c", "echo $HOME 'quoted'"]
+                .map(str::to_owned)
+                .to_vec(),
+        );
+
+        compose
+            .run("alpha-app", exec, Output::Inherit)
+            .await
+            .expect("the fake run succeeds");
+
+        let runs = compose.runner.runs();
+        let file = data_dir.installed().join("alpha-app").join("compose.yml");
+
+        assert_eq!(
+            runs[0].args,
+            [
+                "compose",
+                "--env-file",
+                data_dir.env_file().to_str().expect("UTF-8"),
+                "-p",
+                "alpha-app",
+                "-f",
+                file.to_str().expect("UTF-8"),
+                "exec",
+                "web",
+                "sh",
+                "-c",
+                "echo $HOME 'quoted'",
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn refuses_an_app_compose_cannot_name_or_that_is_not_installed() {
         let (_dir, data_dir) = installed(&["llama.cpp"]);
         let compose = Compose::new(data_dir, FakeRunner::new());
@@ -747,6 +792,61 @@ categories:
     }
 
     #[tokio::test]
+    async fn refuses_an_up_that_attaches_on_several_apps_and_runs_it_on_one() {
+        let (_dir, data_dir) = installed(&["alpha-app", "beta-app"]);
+        let runner = Gated::open();
+        let compose = Compose::new(data_dir, runner.clone());
+        let attached = ComposeCommand::Args(vec!["up".into(), "--build".into()]);
+        let refused = compose
+            .batch(
+                attached.clone(),
+                &["alpha-app", "beta-app"],
+                &config(),
+                OnFailure::Stop,
+            )
+            .await
+            .expect_err("an attached up runs on one app alone");
+
+        assert_eq!(
+            refused.to_string(),
+            "docker compose up --build is not detached: it runs on one app alone, add -d to run it on several"
+        );
+        assert!(runner.fake.runs().is_empty());
+
+        let batch = compose
+            .batch(
+                attached,
+                &["alpha-app", "alpha-app"],
+                &config(),
+                OnFailure::Stop,
+            )
+            .await
+            .expect("an app given twice is one app");
+
+        assert_eq!(batch.finished().await.failures(), 0);
+        assert_eq!(projects(&runner.fake.runs()), ["alpha-app"]);
+    }
+
+    #[tokio::test]
+    async fn stops_a_batch_passed_as_its_arguments_in_reverse() {
+        let (_dir, data_dir) = installed(&["alpha-app", "beta-app"]);
+        let runner = Gated::open();
+        let compose = Compose::new(data_dir, runner.clone());
+        let stop = ComposeCommand::Args(vec!["stop".into(), "--timeout".into(), "1".into()]);
+        let batch = compose
+            .batch(stop, &["alpha-app", "beta-app"], &config(), OnFailure::Stop)
+            .await
+            .expect("every app is installed");
+
+        batch.finished().await;
+
+        let runs = runner.fake.runs();
+
+        assert_eq!(projects(&runs), ["beta-app", "alpha-app"]);
+        assert_eq!(runs[0].args[7..], ["stop", "--timeout", "1"]);
+    }
+
+    #[tokio::test]
     async fn carries_on_after_an_app_that_fails_and_keeps_the_output_for_a_late_listener() {
         let (_dir, data_dir) = installed(&["alpha-app", "beta-app", "gamma-app"]);
         let runner = Gated::open();
@@ -865,7 +965,7 @@ categories:
                 });
 
             let batch = compose
-                .batch(command, &apps, &config(), OnFailure::Stop)
+                .batch(command.clone(), &apps, &config(), OnFailure::Stop)
                 .await
                 .expect("every app is installed");
             let report = batch.finished().await;

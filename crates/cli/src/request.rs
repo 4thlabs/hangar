@@ -25,72 +25,60 @@ impl ComposeRequest {
     ///
     /// # Errors
     ///
-    /// Returns [`Failure::NoCommand`] when no command follows the target, and [`Failure::Unsupported`] for a command
-    /// or an argument the Rust binary does not run.
+    /// Returns [`Failure::NoCommand`] when no command follows the target.
     pub(crate) fn parse(args: &[String]) -> Result<Self, Failure> {
         let Some((name, rest)) = args.split_first() else {
             return Err(Failure::NoCommand);
         };
 
         if Self::ON_EVERY_APP.contains(&name.as_str()) {
-            return Self::on_every_app(name, rest);
+            return Ok(Self::on_every_app(name, rest));
         }
 
-        let command = Self::command(name, rest)?;
+        let Some((command, options)) = rest.split_first() else {
+            return Err(Failure::NoCommand);
+        };
 
         Ok(Self {
             target: Target::Named(name.clone()),
-            command,
+            command: Self::command(command, options),
         })
     }
 
-    /// `store <command> [args...]`, on every app the categories list.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Failure::Unsupported`] as [`parse`](Self::parse) does.
-    pub(crate) fn on_every_app(command: &str, args: &[String]) -> Result<Self, Failure> {
-        let line: Vec<String> = std::iter::once(command.to_owned())
-            .chain(args.iter().cloned())
-            .collect();
-        let command = Self::command("", &line)?;
+    /// `store <command> [args...]`, on every app the categories list. `up` is always detached, as the Node CLI's
+    /// `store up` passes `-d`: it would attach to the first app and never get to the others.
+    pub(crate) fn on_every_app(command: &str, args: &[String]) -> Self {
+        let is_detached = args.iter().any(|arg| arg == "-d" || arg == "--detach");
+        let detach = (command == "up" && !is_detached).then(|| "-d".to_owned());
+        let options: Vec<String> = detach.into_iter().chain(args.iter().cloned()).collect();
 
-        Ok(Self {
+        Self {
             target: Target::EveryApp,
-            command,
+            command: Self::command(command, &options),
+        }
+    }
+
+    /// The command `name` with its `options`: a command Hangar types, as the Apps page runs it, when it is one, any
+    /// other passed to compose as it is.
+    fn command(name: &str, options: &[String]) -> ComposeCommand {
+        let typed = match name {
+            "up" => Self::up_options(options).map(ComposeCommand::Up),
+            "down" if options.is_empty() => Some(ComposeCommand::Down),
+            "restart" if options.is_empty() => Some(ComposeCommand::Restart),
+            "pull" if options.is_empty() => Some(ComposeCommand::Pull),
+            _ => None,
+        };
+
+        typed.unwrap_or_else(|| {
+            let line = std::iter::once(name.to_owned()).chain(options.iter().cloned());
+
+            ComposeCommand::Args(line.collect())
         })
     }
 
-    /// The command that `line` names after `target`, empty for every app.
-    fn command(target: &str, line: &[String]) -> Result<ComposeCommand, Failure> {
-        let Some((command, options)) = line.split_first() else {
-            return Err(Failure::NoCommand);
-        };
-        let unsupported = |what: String| Failure::Unsupported {
-            what,
-            node_command: Self::node_command(target, line),
-        };
-
-        let command = match command.as_str() {
-            "up" => ComposeCommand::Up(Self::up_options(options).map_err(unsupported)?),
-            "down" => ComposeCommand::Down,
-            "restart" => ComposeCommand::Restart,
-            "pull" => ComposeCommand::Pull,
-            other => return Err(unsupported(format!("`{other}`"))),
-        };
-
-        if !matches!(command, ComposeCommand::Up(_))
-            && let Some(option) = options.first()
-        {
-            return Err(unsupported(format!("`{option}`")));
-        }
-
-        Ok(command)
-    }
-
-    /// The options of `up`: it always runs detached, so `-d` changes nothing. Returns the first other argument, to be
-    /// refused.
-    fn up_options(options: &[String]) -> Result<UpOptions, String> {
+    /// The options of a typed `up`, which always runs detached, so `-d` changes nothing; `None` when another
+    /// argument makes it a command passed as it is.
+    fn up_options(options: &[String]) -> Option<UpOptions> {
         let mut up = UpOptions::default();
         let mut options = options.iter();
 
@@ -101,44 +89,16 @@ impl ComposeRequest {
                 "--pull=always" => up.pull = true,
                 "--pull" => {
                     let Some("always") = options.next().map(String::as_str) else {
-                        return Err("`--pull` other than `--pull always`".to_owned());
+                        return None;
                     };
 
                     up.pull = true;
                 }
-                other => return Err(format!("`{other}`")),
+                _ => return None,
             }
         }
 
-        Ok(up)
-    }
-
-    /// The Node CLI's command line for the same request, each word quoted for a shell where it needs to be.
-    fn node_command(target: &str, line: &[String]) -> String {
-        let words = std::iter::once(target)
-            .filter(|target| !target.is_empty())
-            .chain(line.iter().map(String::as_str))
-            .map(Self::shell_word);
-
-        format!(
-            "node bin/cli.js store {}",
-            words.collect::<Vec<_>>().join(" ")
-        )
-    }
-
-    /// `word` as a shell reads it back: as it is when it holds only characters no shell treats apart, else in single
-    /// quotes, a `'` in it closed, escaped and opened again.
-    fn shell_word(word: &str) -> String {
-        let is_plain = !word.is_empty()
-            && word.chars().all(|character| {
-                character.is_ascii_alphanumeric() || "-_./:=@%+,".contains(character)
-            });
-
-        if is_plain {
-            return word.to_owned();
-        }
-
-        format!("'{}'", word.replace('\'', r"'\''"))
+        Some(up)
     }
 }
 
@@ -156,6 +116,10 @@ mod tests {
 
     fn parse(line: &[&str]) -> Result<ComposeRequest, Failure> {
         ComposeRequest::parse(&words(line))
+    }
+
+    fn passed(line: &[&str]) -> ComposeCommand {
+        ComposeCommand::Args(words(line))
     }
 
     #[test]
@@ -203,45 +167,49 @@ mod tests {
     }
 
     #[test]
-    fn refuses_another_command_and_names_the_node_cli_for_it() {
-        let Err(failure) = parse(&["jellyfin", "logs", "-f"]) else {
-            panic!("logs is not run by the Rust binary");
-        };
+    fn passes_any_other_command_through_as_it_is() {
+        let request = parse(&["jellyfin", "logs", "-f", "--since", "2 hours"])
+            .expect("logs is passed through");
 
+        assert_eq!(request.target, Target::Named("jellyfin".into()));
         assert_eq!(
-            failure.to_string(),
-            "`logs` is not in the Rust binary yet: run `node bin/cli.js store jellyfin logs -f`"
+            request.command,
+            passed(&["logs", "-f", "--since", "2 hours"])
         );
     }
 
     #[test]
-    fn refuses_an_argument_it_does_not_pass_on() {
-        let refused = |line: &[&str]| {
-            parse(line)
-                .expect_err("the argument is refused")
-                .to_string()
-        };
+    fn passes_a_typed_command_through_once_it_has_an_argument_hangar_does_not_type() {
+        let command = |line: &[&str]| parse(line).expect("the command runs").command;
 
         assert_eq!(
-            refused(&["down", "--volumes"]),
-            "`--volumes` is not in the Rust binary yet: run `node bin/cli.js store down --volumes`"
+            command(&["down", "--volumes"]),
+            passed(&["down", "--volumes"])
         );
-        assert!(refused(&["up", "--pull", "missing"]).starts_with("`--pull` other than"));
-        assert!(refused(&["jellyfin", "up", "--wait"]).starts_with("`--wait`"));
+        assert_eq!(
+            command(&["Media", "restart", "web"]),
+            passed(&["restart", "web"])
+        );
+        assert_eq!(
+            command(&["jellyfin", "up", "--pull", "missing"]),
+            passed(&["up", "--pull", "missing"])
+        );
+        assert_eq!(
+            command(&["jellyfin", "up", "--build"]),
+            passed(&["up", "--build"])
+        );
     }
 
     #[test]
-    fn quotes_the_words_a_shell_would_split_or_read_otherwise() {
-        let refused = parse(&[
-            "jellyfin", "logs", "--since", "2 hours", "it's", "$HOME", "",
-        ])
-        .expect_err("logs is refused")
-        .to_string();
+    fn detaches_an_up_on_every_app_as_the_node_cli_does() {
+        let up = |args: &[&str]| ComposeRequest::on_every_app("up", &words(args)).command;
 
-        assert!(
-            refused.ends_with(r#"run `node bin/cli.js store jellyfin logs --since '2 hours' 'it'\''s' '$HOME' ''`"#),
-            "{refused}"
+        assert_eq!(up(&["--build"]), passed(&["up", "-d", "--build"]));
+        assert_eq!(
+            up(&["--build", "--detach"]),
+            passed(&["up", "--build", "--detach"])
         );
+        assert_eq!(up(&[]), ComposeCommand::Up(UpOptions::default()));
     }
 
     #[test]
