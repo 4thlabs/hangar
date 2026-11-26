@@ -10,7 +10,7 @@ import { parseStoreFilters } from "#modules/store/store-search.ts";
 
 /** `/store`: the store's apps, the filters of the URL applied by the server, then its `q` by name. */
 export function StorePage() {
-  const search = useSearch({ from: "/app/store" });
+  const search = useSearch({ from: "/_app/store" });
   const filters = parseStoreFilters(search.filter);
   const { data, error, isPending } = useStoreApps(filters.length > 0 ? { filter: filters } : undefined);
   const apps = searchByName(search.q ?? "", data?.apps ?? []);

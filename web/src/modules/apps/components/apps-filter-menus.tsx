@@ -23,7 +23,7 @@ type AppsFilterMenusProps = {
  * that none keeps nothing, by status, and by whether the last image check found an update.
  */
 export function AppsFilterMenus({ projects }: AppsFilterMenusProps) {
-  const search = useSearch({ from: "/app/apps" });
+  const search = useSearch({ from: "/_app/apps" });
   const navigate = useNavigate({ from: "/apps" });
   const statusCounts = countBy(projects, project => project.status);
   const categoryCounts = countBy(projects, project => project.category?.name);

@@ -115,7 +115,7 @@ function AppNotFound({ project }: { project: string }) {
  * found. Its backups come with #177, and the link to its editor with #172.
  */
 export function AppDetailPage() {
-  const { project } = useParams({ from: "/app/apps/$project" });
+  const { project } = useParams({ from: "/_app/apps_/$project" });
 
   // Keyed: another app's page starts over, its commands' state and panel included.
   return <AppDetail key={project} project={project} />;
