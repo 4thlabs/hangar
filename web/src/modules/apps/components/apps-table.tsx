@@ -66,4 +66,3 @@ export function AppsTable({ projects, sort, onSort }: AppsTableProps) {
     </Table>
   );
 }
-

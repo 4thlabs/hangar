@@ -1,6 +1,6 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { BoxesIcon, CpuIcon, LayersIcon, MemoryStickIcon, PackageOpenIcon, PlayIcon, SquareIcon } from "lucide-react";
-import { type ProjectSummary, useDockerProjects } from "#libs/api";
+import { useDockerProjects, type ProjectSummary } from "#libs/api";
 import { AppsSearchParams, type AppSortColumn } from "#modules/apps/apps-search.ts";
 import { AppsFilterMenus } from "#modules/apps/components/apps-filter-menus.tsx";
 import { AppsTable } from "#modules/apps/components/apps-table.tsx";

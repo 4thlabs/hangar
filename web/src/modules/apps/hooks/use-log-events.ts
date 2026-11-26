@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { type LogEvent, ServerEvents } from "#libs/api";
+import { ServerEvents, type LogEvent } from "#libs/api";
 import { ErrorMessage } from "#modules/common/error-message.ts";
 
 /** Where a followed log is. */

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { type DockerChange, getDockerChangesUrl, ServerEvents } from "#libs/api";
+import { getDockerChangesUrl, ServerEvents, type DockerChange } from "#libs/api";
 
 /** The query keys each change of the daemon makes stale, by the start of their URL. */
 class DockerQueries {

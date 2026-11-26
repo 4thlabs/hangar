@@ -1,6 +1,6 @@
 import { EraserIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState, type UIEvent } from "react";
-import { type LogStatus, useLogEvents } from "#modules/apps/hooks/use-log-events.ts";
+import { useLogEvents, type LogStatus } from "#modules/apps/hooks/use-log-events.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";

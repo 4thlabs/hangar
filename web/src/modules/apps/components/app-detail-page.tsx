@@ -1,6 +1,6 @@
 import { Link, useParams } from "@tanstack/react-router";
 import { BoxIcon, CpuIcon, HardDriveIcon, MemoryStickIcon, NetworkIcon } from "lucide-react";
-import { ApiError, type ProjectDetail, useDockerOverview, useDockerProject } from "#libs/api";
+import { ApiError, useDockerOverview, useDockerProject, type ProjectDetail } from "#libs/api";
 import { ReconnectingNotice } from "#modules/apps/components/reconnecting-notice.tsx";
 import { ServiceCard } from "#modules/apps/components/service-card.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";

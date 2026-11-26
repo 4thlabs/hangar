@@ -75,7 +75,12 @@ export class ServerEvents {
    */
   static follow<T>(
     url: string,
-    { onItem, onOpen = () => {}, onEnd = () => {}, onDown = () => {} }: EventHandlers<T> & Pick<KeptHandlers<T>, "onDown">,
+    {
+      onItem,
+      onOpen = () => {},
+      onEnd = () => {},
+      onDown = () => {},
+    }: EventHandlers<T> & Pick<KeptHandlers<T>, "onDown">,
   ): () => void {
     const source = new EventSource(url);
 

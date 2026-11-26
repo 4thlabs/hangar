@@ -17,7 +17,11 @@ function project(name: string, status: ProjectStatus, category?: string): Projec
   };
 }
 
-const projects = [project("jellyfin", "running", "Media"), project("miniflux", "stopped"), project("frigate", "unhealthy")];
+const projects = [
+  project("jellyfin", "running", "Media"),
+  project("miniflux", "stopped"),
+  project("frigate", "unhealthy"),
+];
 
 /** The full id of the container of `alpha`. */
 const alphaId = "a".repeat(64);
