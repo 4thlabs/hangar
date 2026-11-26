@@ -7,8 +7,8 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#m
 import { Popover, PopoverContent, PopoverTrigger } from "#modules/common/ui/popover.tsx";
 import { ToastIcon } from "#modules/common/ui/toast.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
+import { describeNotification } from "#modules/notifications/helpers/notification-text.ts";
 import { useNotifications } from "#modules/notifications/hooks/use-notifications.ts";
-import { describeNotification } from "#modules/notifications/notification-text.ts";
 
 type NotificationItemProps = {
   notification: Notification;

@@ -11,8 +11,14 @@ import {
   type RecentNotifications,
 } from "#libs/api";
 import { toast } from "#modules/common/ui/toast.tsx";
-import { newestId, openedIn, withNotification, withRead, withSeen } from "#modules/notifications/notification-feed.ts";
-import { describeNotification } from "#modules/notifications/notification-text.ts";
+import {
+  newestId,
+  openedIn,
+  withNotification,
+  withRead,
+  withSeen,
+} from "#modules/notifications/helpers/notification-feed.ts";
+import { describeNotification } from "#modules/notifications/helpers/notification-text.ts";
 
 /** How many unseen notifications may toast at once, as they come; the rest wait in the bell. */
 const toastLimit = 3;
