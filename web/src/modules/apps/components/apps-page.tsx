@@ -2,19 +2,25 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { BoxesIcon, CpuIcon, LayersIcon, MemoryStickIcon, PackageOpenIcon, PlayIcon, SquareIcon } from "lucide-react";
 import { useState } from "react";
 import { useDockerProjects, type ProjectSummary } from "#libs/api";
-import { AppsSearchParams, type AppSortColumn } from "#modules/apps/apps-search.ts";
+import {
+  parseAppCategories,
+  parseAppsSort,
+  parseAppStatuses,
+  parseAppUpdates,
+  type AppSortColumn,
+} from "#modules/apps/apps-search.ts";
 import { AppsFilterMenus } from "#modules/apps/components/apps-filter-menus.tsx";
 import { AppsTable } from "#modules/apps/components/apps-table.tsx";
 import { ComposeDialogs, ComposeOperationButtons } from "#modules/apps/components/compose-operations.tsx";
 import { ReconnectingNotice } from "#modules/apps/components/reconnecting-notice.tsx";
 import { RunningBatches } from "#modules/apps/components/running-batches.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
-import { ComposeActions } from "#modules/apps/compose-actions.ts";
+import { appCount, composeSubject } from "#modules/apps/compose-actions.ts";
 import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { MetricFormat } from "#modules/apps/metric-format.ts";
-import { ProjectFilter } from "#modules/apps/project-filter.ts";
+import { formatBytes, formatPercent } from "#modules/apps/metric-format.ts";
+import { filterProjects } from "#modules/apps/project-filter.ts";
 import { describeError } from "#modules/common/error-message.ts";
 import { nextSort, serializeSort } from "#modules/common/table-sort.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
@@ -29,13 +35,13 @@ function LiveTotals({ containerIds }: { containerIds: readonly string[] }) {
     <>
       <StatCard
         title="CPU"
-        value={MetricFormat.percent(total(metrics => metrics.cpuPercent))}
+        value={formatPercent(total(metrics => metrics.cpuPercent))}
         detail="All apps combined"
         icon={CpuIcon}
       />
       <StatCard
         title="Memory"
-        value={MetricFormat.bytes(total(metrics => metrics.memoryUsage))}
+        value={formatBytes(total(metrics => metrics.memoryUsage))}
         detail="All apps combined"
         icon={MemoryStickIcon}
       />
@@ -89,13 +95,13 @@ export function AppsPage() {
   const navigate = useNavigate({ from: "/apps" });
   const { data, error, isPending, refetch, isRefetching } = useDockerProjects();
   const projects = data ?? [];
-  const sort = AppsSearchParams.sort(search.sort);
+  const sort = parseAppsSort(search.sort);
 
-  const visible = ProjectFilter.apply(projects, {
+  const visible = filterProjects(projects, {
     q: search.q ?? "",
-    statuses: AppsSearchParams.statuses(search.status),
-    categories: AppsSearchParams.categories(search.category),
-    updates: AppsSearchParams.updates(search.update),
+    statuses: parseAppStatuses(search.status),
+    categories: parseAppCategories(search.category),
+    updates: parseAppUpdates(search.update),
     sort,
   });
 
@@ -114,7 +120,7 @@ export function AppsPage() {
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
   const selected = visible.map(project => project.name).filter(name => selection.has(name));
   const compose = useComposeCommand(selected);
-  const selectionLabel = selected.length === 0 ? "No selection" : `${ComposeActions.count(selected.length)} selected`;
+  const selectionLabel = selected.length === 0 ? "No selection" : `${appCount(selected.length)} selected`;
 
   return (
     <main>
@@ -165,7 +171,7 @@ export function AppsPage() {
         </>
       )}
       {isPending && <p className="text-sm text-muted-foreground">Reading Docker…</p>}
-      <ComposeDialogs compose={compose} subject={ComposeActions.subject(selected)} count={selected.length} />
+      <ComposeDialogs compose={compose} subject={composeSubject(selected)} count={selected.length} />
     </main>
   );
 }

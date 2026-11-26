@@ -6,17 +6,15 @@ import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 
 /** What the badge of each state of a followed log says. */
-class LogStatusView {
-  static readonly Labels: Readonly<Record<LogStatus, string>> = {
-    connecting: "Connecting…",
-    connected: "Live",
-    ended: "Stream ended",
-    error: "Error",
-  };
+const logStatusLabels: Readonly<Record<LogStatus, string>> = {
+  connecting: "Connecting…",
+  connected: "Live",
+  ended: "Stream ended",
+  error: "Error",
+};
 
-  /** How close to the bottom the reader counts as there, in pixels. */
-  static readonly Bottom = 32;
-}
+/** How close to the bottom the reader counts as there, in pixels. */
+const bottomSlack = 32;
 
 /** The followed log of a container and its toolbar; a new mount, as when its sheet opens, starts from the tail. */
 export function LogsPanel({ url }: { url: string }) {
@@ -36,8 +34,7 @@ export function LogsPanel({ url }: { url: string }) {
    * have grown again, so the distance to the bottom alone would read a burst, as the first 200, as the reader leaving.
    */
   function handleScroll({ currentTarget }: UIEvent<HTMLDivElement>) {
-    const isAtBottom =
-      currentTarget.scrollHeight - currentTarget.scrollTop - currentTarget.clientHeight < LogStatusView.Bottom;
+    const isAtBottom = currentTarget.scrollHeight - currentTarget.scrollTop - currentTarget.clientHeight < bottomSlack;
 
     const scrolledUp = currentTarget.scrollTop < lastScrollTop.current;
 
@@ -53,7 +50,7 @@ export function LogsPanel({ url }: { url: string }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={status === "error" ? "destructive" : "secondary"}>{LogStatusView.Labels[status]}</Badge>
+        <Badge variant={status === "error" ? "destructive" : "secondary"}>{logStatusLabels[status]}</Badge>
         <Button
           type="button"
           variant="outline"

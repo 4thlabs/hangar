@@ -1,7 +1,7 @@
 import type { ProjectService } from "#libs/api";
 import { ContainerTable } from "#modules/apps/components/container-table.tsx";
 import type { ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { ProjectStatusView } from "#modules/apps/project-status.ts";
+import { projectStatusLabels, statusBadgeVariant } from "#modules/apps/project-status.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 
@@ -20,7 +20,7 @@ export function ServiceCard({ project, service, stats }: ServiceCardProps) {
           {service.runningCount}/{total} {total === 1 ? "container" : "containers"} running{unhealthy}
         </CardDescription>
         <CardAction>
-          <Badge variant={ProjectStatusView.variant(service.status)}>{ProjectStatusView.Labels[service.status]}</Badge>
+          <Badge variant={statusBadgeVariant(service.status)}>{projectStatusLabels[service.status]}</Badge>
         </CardAction>
       </CardHeader>
       <CardContent className="px-0">

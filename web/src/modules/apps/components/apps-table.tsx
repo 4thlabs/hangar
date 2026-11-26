@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import type { ProjectSummary } from "#libs/api";
 import type { AppSortColumn, AppsSort } from "#modules/apps/apps-search.ts";
-import { CategoryBadge } from "#modules/apps/category-badge.ts";
-import { ProjectStatusView } from "#modules/apps/project-status.ts";
+import { categoryBadgeClasses } from "#modules/apps/category-badge.ts";
+import { projectStatusLabels, statusBadgeVariant } from "#modules/apps/project-status.ts";
 import { SortableHead } from "#modules/common/components/sortable-head.tsx";
 import { toggledSet } from "#modules/common/toggled-set.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
@@ -71,7 +71,7 @@ export function AppsTable({ projects, sort, onSort, selection, onSelectionChange
             </TableCell>
             <TableCell>
               {project.category ? (
-                <Badge variant="secondary" className={CategoryBadge.Classes[project.category.color]}>
+                <Badge variant="secondary" className={categoryBadgeClasses[project.category.color]}>
                   {project.category.name}
                 </Badge>
               ) : (
@@ -79,9 +79,7 @@ export function AppsTable({ projects, sort, onSort, selection, onSelectionChange
               )}
             </TableCell>
             <TableCell>
-              <Badge variant={ProjectStatusView.variant(project.status)}>
-                {ProjectStatusView.Labels[project.status]}
-              </Badge>
+              <Badge variant={statusBadgeVariant(project.status)}>{projectStatusLabels[project.status]}</Badge>
             </TableCell>
             <TableCell className="tabular-nums">{project.serviceCount}</TableCell>
             <TableCell className="tabular-nums">

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useComposeBatches, type ComposeAction, type ComposeBatch } from "#libs/api";
-import { ComposeActions, type UpFlag } from "#modules/apps/compose-actions.ts";
+import { needsConfirmation, type UpFlag } from "#modules/apps/compose-actions.ts";
 import { useComposeStream } from "#modules/apps/hooks/use-compose-stream.ts";
 import { toggledSet } from "#modules/common/toggled-set.ts";
 
@@ -48,7 +48,7 @@ export function useComposeCommand(apps: readonly string[]) {
 
   /** Runs `action`, after a confirmation when it takes the apps down. */
   function request(action: ComposeAction) {
-    if (ComposeActions.needsConfirmation(action)) {
+    if (needsConfirmation(action)) {
       setConfirmation(action);
     } else {
       run(action);

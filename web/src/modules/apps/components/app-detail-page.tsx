@@ -9,9 +9,9 @@ import { StatCard } from "#modules/apps/components/stat-card.tsx";
 import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { MemoryLimit } from "#modules/apps/memory-limit.ts";
-import { MetricFormat } from "#modules/apps/metric-format.ts";
-import { ProjectStatusView } from "#modules/apps/project-status.ts";
+import { availableMemory } from "#modules/apps/memory-limit.ts";
+import { formatBytes, formatPercent } from "#modules/apps/metric-format.ts";
+import { projectStatusLabels, statusBadgeVariant } from "#modules/apps/project-status.ts";
 import { describeError } from "#modules/common/error-message.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Badge } from "#modules/common/ui/badge.tsx";
@@ -29,16 +29,16 @@ import {
 function AppLiveStats({ detail }: { detail: ProjectDetail }) {
   const { stats, total } = useDockerStats(detail.summary.containerIds);
   const { data: overview } = useDockerOverview();
-  const bytes = (pick: Parameters<typeof total>[0]) => MetricFormat.bytes(total(pick));
+  const bytes = (pick: Parameters<typeof total>[0]) => formatBytes(total(pick));
   const limits = detail.summary.containerIds.flatMap(id => (stats[id] ? [stats[id].memoryLimit] : []));
-  const available = MemoryLimit.available(limits, overview?.memory);
+  const available = availableMemory(limits, overview?.memory);
 
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="CPU"
-          value={MetricFormat.percent(total(metrics => metrics.cpuPercent))}
+          value={formatPercent(total(metrics => metrics.cpuPercent))}
           detail="Sum of the running containers"
           icon={CpuIcon}
         />
@@ -46,7 +46,7 @@ function AppLiveStats({ detail }: { detail: ProjectDetail }) {
           title="Memory"
           value={bytes(metrics => metrics.memoryUsage)}
           {...(available
-            ? { detail: `${MetricFormat.bytes(available.bytes)} ${available.isHost ? "on the host" : "available"}` }
+            ? { detail: `${formatBytes(available.bytes)} ${available.isHost ? "on the host" : "available"}` }
             : {})}
           icon={MemoryStickIcon}
         />
@@ -81,7 +81,7 @@ function AppHeader({ detail: { summary } }: { detail: ProjectDetail }) {
       <div className="flex flex-wrap items-center gap-2">
         {summary.icon && <img src={summary.icon} alt="" className="size-7 object-contain" />}
         <h1 className="text-2xl font-semibold">{summary.name}</h1>
-        <Badge variant={ProjectStatusView.variant(summary.status)}>{ProjectStatusView.Labels[summary.status]}</Badge>
+        <Badge variant={statusBadgeVariant(summary.status)}>{projectStatusLabels[summary.status]}</Badge>
         {summary.updateAvailable && <Badge variant="outline">Update available</Badge>}
       </div>
       <p className="text-sm text-muted-foreground">

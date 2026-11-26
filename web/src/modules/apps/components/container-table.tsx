@@ -2,7 +2,7 @@ import type { ProjectContainer } from "#libs/api";
 import { ContainerStatus } from "#modules/apps/components/container-status.tsx";
 import { LogsSheet } from "#modules/apps/components/logs-sheet.tsx";
 import type { ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { MetricFormat } from "#modules/apps/metric-format.ts";
+import { formatBytes, formatPercent, noMetrics, noReading } from "#modules/apps/metric-format.ts";
 import { Progress } from "#modules/common/ui/progress.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
 
@@ -38,8 +38,8 @@ export function ContainerTable({ project, containers, stats }: ContainerTablePro
 type ContainerRowProps = { project: string; container: ProjectContainer; stats: ContainerStats };
 
 function ContainerRow({ project, container, stats }: ContainerRowProps) {
-  const metrics = stats[container.id] ?? MetricFormat.NoMetrics;
-  const ports = ContainerPorts.write(container);
+  const metrics = stats[container.id] ?? noMetrics;
+  const ports = publishedPorts(container);
 
   return (
     <TableRow>
@@ -58,25 +58,25 @@ function ContainerRow({ project, container, stats }: ContainerRowProps) {
       <TableCell className="max-w-72 truncate" title={ports}>
         {ports}
       </TableCell>
-      <TableCell className="tabular-nums">{MetricFormat.percent(metrics.cpuPercent)}</TableCell>
+      <TableCell className="tabular-nums">{formatPercent(metrics.cpuPercent)}</TableCell>
       <TableCell className="min-w-44">
         {metrics.memoryUsage === null ? (
-          MetricFormat.None
+          noReading
         ) : (
           <Progress value={Math.min(metrics.memoryPercent ?? 0, 100)} aria-label={`Memory used by ${container.name}`}>
             <span className="ml-auto text-sm text-muted-foreground tabular-nums">
-              {MetricFormat.bytes(metrics.memoryUsage)} / {MetricFormat.bytes(metrics.memoryLimit)}
+              {formatBytes(metrics.memoryUsage)} / {formatBytes(metrics.memoryLimit)}
             </span>
           </Progress>
         )}
       </TableCell>
       <TableCell className="tabular-nums">
-        ↓ {MetricFormat.bytes(metrics.networkRx)} · ↑ {MetricFormat.bytes(metrics.networkTx)}
+        ↓ {formatBytes(metrics.networkRx)} · ↑ {formatBytes(metrics.networkTx)}
       </TableCell>
       <TableCell className="tabular-nums">
-        ↓ {MetricFormat.bytes(metrics.blockRead)} · ↑ {MetricFormat.bytes(metrics.blockWrite)}
+        ↓ {formatBytes(metrics.blockRead)} · ↑ {formatBytes(metrics.blockWrite)}
       </TableCell>
-      <TableCell className="text-center tabular-nums">{container.restartCount ?? MetricFormat.None}</TableCell>
+      <TableCell className="text-center tabular-nums">{container.restartCount ?? noReading}</TableCell>
       <TableCell>
         <LogsSheet project={project} container={container} />
       </TableCell>
@@ -84,16 +84,13 @@ function ContainerRow({ project, container, stats }: ContainerRowProps) {
   );
 }
 
-/** How the ports a container publishes read. */
-class ContainerPorts {
-  /** `0.0.0.0:8080 → 80/tcp`, one per port, or a dash for none. */
-  static write(container: ProjectContainer): string {
-    if (container.ports.length === 0) {
-      return MetricFormat.None;
-    }
-
-    return container.ports
-      .map(port => `${port.ip || "0.0.0.0"}:${port.publicPort} → ${port.privatePort}/${port.protocol}`)
-      .join(", ");
+/** How the ports a container publishes read: `0.0.0.0:8080 → 80/tcp`, one per port, or a dash for none. */
+function publishedPorts(container: ProjectContainer): string {
+  if (container.ports.length === 0) {
+    return noReading;
   }
+
+  return container.ports
+    .map(port => `${port.ip || "0.0.0.0"}:${port.publicPort} → ${port.privatePort}/${port.protocol}`)
+    .join(", ");
 }
