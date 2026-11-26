@@ -7,6 +7,7 @@ import { AppLayout } from "#modules/common/components/app-layout.tsx";
 import { NotFoundPage } from "#modules/common/components/not-found-page.tsx";
 import { PendingPage } from "#modules/common/components/pending-page.tsx";
 import { SettingsPage } from "#modules/settings/components/settings-page.tsx";
+import { EditAppPage } from "#modules/store/components/edit-app-page.tsx";
 import { NewAppPage } from "#modules/store/components/new-app-page.tsx";
 import { StorePage } from "#modules/store/components/store-page.tsx";
 import { StoreSearchParams } from "#modules/store/store-search.ts";
@@ -59,6 +60,12 @@ export class Routes {
 
   static readonly newApp = createRoute({ getParentRoute: () => Routes.app, path: "/store/new", component: NewAppPage });
 
+  static readonly editApp = createRoute({
+    getParentRoute: () => Routes.app,
+    path: "/store/$id/edit",
+    component: EditAppPage,
+  });
+
   static readonly settings = createRoute({
     getParentRoute: () => Routes.app,
     path: "/settings",
@@ -73,6 +80,7 @@ export class Routes {
       Routes.cluster,
       Routes.store,
       Routes.newApp,
+      Routes.editApp,
       Routes.settings,
     ]),
   ]);
