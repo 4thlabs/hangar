@@ -2,6 +2,7 @@
 //! version, reads the same in the other, and so does the `.env` the CLI reads.
 
 use std::collections::BTreeMap;
+use std::ops::RangeInclusive;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -37,13 +38,32 @@ pub struct Dotenv;
 impl Dotenv {
     /// The variables of `source`; a key declared twice takes its last value.
     pub fn parse(source: &str) -> BTreeMap<String, String> {
-        let source = source.replace("\r\n", "\n").replace('\r', "\n");
+        let source = Self::lines(source);
 
         LINE.captures_iter(&source)
             .map(|line| {
                 let value = line.get(2).map_or("", |value| value.as_str());
 
                 (line[1].to_owned(), Self::value(value))
+            })
+            .collect()
+    }
+
+    /// `source` with its line breaks as dotenv reads them: `\r\n` and `\r` are `\n`.
+    pub(crate) fn lines(source: &str) -> String {
+        source.replace("\r\n", "\n").replace('\r', "\n")
+    }
+
+    /// The lines, from 0, of [`lines`](Self::lines) of `source`, that each variable declared in it spans, its value
+    /// quoted over several lines included: every one, a variable declared twice too, as dotenv reads the source.
+    pub(crate) fn declared_lines(source: &str) -> Vec<RangeInclusive<usize>> {
+        let source = Self::lines(source);
+
+        LINE.find_iter(&source)
+            .map(|declaration| {
+                let first = source[..declaration.start()].matches('\n').count();
+
+                first..=first + declaration.as_str().matches('\n').count()
             })
             .collect()
     }
