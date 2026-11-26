@@ -23,22 +23,45 @@ export function useLogEvents(url: string) {
   const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
+    // The lines come in bursts, the first 200 at once: they are kept once a frame, not copied once a line.
+    let pending: string[] = [];
+    let frame: number | undefined;
+
+    const flush = () => {
+      const added = pending;
+
+      pending = [];
+      frame = undefined;
+      setLines(current => [...current, ...added].slice(-LogLines.Max));
+    };
+
+    const flushNow = () => {
+      if (frame !== undefined) {
+        cancelAnimationFrame(frame);
+        flush();
+      }
+    };
+
     setLines([]);
     setStatus("connecting");
     setError(null);
 
-    return ServerEvents.read<LogEvent>(url, {
+    const stop = ServerEvents.read<LogEvent>(url, {
       onOpen: () => setStatus("connected"),
       onItem: event => {
         if (event.kind === "end") {
+          flushNow();
           setStatus("ended");
 
           return;
         }
 
-        setLines(current => [...current, event.line].slice(-LogLines.Max));
+        pending.push(event.line);
+        frame ??= requestAnimationFrame(flush);
       },
       onEnd: failure => {
+        flushNow();
+
         if (failure === undefined) {
           setStatus(current => (current === "error" ? current : "ended"));
 
@@ -49,6 +72,14 @@ export function useLogEvents(url: string) {
         setError(ErrorMessage.describe(failure));
       },
     });
+
+    return () => {
+      if (frame !== undefined) {
+        cancelAnimationFrame(frame);
+      }
+
+      stop();
+    };
   }, [url, generation]);
 
   return {
