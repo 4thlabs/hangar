@@ -131,7 +131,8 @@ impl DockerState {
     }
 
     /// Follows the daemon's events, which reload what they make stale, until the server stops; once, however many
-    /// times it is called.
+    /// times it is called. When the daemon refuses them for good, as with a 403, what is kept is reloaded each time it
+    /// goes stale instead.
     pub(crate) fn follow(self: &Arc<Self>) {
         if self.is_following.swap(true, Ordering::SeqCst) {
             return;
@@ -148,10 +149,14 @@ impl DockerState {
                     Err(error) => tracing::error!(
                         error = %Failure::chain(&error),
                         "the Docker events are no longer followed: what the server keeps of the daemon is reloaded \
-                         as it ages alone"
+                         each time it goes stale"
                     ),
                 }
             }
+
+            // The events no longer say what changed: the pages, which follow what the cache changes, would wait forever.
+            this.containers.poll();
+            this.overview.poll();
         });
     }
 

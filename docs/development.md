@@ -180,7 +180,7 @@ failure, the daemon is not asked again before a wait, from 2 seconds doubled up 
 tried again once its wait has passed. The server follows the
 daemon's events from its start, and reads again what they make stale, whatever that wait, the events of a quarter of a
 second gathered, two seconds for the overview; when the events are followed again after the daemon went away,
-everything is read again.
+everything is read again, and when the daemon refuses them for good, each value is read again as it goes stale.
 
 A reread that changes what the cache holds is pushed to the page on `GET /api/docker/changes`, as are an install, an
 uninstall, a saved `hangar.yml` and the end of a store sync, which change the apps listed; the page reads again what it
