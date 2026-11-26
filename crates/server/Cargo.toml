@@ -32,11 +32,14 @@ jiff = { version = "0.2", default-features = false, features = ["std", "tz-syste
 openidconnect = { version = "4", default-features = false }
 # The decoded path of a request, which the trailing-slash redirect compares with the page's directories.
 percent-encoding = "2"
-quoll = { workspace = true, features = ["server"] }
+# The server, and the clients of the services the dashboard's widgets read.
+quoll = { workspace = true, features = ["client", "server"] }
 # The credentials of a URL, taken out of a command's output before the log writes it.
 regex = "1"
 # The provider's discovery, keys and token endpoint, over rustls with the platform's roots, as quoll's client.
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+# The client quoll builds, which the widgets' contracts share whatever the address of their service.
+reqwest-middleware = "0.5"
 serde.workspace = true
 serde_json.workspace = true
 # The value of a user's credentials a session holds.

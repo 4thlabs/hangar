@@ -13,7 +13,7 @@ use super::ConfigError;
 use super::rules::{Integer, List, MAX_SAFE_INTEGER, Matching, NonEmpty, Pattern, present};
 
 /// A widget placed on the dashboard.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct Widget {
     /// The column it is placed in.
@@ -33,8 +33,9 @@ pub enum Column {
     Third,
 }
 
-/// Which widget a declaration places, its `type`, with the options it takes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Which widget a declaration places, its `type`, with the options it takes. Two declarations of the same type and
+/// options hash alike, wherever they are placed.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum WidgetKind {
     /// `clock`.
@@ -111,7 +112,7 @@ pub enum WidgetKind {
 }
 
 /// Where a widget's service is, and how fresh its card stays.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct ServiceOptions {
     /// The address Hangar calls the service at; `None`, the link.
@@ -139,6 +140,33 @@ impl Column {
             Self::First => 1,
             Self::Second => 2,
             Self::Third => 3,
+        }
+    }
+}
+
+impl WidgetKind {
+    /// Its `type` in `hangar.yml`, as `frigate-events`.
+    ///
+    /// ```
+    /// use hangar_core::WidgetKind;
+    ///
+    /// assert_eq!(WidgetKind::Clock.name(), "clock");
+    /// ```
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Clock => "clock",
+            Self::DockerGeneralStats => "docker-general-stats",
+            Self::ArcaneGeneralStats { .. } => "arcane-general-stats",
+            Self::BackrestSummary { .. } => "backrest-summary",
+            Self::BeszelServerStats { .. } => "beszel-server-stats",
+            Self::ForgejoCi { .. } => "forgejo-ci",
+            Self::FrigateEvents { .. } => "frigate-events",
+            Self::GluetunVpnStatus { .. } => "gluetun-vpn-status",
+            Self::MinifluxEntries { .. } => "miniflux-entries",
+            Self::JellyfinLatest { .. } => "jellyfin-latest",
+            Self::TcgCollectorCards { .. } => "tcg-collector-cards",
+            Self::GithubReleases { .. } => "github-releases",
+            Self::StockPrices { .. } => "stock-prices",
         }
     }
 }
@@ -561,8 +589,36 @@ mod tests {
         }
 
         let clock = parse("{ type: clock, column: 0 }").expect_err("column 0 does not exist");
-
         assert_eq!(clock, "widgets[0].column: must be from 1 to 3");
+    }
+
+    #[test]
+    fn names_each_type_as_hangar_yml_writes_it() {
+        let names: Vec<_> = [
+            "{ type: clock, column: 1 }",
+            "{ type: docker-general-stats, column: 1 }",
+            "{ type: arcane-general-stats, column: 1 }",
+            "{ type: backrest-summary, column: 1 }",
+            "{ type: beszel-server-stats, column: 1 }",
+            "{ type: forgejo-ci, column: 1 }",
+            "{ type: frigate-events, column: 1 }",
+            "{ type: gluetun-vpn-status, column: 1 }",
+            "{ type: miniflux-entries, column: 1 }",
+            "{ type: jellyfin-latest, column: 1, user: ana }",
+            "{ type: tcg-collector-cards, column: 1, cards: [{ game: 1, product: 1 }] }",
+            "{ type: github-releases, column: 1, repositories: [4thlabs/hangar] }",
+            "{ type: stock-prices, column: 1, tickers: [AAPL] }",
+        ]
+        .into_iter()
+        .map(|declaration| {
+            parse(declaration)
+                .expect("the declaration is valid")
+                .kind
+                .name()
+        })
+        .collect();
+
+        assert_eq!(names, Widget::TYPES);
     }
 
     #[test]

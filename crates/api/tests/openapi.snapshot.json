@@ -2039,6 +2039,89 @@
             "type": "object"
           },
           {
+            "description": "No widget that loads is placed under this key: none at all, the clock, or Docker's stats, which the page reads\nitself.",
+            "properties": {
+              "code": {
+                "const": "widgets.unknown_placement",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "key": {
+                    "description": "The key asked for.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The service of a widget did not answer, or not as the widget reads it: the server's log says why.",
+            "properties": {
+              "code": {
+                "const": "widgets.unavailable",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "widget": {
+                    "description": "The widget's `type`, as `frigate-events`.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "widget"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A widget has no such image to relay: it relays none, its service has none of this id, or the id is not one its\nservice would give.",
+            "properties": {
+              "code": {
+                "const": "widgets.unknown_image",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "image": {
+                    "description": "The image's id asked for.",
+                    "type": "string"
+                  },
+                  "key": {
+                    "description": "The placement's key.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "image"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
             "description": "A sign-in by password of an email unknown to `hangar.yml`, or with a wrong password.",
             "properties": {
               "code": {
@@ -2177,6 +2260,98 @@
         },
         "required": [
           "source"
+        ],
+        "type": "object"
+      },
+      "FrigateDetector": {
+        "description": "A detector of Frigate's, and how fast it runs.",
+        "properties": {
+          "inferenceSpeed": {
+            "description": "How long one inference takes, in milliseconds.",
+            "format": "double",
+            "type": "number"
+          },
+          "name": {
+            "description": "Its name, as Frigate's config gives it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "inferenceSpeed"
+        ],
+        "type": "object"
+      },
+      "FrigateEvent": {
+        "description": "An event of Frigate's: what a camera saw.",
+        "properties": {
+          "camera": {
+            "description": "The camera, as `frigate_front_door`.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Its id, which is also that of its thumbnail, relayed by `GET /widgets/{key}/image/{id}`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "What was seen, as `person`.",
+            "type": "string"
+          },
+          "startTime": {
+            "description": "When it began, in RFC 3339.",
+            "type": "string"
+          },
+          "subLabel": {
+            "description": "What it was recognised as, a face or a plate, when it was.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "camera",
+          "label",
+          "subLabel",
+          "startTime"
+        ],
+        "type": "object"
+      },
+      "FrigateEvents": {
+        "description": "Frigate's latest events, and how its detection runs.",
+        "properties": {
+          "cameraCount": {
+            "description": "How many cameras it watches.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "detectionFps": {
+            "description": "How many detections it runs a second, on all its cameras.",
+            "format": "double",
+            "type": "number"
+          },
+          "detectors": {
+            "description": "Its detectors, by name.",
+            "items": {
+              "$ref": "#/components/schemas/FrigateDetector"
+            },
+            "type": "array"
+          },
+          "events": {
+            "description": "The latest events, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/FrigateEvent"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "cameraCount",
+          "detectionFps",
+          "detectors",
+          "events"
         ],
         "type": "object"
       },
@@ -3378,6 +3553,136 @@
           "unused"
         ],
         "type": "object"
+      },
+      "WidgetData": {
+        "description": "What a widget loaded from its service, by its `type`.",
+        "oneOf": [
+          {
+            "description": "`frigate-events`.",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/FrigateEvents"
+              },
+              "type": {
+                "const": "frigate-events",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "data"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "WidgetPlacement": {
+        "description": "A widget placed on the dashboard.",
+        "properties": {
+          "column": {
+            "description": "The column it sits in, from 1 on the left to 3.",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "key": {
+            "description": "What names its data and its images, `<type>-<hash>` of its options, so that moving it to another column keeps\nwhat was loaded; a second placement of the same options takes `-2`, and so on.",
+            "type": "string"
+          },
+          "link": {
+            "description": "Where its card links to in the browser: `link`, or `https://<container>.<DOMAIN>`; `None` for a widget that\nreads no store app.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WidgetType"
+              }
+            ],
+            "description": "Which widget it is."
+          }
+        },
+        "required": [
+          "key",
+          "type",
+          "column",
+          "link"
+        ],
+        "type": "object"
+      },
+      "WidgetType": {
+        "description": "Which widget a placement is, its `type` in `hangar.yml`.",
+        "oneOf": [
+          {
+            "const": "clock",
+            "description": "The date and time, from the reader's own clock: it loads nothing.",
+            "type": "string"
+          },
+          {
+            "const": "docker-general-stats",
+            "description": "The usage of the Docker host, which the page reads from the Docker routes: it loads nothing here.",
+            "type": "string"
+          },
+          {
+            "const": "arcane-general-stats",
+            "description": "Arcane's view of the Docker host.",
+            "type": "string"
+          },
+          {
+            "const": "backrest-summary",
+            "description": "Backrest's repositories and their last backups.",
+            "type": "string"
+          },
+          {
+            "const": "beszel-server-stats",
+            "description": "The systems a Beszel hub monitors.",
+            "type": "string"
+          },
+          {
+            "const": "forgejo-ci",
+            "description": "What Forgejo Actions runs, and the repositories updated last.",
+            "type": "string"
+          },
+          {
+            "const": "frigate-events",
+            "description": "Frigate's latest events.",
+            "type": "string"
+          },
+          {
+            "const": "gluetun-vpn-status",
+            "description": "Whether gluetun's tunnel is up, and where it exits.",
+            "type": "string"
+          },
+          {
+            "const": "miniflux-entries",
+            "description": "Miniflux's newest entries.",
+            "type": "string"
+          },
+          {
+            "const": "jellyfin-latest",
+            "description": "What was added to Jellyfin last.",
+            "type": "string"
+          },
+          {
+            "const": "tcg-collector-cards",
+            "description": "The prices of the cards tcg-collector follows.",
+            "type": "string"
+          },
+          {
+            "const": "github-releases",
+            "description": "The latest release of GitHub repositories.",
+            "type": "string"
+          },
+          {
+            "const": "stock-prices",
+            "description": "Stock quotes from Finnhub.",
+            "type": "string"
+          }
+        ]
       }
     },
     "securitySchemes": {
@@ -4950,6 +5255,138 @@
           "Store"
         ]
       }
+    },
+    "/api/widgets": {
+      "get": {
+        "operationId": "widgets_placements",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WidgetPlacement"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The widgets, in the order `hangar.yml` places them.",
+        "tags": [
+          "Widgets"
+        ]
+      }
+    },
+    "/api/widgets/{key}": {
+      "get": {
+        "operationId": "widgets_data",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WidgetData"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "What the widget placed as `key` loaded. A 404 for a key the dashboard does not place, or that of a widget that loads nothing, the clock's or Docker's; a 502 when its service did not answer.",
+        "tags": [
+          "Widgets"
+        ]
+      }
+    },
+    "/api/widgets/{key}/image/{id}": {
+      "get": {
+        "operationId": "widgets_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {}
+            },
+            "description": "Bytes of the media type `Content-Type` says."
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "An image the widget placed as `key` shows, fetched from its service: a Frigate thumbnail, a Jellyfin poster, a card of tcg-collector. Kept a day by the browser. A 404 for an id that is not letters, digits, `_`, `.` and `-`, or that its service does not have.",
+        "tags": [
+          "Widgets"
+        ]
+      }
     }
   },
   "tags": [
@@ -4992,6 +5429,10 @@
     {
       "description": "The jobs of the server, run on their schedules or when asked: the last 50 runs, kept in memory.",
       "name": "Jobs"
+    },
+    {
+      "description": "The dashboard, as `hangar.yml` places its widgets. A widget's data is kept per placement: fresh for its `ttl`,\n60 seconds unless `hangar.yml` says, then served while it reloads behind the reader for 15 minutes more, which\nis also how long a service that stops answering keeps its last card. Nothing is loaded without a reader.",
+      "name": "Widgets"
     }
   ]
 }

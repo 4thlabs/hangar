@@ -105,6 +105,26 @@ impl GlobalEnv {
         Ok(Dotenv::parse(&String::from_utf8_lossy(&bytes)))
     }
 
+    /// The variable `suffix` of `app`, under either of its prefixes, as the Waku version reads an app's own: `sync-in`'s
+    /// `API_KEY` is `SYNCIN_API_KEY`, else `SYNC_IN_API_KEY`. An empty value is not set.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] when the file exists but cannot be read.
+    pub async fn app_variable(
+        &self,
+        app: &str,
+        suffix: &str,
+    ) -> Result<Option<String>, StoreError> {
+        let mut variables = self.read().await?;
+
+        Ok(Self::prefixes(app).iter().find_map(|prefix| {
+            variables
+                .remove(&format!("{prefix}{suffix}"))
+                .filter(|value| !value.is_empty())
+        }))
+    }
+
     /// Merges `updates` into what is on disk now, so that a variable added meanwhile survives, then drops the
     /// variables of `remove`, the only way one is ever lost. The file is copied aside first, then replaced whole;
     /// a write that changes nothing leaves it, and makes no copy.
@@ -848,6 +868,30 @@ mod tests {
             .expect_err("a new name compose does not take is refused");
 
         assert!(matches!(error, StoreError::InvalidVariable { key } if key == "NEW-KEY"));
+    }
+
+    #[tokio::test]
+    async fn reads_a_variable_of_an_app_under_either_of_its_prefixes() {
+        let fixture = Fixture::new();
+
+        std::fs::write(
+            fixture.env.file(),
+            "SYNCIN_API_KEY=\nSYNC_IN_API_KEY=second\nFRIGATE_API_KEY=first\n",
+        )
+        .expect("written by hand");
+
+        let read = |app: &'static str| fixture.env.app_variable(app, "API_KEY");
+
+        assert_eq!(
+            read("frigate").await.expect("read"),
+            Some("first".to_owned())
+        );
+        assert_eq!(
+            read("sync-in").await.expect("read"),
+            Some("second".to_owned()),
+            "an empty value is not set"
+        );
+        assert_eq!(read("miniflux").await.expect("read"), None);
     }
 
     #[tokio::test]
