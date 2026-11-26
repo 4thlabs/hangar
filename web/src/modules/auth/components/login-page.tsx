@@ -48,7 +48,7 @@ export function LoginPage() {
   return (
     <main className="flex min-h-svh items-center justify-center bg-background p-6 font-sans">
       <title>Sign in | Hangar</title>
-      <form onSubmit={handleSubmit} className="w-full max-w-sm">
+      <form onSubmit={event => void handleSubmit(event)} className="w-full max-w-sm">
         <Card>
           <CardHeader>
             <CardTitle>

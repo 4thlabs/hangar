@@ -78,7 +78,7 @@ export function UserMenu() {
             variant="destructive"
             disabled={logout.isPending}
             closeOnClick={false}
-            onClick={handleSignOut}
+            onClick={() => void handleSignOut()}
           >
             {logout.isPending ? <Spinner /> : <LogOutIcon />}
             <span>{logout.isPending ? "Signing out…" : "Sign out"}</span>

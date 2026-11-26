@@ -47,9 +47,7 @@ describe("/store", () => {
     expect(await screen.findByText("Miniflux")).toBeDefined();
     expect(screen.queryByText("Frigate")).toBeNull();
     expect(fetch.mock.calls.map(([url]) => url)).toContain("/api/store/apps?filter=available");
-    expect((screen.getByLabelText("Search", { selector: "#navbar-search-field" }) as HTMLInputElement).value).toBe(
-      "mini",
-    );
+    expect(screen.getByLabelText<HTMLInputElement>("Search", { selector: "#navbar-search-field" }).value).toBe("mini");
   });
 
   it("narrows the apps by what is typed in the navbar's search", async () => {

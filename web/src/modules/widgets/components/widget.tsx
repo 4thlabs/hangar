@@ -138,14 +138,14 @@ export function WidgetListItem({ children, className, media, trailing, ...props 
 type WidgetTimeProps = {
   /** When it happened, or is due, in milliseconds: a moment ahead reads `in 22 hours`. */
   at: number;
-  /** For a test that pins the clock. */
-  now?: number;
+  /** The moment it is written from, the card's `useNow()`: one clock per card, not one per row. */
+  now: number;
   /** `compact` writes `18h` rather than `18 hours ago`, for a row that has other things to say. */
   variant?: "long" | "compact";
 };
 
 /** A moment, as every widget's trailing column writes one. */
-export function WidgetTime({ at, variant = "long", now = Date.now() }: WidgetTimeProps) {
+export function WidgetTime({ at, now, variant = "long" }: WidgetTimeProps) {
   const text = variant === "compact" ? RelativeTime.compact(at, now) : RelativeTime.format(at, now);
   const isTime = Number.isFinite(at);
 

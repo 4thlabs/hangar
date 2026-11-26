@@ -1,9 +1,12 @@
 import babelParser from "@babel/eslint-parser";
 import stylistic from "@stylistic/eslint-plugin";
+import reactHooks from "eslint-plugin-react-hooks";
 
 /**
- * Only the blank-line rules Prettier cannot hold: it keeps the blank lines it is given but never
- * adds one. Parsed with Babel, since typescript-eslint does not run on TypeScript 7.
+ * The blank-line rules Prettier cannot hold, since it keeps the blank lines it is given but never
+ * adds one, and for `web/` the rules of `docs/web/CODING_RULES.md` that need no types. Parsed with
+ * Babel, since typescript-eslint does not run on TypeScript 7: the rules that read types are
+ * oxlint's, in `web/.oxlintrc.json`.
  */
 const parserFor = plugins => ({
   parser: babelParser,
@@ -21,8 +24,23 @@ const blankLines = [
   { blankLine: "any", prev: ["singleline-const", "singleline-let"], next: ["singleline-const", "singleline-let"] },
 ];
 
+/**
+ * The rules of hooks and the React compiler's, which work on Babel's tree, and the core rules that
+ * need no types. `no-unused-vars` is oxlint's: the core rule sees neither a name used in JSX nor
+ * one used only as a type.
+ */
+const pageRules = {
+  ...reactHooks.configs["recommended-latest"].rules,
+  curly: ["error", "all"],
+  eqeqeq: ["error", "always", { null: "ignore" }],
+  "no-console": ["error", { allow: ["warn", "error"] }],
+  "no-implicit-coercion": "error",
+  "no-param-reassign": "error",
+  "prefer-const": "error",
+};
+
 export default [
-  // `web/src` is the Rust server's page, which follows the same rules.
+  // `web/src` is the Rust server's page, which follows the same rules, and its own in the last block.
   {
     ignores: [
       "src/modules/common/ui/**",
@@ -46,5 +64,10 @@ export default [
     rules: {
       "@stylistic/padding-line-between-statements": blankLines,
     },
+  },
+  {
+    files: ["web/src/**/*.{ts,tsx}"],
+    plugins: { "react-hooks": reactHooks },
+    rules: pageRules,
   },
 ];

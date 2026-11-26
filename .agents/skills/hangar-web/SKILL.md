@@ -18,9 +18,11 @@ merge, some names below do not exist yet (`Region`, `createPage`, `useEventFeed`
 - Do not port code an issue is not about: AGENTS.md's scope rule holds.
 - Where this skill and the code disagree, the code is the old shape, not a new rule.
 
-Also read AGENTS.md: the import mapping, the readability rules, the Rust section's "Errors the page shows". Load the
-other skills it lists (`react-query`, `vercel-react-best-practices`, `vercel-composition-patterns`, and TanStack
-Router's through `intent`), with what AGENTS.md says does not apply.
+Also read [`docs/web/CODING_RULES.md`](../../../docs/web/CODING_RULES.md): the language, React, readability and test
+rules, and the two linters, ESLint at the root and oxlint's type-aware rules in `web/`. And AGENTS.md: the import
+mapping and the Rust section's "Errors the page shows". Load the other skills it lists (`react-query`,
+`vercel-react-best-practices`, `vercel-composition-patterns`, and TanStack Router's through `intent`), with what
+AGENTS.md says does not apply.
 
 ## The layers, and what each may import
 

@@ -25,13 +25,15 @@ is git-ignored.
 | `npm test`                        | Vitest, once                                   |
 | `npm run typecheck`               | `tsc --noEmit`                                 |
 | `npm run format` / `format:check` | Prettier                                       |
+| `npm run lint` / `lint:fix`       | ESLint, on `src/` and `web/src`                |
 | `npm run typegen`                 | Regenerates Waku's typed routes                |
 | `npm run db:generate`             | Generates a Drizzle migration from the schemas |
 | `npm run db:migrate`              | Applies the migrations to `HANGAR_DB_HOST`     |
 | `npm run db:studio`               | Opens Drizzle Studio on the database           |
 
-CI runs `typecheck`, `test` and `build` on every pull request and push to `main`, its `rust` job checks
-the Cargo workspace, and its `web` job builds and tests the Rust server's page (see the Rust section of
+CI runs `format:check`, `lint`, `typecheck`, `test` and `build` on every pull request and push to
+`main`, its `rust` job checks the Cargo workspace, and its `web` job builds, lints and tests the Rust
+server's page (see the Rust section of
 [`AGENTS.md`](../AGENTS.md)). Its `cli` job builds the static `hangar` binary for the host, and `image-cli`
 the Dockerfile's `cli` stage, which puts it in the image. Each push to `main` (a merged pull request) and
 each `v*` tag also builds the image for `amd64` and `arm64` and publishes it to `ghcr.io/4thlabs/hangar`:
@@ -60,6 +62,10 @@ at <http://localhost:5173> and proxies `/api` to the server. A change to a crate
 change to the contract writes the hooks again. The server listens on 127.0.0.1:3011, the `HOST` and `PORT` that the
 `env` of `[[workspace.metadata.quoll.server]]` gives it, beside its `url` and the proxy's target, so that it runs
 beside `npm run dev` on 3010.
+
+`npm run lint --prefix web` runs oxlint's type-aware rules on the page, once `cargo quoll gen` has written orval's
+TypeScript. The page's coding rules, and what each linter checks, are in
+[`docs/web/CODING_RULES.md`](web/CODING_RULES.md).
 
 `cargo quoll build` builds the page in `web/dist`, which the server serves when `HANGAR_PAGE_DIR` names it:
 `HANGAR_PAGE_DIR=web/dist cargo run -p hangar-server`, at <http://localhost:3010>.

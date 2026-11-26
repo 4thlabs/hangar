@@ -59,7 +59,7 @@ describe("/settings#env", () => {
     serve({ "GET /api/env": () => Response.json({ variables: { JELLYFIN_API_KEY: "secret" } }) });
     renderAt("/settings#env");
 
-    const value = (await screen.findByLabelText("JELLYFIN_API_KEY")) as HTMLInputElement;
+    const value = await screen.findByLabelText<HTMLInputElement>("JELLYFIN_API_KEY");
 
     expect(value.type).toBe("password");
     fireEvent.click(screen.getByRole("button", { name: "Show the value of JELLYFIN_API_KEY" }));

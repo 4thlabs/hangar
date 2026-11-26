@@ -98,7 +98,7 @@ jobs:
         run: cargo doc --workspace --all-features --no-deps --locked
 
   # The Rust server's page, in web/: the TypeScript written from the contract of the commit, type-checked and bundled,
-  # then its tests. A change of the contract that breaks the page breaks the pull request. Like `rust`, the image
+  # linted with its types, then its tests. A change of the contract that breaks the page breaks the pull request. Like `rust`, the image
   # does not wait for it until the switch.
   web:
     name: Web
@@ -135,6 +135,12 @@ jobs:
 
       - name: Build
         run: cargo quoll build
+
+      # After the build, which writes the orval TypeScript the rules read the types of. The rules that need no types
+      # are ESLint's, in the `ci` job's lint. Warnings count as errors (`denyWarnings` in `.oxlintrc.json`).
+      - name: Lint the types
+        run: npm run lint
+        working-directory: web
 
       - name: Run tests
         run: npm test

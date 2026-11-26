@@ -21,6 +21,17 @@ export function useLogEvents(url: string) {
   const [error, setError] = useState<string | null>(null);
   // Bumped to read the log again.
   const [generation, setGeneration] = useState(0);
+  // The read the state above belongs to. A new one starts empty, set during render rather than in the effect, so that
+  // no frame shows the last read's lines under the new one.
+  const read = `${generation} ${url}`;
+  const [shownRead, setShownRead] = useState(read);
+
+  if (shownRead !== read) {
+    setShownRead(read);
+    setLines([]);
+    setStatus("connecting");
+    setError(null);
+  }
 
   useEffect(() => {
     // The lines come in bursts, the first 200 at once: they are kept once a frame, not copied once a line.
@@ -41,10 +52,6 @@ export function useLogEvents(url: string) {
         flush();
       }
     };
-
-    setLines([]);
-    setStatus("connecting");
-    setError(null);
 
     const stop = ServerEvents.read<LogEvent>(url, {
       onOpen: () => setStatus("connected"),

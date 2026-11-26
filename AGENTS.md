@@ -1,6 +1,14 @@
 # Conventions
 
+The TypeScript has two homes until the switch, #181. `src/` is the Waku version: the sections below marked "`src/`
+only" are its conventions, and #181 removes them with it. `web/`, the Rust server's page, follows
+[`docs/web/CODING_RULES.md`](docs/web/CODING_RULES.md) and [ADR 0002](docs/adr/0002-web-design.md): read them before
+writing or reviewing its code. Both follow the import mapping, "Responsive layouts", and the readability rules of the
+coding rules.
+
 ## Libraries under `src/libs`
+
+`src/` only, until #181.
 
 - One entry point = one `index.ts`, which only re-exports. Implementation goes in named files
   beside it (`format/index.ts` → `format/relative-time.ts`, `docker/server/index.ts` →
@@ -11,6 +19,8 @@
   need no configuration. Test doubles get one, so a mock never sits in the public barrel.
 
 ## Modules under `src/modules`
+
+`src/` only, until #181. `web/`'s layers are ADR 0002's decision 1.
 
 - One module per page domain (`apps`, `store`, `settings`, `auth`, `notifications`, `widgets`
   for the dashboard), holding its `actions/`, `components/`, `hooks/` and plain `.ts` helpers at
@@ -24,6 +34,8 @@
   styles.
 
 ## Import mapping
+
+For `src/` and `web/`, which has the same.
 
 ```json
 "imports": {
@@ -47,6 +59,8 @@ Do not retry these, all verified here:
 
 ## `server-only`
 
+`src/` only, until #181.
+
 A library carries no guard: it takes its dependencies by injection, and the guard sits in the
 composition root that binds them — `notifications/notifications.ts` (class) vs
 `notifications/server/server.ts` (`import "server-only"` + the instance). Same split as
@@ -61,6 +75,8 @@ descriptor reaches its components only through `import()`.
 
 ## Classes
 
+`src/` only, until #181. `web/` has no class made only of statics: see its coding rules.
+
 A library's unit of work is a class taking its dependencies as constructor arguments — that is
 what lets a test pass an in-memory database instead of mocking a module.
 
@@ -70,6 +86,8 @@ function or module-level `const`. The exceptions are React components and hooks,
 definitions in `src/cli`.
 
 ## Translations
+
+`src/` only, until #181. `web/` is English only: see the Rust section.
 
 - Every word the UI shows sits in a catalog, a module's `messages.ts`:
   `class AppsMessages { static readonly en = {…}; static readonly fr: typeof AppsMessages.en = {…} }`. English
@@ -92,28 +110,14 @@ differences as classes on a single element.
 
 ## Code readability
 
-Write code for the next human reader. Clarity beats cleverness and brevity.
-
-- Follow the project first: match existing conventions, naming, structure and tooling; run the formatter and linter before finishing.
-- Names: say what and why (`elapsedDays`, `isEligibleForRefund`). No `data`, `tmp`, `util`, `manager`, invented abbreviations, or misleading names. One word per concept.
-  On a class member, the class carries the context and the method the action: `ActionToast.create`, not
-  `ActionToast.of`.
-- Functions: small, one job, one level of abstraction; ≤ 3–4 parameters; no boolean flags that switch behavior.
-- Control flow: early returns, nesting ≤ 3, complex conditions extracted into named variables. No nested ternaries or clever one-liners. Every `if`, `else` and loop body is a braced block on its own lines, even a lone `return`.
-- Blank lines: one after a multi-line statement, after a group of declarations, and before a `return` that is not alone in its block. `npm run lint:fix` applies them; Prettier sorts the imports.
-- Structure: put code where a newcomer would look for it; no god files or growing `utils`; dependencies flow one way.
-- Duplication: one place per rule or constant, but no premature abstraction; a little repetition beats a helper full of options.
-- Comments: explain why, never what. No commented-out code, no stale comments, no TODO without context. Document public APIs.
-- Data: explicit types and shapes; named constants instead of magic numbers/strings; avoid `any`.
-- Errors: never swallow them; add context; keep the happy path readable.
-- Tests: names describe behavior; setup visible in the test.
-- Scope: change only what the task needs; keep refactors separate from behavior changes.
+The readability rules are in [`docs/web/CODING_RULES.md`](docs/web/CODING_RULES.md#readability), for `src/` too
+until #181.
 
 ## Rust
 
 The server is being rewritten in Rust, in the Cargo workspace at the root, beside the Waku version, which stays the
-published image until the switch. The sections above are the TypeScript conventions, for `src/`. The Rust code
-follows [`docs/rust/CODING_RULES.md`](docs/rust/CODING_RULES.md): read it before writing or reviewing Rust.
+published image until the switch. The TypeScript conventions are above and in `docs/web/CODING_RULES.md`. The
+Rust code follows [`docs/rust/CODING_RULES.md`](docs/rust/CODING_RULES.md): read it before writing or reviewing Rust.
 
 ```
 Cargo.toml        # the workspace: members = ["crates/*"], the shared settings and lints, `cargo quoll`'s config
@@ -125,13 +129,14 @@ crates/
 web/              # the server's page: a Vite SPA on the TanStack Query hooks orval writes from the document
 ```
 
-`web/` is a package of its own, beside Waku's: the switch removes the root's without touching it. It follows the
-TypeScript conventions above, with the same import mapping and the root's Prettier and eslint (`npm run lint` covers
-`web/src`), and takes from `src/` what a page it moves needs, copied: the Waku version keeps its own until the switch.
-Its `src/libs/api/generated.ts` and `web/openapi.json` are written by `cargo quoll gen`, never committed. Its design
-is [ADR 0002](docs/adr/0002-web-design.md), accepted on 2026-11-26, and the `hangar-web` skill gives its rules in short.
-Where the ADR and the conventions above differ, `web/` follows the ADR: no class made only of statics (#195 rewrites
-the Classes section), and its words in a plain `messages.ts` per module.
+`web/` is a package of its own, beside Waku's: the switch removes the root's without touching it. It follows
+[`docs/web/CODING_RULES.md`](docs/web/CODING_RULES.md), with the same import mapping, the root's Prettier and ESLint
+(`npm run lint` covers `web/src`), and its own oxlint for the rules that read types (`npm run lint --prefix web`). It
+takes from `src/` what a page it moves needs, copied: the Waku version keeps its own until the switch. Its
+`src/libs/api/generated.ts` and `web/openapi.json` are written by `cargo quoll gen`, never committed. Its design is
+[ADR 0002](docs/adr/0002-web-design.md), accepted on 2026-11-26, and the `hangar-web` skill gives its rules in short.
+Where the ADR and the sections for `src/` differ, `web/` follows the ADR: no class made only of statics, and its words
+in a plain `messages.ts` per module.
 
 The page is English only, decided with the maintainer on 2026-11-24: the Translations section above is the Waku
 version's alone, until the switch. `web/` has no translation helper, no `t()`, no language cookie or switch. Its words
@@ -190,8 +195,11 @@ installed at the tag of the quoll the contract uses:
 ```bash
 npm ci --prefix web
 cargo quoll build      # the document, orval's TypeScript, then tsc and vite build in web/
+npm run lint --prefix web   # oxlint's type-aware rules, on orval's TypeScript
 npm test --prefix web
 ```
+
+The root's `ci` job runs `npm run lint`, ESLint on `src/` and `web/src`, warnings as errors.
 
 A change to the contract rewrites its snapshot: `SNAPSHOT=overwrite cargo test -p hangar-api --test openapi`, and
 the diff is reviewed.

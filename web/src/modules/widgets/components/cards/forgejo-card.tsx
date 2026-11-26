@@ -1,5 +1,6 @@
 import { cn } from "cn";
 import type { ForgejoCi } from "#libs/api";
+import { useNow } from "#modules/common/hooks/use-now.ts";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
 import { Units } from "#modules/widgets/widget-format.ts";
 import {
@@ -16,16 +17,11 @@ import {
 type ForgejoCardProps = {
   ci: ForgejoCi;
   link: string | null;
-  /** For a test that pins the clock. */
-  now?: number;
 };
 
 /** What Forgejo Actions runs or has queued, and the repositories updated last. */
-export function ForgejoCard({
-  ci: { repositoryCount, activeRuns, recentRepositories },
-  link,
-  now = Date.now(),
-}: ForgejoCardProps) {
+export function ForgejoCard({ ci: { repositoryCount, activeRuns, recentRepositories }, link }: ForgejoCardProps) {
+  const now = useNow();
   const look = WidgetAppearance.get("forgejo-ci");
   const queued = activeRuns.filter(run => run.isQueued).length;
   const running = activeRuns.length - queued;
