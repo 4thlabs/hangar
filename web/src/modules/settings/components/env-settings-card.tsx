@@ -100,7 +100,9 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
 
   return (
     <>
-      <CardContent>
+      {/* Inert while the save runs: the form starts again from the file written, which would drop what is typed
+          meanwhile. */}
+      <CardContent inert={save.isPending}>
         <FieldGroup>
           {keys.map(key => (
             <Field key={key} orientation="horizontal">

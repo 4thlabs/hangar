@@ -38,12 +38,15 @@ function ConfigEditor({ source }: { source: string }) {
 
   const save = useConfigSave({
     mutation: {
-      onSuccess: () => {
+      onSuccess: async () => {
         setRefusal(null);
         ActionToast.success("Configuration saved", "The configuration was saved.");
-        // The file as written, and the apps it links, are read again.
-        void queryClient.invalidateQueries({ queryKey: getConfigReadQueryKey() });
-        void queryClient.invalidateQueries({ queryKey: getStoreAppsQueryKey() });
+        // The file as written, and the apps it links, are read again; the save stays pending until they are, so
+        // that the editor, which takes no typing meanwhile, opens on what was saved.
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: getConfigReadQueryKey() }),
+          queryClient.invalidateQueries({ queryKey: getStoreAppsQueryKey() }),
+        ]);
       },
       onError: failure => {
         setRefusal(ErrorMessage.describe(failure));
@@ -54,7 +57,10 @@ function ConfigEditor({ source }: { source: string }) {
 
   return (
     <>
-      <CardContent className="flex flex-col gap-3">{editor}</CardContent>
+      {/* Inert while the save runs: the editor opens again on the file saved, which would drop what is typed meanwhile. */}
+      <CardContent className="flex flex-col gap-3" inert={save.isPending}>
+        {editor}
+      </CardContent>
       <CardFooter>
         <PendingButton
           type="button"

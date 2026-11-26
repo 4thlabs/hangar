@@ -11,9 +11,9 @@ use quoll::Error;
 use regex::Regex;
 
 /// The credentials of a URL, `user:token@` after its scheme, as `git clone https://user:token@host/store.git`
-/// echoes them.
+/// echoes them: up to the last `@` before the path, as a password git echoes unescaped may hold one.
 static URL_CREDENTIALS: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/\s@]+@").expect("the pattern is valid")
+    Regex::new(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/\s]+@").expect("the pattern is valid")
 });
 
 /// A failure that the server logs whole, and answers with a code of its own.
@@ -105,6 +105,11 @@ mod tests {
         assert_eq!(
             Failure::redacted("ssh://git@example.com:22/store.git and https://example.com/a@b"),
             "ssh://***@example.com:22/store.git and https://example.com/a@b"
+        );
+        assert_eq!(
+            Failure::redacted("https://user:p@ss@example.com/x.git"),
+            "https://***@example.com/x.git",
+            "a password with an `@` goes whole"
         );
     }
 

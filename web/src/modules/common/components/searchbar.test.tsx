@@ -52,6 +52,25 @@ describe("the navbar's search", () => {
     await waitFor(() => expect(field().value).toBe(""));
   });
 
+  it("follows a ?q= from elsewhere that is one the field sent before", async () => {
+    serve({ "GET /api/store/apps": () => Response.json(listing) });
+
+    const router = renderAt("/store");
+
+    fireEvent.change(await screen.findByLabelText("Search", { selector: "input" }), { target: { value: "alpha" } });
+    await waitFor(() => expect(query(router)).toBe("alpha"));
+
+    await act(() => router.navigate({ to: "/store", search: { q: "beta" } }));
+    await waitFor(() => expect(field().value).toBe("beta"));
+    await act(() => router.navigate({ to: "/store", search: { q: "alpha" } }));
+    await waitFor(() => expect(field().value).toBe("alpha"));
+
+    // Longer than the field waits before it writes ?q=: it does not write beta back.
+    await act(() => new Promise(resolve => setTimeout(resolve, 500)));
+
+    expect(query(router)).toBe("alpha");
+  });
+
   it("is disabled on a page with no search", async () => {
     serve({ "GET /api/store": () => Response.json({ url: "u", installed: false, sync: null }) });
     renderAt("/settings");

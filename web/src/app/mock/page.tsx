@@ -10,8 +10,8 @@ import { AppProviders } from "#modules/common/components/app-providers.tsx";
 /** The signed-in user of the pages under test. */
 export const ana = { name: "Ana Lima", email: "ana@example.com" };
 
-/** The server's answer to a call, by `METHOD /path` with its query, given the call's body. */
-export type Answers = Record<string, (body: unknown) => Response>;
+/** The server's answer to a call, by `METHOD /path` with its query, given the call's body: now, or once it settles. */
+export type Answers = Record<string, (body: unknown) => Response | Promise<Response>>;
 
 /** A problem of `status`, as the server answers an error, with `detail`. */
 export function problem(status: number, detail: string): Response {

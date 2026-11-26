@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { DownloadIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
-import { getStoreAppsQueryKey, useStoreInstall, useStoreUninstall, type StoreApp } from "#libs/api";
+import { getEnvReadQueryKey, getStoreAppsQueryKey, useStoreInstall, useStoreUninstall, type StoreApp } from "#libs/api";
 import { ActionToast } from "#modules/common/action-toast.ts";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -33,11 +33,15 @@ export function StoreAppButton({ app }: StoreAppButtonProps) {
   // The list and its counts follow the change, whatever its outcome: another process may have made it meanwhile.
   const settled = () => queryClient.invalidateQueries({ queryKey: getStoreAppsQueryKey() });
 
+  // An install seeds .env.global with the variables the app references, even one that fails after the seed.
+  const installSettled = () =>
+    Promise.all([settled(), queryClient.invalidateQueries({ queryKey: getEnvReadQueryKey() })]);
+
   const install = useStoreInstall({
     mutation: {
       onSuccess: () => ActionToast.success("App installed", `${app.name} was installed.`),
       onError: error => ActionToast.failure("Installation failed", error),
-      onSettled: settled,
+      onSettled: installSettled,
     },
   });
 
