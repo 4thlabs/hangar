@@ -132,4 +132,7 @@ cargo test --workspace --all-features --locked
 cargo doc --workspace --all-features --no-deps --locked
 ```
 
-`cargo run -p hangar-cli -- <args>` runs the binary. Nothing of the workspace goes into the Docker image.
+`cargo run -p hangar-cli -- <args>` runs the binary. The Docker image builds it in its `cli` stage, on Alpine, and
+ships it at `/usr/local/bin/hangar`; nothing else of the workspace goes into the image. CI's `cli` job builds it static
+for the host, x86_64 and aarch64 musl, and a `v*` tag attaches it to its release. A build given `HANGAR_VERSION`, the
+tag, prints it for `--version`, its `v` left out; any other prints the workspace's version with `-dev`.

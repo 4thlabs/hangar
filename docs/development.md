@@ -31,9 +31,16 @@ is git-ignored.
 | `npm run db:studio`               | Opens Drizzle Studio on the database           |
 
 CI runs `typecheck`, `test` and `build` on every pull request and push to `main`, and its `rust` job checks
-the Cargo workspace (see the Rust section of [`AGENTS.md`](../AGENTS.md)). Each push to
+the Cargo workspace (see the Rust section of [`AGENTS.md`](../AGENTS.md)). Its `cli` job builds the static
+`hangar` binary for the host, and `image-cli` the Dockerfile's `cli` stage, which puts it in the image. Each push to
 `main` (a merged pull request) and each `v*` tag also builds the image for `amd64` and `arm64` and
 publishes it to `ghcr.io/4thlabs/hangar`: as `edge` for `main`, as the release tags for a `v*` tag.
+
+A release is cut with `gh release create vX.Y.Z --notes "…"`, which pushes the tag. The `v*` tag
+then attaches the binaries of the `cli` job to its release, with their checksums
+(`hangar-x86_64-unknown-linux-musl`, `hangar-aarch64-unknown-linux-musl`, and each one's `.sha256`).
+A tag pushed alone, with `git push`, gets a release without notes, which `gh release edit vX.Y.Z
+--notes "…"` fills in.
 
 ## Database
 
