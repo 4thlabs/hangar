@@ -4,5 +4,7 @@
 /node_modules
 # Written by TanStack Router from src/routes/, by `tsr generate` or the Vite plugin.
 /src/routeTree.gen.ts
+# Where it was until #207, which a checkout built before it keeps: drop this line after #181.
+/src/app/routeTree.gen.ts
 # The router generator's scratch files.
 /.tanstack

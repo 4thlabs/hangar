@@ -83,11 +83,22 @@ const helperPatterns = [
 ];
 
 /**
+ * The selector of an `import()` whose specifier `pattern` matches, a regex with its `/` escaped: a string, or a
+ * template with no expression in it, which is a string too. One with an expression is not known before it runs.
+ */
+function importOf(pattern) {
+  return [
+    `ImportExpression[source.value=/${pattern}/]`,
+    `ImportExpression[source.type="TemplateLiteral"][source.expressions.length=0][source.quasis.0.value.cooked=/${pattern}/]`,
+  ].join(", ");
+}
+
+/**
  * Rule 4 for `import()`, which `no-restricted-imports` does not read: no module's `api/`, `hooks/`, `components/` or
  * `ui/`.
  */
 const helperDynamicImport = {
-  selector: "ImportExpression[source.value=/^(#modules\\/[^\\/]+|\\.)\\/(api|hooks|components|ui)\\//]",
+  selector: importOf("^(#modules\\/[^\\/]+|\\.)\\/(api|hooks|components|ui)\\/"),
   message: "A module's helpers load nothing of api/, hooks/, components/ or ui/ (ADR 0002, decision 1).",
 };
 
@@ -99,7 +110,8 @@ const pageModules = readdirSync(new URL("web/src/modules/", import.meta.url), { 
 /**
  * #207, ADR 0002's decision 6: a module imports only `common`, `#libs/...`, its own files and packages; `common`, only
  * itself. The routes compose the modules, and nothing of `#routes/`, the wiring or another module is imported from
- * one. A test may take `#mock/`, the page's test double. `../` is refused, so that every import names its module.
+ * one. A test may take `#mock/`, the page's test double. A `..` segment is refused wherever it is (`../`, `./../`,
+ * `#modules/apps/../store/`), so that every import names its module.
  */
 function modulePatterns(module, { tests }) {
   const allowed = ["libs/", "modules/common/", `modules/${module}/`, ...(tests ? ["mock/"] : [])];
@@ -110,7 +122,7 @@ function modulePatterns(module, { tests }) {
       message: `A module imports only common and #libs: ${module} may not import another module, a route or the wiring (ADR 0002, decision 6). Compose them in a route.`,
     },
     {
-      regex: "^\\.\\./",
+      regex: "(^|/)\\.\\.(/|$)",
       message:
         "In a module, import with #modules/..., so that the rules see which module a file is in (ADR 0002, decision 6).",
     },
@@ -122,7 +134,7 @@ function moduleDynamicImport(module) {
   const allowed = ["libs", "modules\\/common", `modules\\/${module}`].map(prefix => `${prefix}\\/`).join("|");
 
   return {
-    selector: `ImportExpression[source.value=/^(#(?!${allowed})|\\.\\.\\/)/]`,
+    selector: importOf(`^#(?!${allowed})|(^|\\/)\\.\\.(\\/|$)`),
     message: `A module loads only common and #libs: ${module} may not load another module, a route or the wiring (ADR 0002, decision 6).`,
   };
 }
@@ -161,7 +173,14 @@ const moduleBlocks = pageModules.flatMap(module => [
 const looseModuleFile = {
   selector: "Program",
   message:
-    "A file directly under a module: put it in its components/, hooks/, api/ or helpers/; only messages.ts stays at its root (ADR 0002, decision 6).",
+    "A file directly under a module: put it in its components/, hooks/, api/ or helpers/; only messages.ts and its test stay at its root (ADR 0002, decision 6).",
+};
+
+/** #207: a file directly under `web/src/modules/` belongs to no module, so no module block would hold its imports. */
+const looseModulesFile = {
+  selector: "Program",
+  message:
+    "A file directly under modules/ is in no module: put it in the module it belongs to, or in common if two modules share it (ADR 0002, decision 6).",
 };
 
 export default [
@@ -199,7 +218,11 @@ export default [
   ...moduleBlocks,
   {
     files: ["web/src/modules/*/*.{ts,tsx}"],
-    ignores: ["web/src/modules/*/messages.ts"],
+    ignores: ["web/src/modules/*/messages.ts", "web/src/modules/*/messages.test.ts"],
     rules: { "no-restricted-syntax": ["error", staticOnlyClass, looseModuleFile] },
+  },
+  {
+    files: ["web/src/modules/*.{ts,tsx}"],
+    rules: { "no-restricted-syntax": ["error", staticOnlyClass, looseModulesFile] },
   },
 ];
