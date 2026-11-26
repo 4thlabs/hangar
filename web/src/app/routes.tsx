@@ -12,7 +12,7 @@ import { SettingsPage } from "#modules/settings/components/settings-page.tsx";
 import { EditAppPage } from "#modules/store/components/edit-app-page.tsx";
 import { NewAppPage } from "#modules/store/components/new-app-page.tsx";
 import { StorePage } from "#modules/store/components/store-page.tsx";
-import { StoreSearchParams } from "#modules/store/store-search.ts";
+import { validateStoreSearch } from "#modules/store/store-search.ts";
 import { DashboardPage } from "#modules/widgets/components/dashboard-page.tsx";
 
 /** What every route reads: the page's query client, and the session it keeps. */
@@ -70,7 +70,7 @@ const storeRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/store",
   component: StorePage,
-  validateSearch: StoreSearchParams.validate,
+  validateSearch: validateStoreSearch,
   staticData: { searchable: true },
 });
 

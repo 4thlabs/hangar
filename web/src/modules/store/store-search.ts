@@ -6,31 +6,33 @@ import { AppFilter } from "#libs/api";
  */
 export type StoreSearch = { q?: string | undefined; filter?: string | undefined };
 
-/** Reads and writes the search of `/store`. */
-export class StoreSearchParams {
-  /** Both filters, in the order the filter menu lists them. */
-  static readonly Filters: readonly AppFilter[] = [AppFilter.installed, AppFilter.available];
+// Reads and writes the search of `/store`.
 
-  /** What each filter is called in the menu. */
-  static readonly Labels: Readonly<Record<AppFilter, string>> = { installed: "Installed", available: "Not installed" };
+/** Both filters, in the order the filter menu lists them. */
+export const storeFilters: readonly AppFilter[] = [AppFilter.installed, AppFilter.available];
 
-  /** The search of a URL: a value of another type left out, and an unknown filter dropped, so that a hand-edited URL is no error. */
-  static validate(search: Record<string, unknown>): StoreSearch {
-    const q = typeof search.q === "string" && search.q !== "" ? search.q : undefined;
-    const filter = StoreSearchParams.write(StoreSearchParams.read(search.filter));
+/** What each filter is called in the menu. */
+export const storeFilterLabels: Readonly<Record<AppFilter, string>> = {
+  installed: "Installed",
+  available: "Not installed",
+};
 
-    return { ...(q === undefined ? {} : { q }), ...(filter === undefined ? {} : { filter }) };
-  }
+/** The search of a URL: a value of another type left out, and an unknown filter dropped, so that a hand-edited URL is no error. */
+export function validateStoreSearch(search: Record<string, unknown>): StoreSearch {
+  const q = typeof search.q === "string" && search.q !== "" ? search.q : undefined;
+  const filter = joinStoreFilters(parseStoreFilters(search.filter));
 
-  /** The filters `filter` ticks, in the menu's order; none for no filter. */
-  static read(filter: unknown): AppFilter[] {
-    const ticked = new Set(typeof filter === "string" ? filter.split(",") : []);
+  return { ...(q === undefined ? {} : { q }), ...(filter === undefined ? {} : { filter }) };
+}
 
-    return StoreSearchParams.Filters.filter(candidate => ticked.has(candidate));
-  }
+/** The filters `filter` ticks, in the menu's order; none for no filter. */
+export function parseStoreFilters(filter: unknown): AppFilter[] {
+  const ticked = new Set(typeof filter === "string" ? filter.split(",") : []);
 
-  /** The `filter` of `filters`, `undefined` for none. */
-  static write(filters: readonly AppFilter[]): string | undefined {
-    return filters.length > 0 ? filters.join(",") : undefined;
-  }
+  return storeFilters.filter(candidate => ticked.has(candidate));
+}
+
+/** The `filter` of `filters`, `undefined` for none. */
+export function joinStoreFilters(filters: readonly AppFilter[]): string | undefined {
+  return filters.length > 0 ? filters.join(",") : undefined;
 }

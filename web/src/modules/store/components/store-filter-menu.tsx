@@ -1,7 +1,7 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { AppCounts } from "#libs/api";
 import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
-import { StoreSearchParams } from "#modules/store/store-search.ts";
+import { joinStoreFilters, parseStoreFilters, storeFilterLabels, storeFilters } from "#modules/store/store-search.ts";
 
 type StoreFilterMenuProps = {
   /** How many apps are installed and how many are not, shown beside each checkbox. */
@@ -16,17 +16,17 @@ export function StoreFilterMenu({ counts }: StoreFilterMenuProps) {
   return (
     <CheckboxFilterMenu
       label="Installation"
-      options={StoreSearchParams.Filters.map(filter => ({
+      options={storeFilters.map(filter => ({
         value: filter,
-        label: StoreSearchParams.Labels[filter],
+        label: storeFilterLabels[filter],
         ...(counts ? { count: counts[filter] } : {}),
       }))}
-      selected={StoreSearchParams.read(search.filter)}
+      selected={parseStoreFilters(search.filter)}
       onChange={selected =>
         void navigate({
           search: previous => ({
             ...previous,
-            filter: StoreSearchParams.write(StoreSearchParams.read(selected.join(","))),
+            filter: joinStoreFilters(parseStoreFilters(selected.join(","))),
           }),
           replace: true,
         })
