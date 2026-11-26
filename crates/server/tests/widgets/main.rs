@@ -4,6 +4,7 @@
 mod arcane;
 mod backrest;
 mod beszel;
+mod finnhub;
 mod forgejo;
 mod frigate;
 mod github;

@@ -3974,6 +3974,90 @@
         ],
         "type": "object"
       },
+      "Stock": {
+        "description": "A stock, as Finnhub quotes it, in the currency it is quoted in.",
+        "properties": {
+          "changePercent": {
+            "description": "Its change since the previous close, in percent.",
+            "format": "double",
+            "type": "number"
+          },
+          "closes": {
+            "description": "Its daily closes over the last month, oldest first; none when Finnhub's plan gives none.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "currency": {
+            "description": "The ISO 4217 code of the currency it is quoted in; `None` when Finnhub has no profile of it.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "high": {
+            "description": "The day's high.",
+            "format": "double",
+            "type": "number"
+          },
+          "low": {
+            "description": "The day's low.",
+            "format": "double",
+            "type": "number"
+          },
+          "name": {
+            "description": "The company's name; `None` when Finnhub has no profile of it.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "open": {
+            "description": "The day's open.",
+            "format": "double",
+            "type": "number"
+          },
+          "price": {
+            "description": "Its last price.",
+            "format": "double",
+            "type": "number"
+          },
+          "symbol": {
+            "description": "Its symbol, as `hangar.yml` writes it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "name",
+          "currency",
+          "price",
+          "changePercent",
+          "high",
+          "low",
+          "open",
+          "closes"
+        ],
+        "type": "object"
+      },
+      "StockPrices": {
+        "description": "Stock quotes from Finnhub, in the order the widget lists them.",
+        "properties": {
+          "stocks": {
+            "description": "The stocks: a symbol Finnhub cannot quote is left out.",
+            "items": {
+              "$ref": "#/components/schemas/Stock"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "stocks"
+        ],
+        "type": "object"
+      },
       "StoreApp": {
         "description": "An app of the store, installed or not.",
         "properties": {
@@ -4504,6 +4588,23 @@
               },
               "type": {
                 "const": "github-releases",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "data"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`stock-prices`.",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/StockPrices"
+              },
+              "type": {
+                "const": "stock-prices",
                 "type": "string"
               }
             },

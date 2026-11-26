@@ -6,6 +6,7 @@ mod backrest;
 mod beszel;
 mod cache;
 mod error;
+mod finnhub;
 mod forgejo;
 mod frigate;
 mod github;
@@ -30,6 +31,7 @@ use crate::Settings;
 use crate::failure::Failure;
 use cache::{Kept, Policy};
 use error::LoadError;
+use finnhub::Finnhub;
 use github::Github;
 use placement::Placement;
 use service::Service;
@@ -45,6 +47,7 @@ pub(crate) struct WidgetsState {
     /// What each placement loaded, by its key.
     loads: Arc<Kept<WidgetData>>,
     github: Github,
+    finnhub: Finnhub,
 }
 
 impl WidgetsState {
@@ -90,6 +93,7 @@ impl WidgetsState {
             http,
             loads: Kept::new("widget"),
             github: Github::new(settings),
+            finnhub: Finnhub::new(settings),
         })
     }
 
@@ -160,6 +164,7 @@ impl WidgetsState {
             domain: self.domain.clone(),
             http: self.http.clone(),
             github: self.github.clone(),
+            finnhub: self.finnhub.clone(),
         }
     }
 
@@ -185,6 +190,7 @@ struct Loader {
     domain: String,
     http: ClientWithMiddleware,
     github: Github,
+    finnhub: Finnhub,
 }
 
 impl Loader {
@@ -259,6 +265,11 @@ impl Loader {
                 .latest_releases(&self.http, repositories)
                 .await
                 .map(WidgetData::GithubReleases),
+            WidgetKind::StockPrices { tickers, .. } => self
+                .finnhub
+                .stocks(&self.http, tickers)
+                .await
+                .map(WidgetData::StockPrices),
             other => Err(LoadError::refused(format!(
                 "the {} widget loads nothing",
                 other.name()
