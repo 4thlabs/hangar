@@ -1,5 +1,6 @@
 import { focusManager, QueryClientProvider, useSuspenseQuery } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, createQueryClient } from "#libs/api";
 import { Region } from "#modules/common/components/region.tsx";
@@ -16,6 +17,11 @@ function Read({ read }: { read: () => Promise<string> }) {
   return <p>{data}</p>;
 }
 
+/** The page's own client around `ui`, as every region of the page has one. */
+function withClient(ui: ReactNode) {
+  return <QueryClientProvider client={createQueryClient()}>{ui}</QueryClientProvider>;
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -25,14 +31,16 @@ describe("Region", () => {
   it("shows the failure of a part that throws as it renders, and its sibling stands", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     render(
-      <>
-        <Region failure="Could not show the card">
-          <Broken />
-        </Region>
-        <Region failure="Could not show the other">
-          <p>The other card</p>
-        </Region>
-      </>,
+      withClient(
+        <>
+          <Region failure="Could not show the card">
+            <Broken />
+          </Region>
+          <Region failure="Could not show the other">
+            <p>The other card</p>
+          </Region>
+        </>,
+      ),
     );
 
     expect(screen.getByText("Could not show the card")).toBeDefined();
@@ -82,17 +90,21 @@ describe("Region", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     const { rerender } = render(
-      <Region resetKey={1} failure="Could not show the card">
-        <Broken />
-      </Region>,
+      withClient(
+        <Region resetKey={1} failure="Could not show the card">
+          <Broken />
+        </Region>,
+      ),
     );
 
     expect(screen.getByText("Could not show the card")).toBeDefined();
 
     rerender(
-      <Region resetKey={2} failure="Could not show the card">
-        <p>Shown</p>
-      </Region>,
+      withClient(
+        <Region resetKey={2} failure="Could not show the card">
+          <p>Shown</p>
+        </Region>,
+      ),
     );
 
     expect(screen.getByText("Shown")).toBeDefined();

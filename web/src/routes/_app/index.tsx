@@ -122,7 +122,10 @@ function PlacedRegion({ placement }: { placement: WidgetPlacement }) {
   const look = widgetLook(placement.type);
 
   return (
-    <Region fallback={<WidgetSkeleton look={look} />} failure={() => <WidgetCardFailure look={look} />}>
+    <Region
+      fallback={<WidgetSkeleton look={look} />}
+      failure={({ retry }) => <WidgetCardFailure look={look} retry={retry} />}
+    >
       <PlacedWidget placement={placement} />
     </Region>
   );

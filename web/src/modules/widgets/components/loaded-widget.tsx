@@ -25,7 +25,7 @@ export function LoadedWidget<Type extends LoadingWidgetType>({ placement, type, 
   return (
     <Region
       fallback={<WidgetSkeleton look={look} />}
-      failure={({ error }) => <WidgetError look={look} reason={describeError(error)} />}
+      failure={({ error, retry }) => <WidgetError look={look} reason={describeError(error)} retry={retry} />}
     >
       <LoadedCard placementKey={placement.key} type={type} look={look}>
         {children}
@@ -48,7 +48,7 @@ function LoadedCard<Type extends LoadingWidgetType>({ placementKey, type, look, 
   }
 
   return (
-    <Region resetKey={dataUpdatedAt} failure={() => <WidgetCardFailure look={look} />}>
+    <Region resetKey={dataUpdatedAt} failure={({ retry }) => <WidgetCardFailure look={look} retry={retry} />}>
       {children(data)}
     </Region>
   );
