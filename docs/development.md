@@ -132,7 +132,21 @@ that compose still reaches its files. Its folder in the store and its volumes ar
 no longer reads, its folder gone or its `compose.yml` or `hangar.yml` broken, goes by its link: compose takes down what
 it can read of it, and the link is removed all the same. `/store` filters by installed or not on the server, which
 counts both, and narrows by the name the navbar's search field puts in `?q=`; an invalid `hangar.yml` is shown there
-with its field at fault. **New app** opens the template of a `compose.yml`; saving it comes with the app editor.
+with its field at fault.
+
+**Store → New app** opens the template of a `compose.yml`, and saves it under the id typed in once `docker compose
+config` accepts it: a file refused creates nothing, not even the app's folder. Each card's pencil opens the app's
+editor, `/store/<app>/edit`, on its `compose.yml`: its files in a tree, 5 folders deep and 500 files at most, with no
+hidden file, symlink, binary, or file over 1 MiB; a draft per file opened, and why a save was refused under the editor.
+A file is written once checked: `compose.yml` by `docker compose config`, and by `docker stack config` beside a
+`compose.swarm.yml` with content, `compose.swarm.yml` by `docker stack config` merged over it, with `.env.global` in its
+environment, a `.yml`, `.yaml` or `.env` file by a read of its syntax. The compose files are written beside, as
+`.compose.<pid>-<n>.pending.yml`, then renamed in place once checked; the others are rewritten in place, so that a
+container that bind-mounts one sees the change. A path is refused with a 400 when it leaves the app's folder: `..`, a
+segment that starts with a dot, an absolute path, a symlink that leads out of it or to nothing. compose's complaint is
+shown as it says it, the app's files by their paths in its folder: it is about the operator's own file, and the only way
+to say what to fix in it. A save, a new file or a new app takes its turn among the store's changes, and is refused with
+a 409 while a sync runs. Edits land in the clone, as a saved `hangar.yml` does.
 
 **Settings → Store** clones the store, or pulls it with `--ff-only` once cloned, apart from the request: the sync goes
 on once the page is closed, and `GET /api/store` gives its state, which the page reads again each second while it runs.

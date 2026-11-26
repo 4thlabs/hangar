@@ -144,8 +144,10 @@ builds text for the user alone: what it says to the page is a code and its param
   (`store.unknown_app`), its params (`{ app }`), its status and its English message, written in one place,
   `ErrorCode::message`. A handler returns `ErrorCode::UnknownApp { .. }.into()`, or `Failure::logged(code, &error)` for
   a failure of its own, which logs the cause whole and sends only the code's words. No `Error::new(status, format!(..))`
-  of words of its own, and never a command's output, where a URL's credentials or an environment value may be. A
-  notification is already a key and its params, rendered where it is read. Logs, and the messages the core's errors
+  of words of its own, and never a command's output, where a URL's credentials or an environment value may be. The
+  one exception is Docker's complaint about a compose file the editor saves (`editor.compose_rejected`): it is about
+  the operator's own file, and the only way to say what to fix in it, so it goes as a param, the app's files named by
+  their paths in its folder and a URL's credentials taken out. A notification is already a key and its params, rendered where it is read. Logs, and the messages the core's errors
   carry, stay English text.
 - **Wire.** A body that holds an error, as a store sync's, carries it whole, a `hangar_api::ErrorDetail`:
   `{ code, params, message }`. A problem cannot yet: quoll writes its status and detail alone, and the code and its
