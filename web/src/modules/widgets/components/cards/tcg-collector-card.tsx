@@ -1,32 +1,31 @@
 import type { TcgCollectorCards, TcgDailyPrices, TcgFollowedCard } from "#libs/api";
 import { Badge } from "#modules/common/ui/badge.tsx";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
-import { Units } from "#modules/widgets/widget-format.ts";
-import { WidgetImage } from "#modules/widgets/widget-image.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { formatCount } from "#modules/widgets/widget-format.ts";
+import { widgetImageUrl } from "#modules/widgets/widget-image.ts";
 import { WidgetSparkline } from "../widget-sparkline.tsx";
 import { WidgetCard, WidgetContent, WidgetHeader, WidgetList, WidgetListItem, WidgetMetadata } from "../widget.tsx";
 
-/** How the card writes prices and days. */
-class CardFormat {
-  private static readonly Euros = new Intl.NumberFormat("en", { style: "currency", currency: "EUR" });
+// How the card writes prices and days.
 
-  /** Days are calendar dates, written in UTC so that no time zone moves one to the day before. */
-  private static readonly Day = new Intl.DateTimeFormat("en", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+const eurosFormat = new Intl.NumberFormat("en", { style: "currency", currency: "EUR" });
 
-  /** A price in euros: an unknown one is a dash, never a zero. */
-  static price(price: number | null) {
-    return price === null ? "—" : CardFormat.Euros.format(price);
-  }
+/** Days are calendar dates, written in UTC so that no time zone moves one to the day before. */
+const dayFormat = new Intl.DateTimeFormat("en", {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
 
-  /** A `YYYY-MM-DD` day, as `Oct 11, 2026`. */
-  static day(day: string) {
-    return CardFormat.Day.format(new Date(`${day}T00:00:00Z`));
-  }
+/** A price in euros: an unknown one is a dash, never a zero. */
+function formatEuros(price: number | null) {
+  return price === null ? "—" : eurosFormat.format(price);
+}
+
+/** A `YYYY-MM-DD` day, as `Oct 11, 2026`. */
+function formatDay(day: string) {
+  return dayFormat.format(new Date(`${day}T00:00:00Z`));
 }
 
 /**
@@ -45,82 +44,77 @@ export type PriceSeries = {
   prices: (number | null)[];
 };
 
-/** A card's prices as its curve draws them. */
-export class PriceCurve {
-  private static readonly MillisecondsPerDay = 86_400_000;
+// A card's prices as its curve draws them.
 
-  /** The games tcg-collector collects, by Cardmarket's game id. */
-  private static readonly GameNames: ReadonlyMap<number, string> = new Map([
-    [1, "Magic"],
-    [21, "Star Wars Unlimited"],
-  ]);
+const millisecondsPerDay = 86_400_000;
 
-  /**
-   * The trend over the window, or the lowest offer for a card Cardmarket gives no trend: a curve of the cheapest copy
-   * beats none. A day outside the window is left out.
-   */
-  static series(history: readonly TcgDailyPrices[], { days, lastDay }: PriceWindow): PriceSeries {
-    const hasTrend = history.some(entry => entry.trend !== null);
-    const prices = Array.from<number | null>({ length: days }).fill(null);
-    const lastSlot = days - 1;
+/** The games tcg-collector collects, by Cardmarket's game id. */
+const gameNames: ReadonlyMap<number, string> = new Map([
+  [1, "Magic"],
+  [21, "Star Wars Unlimited"],
+]);
 
-    for (const entry of history) {
-      const slot = lastSlot - (PriceCurve.dayNumber(lastDay) - PriceCurve.dayNumber(entry.day));
+/**
+ * The trend over the window, or the lowest offer for a card Cardmarket gives no trend: a curve of the cheapest copy
+ * beats none. A day outside the window is left out.
+ */
+export function priceSeries(history: readonly TcgDailyPrices[], { days, lastDay }: PriceWindow): PriceSeries {
+  const hasTrend = history.some(entry => entry.trend !== null);
+  const prices = Array.from<number | null>({ length: days }).fill(null);
+  const lastSlot = days - 1;
 
-      if (slot >= 0 && slot <= lastSlot) {
-        prices[slot] = hasTrend ? entry.trend : entry.low;
-      }
+  for (const entry of history) {
+    const slot = lastSlot - (dayNumber(lastDay) - dayNumber(entry.day));
+
+    if (slot >= 0 && slot <= lastSlot) {
+      prices[slot] = hasTrend ? entry.trend : entry.low;
     }
-
-    return { label: hasTrend ? "Trend" : "Low", prices };
   }
 
-  /** What the curve shows, for a screen reader: `Trend over 30 days: from €1.20 to €1.45`. */
-  static describe({ label, prices }: PriceSeries) {
-    const known = prices.filter(price => price !== null);
-    const period = `${label} over ${Units.count(prices.length, "day", "days")}`;
+  return { label: hasTrend ? "Trend" : "Low", prices };
+}
 
-    if (known.length === 1) {
-      return `${period}: ${CardFormat.price(known[0]!)}`;
-    }
+/** What the curve shows, for a screen reader: `Trend over 30 days: from €1.20 to €1.45`. */
+export function describePriceSeries({ label, prices }: PriceSeries) {
+  const known = prices.filter(price => price !== null);
+  const period = `${label} over ${formatCount(prices.length, "day", "days")}`;
 
-    return `${period}: from ${CardFormat.price(known[0] ?? null)} to ${CardFormat.price(known.at(-1) ?? null)}`;
+  if (known.length === 1) {
+    return `${period}: ${formatEuros(known[0]!)}`;
   }
 
-  /** The latest day any card has a price for, `YYYY-MM-DD`; `undefined` when none has one. */
-  static latestDay(cards: readonly TcgFollowedCard[]) {
-    // ISO dates sort as text.
-    return cards
-      .flatMap(({ history }) => history.at(-1)?.day ?? [])
-      .sort()
-      .at(-1);
-  }
+  return `${period}: from ${formatEuros(known[0] ?? null)} to ${formatEuros(known.at(-1) ?? null)}`;
+}
 
-  /** A game's name, or its id for a game the card does not know by name. */
-  static gameName(game: number) {
-    return PriceCurve.GameNames.get(game) ?? `Game ${game}`;
-  }
+/** The latest day any card has a price for, `YYYY-MM-DD`; `undefined` when none has one. */
+export function latestPriceDay(cards: readonly TcgFollowedCard[]) {
+  // ISO dates sort as text.
+  return cards
+    .flatMap(({ history }) => history.at(-1)?.day ?? [])
+    .sort()
+    .at(-1);
+}
 
-  /** A `YYYY-MM-DD` day as a count of days, so that two days subtract to the days between them. */
-  private static dayNumber(day: string) {
-    return Date.parse(`${day}T00:00:00Z`) / PriceCurve.MillisecondsPerDay;
-  }
+/** A game's name, or its id for a game the card does not know by name. */
+export function gameName(game: number) {
+  return gameNames.get(game) ?? `Game ${game}`;
+}
+
+/** A `YYYY-MM-DD` day as a count of days, so that two days subtract to the days between them. */
+function dayNumber(day: string) {
+  return Date.parse(`${day}T00:00:00Z`) / millisecondsPerDay;
 }
 
 /**
  * The sheet of one card on tcg-collector's page, which opens it from its address. A link written with a final slash
  * would otherwise give `//?game=…`, which the page does not serve.
  */
-class CardPage {
-  static url(link: string, { game, product }: TcgFollowedCard) {
-    return `${link.replace(/\/+$/, "")}/?game=${game}&card=${product}`;
-  }
+function cardPageUrl(link: string, { game, product }: TcgFollowedCard) {
+  return `${link.replace(/\/+$/, "")}/?game=${game}&card=${product}`;
 }
 
 /** The frame of a card's image, kept with no image, so that every name starts on the same column. */
-class Thumbnail {
-  static readonly ClassName = "block aspect-5/7 w-10 shrink-0 overflow-hidden rounded-sm bg-muted";
-}
+const thumbnailClassName = "block aspect-5/7 w-10 shrink-0 overflow-hidden rounded-sm bg-muted";
 
 type CardRowProps = {
   followed: TcgFollowedCard;
@@ -136,17 +130,17 @@ function CardRow({ followed, priceWindow, link, placementKey }: CardRowProps) {
 
   if (!card) {
     return (
-      <WidgetListItem media={<span className={Thumbnail.ClassName} />}>
+      <WidgetListItem media={<span className={thumbnailClassName} />}>
         <p className="truncate font-medium text-muted-foreground">Card not found</p>
         <p className="truncate text-xs text-muted-foreground">
-          {PriceCurve.gameName(followed.game)} · product {followed.product}
+          {gameName(followed.game)} · product {followed.product}
         </p>
       </WidgetListItem>
     );
   }
 
-  const cardUrl = link ? CardPage.url(link, followed) : undefined;
-  const series = priceWindow && PriceCurve.series(followed.history, priceWindow);
+  const cardUrl = link ? cardPageUrl(link, followed) : undefined;
+  const series = priceWindow && priceSeries(followed.history, priceWindow);
 
   return (
     <WidgetListItem
@@ -158,17 +152,17 @@ function CardRow({ followed, priceWindow, link, placementKey }: CardRowProps) {
           rel="noreferrer"
           tabIndex={-1}
           aria-hidden="true"
-          className={Thumbnail.ClassName}
+          className={thumbnailClassName}
         >
           <img
-            src={WidgetImage.url(placementKey, followed.imageId)}
+            src={widgetImageUrl(placementKey, followed.imageId)}
             alt=""
             loading="lazy"
             className="size-full object-cover"
           />
         </a>
       }
-      trailing={series && <WidgetSparkline prices={series.prices} label={PriceCurve.describe(series)} />}
+      trailing={series && <WidgetSparkline prices={series.prices} label={describePriceSeries(series)} />}
     >
       <div className="flex min-w-0 items-center gap-1.5">
         <a
@@ -185,12 +179,12 @@ function CardRow({ followed, priceWindow, link, placementKey }: CardRowProps) {
       <p className="flex items-baseline gap-x-2 overflow-hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground">
         <span className="text-sm font-semibold text-primary">
           <span className="sr-only">Trend </span>
-          {CardFormat.price(card.trend)}
+          {formatEuros(card.trend)}
         </span>
         <WidgetMetadata>
-          <span>Low {CardFormat.price(card.low)}</span>
+          <span>Low {formatEuros(card.low)}</span>
           {/* Most cards have no foil printing: a dash there would read as a missing price. */}
-          {card.trendFoil !== null && <span>Foil {CardFormat.price(card.trendFoil)}</span>}
+          {card.trendFoil !== null && <span>Foil {formatEuros(card.trendFoil)}</span>}
         </WidgetMetadata>
       </p>
     </WidgetListItem>
@@ -206,8 +200,8 @@ type TcgCollectorCardProps = {
 
 /** The cards tcg-collector follows: their prices, and the curve of each over the widget's days. */
 export function TcgCollectorCard({ cards: { days, cards }, placementKey, link }: TcgCollectorCardProps) {
-  const look = WidgetAppearance.get("tcg-collector-cards");
-  const latestDay = PriceCurve.latestDay(cards);
+  const look = widgetLook("tcg-collector-cards");
+  const latestDay = latestPriceDay(cards);
   const priceWindow = latestDay === undefined ? undefined : { days, lastDay: latestDay };
 
   return (
@@ -218,9 +212,9 @@ export function TcgCollectorCard({ cards: { days, cards }, placementKey, link }:
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{Units.count(cards.length, "card", "cards")}</span>
-            <span>{Units.count(days, "day", "days")}</span>
-            {latestDay && <span>as of {CardFormat.day(latestDay)}</span>}
+            <span>{formatCount(cards.length, "card", "cards")}</span>
+            <span>{formatCount(days, "day", "days")}</span>
+            {latestDay && <span>as of {formatDay(latestDay)}</span>}
           </WidgetMetadata>
         }
       />

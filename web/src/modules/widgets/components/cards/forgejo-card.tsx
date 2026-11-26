@@ -1,8 +1,8 @@
 import { cn } from "cn";
 import type { ForgejoCi } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
-import { Units } from "#modules/widgets/widget-format.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { formatCount, formatInteger } from "#modules/widgets/widget-format.ts";
 import {
   WidgetCard,
   WidgetContent,
@@ -22,7 +22,7 @@ type ForgejoCardProps = {
 /** What Forgejo Actions runs or has queued, and the repositories updated last. */
 export function ForgejoCard({ ci: { repositoryCount, activeRuns, recentRepositories }, link }: ForgejoCardProps) {
   const now = useNow();
-  const look = WidgetAppearance.get("forgejo-ci");
+  const look = widgetLook("forgejo-ci");
   const queued = activeRuns.filter(run => run.isQueued).length;
   const running = activeRuns.length - queued;
 
@@ -34,9 +34,9 @@ export function ForgejoCard({ ci: { repositoryCount, activeRuns, recentRepositor
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{Units.count(repositoryCount, "repo", "repos")}</span>
-            {running > 0 && <span className="font-medium text-chart-4">{Units.integer(running)} running</span>}
-            {queued > 0 && <span>{Units.integer(queued)} queued</span>}
+            <span>{formatCount(repositoryCount, "repo", "repos")}</span>
+            {running > 0 && <span className="font-medium text-chart-4">{formatInteger(running)} running</span>}
+            {queued > 0 && <span>{formatInteger(queued)} queued</span>}
           </WidgetMetadata>
         }
       />

@@ -1,11 +1,11 @@
 import { cn } from "cn";
 import type { GluetunVpnStatus } from "#libs/api";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
 import { WidgetCard, WidgetContent, WidgetHeader } from "../widget.tsx";
 
 /** Whether gluetun's tunnel is up, and where it comes out. No link: gluetun has no web page. */
 export function GluetunCard({ status: { publicIp, city, country } }: { status: GluetunVpnStatus }) {
-  const look = WidgetAppearance.get("gluetun-vpn-status");
+  const look = widgetLook("gluetun-vpn-status");
   // gluetun answers without an address while the tunnel is down.
   const isConnected = publicIp.length > 0;
   const location = [city, country].filter(part => part.length > 0).join(", ");

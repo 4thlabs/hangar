@@ -4,7 +4,7 @@ import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
 import { compactRelativeTime, relativeTime } from "#libs/format";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import type { WidgetIcon } from "#modules/widgets/widget-appearance.ts";
-import { Units } from "#modules/widgets/widget-format.ts";
+import { formatInteger } from "#modules/widgets/widget-format.ts";
 import { WidgetIconImage } from "./widget-icon.tsx";
 
 export function WidgetCard({ className, ...props }: ComponentProps<typeof Card>) {
@@ -96,7 +96,7 @@ export function WidgetMetric({ className, detail, label, tone = "default", value
           tone === "destructive" && "text-destructive",
         )}
       >
-        {typeof value === "number" ? Units.integer(value) : value}
+        {typeof value === "number" ? formatInteger(value) : value}
       </dd>
       {detail && <dd className="truncate text-xs leading-tight text-muted-foreground">{detail}</dd>}
     </div>

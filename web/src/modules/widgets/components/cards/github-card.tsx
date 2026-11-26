@@ -1,12 +1,12 @@
 import type { GithubReleases } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
 import { WidgetCard, WidgetContent, WidgetHeader, WidgetList, WidgetListItem, WidgetTime } from "../widget.tsx";
 
 /** The latest release of each repository, newest first. */
 export function GithubCard({ releases: { releases } }: { releases: GithubReleases }) {
   const now = useNow();
-  const look = WidgetAppearance.get("github-releases");
+  const look = widgetLook("github-releases");
 
   return (
     <WidgetCard className={look.className}>

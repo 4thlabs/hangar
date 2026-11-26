@@ -1,5 +1,5 @@
 import type { ContainerCounts, ImageCounts, VolumeCounts } from "#libs/api";
-import { Units } from "#modules/widgets/widget-format.ts";
+import { formatInteger, formatSize } from "#modules/widgets/widget-format.ts";
 import { WidgetMetric, WidgetMetricGrid } from "../widget.tsx";
 
 type HostMetricsProps = {
@@ -21,12 +21,12 @@ export function HostMetrics({ containers, images, volumes }: HostMetricsProps) {
       <WidgetMetric
         label="Images"
         value={images.total}
-        detail={`${Units.integer(images.unused)} unused · ${Units.bytes(images.size)}`}
+        detail={`${formatInteger(images.unused)} unused · ${formatSize(images.size)}`}
       />
       <WidgetMetric
         label="Volumes"
         value={volumes.total}
-        detail={`${Units.integer(volumes.inUse)} in use · ${Units.integer(volumes.unused)} unused`}
+        detail={`${formatInteger(volumes.inUse)} in use · ${formatInteger(volumes.unused)} unused`}
       />
     </WidgetMetricGrid>
   );

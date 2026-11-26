@@ -1,58 +1,57 @@
 import type { Stock, StockPrices } from "#libs/api";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
-import { Units } from "#modules/widgets/widget-format.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { formatCount, formatInteger } from "#modules/widgets/widget-format.ts";
 import { WidgetSparkline } from "../widget-sparkline.tsx";
 import { WidgetCard, WidgetContent, WidgetHeader, WidgetMetadata, WidgetMetric, WidgetMetricGrid } from "../widget.tsx";
 
-/** How the card writes prices and their changes. */
-export class StockFormat {
-  /** Two decimals, as quotes are written. */
-  private static readonly Decimals = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+// How the card writes prices and their changes.
 
-  private static readonly Amount = new Intl.NumberFormat("en", StockFormat.Decimals);
+/** Two decimals, as quotes are written. */
+const twoDecimals = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
 
-  private static readonly Change = new Intl.NumberFormat("en", {
-    style: "percent",
-    signDisplay: "exceptZero",
-    ...StockFormat.Decimals,
-  });
+const amountFormat = new Intl.NumberFormat("en", twoDecimals);
 
-  /** A price in the currency the stock is quoted in: Finnhub converts nothing, so neither does the card. */
-  static price(price: number, currency: string | null) {
-    if (currency === null || !StockFormat.isCurrency(currency)) {
-      return StockFormat.amount(price);
-    }
+const changeFormat = new Intl.NumberFormat("en", {
+  style: "percent",
+  signDisplay: "exceptZero",
+  ...twoDecimals,
+});
 
-    return new Intl.NumberFormat("en", { style: "currency", currency, ...StockFormat.Decimals }).format(price);
+/** A price in the currency the stock is quoted in: Finnhub converts nothing, so neither does the card. */
+export function formatPrice(price: number, currency: string | null) {
+  if (currency === null || !isCurrencyCode(currency)) {
+    return formatAmount(price);
   }
 
-  /** Whether `currency` is a code `Intl` formats, which throws for any other. */
-  private static isCurrency(currency: string) {
-    return /^[A-Za-z]{3}$/.test(currency);
+  return new Intl.NumberFormat("en", { style: "currency", currency, ...twoDecimals }).format(price);
+}
+
+/** Whether `currency` is a code `Intl` formats, which throws for any other. */
+function isCurrencyCode(currency: string) {
+  return /^[A-Za-z]{3}$/.test(currency);
+}
+
+/** A bare number, for a stock whose currency Finnhub does not say, and for the day's high, low and open. */
+export function formatAmount(amount: number) {
+  return amountFormat.format(amount);
+}
+
+/** A change in percent, as Finnhub gives it: `1.5` is `+1.50%`, its sign written so that a fall reads at a glance. */
+export function formatChange(changePercent: number) {
+  return changeFormat.format(changePercent / 100);
+}
+
+/** The color of a change: green up, red down, muted when flat. */
+export function changeClassName(changePercent: number) {
+  if (changePercent > 0) {
+    return "text-emerald-500";
   }
 
-  /** A bare number, for a stock whose currency Finnhub does not say, and for the day's high, low and open. */
-  static amount(amount: number) {
-    return StockFormat.Amount.format(amount);
+  if (changePercent < 0) {
+    return "text-red-500";
   }
 
-  /** A change in percent, as Finnhub gives it: `1.5` is `+1.50%`, its sign written so that a fall reads at a glance. */
-  static change(changePercent: number) {
-    return StockFormat.Change.format(changePercent / 100);
-  }
-
-  /** The color of a change: green up, red down, muted when flat. */
-  static changeClassName(changePercent: number) {
-    if (changePercent > 0) {
-      return "text-emerald-500";
-    }
-
-    if (changePercent < 0) {
-      return "text-red-500";
-    }
-
-    return "text-muted-foreground";
-  }
+  return "text-muted-foreground";
 }
 
 /** The stock's closes over the last month. Nothing when Finnhub's plan gives none. */
@@ -64,8 +63,8 @@ function ClosesSparkline({ stock }: { stock: Stock }) {
     return null;
   }
 
-  const from = StockFormat.price(first, stock.currency);
-  const to = StockFormat.price(last, stock.currency);
+  const from = formatPrice(first, stock.currency);
+  const to = formatPrice(last, stock.currency);
 
   return <WidgetSparkline prices={stock.closes} label={`Closes over the last month: from ${from} to ${to}`} />;
 }
@@ -83,17 +82,17 @@ function StockTile({ stock }: { stock: Stock }) {
       </div>
       <div className="flex items-baseline gap-2">
         <span className="text-xl font-semibold tabular-nums text-primary">
-          {StockFormat.price(stock.price, stock.currency)}
+          {formatPrice(stock.price, stock.currency)}
         </span>
-        <span className={`tabular-nums ${StockFormat.changeClassName(stock.changePercent)}`}>
-          {StockFormat.change(stock.changePercent)}
+        <span className={`tabular-nums ${changeClassName(stock.changePercent)}`}>
+          {formatChange(stock.changePercent)}
         </span>
       </div>
       <p className="text-xs text-muted-foreground">
         <WidgetMetadata>
-          <span>H {StockFormat.amount(stock.high)}</span>
-          <span>L {StockFormat.amount(stock.low)}</span>
-          <span>O {StockFormat.amount(stock.open)}</span>
+          <span>H {formatAmount(stock.high)}</span>
+          <span>L {formatAmount(stock.low)}</span>
+          <span>O {formatAmount(stock.open)}</span>
         </WidgetMetadata>
       </p>
     </div>
@@ -119,24 +118,24 @@ function StockMetrics({ stocks }: { stocks: Stock[] }) {
     <WidgetMetricGrid>
       <WidgetMetric
         label="Best"
-        value={StockFormat.change(best.changePercent)}
+        value={formatChange(best.changePercent)}
         detail={best.symbol}
         tone={best.changePercent < 0 ? "destructive" : "default"}
       />
       <WidgetMetric
         label="Worst"
-        value={StockFormat.change(worst.changePercent)}
+        value={formatChange(worst.changePercent)}
         detail={worst.symbol}
         tone={worst.changePercent < 0 ? "destructive" : "default"}
       />
-      <WidgetMetric label="Rising" value={rising} detail={`of ${Units.integer(stocks.length)}`} />
+      <WidgetMetric label="Rising" value={rising} detail={`of ${formatInteger(stocks.length)}`} />
     </WidgetMetricGrid>
   );
 }
 
 /** The quote of each stock, in the order `hangar.yml` lists them. */
 export function StockCard({ prices: { stocks } }: { prices: StockPrices }) {
-  const look = WidgetAppearance.get("stock-prices");
+  const look = widgetLook("stock-prices");
 
   return (
     <WidgetCard className={look.className}>
@@ -145,7 +144,7 @@ export function StockCard({ prices: { stocks } }: { prices: StockPrices }) {
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{Units.count(stocks.length, "ticker", "tickers")}</span>
+            <span>{formatCount(stocks.length, "ticker", "tickers")}</span>
           </WidgetMetadata>
         }
       />

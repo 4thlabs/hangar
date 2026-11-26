@@ -1,22 +1,20 @@
 import type { ArcaneGeneralStats, ArcaneVersion } from "#libs/api";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
-import { Units } from "#modules/widgets/widget-format.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { formatCount, formatInteger } from "#modules/widgets/widget-format.ts";
 import { WidgetCard, WidgetContent, WidgetFooter, WidgetHeader, WidgetMetadata } from "../widget.tsx";
 import { HostMetrics } from "./host-metrics.tsx";
 
 /** The color of an item that needs attention, by how pressing it is. */
-class Severity {
-  static className(severity: string) {
-    if (severity === "critical") {
-      return "text-destructive";
-    }
-
-    if (severity === "warning") {
-      return "text-chart-4";
-    }
-
-    return "text-muted-foreground";
+function severityClassName(severity: string) {
+  if (severity === "critical") {
+    return "text-destructive";
   }
+
+  if (severity === "warning") {
+    return "text-chart-4";
+  }
+
+  return "text-muted-foreground";
 }
 
 /** Arcane's version, and the newest when it is out, linked to its release when Arcane gives one. */
@@ -50,7 +48,7 @@ type ArcaneCardProps = {
 
 /** The Docker host as Arcane reports it, and what it says needs attention. */
 export function ArcaneCard({ stats: { version, containers, images, volumes, actionItems }, link }: ArcaneCardProps) {
-  const look = WidgetAppearance.get("arcane-general-stats");
+  const look = widgetLook("arcane-general-stats");
 
   return (
     <WidgetCard className={look.className}>
@@ -61,7 +59,7 @@ export function ArcaneCard({ stats: { version, containers, images, volumes, acti
         description={
           <WidgetMetadata>
             <VersionLabel version={version} />
-            <span>{Units.count(containers.total, "container", "containers")}</span>
+            <span>{formatCount(containers.total, "container", "containers")}</span>
           </WidgetMetadata>
         }
       />
@@ -74,8 +72,8 @@ export function ArcaneCard({ stats: { version, containers, images, volumes, acti
         <WidgetFooter title="Needs attention">
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             {actionItems.map(action => (
-              <li key={`${action.kind}-${action.severity}`} className={Severity.className(action.severity)}>
-                <span className="font-semibold tabular-nums">{Units.integer(action.count)}</span>{" "}
+              <li key={`${action.kind}-${action.severity}`} className={severityClassName(action.severity)}>
+                <span className="font-semibold tabular-nums">{formatInteger(action.count)}</span>{" "}
                 {action.kind.replaceAll("_", " ")}
               </li>
             ))}

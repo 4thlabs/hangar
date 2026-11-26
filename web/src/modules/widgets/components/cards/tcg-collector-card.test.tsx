@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { TcgCard, TcgDailyPrices, TcgFollowedCard } from "#libs/api";
-import { PriceCurve, TcgCollectorCard } from "./tcg-collector-card.tsx";
+import { describePriceSeries, latestPriceDay, priceSeries, TcgCollectorCard } from "./tcg-collector-card.tsx";
 
 const aCard = (overrides: Partial<TcgCard> = {}): TcgCard => ({
   name: "Sol Ring",
@@ -31,42 +31,42 @@ const solRing: TcgFollowedCard = { game: 1, product: 910771, imageId: "1-910771"
 const render = (cards: TcgFollowedCard[], days = 30, link = "https://cards.test.local") =>
   renderToStaticMarkup(<TcgCollectorCard cards={{ days, cards }} placementKey="tcg-collector-cards-k1" link={link} />);
 
-describe("PriceCurve", () => {
+describe("the price curve", () => {
   it("places each day by its date in the window, so that a short history fills only its last days", () => {
-    const series = PriceCurve.series(history, { days: 5, lastDay: "2026-10-11" });
+    const series = priceSeries(history, { days: 5, lastDay: "2026-10-11" });
 
     expect(series).toEqual({ label: "Trend", prices: [null, null, 1.2, 1.3, 1.45] });
   });
 
   it("leaves the days after a card's last price empty when another card has more recent ones", () => {
-    expect(PriceCurve.series(history, { days: 5, lastDay: "2026-10-13" }).prices).toEqual([1.2, 1.3, 1.45, null, null]);
+    expect(priceSeries(history, { days: 5, lastDay: "2026-10-13" }).prices).toEqual([1.2, 1.3, 1.45, null, null]);
   });
 
   it("drops the days before the window", () => {
-    expect(PriceCurve.series(history, { days: 2, lastDay: "2026-10-11" }).prices).toEqual([1.3, 1.45]);
+    expect(priceSeries(history, { days: 2, lastDay: "2026-10-11" }).prices).toEqual([1.3, 1.45]);
   });
 
   it("falls back to the lowest offer for a card Cardmarket gives no trend", () => {
-    const series = PriceCurve.series(
-      [aDay("2026-10-10", { trend: null, low: 3 }), aDay("2026-10-11", { trend: null })],
-      { days: 2, lastDay: "2026-10-11" },
-    );
+    const series = priceSeries([aDay("2026-10-10", { trend: null, low: 3 }), aDay("2026-10-11", { trend: null })], {
+      days: 2,
+      lastDay: "2026-10-11",
+    });
 
     expect(series).toEqual({ label: "Low", prices: [3, 0.9] });
   });
 
   it("reads the curve out over the whole window, from the first known price to the last", () => {
-    const series = PriceCurve.series(history, { days: 30, lastDay: "2026-10-11" });
+    const series = priceSeries(history, { days: 30, lastDay: "2026-10-11" });
 
-    expect(PriceCurve.describe(series)).toBe("Trend over 30 days: from €1.20 to €1.45");
-    expect(PriceCurve.describe({ label: "Trend", prices: [2] })).toBe("Trend over 1 day: €2.00");
+    expect(describePriceSeries(series)).toBe("Trend over 30 days: from €1.20 to €1.45");
+    expect(describePriceSeries({ label: "Trend", prices: [2] })).toBe("Trend over 1 day: €2.00");
   });
 
   it("finds the most recent priced day across the cards, and none when no card has one", () => {
     const older = { ...solRing, history: [aDay("2026-10-02")] };
 
-    expect(PriceCurve.latestDay([older, solRing])).toBe("2026-10-11");
-    expect(PriceCurve.latestDay([{ ...solRing, history: [] }])).toBeUndefined();
+    expect(latestPriceDay([older, solRing])).toBe("2026-10-11");
+    expect(latestPriceDay([{ ...solRing, history: [] }])).toBeUndefined();
   });
 });
 

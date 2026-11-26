@@ -1,8 +1,8 @@
 import { cn } from "cn";
 import type { MinifluxEntries } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
-import { Units } from "#modules/widgets/widget-format.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { formatInteger } from "#modules/widgets/widget-format.ts";
 import {
   WidgetCard,
   WidgetContent,
@@ -21,7 +21,7 @@ type MinifluxCardProps = {
 /** Miniflux's newest entries, each marked when not read yet, and how many are unread. */
 export function MinifluxCard({ entries: { unread, entries }, link }: MinifluxCardProps) {
   const now = useNow();
-  const look = WidgetAppearance.get("miniflux-entries");
+  const look = widgetLook("miniflux-entries");
 
   return (
     <WidgetCard className={look.className}>
@@ -32,7 +32,7 @@ export function MinifluxCard({ entries: { unread, entries }, link }: MinifluxCar
         bordered={entries.length > 0}
         description={
           <WidgetMetadata>
-            <span>{Units.integer(unread)} unread</span>
+            <span>{formatInteger(unread)} unread</span>
           </WidgetMetadata>
         }
       />

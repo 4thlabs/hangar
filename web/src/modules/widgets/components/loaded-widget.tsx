@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { WidgetPlacement } from "#libs/api";
 import { describeError } from "#modules/common/error-message.ts";
 import { useWidgetData, type LoadingWidgetType, type WidgetDataOf } from "#modules/widgets/hooks/use-widget-data.ts";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
 import { WidgetBoundary } from "./widget-boundary.tsx";
 import { WidgetError, WidgetSkeleton } from "./widget-states.tsx";
 
@@ -20,7 +20,7 @@ type LoadedWidgetProps<Type extends LoadingWidgetType> = {
  * last answer of a service for 15 minutes, and says when it is too old.
  */
 export function LoadedWidget<Type extends LoadingWidgetType>({ placement, type, children }: LoadedWidgetProps<Type>) {
-  const look = WidgetAppearance.get(type);
+  const look = widgetLook(type);
   const { data, error, dataUpdatedAt } = useWidgetData(placement.key, type);
 
   if (data !== undefined) {
