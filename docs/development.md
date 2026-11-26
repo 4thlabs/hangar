@@ -123,6 +123,28 @@ one discovery at a time and 10 s at most, and discovered anew when they refuse a
 provider rotated its keys, unless they are less than 30 s old. Under `cargo quoll dev`, the callback goes through Vite
 too: `http://localhost:5173/api/auth/oidc/callback`.
 
+### The store
+
+The store's routes run on the core's `Store`, as the Waku version's actions do on `HangarStore`. **Store → Install**
+links an app into `app-installed/` and seeds the variables its files reference; **Uninstall** runs `docker compose
+down` first, and removes the link once compose has taken the app down: an app compose does not take down stays
+installed, so that compose still reaches its files. Its folder in the store and its volumes are kept. `/store`
+filters by installed or not on the server, which counts both, and narrows by the name the navbar's search field puts
+in `?q=`.
+**New app** opens the template of a `compose.yml`; saving it comes with the app editor.
+
+**Settings → Store** clones the store, or pulls it with `--ff-only` once cloned, apart from the request: the sync goes
+on once the page is closed, and `GET /api/store` gives its state, which the page reads again each second while it
+runs. One sync runs at a time: a second request gets the one running. Its end is notified (`storeInstalled`,
+`storeUpdated`, `storeInstallFailed`, `storeUpdateFailed`); until the notifications are kept, the server logs them.
+The page shows why a sync failed in the store's words, never git's output, which the log holds.
+
+**Settings → Configuration** saves `hangar.yml` once it is valid, and links the apps and shared files it lists; an
+invalid file is refused with the field at fault, and not written. **Settings → Environment** saves `.env.global`
+merged into the file as it is on disk, after its copy aside, `.env.global.<time>.bak`: a variable added by hand
+meanwhile is kept, and only the ones removed on the page are lost. Its values are hidden until shown, as most are
+secrets, and its answer is never cached (`Cache-Control: no-store`).
+
 ## Database
 
 Hangar keeps its own state in SQLite, through Drizzle: the Better Auth tables
