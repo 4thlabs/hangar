@@ -4,7 +4,7 @@ import { ConfigSettingsCard } from "#modules/settings/components/config-settings
 import { EnvSettingsCard } from "#modules/settings/components/env-settings-card.tsx";
 import { JobsSettingsCard } from "#modules/settings/components/jobs-settings-card.tsx";
 import { StoreSettingsCard } from "#modules/settings/components/store-settings-card.tsx";
-import { parseSettingsTab, settingsTabs, type SettingsTabId } from "#modules/settings/settings-tab.ts";
+import { parseSettingsTab, settingsTabs, type SettingsTabId } from "#modules/settings/helpers/settings-tab.ts";
 
 /**
  * `/settings`: the store, `.env.global`, `hangar.yml` and the server's jobs, a tab each, the URL's hash saying which one

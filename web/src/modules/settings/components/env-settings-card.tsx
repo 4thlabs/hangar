@@ -9,7 +9,7 @@ import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
-import { envChanges } from "#modules/settings/env-changes.ts";
+import { envChanges } from "#modules/settings/helpers/env-changes.ts";
 
 /** A secret for a variable, of the shape of `openssl rand -hex 32`. */
 function randomSecret(): string {
