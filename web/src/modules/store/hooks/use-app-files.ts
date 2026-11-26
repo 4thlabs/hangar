@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { getEditorReadQueryOptions, useEditorCreate, useEditorWrite, type AppFile, type SavedFile } from "#libs/api";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 
 export type AppFilesOptions = {
   id: string;

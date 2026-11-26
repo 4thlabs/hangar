@@ -1,6 +1,6 @@
 import { CircleAlertIcon } from "lucide-react";
 import { useWidgetsPlacements, type WidgetPlacement } from "#libs/api";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
 import { widgetLook } from "#modules/widgets/widget-appearance.ts";

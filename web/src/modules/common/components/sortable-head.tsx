@@ -1,5 +1,5 @@
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
-import { sortDirection, type SortState } from "#modules/common/table-sort.ts";
+import { sortDirection, type SortState } from "#modules/common/helpers/table-sort.ts";
 import { TableHead } from "#modules/common/ui/table.tsx";
 
 type SortableHeadProps<Column extends string> = {

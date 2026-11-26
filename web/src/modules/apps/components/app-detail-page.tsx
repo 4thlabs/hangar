@@ -12,7 +12,7 @@ import { projectStatusLabels, statusBadgeVariant } from "#modules/apps/helpers/p
 import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";

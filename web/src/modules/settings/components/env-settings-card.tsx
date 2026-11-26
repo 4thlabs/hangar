@@ -4,7 +4,7 @@ import { useState } from "react";
 import { getEnvReadQueryKey, useEnvRead, useEnvSave } from "#libs/api";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";

@@ -1,5 +1,5 @@
 import { ProjectStatus } from "#libs/api";
-import { parseSort, serializeSort, type SortState } from "#modules/common/table-sort.ts";
+import { parseSort, serializeSort, type SortState } from "#modules/common/helpers/table-sort.ts";
 
 /** The sortable columns of the apps' table. */
 export type AppSortColumn = "name" | "category" | "status" | "services" | "containers" | "unhealthy";

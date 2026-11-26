@@ -3,7 +3,7 @@ import { composeCommandLine, composeLabel, composeSubject } from "#modules/apps/
 import type { AppRun, AppRunStatus } from "#modules/apps/helpers/compose-output.ts";
 import type { ComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import type { ComposeStreamStatus } from "#modules/apps/hooks/use-compose-stream.ts";
-import { describeErrorDetail } from "#modules/common/error-message.ts";
+import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "#modules/common/ui/sheet.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";

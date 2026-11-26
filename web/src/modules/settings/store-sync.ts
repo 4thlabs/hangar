@@ -1,5 +1,5 @@
 import type { StoreSync } from "#libs/api";
-import { describeErrorDetail } from "#modules/common/error-message.ts";
+import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
 
 // What the store's card says of its last sync.
 

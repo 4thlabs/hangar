@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { RotateCcwIcon, XIcon } from "lucide-react";
 import { getJobsListQueryKey, useJobsCancel, useJobsList, useJobsRun, type JobRun } from "#libs/api";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";

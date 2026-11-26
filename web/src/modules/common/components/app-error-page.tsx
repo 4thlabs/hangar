@@ -1,6 +1,6 @@
 import { useRouteContext, useRouter, type ErrorComponentProps } from "@tanstack/react-router";
 import { AppFrame } from "#modules/common/components/app-layout.tsx";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 
 /**

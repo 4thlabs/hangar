@@ -14,7 +14,7 @@ import {
   emptyComposeOutput,
   type ComposeOutputState,
 } from "#modules/apps/helpers/compose-output.ts";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 
 /** What the panel says of a stream that ended before its `end`. */
 const cutShortMessage = "The output was cut short: the command goes on on the server.";

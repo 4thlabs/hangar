@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { getEditorFilesQueryKey, getStoreAppsQueryKey, useEditorFiles, useEditorRead, type SavedFile } from "#libs/api";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { AppEditor } from "#modules/store/components/app-editor.tsx";
 import { composeFileName } from "#modules/store/compose-file.ts";

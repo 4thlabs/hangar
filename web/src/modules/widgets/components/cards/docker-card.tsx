@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useDockerOverview, useDockerProjects } from "#libs/api";
 import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
-import { describeError } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 import { widgetLook } from "#modules/widgets/widget-appearance.ts";
 import { formatCount } from "#modules/widgets/widget-format.ts";
 import { WidgetError, WidgetSkeleton } from "../widget-states.tsx";

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useComposeBatches, type ComposeAction, type ComposeBatch } from "#libs/api";
 import { needsConfirmation, type UpFlag } from "#modules/apps/helpers/compose-actions.ts";
 import { useComposeStream } from "#modules/apps/hooks/use-compose-stream.ts";
-import { toggledSet } from "#modules/common/toggled-set.ts";
+import { toggledSet } from "#modules/common/helpers/toggled-set.ts";
 
 /** The batch the output panel shows: its command and its apps. */
 export type ShownBatch = { action: ComposeAction; apps: readonly string[] };

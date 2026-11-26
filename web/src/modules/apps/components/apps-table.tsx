@@ -4,7 +4,7 @@ import type { AppSortColumn, AppsSort } from "#modules/apps/helpers/apps-search.
 import { categoryBadgeClasses } from "#modules/apps/helpers/category-badge.ts";
 import { projectStatusLabels, statusBadgeVariant } from "#modules/apps/helpers/project-status.ts";
 import { SortableHead } from "#modules/common/components/sortable-head.tsx";
-import { toggledSet } from "#modules/common/toggled-set.ts";
+import { toggledSet } from "#modules/common/helpers/toggled-set.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
 

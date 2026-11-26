@@ -1,8 +1,8 @@
 import { Link, useSearch } from "@tanstack/react-router";
 import { PlusIcon } from "lucide-react";
 import { useStoreApps } from "#libs/api";
-import { describeError } from "#modules/common/error-message.ts";
-import { searchByName } from "#modules/common/search-by-name.ts";
+import { describeError } from "#modules/common/helpers/error-message.ts";
+import { searchByName } from "#modules/common/helpers/search-by-name.ts";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { StoreAppCard } from "#modules/store/components/store-app-card.tsx";
 import { StoreFilterMenu } from "#modules/store/components/store-filter-menu.tsx";
