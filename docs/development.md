@@ -118,8 +118,10 @@ at most.
 For the identity provider, register a confidential client whose redirect URL is the callback,
 `<HANGAR_URL>/api/auth/oidc/callback`, and give the server its issuer, as the provider writes it in its discovery
 document, its client id and its secret. The sign-in asks for the scopes `openid`, `email` and `profile`, with PKCE,
-and checks the ID token against the provider's keys. Under `cargo quoll dev`, the callback goes through Vite too:
-`http://localhost:5173/api/auth/oidc/callback`.
+and checks the ID token against the provider's keys. The provider's discovery document and keys are kept five minutes,
+one discovery at a time and 10 s at most, and discovered anew when they refuse an ID token's signature, as after the
+provider rotated its keys, unless they are less than 30 s old. Under `cargo quoll dev`, the callback goes through Vite
+too: `http://localhost:5173/api/auth/oidc/callback`.
 
 ## Database
 

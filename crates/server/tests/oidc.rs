@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use axum::extract::{Form, State};
@@ -56,12 +57,14 @@ struct Issued {
     redirect_uri: String,
 }
 
-/// The fake provider: its issuer, its key, and the codes it handed out.
+/// The fake provider: its issuer, its key, the codes it handed out, and how many times it was discovered.
 #[derive(Clone)]
 struct Provider {
     issuer: String,
-    key: Arc<CoreEdDsaPrivateSigningKey>,
+    key: Arc<Mutex<Arc<CoreEdDsaPrivateSigningKey>>>,
     codes: Arc<Mutex<HashMap<String, Issued>>>,
+    discoveries: Arc<AtomicUsize>,
+    expired_tokens: Arc<AtomicBool>,
 }
 
 /// The form of a token request.
@@ -80,18 +83,12 @@ impl Provider {
             .await
             .expect("bound");
         let issuer = format!("http://{}", listener.local_addr().expect("an address"));
-        let pem = SigningKey::from_bytes(&[7; 32])
-            .to_pkcs8_pem(LineEnding::LF)
-            .expect("a PEM");
-        let key = CoreEdDsaPrivateSigningKey::from_ed25519_pem(
-            &pem,
-            Some(JsonWebKeyId::new("test".to_owned())),
-        )
-        .expect("an Ed25519 key");
         let provider = Self {
             issuer,
-            key: Arc::new(key),
+            key: Arc::new(Mutex::new(Self::key(7))),
             codes: Arc::default(),
+            discoveries: Arc::default(),
+            expired_tokens: Arc::default(),
         };
         let router = Router::new()
             .route("/.well-known/openid-configuration", get(Self::discovery))
@@ -101,6 +98,30 @@ impl Provider {
 
         tokio::spawn(async move { axum::serve(listener, router).await });
         provider
+    }
+
+    /// The signing key made of the bytes `seed`, named after them.
+    fn key(seed: u8) -> Arc<CoreEdDsaPrivateSigningKey> {
+        let pem = SigningKey::from_bytes(&[seed; 32])
+            .to_pkcs8_pem(LineEnding::LF)
+            .expect("a PEM");
+        let key = CoreEdDsaPrivateSigningKey::from_ed25519_pem(
+            &pem,
+            Some(JsonWebKeyId::new(format!("key-{seed}"))),
+        )
+        .expect("an Ed25519 key");
+
+        Arc::new(key)
+    }
+
+    /// Replaces the provider's key with another, as a provider rotates its keys: the old one is no longer published.
+    fn rotate_key(&self, seed: u8) {
+        *self.key.lock().expect("no test panics with the lock") = Self::key(seed);
+    }
+
+    /// The provider's current key.
+    fn current_key(&self) -> Arc<CoreEdDsaPrivateSigningKey> {
+        Arc::clone(&self.key.lock().expect("no test panics with the lock"))
     }
 
     /// Hands out `code` for `grant`, to the sign-in whose authorization URL is `authorize`.
@@ -134,6 +155,8 @@ impl Provider {
     async fn discovery(State(provider): State<Self>) -> Json<Value> {
         let issuer = &provider.issuer;
 
+        provider.discoveries.fetch_add(1, Ordering::SeqCst);
+
         Json(json!({
             "issuer": issuer,
             "authorization_endpoint": format!("{issuer}/authorize"),
@@ -148,7 +171,7 @@ impl Provider {
 
     async fn jwks(State(provider): State<Self>) -> Json<CoreJsonWebKeySet> {
         Json(CoreJsonWebKeySet::new(vec![
-            provider.key.as_verification_key(),
+            provider.current_key().as_verification_key(),
         ]))
     }
 
@@ -200,6 +223,11 @@ impl Provider {
     /// The ID token of `issued`, signed with the provider's key.
     fn id_token(&self, issued: &Issued) -> CoreIdToken {
         let now = chrono::Utc::now();
+        let now = if self.expired_tokens.load(Ordering::SeqCst) {
+            now - chrono::Duration::hours(1)
+        } else {
+            now
+        };
         let claims = CoreIdTokenClaims::new(
             IssuerUrl::new(self.issuer.clone()).expect("a URL"),
             vec![Audience::new(CLIENT_ID.to_owned())],
@@ -214,7 +242,7 @@ impl Provider {
 
         CoreIdToken::new(
             claims,
-            self.key.as_ref(),
+            self.current_key().as_ref(),
             CoreJwsSigningAlgorithm::EdDsa,
             None,
             None,
@@ -584,4 +612,93 @@ async fn over_plain_http_the_cookies_are_neither_secure_nor_prefixed() {
         .expect("JSON");
 
     assert_eq!(user, json!({ "name": "Ana", "email": "ana@example.com" }));
+}
+
+/// Ana, as the provider signs her in.
+fn ana() -> Grant {
+    Grant {
+        subject: "ana-at-the-provider",
+        email: "ana@example.com",
+        email_verified: true,
+    }
+}
+
+#[tokio::test]
+async fn the_provider_is_discovered_once_for_many_sign_ins() {
+    let provider = Provider::serve().await;
+    let dir = data_dir();
+    let url = serve(dir.path(), &provider).await;
+
+    for index in 0..3 {
+        let (authorize, flow) = start(&url).await;
+        let code = format!("code-{index}");
+
+        provider.hand_out(&code, &authorize, ana());
+
+        assert_eq!(
+            location(&callback(&url, &code, &state(&authorize), &flow).await),
+            "/"
+        );
+    }
+
+    let starts = (0..20).map(|_| http().get(format!("{url}/api/auth/oidc/login")).send());
+
+    futures::future::join_all(starts).await;
+
+    assert_eq!(provider.discoveries.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn an_expired_token_is_refused_without_discovering_the_provider_anew() {
+    let provider = Provider::serve().await;
+    let dir = data_dir();
+    let url = serve(dir.path(), &provider).await;
+    let (authorize, flow) = start(&url).await;
+
+    provider.expired_tokens.store(true, Ordering::SeqCst);
+    provider.hand_out("code-ana", &authorize, ana());
+
+    let refused = callback(&url, "code-ana", &state(&authorize), &flow).await;
+
+    assert_eq!(location(&refused), "/login?error=unavailable");
+    assert_eq!(provider.discoveries.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn a_burst_of_tokens_of_a_key_just_rotated_in_does_not_discover_the_provider_again_and_again()
+{
+    let provider = Provider::serve().await;
+    let dir = data_dir();
+    let url = serve(dir.path(), &provider).await;
+    let mut started = Vec::new();
+
+    for _ in 0..5 {
+        started.push(start(&url).await);
+    }
+
+    provider.rotate_key(8);
+
+    for (index, (authorize, _)) in started.iter().enumerate() {
+        provider.hand_out(&format!("code-{index}"), authorize, ana());
+    }
+
+    let callbacks = started
+        .iter()
+        .enumerate()
+        .map(|(index, (authorize, flow))| {
+            let code = format!("code-{index}");
+            let state = state(authorize);
+            let url = url.clone();
+
+            async move { callback(&url, &code, &state, flow).await }
+        });
+    let answers = futures::future::join_all(callbacks).await;
+
+    // The keys were discovered at the first start, less than thirty seconds ago: they are kept, and the tokens of
+    // the new key refused, until the pause has passed.
+    for answer in &answers {
+        assert_eq!(location(answer), "/login?error=unavailable");
+    }
+
+    assert_eq!(provider.discoveries.load(Ordering::SeqCst), 1);
 }
