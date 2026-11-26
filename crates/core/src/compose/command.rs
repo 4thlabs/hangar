@@ -94,7 +94,8 @@ impl ComposeCommand {
 
     /// Whether the command attaches to its app and runs until it is stopped: an [`Args`](Self::Args) `up` that
     /// nothing detaches, neither `--detach` nor `--wait`, as a flag or with a true value, nor `-d`, alone, with a true
-    /// value or in a group of short flags (`-dV`). The last value of each flag wins, as compose reads them. The typed [`Up`](Self::Up) is always
+    /// value or in a group of short flags (`-dV`), and that starts what it creates, without `--no-start`, which compose
+    /// returns from before it attaches. The last value of each flag wins, as compose reads them. The typed [`Up`](Self::Up) is always
     /// detached.
     ///
     /// ```
@@ -112,6 +113,7 @@ impl ComposeCommand {
         };
         let mut detach = false;
         let mut wait = false;
+        let mut no_start = false;
 
         for arg in args {
             if let Some(value) = Self::short_detach(arg) {
@@ -125,9 +127,13 @@ impl ComposeCommand {
             if let Some(value) = Self::flag_value(arg, "wait") {
                 wait = value;
             }
+
+            if let Some(value) = Self::flag_value(arg, "no-start") {
+                no_start = value;
+            }
         }
 
-        args.first().is_some_and(|name| name == "up") && !detach && !wait
+        args.first().is_some_and(|name| name == "up") && !detach && !wait && !no_start
     }
 
     /// The word starting with `-` that an [`Args`](Self::Args) holds before its command's name, which compose would
@@ -279,6 +285,7 @@ mod tests {
             &["up", "--detach-keys", "ctrl-d"],
             &["up", "-d=false"],
             &["up", "-Vd=0"],
+            &["up", "--no-start=false"],
         ] {
             assert!(args(line).is_attached(), "{line:?}");
         }
@@ -295,6 +302,7 @@ mod tests {
             &["up", "--detach=false", "--wait"],
             &["up", "-d=true"],
             &["up", "-dV=false"],
+            &["up", "--no-start"],
         ] {
             assert!(!args(line).is_attached(), "{line:?}");
         }

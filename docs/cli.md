@@ -138,8 +138,8 @@ its variables on to `docker` and `git`. It needs only what a command uses: `HANG
 | `store ls [args...]`                               | `docker compose ls`, with the arguments                              |
 
 A command with an argument the table does not list, as `down --volumes` or `up -d --build`, is
-passed through as well, and so is an `up` on a target without `-d`, `--detach` or `--wait`, which
-attaches to its stack as with the Node CLI: it runs on a single stack alone. `store up` adds `-d`.
+passed through as well, and so is an `up` on a target without `-d`, `--detach`, `--wait` or
+`--no-start`, which attaches to its stack as with the Node CLI: it runs on a single stack alone. `store up` adds `-d`.
 A target with no command runs `docker compose` alone, which prints its help.
 
 Passed through, a command runs in the order of its name, as with the Node CLI: `up`, `start` and
@@ -162,8 +162,8 @@ Where it differs from the Node CLI:
 - On a category, a stack listed in several categories runs at its first place in `hangar.yml`.
 - Any command but one passed through on a single stack prints compose's output on stdout, as
   below, where the Node CLI hands it the terminal.
-- `up` counts `--wait` and `--detach=true` as detached, where the Node CLI knows `-d` and
-  `--detach` alone.
+- `up` counts `--wait`, `--no-start` and `--detach=true` as not attaching, the last value of a
+  flag winning as with compose, where the Node CLI knows `-d` and `--detach` alone.
 - An option before the command's name is refused, where the Node CLI passes it to compose.
 
 A command passed through on a single stack is given the terminal, as `docker compose` run by hand:
