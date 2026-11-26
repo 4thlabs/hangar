@@ -11,6 +11,7 @@ function notification(id: number, message: NotificationMessage, marks: Partial<N
     level: "success",
     message,
     href: "/settings",
+    dedupeKey: null,
     seen: false,
     read: false,
     createdAt: new Date().toISOString(),
@@ -88,6 +89,21 @@ describe("the notifications' bell", () => {
     );
 
     expect(screen.getByRole("button", { name: "Notifications" })).toBeDefined();
+  });
+
+  it("reads the list when a notification's link is followed, by a call that outlives the page", async () => {
+    const fetch = serve(answers(() => Response.json(recent)));
+
+    renderAt("/apps");
+    fireEvent.click(await screen.findByRole("button", { name: "Notifications, 1 unread" }));
+    fireEvent.click(await screen.findByRole("link", { name: /Store: installation finished/ }));
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/notifications/read",
+        expect.objectContaining({ method: "POST", keepalive: true }),
+      ),
+    );
   });
 
   it("keeps what the stream brought over a read of the list that was in flight", async () => {

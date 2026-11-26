@@ -1722,6 +1722,13 @@
             "description": "When it was filed, in RFC 3339.",
             "type": "string"
           },
+          "dedupeKey": {
+            "description": "What it is about, as `backup:alpha`: a newer notification of the same key replaces it, on the server and in a\npage that holds it. `None` for one that nothing replaces.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "href": {
             "description": "The page it leads to, as `/settings`; `None` for none.",
             "type": [
@@ -1765,6 +1772,7 @@
           "level",
           "message",
           "href",
+          "dedupeKey",
           "seen",
           "read",
           "createdAt"

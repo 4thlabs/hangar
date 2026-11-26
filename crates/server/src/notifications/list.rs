@@ -23,18 +23,8 @@ pub(super) struct NotificationList {
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 enum Entry {
-    Known(Kept),
+    Known(hangar_api::Notification),
     Foreign(Value),
-}
-
-/// A notification this version reads: what the page reads of it, and the key that a newer one of the same replaces it
-/// by.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Kept {
-    #[serde(flatten)]
-    notification: hangar_api::Notification,
-    dedupe_key: Option<String>,
 }
 
 /// The file of the list, as it is written.
@@ -60,21 +50,21 @@ impl Entry {
     /// What the page reads of it, for one this version reads.
     fn known(&self) -> Option<&hangar_api::Notification> {
         match self {
-            Self::Known(kept) => Some(&kept.notification),
+            Self::Known(notification) => Some(notification),
             Self::Foreign(_) => None,
         }
     }
 
     fn id(&self) -> Option<u64> {
         match self {
-            Self::Known(kept) => Some(kept.notification.id),
+            Self::Known(notification) => Some(notification.id),
             Self::Foreign(value) => value.get("id").and_then(Value::as_u64),
         }
     }
 
     fn dedupe_key(&self) -> Option<&str> {
         match self {
-            Self::Known(kept) => kept.dedupe_key.as_deref(),
+            Self::Known(notification) => notification.dedupe_key.as_deref(),
             Self::Foreign(value) => value.get("dedupeKey").and_then(Value::as_str),
         }
     }
@@ -125,7 +115,7 @@ impl NotificationList {
             .notifications
             .into_iter()
             .map(|notification| match serde_json::from_value(notification.clone()) {
-                Ok(kept) => Entry::Known(kept),
+                Ok(known) => Entry::Known(known),
                 Err(error) => {
                     tracing::warn!(%error, "a notification of the file is not one this version reads: kept as it is");
                     Entry::Foreign(notification)
@@ -184,6 +174,7 @@ impl NotificationList {
             level: notification.level,
             message: notification.message,
             href: notification.href,
+            dedupe_key: notification.dedupe_key,
             seen: false,
             read: false,
             created_at,
@@ -191,15 +182,12 @@ impl NotificationList {
 
         // Removed rather than updated, so that one filed again, its words changed, comes first rather than where the
         // older one was.
-        if let Some(key) = &notification.dedupe_key {
+        if let Some(key) = &filed.dedupe_key {
             self.kept
                 .retain(|entry| entry.dedupe_key() != Some(key.as_str()));
         }
 
-        self.kept.push_front(Entry::Known(Kept {
-            notification: filed.clone(),
-            dedupe_key: notification.dedupe_key,
-        }));
+        self.kept.push_front(Entry::Known(filed.clone()));
         self.kept.truncate(Self::KEPT);
         self.next_id = id + 1;
         self.version += 1;
@@ -257,7 +245,7 @@ impl NotificationList {
             .kept
             .iter_mut()
             .fold(false, |changed, entry| match entry {
-                Entry::Known(kept) => mark(&mut kept.notification) | changed,
+                Entry::Known(notification) => mark(notification) | changed,
                 Entry::Foreign(_) => changed,
             });
 

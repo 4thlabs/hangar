@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { Notification, RecentNotifications } from "#libs/api";
 import { NotificationFeed } from "./notification-feed.ts";
 
-function notification(id: number): Notification {
+function notification(id: number, dedupeKey: string | null = null): Notification {
   return {
     id,
     level: "success",
     message: { key: "storeUpdated" },
     href: "/settings",
+    dedupeKey,
     seen: false,
     read: false,
     createdAt: "2026-11-26T10:00:00.000Z",
@@ -15,7 +16,7 @@ function notification(id: number): Notification {
 }
 
 function recent(...ids: number[]): RecentNotifications {
-  return { epoch: "first", notifications: ids.map(notification) };
+  return { epoch: "first", notifications: ids.map(id => notification(id)) };
 }
 
 function ids(feed: RecentNotifications): number[] {
@@ -26,6 +27,19 @@ describe("NotificationFeed", () => {
   it("puts a new one first, and one it holds once", () => {
     expect(ids(NotificationFeed.add(recent(2, 1), notification(3)))).toEqual([3, 2, 1]);
     expect(ids(NotificationFeed.add(recent(2, 1), notification(2)))).toEqual([2, 1]);
+  });
+
+  it("puts a new one in place of the older one of its dedupe key, as the server did", () => {
+    const held = { epoch: "first", notifications: [notification(2), notification(1, "backup:alpha")] };
+
+    expect(ids(NotificationFeed.add(held, notification(3, "backup:alpha")))).toEqual([3, 2]);
+    expect(ids(NotificationFeed.add(held, notification(3, "backup:beta")))).toEqual([3, 2, 1]);
+  });
+
+  it("passes over an older one of a dedupe key it holds a newer one of", () => {
+    const held = { epoch: "first", notifications: [notification(5, "backup:alpha")] };
+
+    expect(ids(NotificationFeed.add(held, notification(3, "backup:alpha")))).toEqual([5]);
   });
 
   it("keeps the newest, in the order of their ids", () => {

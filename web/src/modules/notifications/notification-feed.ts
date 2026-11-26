@@ -8,17 +8,34 @@ export class NotificationFeed {
   /** How many the list holds, as many as the server gives at first. */
   static readonly Size = 30;
 
-  /** `recent` with `notification`, unless it holds it already, as a stream opened again gives it again. */
+  /**
+   * `recent` with `notification`, in place of the older one of its dedupe key, as the server replaced it; unless it
+   * holds it already, as a stream opened again gives it again, or holds a newer one of its key.
+   */
   static add(recent: RecentNotifications, notification: Notification): RecentNotifications {
-    if (recent.notifications.some(item => item.id === notification.id)) {
+    const isHeld = recent.notifications.some(
+      item =>
+        item.id === notification.id ||
+        (NotificationFeed.isSameSubject(item, notification) && item.id > notification.id),
+    );
+
+    if (isHeld) {
       return recent;
     }
 
-    const notifications = [notification, ...recent.notifications]
+    const notifications = [
+      notification,
+      ...recent.notifications.filter(item => !NotificationFeed.isSameSubject(item, notification)),
+    ]
       .sort((left, right) => right.id - left.id)
       .slice(0, NotificationFeed.Size);
 
     return { ...recent, notifications };
+  }
+
+  /** Whether `left` and `right` are about the same thing, as their dedupe key says: the newer replaces the older. */
+  private static isSameSubject(left: Notification, right: Notification): boolean {
+    return left.dedupeKey !== null && left.dedupeKey === right.dedupeKey;
   }
 
   /**
