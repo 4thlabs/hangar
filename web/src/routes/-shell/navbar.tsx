@@ -2,14 +2,14 @@ import { Link } from "@tanstack/react-router";
 import { cn } from "cn";
 import { SearchIcon, SettingsIcon } from "lucide-react";
 import { useState } from "react";
-import { NavbarSearch } from "#modules/common/components/searchbar.tsx";
-import { UserMenu } from "#modules/common/components/user-menu.tsx";
-import { isNavigationActive, navigationCategories } from "#modules/common/helpers/navigations.ts";
 import { useCurrentPath } from "#modules/common/hooks/use-current-path.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Tabs, TabsList, TabsTrigger } from "#modules/common/ui/tabs.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
 import { NotificationsMenu } from "#modules/notifications/components/notifications-menu.tsx";
+import { isNavigationActive, navigationCategories } from "#routes/-shell/navigations.ts";
+import { NavbarSearch } from "#routes/-shell/searchbar.tsx";
+import { UserMenu } from "#routes/-shell/user-menu.tsx";
 
 function Brand() {
   return (

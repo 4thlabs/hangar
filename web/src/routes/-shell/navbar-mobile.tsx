@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { cn } from "cn";
 import { BoxesIcon, LayoutDashboardIcon, NetworkIcon, SettingsIcon, StoreIcon, type LucideIcon } from "lucide-react";
-import { isNavigationActive, navigationCategories, type NavigationPath } from "#modules/common/helpers/navigations.ts";
 import { useCurrentPath } from "#modules/common/hooks/use-current-path.ts";
+import { isNavigationActive, navigationCategories, type NavigationPath } from "#routes/-shell/navigations.ts";
 
 /** The icon of each section on the tab bar. */
 const sectionIcons: Readonly<Record<NavigationPath, LucideIcon>> = {
