@@ -75,7 +75,60 @@ descriptor reaches its components only through `import()`.
 
 ## Classes
 
-`src/` only, until #181. `web/` has no class made only of statics: see its coding rules.
+`web/` has no class made only of static members (ADR 0002, decision 7), which ESLint's `no-restricted-syntax` holds:
+
+- **What has no state is module functions and consts**, imported by name. A function's name carries its context.
+
+  ```ts
+  // modules/settings/job-text.ts
+  export const jobNames: Readonly<Record<Job, string>> = {
+    image_check: "Image check",
+    auto_update: "Update of the apps",
+  };
+
+  export function askedAgain(asked: JobRun): string {
+    return asked.state === "running" ? `${jobName(asked.job)} runs.` : `${jobName(asked.job)} waits its turn.`;
+  }
+  ```
+
+- **What has state or dependencies is a class created with `new`**, its dependencies as constructor arguments. Its one
+  instance is created in `createPage` (`web/src/app/page.ts`), and a test builds its own with `new`, with no module
+  mock.
+
+  ```ts
+  // modules/auth/api/session.ts
+  export class Session {
+    readonly #queryClient: QueryClient;
+
+    constructor(queryClient: QueryClient) {
+      this.#queryClient = queryClient;
+    }
+
+    async require(): Promise<SessionUser> {
+      /* ensureQueryData, or a redirect to /login */
+    }
+  }
+  ```
+
+- **A helper of one hook that needs the hook's values is a closure of that hook**, not a class. One that several of
+  its effects call is a module function beside it, taking what it needs, as `changeNotifications(queryClient, change)`:
+  as a closure it would be a dependency of each effect, which `exhaustive-deps` asks to wrap in a `useCallback`.
+
+  ```ts
+  export function useDockerChanges() {
+    const queryClient = useQueryClient();
+
+    useEffect(() => {
+      const invalidate = (prefix: string) => void queryClient.invalidateQueries({ predicate: startsWith(prefix) });
+      // ...
+    }, [queryClient]);
+  }
+  ```
+
+- `static` stays only for a real factory or constant of a class that has instances, as `Preferences.fromCookies` or
+  `WidgetIcon.dashboard`. `ApiError extends Error` and the test doubles with instances are classes as before.
+
+`src/` keeps its own rule, until #181:
 
 A library's unit of work is a class taking its dependencies as constructor arguments — that is
 what lets a test pass an in-memory database instead of mocking a module.
@@ -172,8 +225,8 @@ builds text for the user alone: what it says to the page is a code and its param
   `{ code, params, message }`. `ErrorCode::read(&error)` gives a client of the contract back the code of a problem.
   No code in the detail, no header of Hangar's own, no body written by hand.
 - **Web.** `ApiError.detail` reads a problem's code and params into the `ErrorDetail` a body carries. The page says
-  why a call failed through `ErrorMessage.describe(error)`, and words an `ErrorDetail` through
-  `ErrorMessage.describeDetail(detail)` (`web/src/modules/common/error-message.ts`): the one place that keys the words
+  why a call failed through `describeError(error)`, and words an `ErrorDetail` through
+  `describeErrorDetail(detail)` (`web/src/modules/common/error-message.ts`): the one place that keys the words
   by the code, typed by the codes of the contract, so that a code without words is a type error, and that a catalog
   will word in another language. A code the page does not know, from a server newer than it, shows the server's
   message; a problem of no code, one quoll answers itself, its detail. The page's own words stay in its components,

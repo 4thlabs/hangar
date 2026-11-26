@@ -30,9 +30,9 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
   `no-redundant-type-constituents`...), and the rules that read types: `no-floating-promises`, `no-misused-promises`,
   `await-thenable`, `no-explicit-any`, `no-unnecessary-type-assertion`, `prefer-promise-reject-errors` and
   `switch-exhaustiveness-check`. It also holds `no-unused-vars`, since the core rule on Babel sees neither a name used
-  in JSX nor one used only as a type. `unbound-method` is off until #195, which removes the static classes it reads
-  as methods losing their `this`. `npm run lint --prefix web` runs it, warnings as errors. It needs orval's
-  `generated.ts`, so it runs after `cargo quoll gen`: CI's `web` job runs it after `cargo quoll build`.
+  in JSX nor one used only as a type, and `unbound-method`, as a method passed by reference loses its `this`.
+  `npm run lint --prefix web` runs it, warnings as errors. It needs orval's `generated.ts`, so it runs after
+  `cargo quoll gen`: CI's `web` job runs it after `cargo quoll build`.
 - One rule, one tool: a rule is in ESLint or in oxlint, never in both.
 - A rule is turned off only on the line that needs it, with its reason, in the comment of the tool that runs it. Never
   for a whole file.
@@ -40,8 +40,12 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
   - An oxlint rule: `// oxlint-disable-next-line typescript/no-floating-promises -- <why>`. ESLint ignores that
     comment. An `eslint-disable` comment would silence oxlint too, but ESLint then fails on a rule it does not
     define.
-- The ADR's own rules come with the PRs that make the code pass them (decision 10): the static-class selector and
-  the root `.ts` imports with #195, the orval hooks and the `api/` imports with the data layer.
+- The ADR's own rules come with the PRs that make the code pass them (decision 10), in ESLint's core rules:
+  - rule 1, `no-restricted-syntax`, on `web/src`: no class made only of static members;
+  - rule 4, `no-restricted-imports`, on a module's root `.ts` (`modules/*/*.ts`, tests excepted): no React, no
+    `@tanstack/`, no `use`, `get`, `prefetch` or `create` function of `#libs/api`, and only types from `api/`,
+    `hooks/`, `components/` or `ui/`;
+  - rules 2 and 3, the orval hooks and the `api/` imports, come with the data layer.
 
 ## Language
 
@@ -58,7 +62,7 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
 - **Errors are typed and never swallowed.**
   - Throw `Error` or a subclass (`ApiError`). TanStack Router's `throw redirect(...)` is the one other thing thrown,
     as its API asks.
-  - A `catch` narrows its `unknown` before reading it. It shows the failure (`ErrorMessage.describe`, a form's
+  - A `catch` narrows its `unknown` before reading it. It shows the failure (`describeError`, a form's
     error), logs it with `console.error` and what was being done, or throws it again. Never an empty `catch`.
 - **Every promise is awaited, returned, or its rejection handled.** An async event handler catches its own failures
   and is passed as `event => void handleSubmit(event)`: `void` says that nothing waits for it, and the handler is
@@ -74,11 +78,15 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
 As decided with ADR 0002 (decision 7), reversing the "Classes" section of AGENTS.md for `web/`:
 
 - **What has no state is module functions and consts**: `filterProjects`, `describeSync`, `parseSettingsTab`. A
-  function's name carries its context. There is no class made only of static members; #195 converts the ones left.
+  function's name carries its context. There is no class made only of static members: lint rule 1 holds it.
 - **What has state or dependencies is a class**, created with `new`, its dependencies as constructor arguments:
   `new Session(queryClient)`. Its one instance is created in `createPage`, and a test builds its own with `new`,
   with no module mock.
-- **A helper of one hook that needs the hook's values is a closure of the hook**, not a class.
+- **A helper of one hook that needs the hook's values is a closure of the hook**, not a class. One that several of
+  its effects call is a module function beside it, taking what it needs (`changeNotifications(queryClient, change)`),
+  rather than a closure each effect would list, which `exhaustive-deps` asks to wrap in a `useCallback`.
+- `static` stays only for a real factory or constant of a class that has instances: `Preferences.fromCookies`,
+  `WidgetIcon.dashboard`.
 - `ApiError extends Error` and the test doubles with instances are classes as before.
 - The layers, what each may import, and where the code of a page goes are the ADR's decision 1.
 
@@ -93,7 +101,7 @@ As decided with ADR 0002 (decision 7), reversing the "Classes" section of AGENTS
   - **No function called during render reads the clock**, the component's own code or a helper it calls. The
     compiler keeps what a call returned for as long as its arguments stay the same: a time written from a clock read
     in render stops moving. A function that writes a time relative to now takes `now` as a required argument, as
-    `RelativeTime.format(at, now)`, with no `Date.now()` default. A component passes it `useNow()`
+    `relativeTime(at, now)`, with no `Date.now()` default. A component passes it `useNow()`
     (`common/hooks/use-now.ts`), the clock as state, read again every 15 seconds; a test or code outside React passes
     an explicit time. One `useNow()` for a card or a list, handed to its rows, not one per row.
   - An effect synchronizes with something outside React. It does not set state in its body: state that starts over
