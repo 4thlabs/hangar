@@ -115,7 +115,8 @@ export function useComposeStream() {
   /** Starts a batch of `request`, and reads its output. */
   const start = useCallback(
     (request: ComposeRequest) =>
-      read(getComposeRunUrl(), request.apps, {
+      // Laid out once its first event, the batch, says the order its apps run in.
+      read(getComposeRunUrl(), [], {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),

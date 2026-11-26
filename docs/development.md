@@ -210,16 +210,23 @@ check (#176), the backups with #177, and a container's console with the terminal
 
 **Apps → Up**, **Restart** and **Down** run `docker compose up -d`, with `--pull always` and `--force-recreate` as Up's
 menu ticks them, `restart` or `down` on the apps selected, or on an app from its page, as a batch: `POST
-/api/docker/compose` checks every app first, a 400 for a name compose does not take, a 404 for an app not installed,
-and none runs, then runs them one at a time in the order of `hangar.yml`, `down` in reverse, each once, carrying on
-after an app that fails. Anything but a plain Up asks first. The batch runs on the server apart from the request:
-closing the panel, or the page, stops nothing. Its answer is its output as it comes, a `started` per app, compose's
-lines, its `finished` with the app's outcome, then an `end` with the report; the panel shows it app by app. After each
-app the server reads the containers again, then notifies `composeSucceeded` or `composeFailed`, and the `end` comes
-once every app is: a page told reads the new state. A failure says why as a code, never with compose's output, which
-the panel shows above it. The server keeps a batch while it runs and five minutes after, listed by `GET
-/api/docker/compose`, with its report once ended; a page that comes back while one runs offers its output, which `GET
-/api/docker/compose/<id>` reads again from its start, as far as its last MiB, the most a batch keeps.
+/api/docker/compose` checks every app first, a 400 for a name compose does not take or more apps than are installed, a
+404 for an app not installed, and none runs, then runs them one at a time in the order of `hangar.yml`, `down` in
+reverse, each once, carrying on after an app that fails. Anything but a plain Up asks first. The batch runs on the
+server apart from the request: closing the panel, or the page, stops nothing. A batch holds its apps until it ends, as
+an install or an uninstall holds its own: another batch, an install or an uninstall of one of them is refused with a
+409, `compose.app_busy`, so that an uninstall's `down` and its unlink never let a batch's `up` in between, and the
+pages disable the buttons of an app a batch holds, whichever page started it. Its answer is its output as it comes:
+the `batch`, its apps in the order they run, a `started` per app, compose's lines, its `finished` with the app's
+outcome, then an `end` with the report; the panel shows it app by app. A line goes out with the values of
+`.env.global`, as it is when the batch starts, and of the server's environment, of 4 characters or more, replaced by
+`***`, and the credentials of a URL taken out, as compose's complaint about a file is. After each app the server reads
+the containers again, unless the daemon failed its last read and its wait runs, then notifies `composeSucceeded` or
+`composeFailed`, and the `end` comes once every app is: a page told reads the new state. A failure says why as a code,
+never with compose's output, which the panel shows above it. The server keeps a batch while it runs and five minutes
+after, the last 20 that ended at most, listed by `GET /api/docker/compose`, with its report once ended; a page that
+comes back while one runs offers its output, which `GET /api/docker/compose/<id>` reads again from its start, as far as
+its last MiB, the most a batch keeps.
 
 ## Database
 

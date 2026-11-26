@@ -261,6 +261,26 @@
         "description": "An event of a batch's output.",
         "oneOf": [
           {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ComposeBatch"
+              },
+              {
+                "properties": {
+                  "kind": {
+                    "const": "batch",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              }
+            ],
+            "description": "The first event: the batch, its apps in the order the command runs on them."
+          },
+          {
             "description": "The command starts on an app: the head of its lines.",
             "properties": {
               "app": {
@@ -279,7 +299,7 @@
             "type": "object"
           },
           {
-            "description": "A line `docker compose` printed on an app, stdout and stderr together, without its line break.",
+            "description": "A line `docker compose` printed on an app, stdout and stderr together, without its line break, the values of\n`.env.global` and of the server's environment, and the credentials of a URL, taken out.",
             "properties": {
               "app": {
                 "description": "The app.",
@@ -425,7 +445,7 @@
             "description": "The command."
           },
           "apps": {
-            "description": "The apps, by id, in any order: the batch runs them in the order of `hangar.yml`, `down` in reverse, each once.",
+            "description": "The apps, by id, in any order: the batch runs them in the order of `hangar.yml`, `down` in reverse, each once.\nNo more than are installed.",
             "items": {
               "type": "string"
             },
@@ -1806,6 +1826,93 @@
             },
             "required": [
               "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A batch of compose commands asked for more apps than are installed.",
+            "properties": {
+              "code": {
+                "const": "compose.too_many_apps",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "apps": {
+                    "description": "How many apps it asked for, each once.",
+                    "format": "uint",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "installed": {
+                    "description": "How many apps are installed.",
+                    "format": "uint",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "apps",
+                  "installed"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "An app that another command holds: a batch of compose commands that runs on it, or its install or uninstall.",
+            "properties": {
+              "code": {
+                "const": "compose.app_busy",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A batch of compose commands that the server could not check before it ran: its log says why.",
+            "properties": {
+              "code": {
+                "const": "compose.unchecked",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "command": {
+                    "description": "The command line, as `docker compose up -d`.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "command"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
             ],
             "type": "object"
           },
@@ -3501,7 +3608,7 @@
             "Session": []
           }
         ],
-        "summary": "The batches that run, and those that ended in the last five minutes, by id.",
+        "summary": "The batches that run, and the last 20 that ended in the last five minutes, by id.",
         "tags": [
           "Compose"
         ]
@@ -3553,7 +3660,7 @@
             "Session": []
           }
         ],
-        "summary": "Starts a batch, once every app is checked: a 400 for a name compose does not take or no app at all, a 404 for an app that is not installed, and none runs. Then its output, from its start: a `started` per app, its lines, its `finished`, and an `end` with the report. The batch goes on once the stream is closed; each app's end is notified.",
+        "summary": "Starts a batch, once every app is checked: a 400 for a name compose does not take, no app at all or more than are installed, a 404 for an app that is not installed, a 409 for an app another batch, an install or an uninstall holds, and none runs. Then its output, from its start: the `batch`, a `started` per app, its lines, its `finished`, and an `end` with the report. The batch goes on once the stream is closed, holding its apps until it ends; each app's end is notified.",
         "tags": [
           "Compose"
         ]

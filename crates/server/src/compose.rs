@@ -14,10 +14,12 @@ use std::time::Duration;
 use futures::StreamExt;
 use hangar_api::{ComposeAction, ErrorCode, NotificationLevel, NotificationMessage};
 use hangar_core::{
-    AppOutcome, BatchEvent, Compose, ComposeCommand, ComposeError, OnFailure, Runtime, Store,
+    AppOutcome, BatchEvent, Compose, ComposeCommand, ComposeError, DataDir, GlobalEnv, OnFailure,
+    Runtime, Secrets, Store,
 };
 
 use crate::Settings;
+use crate::app_locks::{AppClaim, AppLocks};
 use crate::docker::DockerState;
 use crate::failure::Failure;
 use crate::notifications::{Notification, Notifier};
@@ -30,8 +32,11 @@ use views::ComposeViews;
 pub(crate) struct ComposeState {
     compose: Compose<Runtime>,
     store: Store<Runtime>,
+    data_dir: DataDir,
     docker: Arc<DockerState>,
     notifier: Notifier,
+    /// The apps each command holds, shared with the store's installs and uninstalls.
+    locks: Arc<AppLocks>,
     /// The batches that run, and those that ended less than [`KEPT`](Self::KEPT) ago, by id.
     batches: Mutex<BTreeMap<u64, Arc<KeptBatch>>>,
     /// The id of the next batch.
@@ -42,13 +47,17 @@ impl ComposeState {
     /// How long a batch is kept once it ended: a page that lists it as it ends still reads its output.
     const KEPT: Duration = Duration::from_secs(5 * 60);
 
+    /// How many batches are kept at most, those that run aside: each keeps up to a MiB of output.
+    const MOST_KEPT: usize = 20;
+
     /// The compose commands of the server's settings, run by `runtime`; each app's end is told to `notifier` once
-    /// `docker` holds what it changed.
+    /// `docker` holds what it changed, and a batch holds its apps in `locks`.
     pub(crate) fn new(
         settings: &Settings,
         runtime: Runtime,
         docker: Arc<DockerState>,
         notifier: Notifier,
+        locks: Arc<AppLocks>,
     ) -> Arc<Self> {
         Arc::new(Self {
             compose: Compose::new(settings.data_dir.clone(), runtime.clone()),
@@ -57,44 +66,114 @@ impl ComposeState {
                 settings.data_dir.clone(),
                 runtime,
             ),
+            data_dir: settings.data_dir.clone(),
             docker,
             notifier,
+            locks,
             batches: Mutex::new(BTreeMap::new()),
             next_id: AtomicU64::new(1),
         })
     }
 
     /// Starts `action` over `apps`, once each is checked, and keeps the batch: it runs on its own, carrying on after
-    /// an app that fails, in the order of `hangar.yml`, `down` in reverse.
+    /// an app that fails, in the order of `hangar.yml`, `down` in reverse, and holds its apps until it ends.
     ///
     /// # Errors
     ///
-    /// A 400 for no app or a name compose does not take, a 404 for an app that is not installed, and the error of a
-    /// `hangar.yml` that cannot be read, which orders the batch.
+    /// A 400 for no app, more than are installed or a name compose does not take, a 404 for an app that is not
+    /// installed, a 409 for an app another command holds, and the error of a `hangar.yml` that cannot be read, which
+    /// orders the batch.
     pub(crate) async fn start(
         self: &Arc<Self>,
         action: ComposeAction,
         apps: &[String],
     ) -> quoll::Result<Arc<KeptBatch>> {
         let command = ComposeViews::command(action);
+        let asked: HashSet<&str> = apps.iter().map(String::as_str).collect();
+        let installed = self.installed_count().await?;
+
+        if asked.len() > installed {
+            return Err(ErrorCode::TooManyApps {
+                apps: asked.len(),
+                installed,
+            }
+            .into());
+        }
+
+        let claim = self.locks.claim(asked.iter().copied())?;
         let config = self
             .store
             .config()
             .await
             .map_err(|error| Failure::store(ErrorCode::ConfigUnreadable, &error))?;
+        let secrets = self.secrets().await;
         let batch = self
             .compose
             .batch(command.clone(), apps, &config, OnFailure::CarryOn)
             .await
             .map_err(|error| Self::refused(&error, apps, &command))?;
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        let kept = KeptBatch::new(id, action, batch);
+        let kept = KeptBatch::new(id, action, batch, secrets);
 
         tracing::info!(id, command = %command, apps = %kept.apps().join(", "), "a compose batch starts");
-        self.batches().insert(id, Arc::clone(&kept));
-        tokio::spawn(Arc::clone(self).watch(Arc::clone(&kept)));
+        self.keep(&kept);
+        tokio::spawn(Arc::clone(self).watch(Arc::clone(&kept), claim));
 
         Ok(kept)
+    }
+
+    /// How many apps are installed: the links of `app-installed/`, none before the first.
+    async fn installed_count(&self) -> quoll::Result<usize> {
+        let mut entries = match tokio::fs::read_dir(self.data_dir.installed()).await {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+            Err(error) => return Err(Failure::logged(ErrorCode::AppsUnreadable, &error)),
+        };
+        let mut count = 0;
+
+        while let Some(_entry) = entries
+            .next_entry()
+            .await
+            .map_err(|error| Failure::logged(ErrorCode::AppsUnreadable, &error))?
+        {
+            count += 1;
+        }
+
+        Ok(count)
+    }
+
+    /// The values a batch's output may echo, which the page must not see: those of `.env.global`, as it is when the
+    /// batch starts, and of the server's environment.
+    async fn secrets(&self) -> Secrets {
+        let variables = GlobalEnv::new(&self.data_dir).read().await.unwrap_or_else(|error| {
+            tracing::warn!(
+                error = %Failure::chain(&error),
+                "could not read .env.global: the output of a batch is masked of the server's environment alone"
+            );
+
+            BTreeMap::new()
+        });
+
+        Secrets::with_environment(&variables)
+    }
+
+    /// Keeps `kept`, and forgets the oldest batches that ended past the last [`MOST_KEPT`](Self::MOST_KEPT); a batch
+    /// that runs is never forgotten, and its apps bound how many run.
+    fn keep(&self, kept: &Arc<KeptBatch>) {
+        let mut batches = self.batches();
+
+        batches.insert(kept.id(), Arc::clone(kept));
+
+        let ended: Vec<u64> = batches
+            .values()
+            .filter(|batch| batch.is_recorded())
+            .map(|batch| batch.id())
+            .collect();
+        let excess = batches.len().saturating_sub(Self::MOST_KEPT);
+
+        for id in ended.into_iter().take(excess) {
+            batches.remove(&id);
+        }
     }
 
     /// The batch `id`, while it is kept.
@@ -114,7 +193,7 @@ impl ComposeState {
         self.batches().values().cloned().collect()
     }
 
-    /// The answer of a batch of `command` that the core refused before any app ran.
+    /// The answer of a batch of `command` over `apps` that the core refused before any app ran.
     fn refused(error: &ComposeError, apps: &[String], command: &ComposeCommand) -> quoll::Error {
         let code = match error {
             ComposeError::EmptyBatch => ErrorCode::NoApps,
@@ -124,11 +203,10 @@ impl ComposeState {
             ComposeError::NotInstalled { app } => ErrorCode::UnknownProject {
                 project: app.clone(),
             },
-            // The actions of the page are never attached, and start with their command's name.
+            // The actions of the page are never attached, and start with their command's name: the server's own bug.
             other => {
                 return Failure::logged(
-                    ErrorCode::ComposeFailed {
-                        app: apps.join(", "),
+                    ErrorCode::BatchUnchecked {
                         command: command.to_string(),
                     },
                     other,
@@ -141,12 +219,12 @@ impl ComposeState {
         code.into()
     }
 
-    /// Tells of the end of each app of `kept` as it comes, then records its report, and forgets the batch once it has
-    /// been kept long enough.
+    /// Tells of the end of each app of `kept` as it comes, then lets its apps go, held by `claim`, and records its
+    /// report; forgets the batch once it has been kept long enough.
     ///
-    /// The apps are told in a task of their own, so that a panic there still records the report: the readers of the
-    /// output wait for it.
-    async fn watch(self: Arc<Self>, kept: Arc<KeptBatch>) {
+    /// The apps are told in a task of their own, so that a panic there still lets them go and records the report: the
+    /// readers of the output wait for it.
+    async fn watch(self: Arc<Self>, kept: Arc<KeptBatch>, claim: AppClaim) {
         let this = Arc::clone(&self);
         let told = Arc::clone(&kept);
 
@@ -154,6 +232,8 @@ impl ComposeState {
             tracing::error!(id = kept.id(), %error, "the ends of a compose batch were not all told");
         }
 
+        // Before the report: a page told of the end runs a command on the apps at once.
+        drop(claim);
         kept.record().await;
         tokio::time::sleep(Self::KEPT).await;
         self.batches().remove(&kept.id());
@@ -279,7 +359,7 @@ mod tests {
 
         let notifier = Notifier::load(&settings.data_dir).await;
 
-        ComposeState::new(&settings, runtime, docker, notifier)
+        ComposeState::new(&settings, runtime, docker, notifier, Arc::default())
     }
 
     #[tokio::test]

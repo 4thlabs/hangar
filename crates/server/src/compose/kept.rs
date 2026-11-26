@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use futures::{Stream, StreamExt, stream};
 use hangar_api::{ComposeAction, ComposeBatch, ComposeEvent, ComposeReport};
-use hangar_core::{BatchEvent, BatchReport};
+use hangar_core::{BatchEvent, BatchReport, Secrets};
 use quoll::Events;
 use tokio::sync::watch;
 
@@ -18,22 +18,26 @@ pub(crate) struct KeptBatch {
     action: ComposeAction,
     batch: hangar_core::ComposeBatch,
     started_at: String,
+    /// What its output may echo that the page must not see.
+    secrets: Secrets,
     /// Its report, once every app's end was told: what ends its output for the page.
     report: watch::Sender<Option<ComposeReport>>,
 }
 
 impl KeptBatch {
-    /// The batch `id` of `action`, which the core runs as `batch`, started now.
+    /// The batch `id` of `action`, which the core runs as `batch`, started now, its output masked of `secrets`.
     pub(super) fn new(
         id: u64,
         action: ComposeAction,
         batch: hangar_core::ComposeBatch,
+        secrets: Secrets,
     ) -> Arc<Self> {
         Arc::new(Self {
             id,
             action,
             batch,
             started_at: Timestamp::now(),
+            secrets,
             report: watch::Sender::new(None),
         })
     }
@@ -75,6 +79,11 @@ impl KeptBatch {
         self.report.send_replace(Some(report));
     }
 
+    /// Whether its report is recorded: it ended, and its apps were let go.
+    pub(super) fn is_recorded(&self) -> bool {
+        self.report.borrow().is_some()
+    }
+
     /// Once recorded, the report.
     pub(super) async fn ended(&self) -> ComposeReport {
         let mut receiver = self.report.subscribe();
@@ -86,17 +95,19 @@ impl KeptBatch {
         report.clone().expect("waited for")
     }
 
-    /// The events of its output from its start, as far as it keeps them, then as they come, and an `end` once its
-    /// report is recorded.
+    /// The events of its output: the batch first, then its output from its start, as far as it keeps it, then as it
+    /// comes, its lines masked, and an `end` once its report is recorded.
     pub(crate) fn events(self: &Arc<Self>) -> Events<ComposeEvent> {
         let command = self.command_line();
+        let masked = Arc::clone(self);
         let kept = Arc::clone(self);
+        let first = stream::iter([ComposeEvent::Batch(self.view())]);
         let output = self
             .output()
-            .map(move |event| ComposeViews::event(event, &command));
+            .map(move |event| ComposeViews::event(event, &command, &masked.secrets));
         let end = stream::once(async move { ComposeEvent::End(kept.ended().await) });
 
-        Events::new(output.chain(end))
+        Events::new(first.chain(output).chain(end))
     }
 
     /// The batch as the listing shows it.

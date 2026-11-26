@@ -18,8 +18,8 @@ use futures::{Stream, StreamExt};
 use hangar_api::Compose as _;
 use hangar_api::Docker as _;
 use hangar_api::{
-    Api, ApiClient, ComposeAction, ComposeEvent, ComposeOutcome, ComposeRequest, ComposeStatus,
-    ErrorCode, ErrorDetail,
+    Api, ApiClient, ComposeAction, ComposeBatch, ComposeEvent, ComposeOutcome, ComposeRequest,
+    ComposeStatus, ErrorCode, ErrorDetail,
 };
 use hangar_core::{Docker, PasswordHash, Runtime};
 use hangar_server::{App, Settings};
@@ -34,7 +34,8 @@ const PATIENCE: Duration = Duration::from_secs(30);
 
 /// The fake `docker`: it logs its arguments, one call per line, and prints two lines on stderr, where compose writes its
 /// progress. Between them, it holds the project that `HANGAR_TEST_HOLD` names until the file `HANGAR_TEST_RELEASE`
-/// exists, its child's wait and not the test's, and fails with code 1 on the one `HANGAR_TEST_FAIL` names.
+/// exists, its child's wait and not the test's, and fails with code 1 on the one `HANGAR_TEST_FAIL` names. Given
+/// `HANGAR_TEST_SECRET`, it echoes it first, in a URL's credentials and alone, as a pull from a registry may.
 const FAKE_DOCKER: &str = r#"#!/bin/sh
 echo "$*" >> "$HANGAR_TEST_LOG"
 project=""
@@ -43,6 +44,9 @@ for arg in "$@"; do
   if [ "$previous" = "-p" ]; then project="$arg"; fi
   previous="$arg"
 done
+if [ -n "$HANGAR_TEST_SECRET" ]; then
+  echo "login https://ana:$HANGAR_TEST_SECRET@registry.example.com with $HANGAR_TEST_SECRET" >&2
+fi
 echo "$project: working" >&2
 if [ "$project" = "${HANGAR_TEST_HOLD:-none}" ]; then
   while [ ! -e "$HANGAR_TEST_RELEASE" ]; do sleep 0.01; done
@@ -97,9 +101,14 @@ struct Behaviour {
     fail: Option<&'static str>,
     /// The app it holds until released.
     hold: Option<&'static str>,
+    /// The value it echoes, which `.env.global` holds.
+    secret: Option<&'static str>,
 }
 
 impl Fixture {
+    /// A value of `.env.global`, which the output of a batch never shows.
+    const SECRET: &str = "ghp_s3cr3t_value";
+
     fn new() -> Self {
         let dir = tempfile::tempdir().expect("a temporary directory");
         let data = dir.path().join("data");
@@ -137,6 +146,11 @@ impl Fixture {
                 "categories:\n  - {{ name: Apps, color: blue, stacks: [gamma, alpha] }}\nusers:\n  - {{ name: Ana, \
                  email: ana@example.com, passwordHash: '{hash}' }}\n"
             ),
+        )
+        .expect("written");
+        fs::write(
+            data.join(".env.global"),
+            format!("REGISTRY_TOKEN={}\n", Self::SECRET),
         )
         .expect("written");
         fs::create_dir_all(&bin).expect("created");
@@ -209,6 +223,10 @@ impl Fixture {
                 behaviour.hold.unwrap_or("none").to_owned(),
             ),
             ("HANGAR_TEST_RELEASE", self.release.display().to_string()),
+            (
+                "HANGAR_TEST_SECRET",
+                behaviour.secret.unwrap_or_default().to_owned(),
+            ),
         ]);
         let docker = Docker::with_host(docker_host).expect("a client");
         let app = App::with_runtime(&settings, runtime, docker).await;
@@ -256,6 +274,20 @@ impl Server {
             }))
             .build::<Api>(&self.url)
             .expect("a client")
+    }
+
+    /// `POST path`, from the page's origin, its status and JSON.
+    async fn post(&self, path: &str) -> (StatusCode, Value) {
+        let response = reqwest::Client::new()
+            .post(format!("{}{path}", self.url))
+            .header(COOKIE, &self.cookie)
+            .header(ORIGIN, URL)
+            .send()
+            .await
+            .expect("the server answers");
+        let status = response.status();
+
+        (status, response.json().await.expect("JSON"))
     }
 
     /// `POST /api/docker/compose` with `body`, its status and JSON, for a batch refused.
@@ -307,6 +339,19 @@ where
         events.map(|event| event.expect("an event")).collect(),
     )
     .await
+}
+
+/// The batch a stream starts with, and the events after it, to its end.
+async fn output<S>(events: S) -> (ComposeBatch, Vec<ComposeEvent>)
+where
+    S: Stream<Item = quoll::Result<ComposeEvent>>,
+{
+    let mut events = all(events).await.into_iter();
+    let Some(ComposeEvent::Batch(batch)) = events.next() else {
+        panic!("the stream starts with its batch");
+    };
+
+    (batch, events.collect())
 }
 
 /// The next event of `events`.
@@ -384,11 +429,13 @@ async fn runs_up_on_each_app_in_the_order_of_hangar_yml_and_ends_with_the_report
     let (_, docker_host) = FakeDaemon::serve().await;
     let server = fixture.serve(&docker_host, Behaviour::default()).await;
 
-    let events = all(server
-        .api()
-        .compose()
-        .run(&request(update(), &["alpha", "gamma", "alpha"]))
-        .await?)
+    let (batch, events) = output(
+        server
+            .api()
+            .compose()
+            .run(&request(update(), &["alpha", "gamma", "alpha"]))
+            .await?,
+    )
     .await;
 
     let mut expected = ran("gamma");
@@ -398,6 +445,8 @@ async fn runs_up_on_each_app_in_the_order_of_hangar_yml_and_ends_with_the_report
         apps: vec![succeeded("gamma"), succeeded("alpha")],
     }));
 
+    assert_eq!(batch.apps, ["gamma", "alpha"], "in the order they run");
+    assert_eq!(batch.report, None);
     assert_eq!(events, expected);
     assert_eq!(fixture.projects(), ["gamma", "alpha"], "each app once");
     assert!(
@@ -441,11 +490,13 @@ async fn carries_on_after_an_app_that_fails_and_says_why_without_its_output() ->
     };
     let server = fixture.serve(&docker_host, behaviour).await;
 
-    let events = all(server
-        .api()
-        .compose()
-        .run(&request(ComposeAction::Restart, &["alpha", "gamma"]))
-        .await?)
+    let (_, events) = output(
+        server
+            .api()
+            .compose()
+            .run(&request(ComposeAction::Restart, &["alpha", "gamma"]))
+            .await?,
+    )
     .await;
 
     let failed = ComposeOutcome {
@@ -506,6 +557,17 @@ async fn refuses_a_batch_with_an_app_it_cannot_run_and_runs_none() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(problem["type"], "/problems/compose.no_apps");
 
+    let (status, problem) = server
+        .refused(&json!({ "action": restart, "apps": ["alpha", "gamma", "delta", "alpha"] }))
+        .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "three apps, two installed");
+    assert_eq!(problem["type"], "/problems/compose.too_many_apps");
+    assert_eq!(
+        (problem["apps"].clone(), problem["installed"].clone()),
+        (json!(3), json!(2))
+    );
+
     assert!(fixture.docker_calls().is_empty(), "docker never ran");
 }
 
@@ -524,6 +586,8 @@ async fn a_page_that_comes_back_reads_a_running_batch_from_its_start() -> quoll:
         .compose()
         .run(&request(update(), &["alpha", "gamma"]))
         .await?;
+
+    assert!(matches!(next(&mut first).await, ComposeEvent::Batch(_)));
 
     for event in ran("gamma") {
         assert_eq!(next(&mut first).await, event);
@@ -544,6 +608,11 @@ async fn a_page_that_comes_back_reads_a_running_batch_from_its_start() -> quoll:
     assert_eq!(batches[0].report, None, "it runs");
 
     let mut again = api.compose().output(batches[0].id).await?;
+
+    assert_eq!(
+        next(&mut again).await,
+        ComposeEvent::Batch(batches[0].clone())
+    );
 
     for event in ran("gamma") {
         assert_eq!(next(&mut again).await, event, "from its start");
@@ -606,5 +675,145 @@ async fn reads_the_containers_again_before_the_end_of_a_batch() -> quoll::Result
     .await;
 
     assert_eq!(daemon.lists(), 3, "once after each app");
+    Ok(())
+}
+
+#[tokio::test]
+async fn takes_the_values_of_env_global_and_the_credentials_of_a_url_out_of_the_lines()
+-> quoll::Result<()> {
+    let fixture = Fixture::new();
+    let (_, docker_host) = FakeDaemon::serve().await;
+    let behaviour = Behaviour {
+        secret: Some(Fixture::SECRET),
+        ..Behaviour::default()
+    };
+    let server = fixture.serve(&docker_host, behaviour).await;
+
+    let (_, events) = output(
+        server
+            .api()
+            .compose()
+            .run(&request(update(), &["alpha"]))
+            .await?,
+    )
+    .await;
+
+    assert_eq!(
+        events[1],
+        line("alpha", "login https://***@registry.example.com with ***")
+    );
+    assert!(
+        !format!("{events:?}").contains(Fixture::SECRET),
+        "{events:?}"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn refuses_a_batch_on_an_app_another_batch_holds_until_it_ends() -> quoll::Result<()> {
+    let fixture = Fixture::new();
+    let (_, docker_host) = FakeDaemon::serve().await;
+    let behaviour = Behaviour {
+        hold: Some("alpha"),
+        ..Behaviour::default()
+    };
+    let server = fixture.serve(&docker_host, behaviour).await;
+    let api = server.api();
+    let running = api.compose().run(&request(update(), &["alpha"])).await?;
+
+    let (status, problem) = server
+        .refused(&json!({ "action": { "operation": "down" }, "apps": ["gamma", "alpha"] }))
+        .await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(problem["type"], "/problems/compose.app_busy");
+    assert_eq!(problem["app"], "alpha");
+
+    let (status, problem) = server.post("/api/store/apps/alpha/uninstall").await;
+
+    assert_eq!(status, StatusCode::CONFLICT, "no uninstall either");
+    assert_eq!(problem["app"], "alpha");
+    assert!(fixture.data.join("app-installed/alpha").is_symlink());
+
+    fixture.release();
+    all(running).await;
+
+    output(
+        api.compose()
+            .run(&request(ComposeAction::Restart, &["gamma", "alpha"]))
+            .await?,
+    )
+    .await;
+
+    assert_eq!(
+        fixture.projects(),
+        ["alpha", "gamma", "alpha"],
+        "taken again once it ended"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn refuses_a_batch_on_an_app_an_uninstall_holds() {
+    let fixture = Fixture::new();
+    let (_, docker_host) = FakeDaemon::serve().await;
+    let behaviour = Behaviour {
+        hold: Some("alpha"),
+        ..Behaviour::default()
+    };
+    let server = Arc::new(fixture.serve(&docker_host, behaviour).await);
+    let uninstalling = Arc::clone(&server);
+    let uninstall =
+        tokio::spawn(async move { uninstalling.post("/api/store/apps/alpha/uninstall").await });
+
+    // The uninstall's `down` runs, held: the fake `docker` logged it.
+    within("the uninstall's down", async {
+        while fixture.docker_calls().is_empty() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await;
+
+    let (status, problem) = server
+        .refused(&json!({ "action": { "operation": "restart" }, "apps": ["alpha"] }))
+        .await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(problem["type"], "/problems/compose.app_busy");
+
+    fixture.release();
+
+    let (status, _) = within("the uninstall", uninstall)
+        .await
+        .expect("the uninstall's task");
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(fixture.docker_calls().len(), 1, "the batch never ran");
+}
+
+#[tokio::test]
+async fn keeps_the_last_20_batches_that_ended() -> quoll::Result<()> {
+    let fixture = Fixture::new();
+    let (_, docker_host) = FakeDaemon::serve().await;
+    let server = fixture.serve(&docker_host, Behaviour::default()).await;
+    let api = server.api();
+
+    for _ in 0..21 {
+        all(api
+            .compose()
+            .run(&request(ComposeAction::Restart, &["alpha"]))
+            .await?)
+        .await;
+    }
+
+    let ids: Vec<u64> = api
+        .compose()
+        .batches()
+        .await?
+        .iter()
+        .map(|batch| batch.id)
+        .collect();
+
+    assert_eq!(ids, (2..=21).collect::<Vec<_>>(), "the first is forgotten");
     Ok(())
 }

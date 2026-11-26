@@ -340,6 +340,26 @@ pub enum ErrorCode {
     /// A batch of compose commands asked for no app.
     #[serde(rename = "compose.no_apps")]
     NoApps,
+    /// A batch of compose commands asked for more apps than are installed.
+    #[serde(rename = "compose.too_many_apps")]
+    TooManyApps {
+        /// How many apps it asked for, each once.
+        apps: usize,
+        /// How many apps are installed.
+        installed: usize,
+    },
+    /// An app that another command holds: a batch of compose commands that runs on it, or its install or uninstall.
+    #[serde(rename = "compose.app_busy")]
+    AppBusy {
+        /// The app.
+        app: String,
+    },
+    /// A batch of compose commands that the server could not check before it ran: its log says why.
+    #[serde(rename = "compose.unchecked")]
+    BatchUnchecked {
+        /// The command line, as `docker compose up -d`.
+        command: String,
+    },
     /// A compose command failed on an app: its output says why, and the server's log.
     #[serde(rename = "compose.failed")]
     ComposeFailed {
@@ -499,6 +519,9 @@ impl ErrorCode {
             Self::InvalidProject { .. } => "docker.invalid_project",
             Self::UnknownContainer { .. } => "docker.unknown_container",
             Self::NoApps => "compose.no_apps",
+            Self::TooManyApps { .. } => "compose.too_many_apps",
+            Self::AppBusy { .. } => "compose.app_busy",
+            Self::BatchUnchecked { .. } => "compose.unchecked",
             Self::ComposeFailed { .. } => "compose.failed",
             Self::UnknownBatch { .. } => "compose.unknown_batch",
             Self::InvalidCredentials => "auth.invalid_credentials",
@@ -533,7 +556,8 @@ impl ErrorCode {
             | Self::SyncRunning
             | Self::AppExists { .. }
             | Self::FileExists { .. }
-            | Self::FileAppeared { .. } => StatusCode::CONFLICT,
+            | Self::FileAppeared { .. }
+            | Self::AppBusy { .. } => StatusCode::CONFLICT,
             Self::ConfigSyntax { .. }
             | Self::ConfigInvalid { .. }
             | Self::InvalidVariableName { .. }
@@ -553,7 +577,8 @@ impl ErrorCode {
             | Self::InvalidFile { .. }
             | Self::ComposeRejected { .. }
             | Self::InvalidProject { .. }
-            | Self::NoApps => StatusCode::BAD_REQUEST,
+            | Self::NoApps
+            | Self::TooManyApps { .. } => StatusCode::BAD_REQUEST,
             Self::AppsUnreadable
             | Self::InstallFailed { .. }
             | Self::UninstallFailed { .. }
@@ -569,7 +594,8 @@ impl ErrorCode {
             | Self::FileReadFailed { .. }
             | Self::FileSaveFailed { .. }
             | Self::AppCreateFailed { .. }
-            | Self::ComposeFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            | Self::ComposeFailed { .. }
+            | Self::BatchUnchecked { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -649,6 +675,17 @@ impl ErrorCode {
                 "{project} is not a compose project name: lowercase letters, digits, `_` and `-`, starting with a letter or a digit"
             ),
             Self::NoApps => "a compose command needs at least one app".to_owned(),
+            Self::TooManyApps { apps, installed } => {
+                format!(
+                    "a compose command cannot run on more apps than are installed: {apps} asked, {installed} installed"
+                )
+            }
+            Self::AppBusy { app } => {
+                format!("another command runs on {app}: try again once it has ended")
+            }
+            Self::BatchUnchecked { command } => {
+                Self::hinted(&format!("the batch of {command} could not be checked"))
+            }
             Self::ComposeFailed { app, command } => {
                 Self::hinted(&format!("{command} failed on {app}"))
             }
@@ -801,6 +838,14 @@ mod tests {
                 project: "llama.cpp".to_owned(),
             },
             ErrorCode::NoApps,
+            ErrorCode::TooManyApps {
+                apps: 3,
+                installed: 2,
+            },
+            ErrorCode::AppBusy { app: app() },
+            ErrorCode::BatchUnchecked {
+                command: "docker compose up -d".to_owned(),
+            },
             ErrorCode::ComposeFailed {
                 app: app(),
                 command: "docker compose up -d".to_owned(),

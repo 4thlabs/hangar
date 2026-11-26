@@ -35,6 +35,7 @@ pub struct ComposeRequest {
     /// The command.
     pub action: ComposeAction,
     /// The apps, by id, in any order: the batch runs them in the order of `hangar.yml`, `down` in reverse, each once.
+    /// No more than are installed.
     pub apps: Vec<String>,
 }
 
@@ -90,12 +91,15 @@ pub struct ComposeReport {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ComposeEvent {
+    /// The first event: the batch, its apps in the order the command runs on them.
+    Batch(ComposeBatch),
     /// The command starts on an app: the head of its lines.
     Started {
         /// The app.
         app: String,
     },
-    /// A line `docker compose` printed on an app, stdout and stderr together, without its line break.
+    /// A line `docker compose` printed on an app, stdout and stderr together, without its line break, the values of
+    /// `.env.global` and of the server's environment, and the credentials of a URL, taken out.
     Line {
         /// The app.
         app: String,
@@ -117,13 +121,14 @@ quoll::group! {
     /// The compose commands of the installed apps, run in batches on the server, whoever reads their output.
     #[auth(crate::Session)]
     pub group Compose {
-        /// Starts a batch, once every app is checked: a 400 for a name compose does not take or no app at all, a 404
-        /// for an app that is not installed, and none runs. Then its output, from its start: a `started` per app, its
-        /// lines, its `finished`, and an `end` with the report. The batch goes on once the stream is closed; each app's
-        /// end is notified.
+        /// Starts a batch, once every app is checked: a 400 for a name compose does not take, no app at all or more
+        /// than are installed, a 404 for an app that is not installed, a 409 for an app another batch, an install or
+        /// an uninstall holds, and none runs. Then its output, from its start: the `batch`, a `started` per app, its
+        /// lines, its `finished`, and an `end` with the report. The batch goes on once the stream is closed, holding
+        /// its apps until it ends; each app's end is notified.
         POST "/docker/compose" => run(request: &ComposeRequest) -> Events<ComposeEvent>;
 
-        /// The batches that run, and those that ended in the last five minutes, by id.
+        /// The batches that run, and the last 20 that ended in the last five minutes, by id.
         GET "/docker/compose" => batches() -> Vec<ComposeBatch>;
 
         /// The output of a batch from its start, as far as it keeps it, then as it comes, to its `end`. A 404 for a
