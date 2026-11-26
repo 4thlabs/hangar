@@ -4,16 +4,12 @@ use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Whether a child holds the terminal, as a compose command passed through on one app: Ctrl-C is then the child's, as
-/// with compose run by hand, and the binary leaves it alone. Its clones share it.
+/// Whether the command handed the terminal to a child, as a compose command passed through on one app: Ctrl-C is then
+/// the child's, as with compose run by hand, and the binary leaves it alone. It stays handed over once the child ends,
+/// as the end of the command, whose code is the child's, comes after. Its clones share it.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Terminal {
     is_handed_over: Arc<AtomicBool>,
-}
-
-/// Takes the terminal back when it is dropped, at the end of the run or when the run is dropped.
-struct Handover<'a> {
-    terminal: &'a Terminal,
 }
 
 impl Terminal {
@@ -21,20 +17,12 @@ impl Terminal {
     pub(crate) async fn hand_over<T>(&self, run: impl Future<Output = T>) -> T {
         self.is_handed_over.store(true, Ordering::SeqCst);
 
-        let _handover = Handover { terminal: self };
-
         run.await
     }
 
-    /// Whether a child holds the terminal.
+    /// Whether the terminal was handed over to a child.
     pub(crate) fn is_handed_over(&self) -> bool {
         self.is_handed_over.load(Ordering::SeqCst)
-    }
-}
-
-impl Drop for Handover<'_> {
-    fn drop(&mut self) {
-        self.terminal.is_handed_over.store(false, Ordering::SeqCst);
     }
 }
 
@@ -43,13 +31,19 @@ mod tests {
     use super::Terminal;
 
     #[tokio::test]
-    async fn is_handed_over_for_the_run_alone() {
+    async fn is_handed_over_from_the_run_on() {
         let terminal = Terminal::default();
+
+        assert!(!terminal.is_handed_over());
+
         let during = terminal
             .hand_over(async { terminal.is_handed_over() })
             .await;
 
         assert!(during);
-        assert!(!terminal.is_handed_over());
+        assert!(
+            terminal.is_handed_over(),
+            "the command ends after its child"
+        );
     }
 }

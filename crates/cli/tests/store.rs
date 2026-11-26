@@ -32,7 +32,7 @@ done
 case "$project" in
   "${HANGAR_TEST_FAIL:-none}") echo "$project: no such image" >&2; exit 3 ;;
   "${HANGAR_TEST_STDIN:-none}") exec cat ;;
-  "${HANGAR_TEST_GRACEFUL:-none}") trap 'kill $!; exit 0' INT; echo "$project started"; sleep 30 & wait ;;
+  "${HANGAR_TEST_GRACEFUL:-none}") sleep 30 & sleeper=$!; trap 'kill $sleeper 2>/dev/null; exit 0' INT; echo "$project started"; wait ;;
   "${HANGAR_TEST_HANG:-none}") echo "$project started"; exec sleep 30 ;;
   "${HANGAR_TEST_DEAF:-none}") trap '' INT; echo "$project started"; exec sleep 30 ;;
   "${HANGAR_TEST_STUBBORN:-none}") trap '' INT TERM; echo "$project started"; exec sleep 30 ;;
@@ -574,6 +574,29 @@ fn exits_with_the_code_of_a_command_passed_through_that_ends_well_on_ctrl_c() {
 
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(stderr(&output), "", "the Ctrl-C was the child's");
+}
+
+#[test]
+fn follows_the_logs_of_every_app_of_a_category_at_once() {
+    let fixture = Fixture::new();
+    let mut child = spawn_in_its_own_group(
+        fixture
+            .hangar(&["store", "Media", "logs", "-f"])
+            .env("HANGAR_TEST_HANG", "traefik"),
+    );
+    let mut stdout = BufReader::new(child.stdout.take().expect("stdout is piped")).lines();
+
+    // traefik, first in the category, still follows its logs when jellyfin's come.
+    wait_for(&mut stdout, "jellyfin done");
+    ctrl_c(&child);
+
+    let status = child.wait().expect("the binary exits");
+    let mut projects = fixture.projects();
+
+    projects.sort();
+
+    assert_eq!(status.code(), Some(130));
+    assert_eq!(projects, ["jellyfin", "traefik"]);
 }
 
 #[test]

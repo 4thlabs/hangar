@@ -66,13 +66,13 @@ impl Interrupts {
             Err(error) => {
                 tracing::warn!(%error, "cannot listen for Ctrl-C");
 
-                return Self::exit(command.await);
+                return self.exit(command.await);
             }
         };
 
         tokio::select! {
             biased;
-            outcome = &mut command => return Self::exit(outcome),
+            outcome = &mut command => return self.exit(outcome),
             Some(()) = ctrl_c.recv() => {}
         }
 
@@ -121,8 +121,8 @@ impl Interrupts {
         tokio::signal::windows::ctrl_c()
     }
 
-    /// The code a command whose child held the terminal exits with, once interrupted: the child's, said only when it
-    /// did not end on SIGINT.
+    /// The code a command whose child held the terminal exits with: the child's, said only when it did not end on
+    /// SIGINT, whether the binary heard the Ctrl-C before the child ended or not.
     fn exit_as_child(outcome: Result<(), Failure>) -> ExitCode {
         let Err(failure) = outcome else {
             return ExitCode::SUCCESS;
@@ -145,8 +145,13 @@ impl Interrupts {
         is_child_end && source.exit_code() == Self::INTERRUPTED
     }
 
-    /// The code a command that was not interrupted exits with.
-    fn exit(outcome: Result<(), Failure>) -> ExitCode {
+    /// The code a command that was not interrupted exits with: that of the child holding the terminal, when one does,
+    /// as its Ctrl-C may end it before the binary hears it.
+    fn exit(&self, outcome: Result<(), Failure>) -> ExitCode {
+        if self.terminal.is_handed_over() {
+            return Self::exit_as_child(outcome);
+        }
+
         match outcome {
             Ok(()) => ExitCode::SUCCESS,
             Err(failure) => failure.report(),
