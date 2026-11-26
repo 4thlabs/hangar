@@ -147,12 +147,15 @@ builds text for the user alone: what it says to the page is a code and its param
   of words of its own, and never a command's output, where a URL's credentials or an environment value may be. A
   notification is already a key and its params, rendered where it is read. Logs, and the messages the core's errors
   carry, stay English text.
-- **Wire.** quoll writes a problem's status and detail alone: the code and its params go on the wire with
-  [quoll#140](https://github.com/4thlabs/quoll/issues/140). Until then the detail is the code's English message, and
-  nothing else carries the code: no code in the detail, no header of Hangar's own, no body written by hand.
-- **Web.** The page says why a call failed through `ErrorMessage.of(error)` (`web/src/modules/common/error-message.ts`),
-  the one place that will key the words by the code for a catalog; until quoll#140 it shows the detail. The page's
-  own words stay in its components, in English.
+- **Wire.** A body that holds an error, as a store sync's, carries it whole, a `hangar_api::ErrorDetail`:
+  `{ code, params, message }`. A problem cannot yet: quoll writes its status and detail alone, and the code and its
+  params go on the wire with [quoll#140](https://github.com/4thlabs/quoll/issues/140). Until then a problem's detail
+  is the code's English message, and nothing else carries its code: no code in the detail, no header of Hangar's own,
+  no body written by hand.
+- **Web.** The page says why a call failed through `ErrorMessage.describe(error)`, and words an `ErrorDetail` through
+  `ErrorMessage.describeDetail(detail)` (`web/src/modules/common/error-message.ts`): the one place that will key the
+  words by the code for a catalog. Until quoll#140 a problem shows its detail. The page's own words stay in its
+  components, in English.
 - The errors of signing in (#170) get their codes with the move to quoll#140.
 
 What CI's `rust` job runs, warnings as errors:

@@ -126,24 +126,29 @@ too: `http://localhost:5173/api/auth/oidc/callback`.
 ### The store
 
 The store's routes run on the core's `Store`, as the Waku version's actions do on `HangarStore`. **Store → Install**
-links an app into `app-installed/` and seeds the variables its files reference; **Uninstall** runs `docker compose
-down` first, and removes the link once compose has taken the app down: an app compose does not take down stays
-installed, so that compose still reaches its files. Its folder in the store and its volumes are kept. `/store`
-filters by installed or not on the server, which counts both, and narrows by the name the navbar's search field puts
-in `?q=`.
-**New app** opens the template of a `compose.yml`; saving it comes with the app editor.
+links an app into `app-installed/` and seeds the variables its files reference; **Uninstall** runs `docker compose down`
+first, and removes the link once compose has taken the app down: an app compose does not take down stays installed, so
+that compose still reaches its files. Its folder in the store and its volumes are kept. An app installed that the store
+no longer reads, its folder gone or its `compose.yml` or `hangar.yml` broken, goes by its link: compose takes down what
+it can read of it, and the link is removed all the same. `/store` filters by installed or not on the server, which
+counts both, and narrows by the name the navbar's search field puts in `?q=`; an invalid `hangar.yml` is shown there
+with its field at fault. **New app** opens the template of a `compose.yml`; saving it comes with the app editor.
 
 **Settings → Store** clones the store, or pulls it with `--ff-only` once cloned, apart from the request: the sync goes
-on once the page is closed, and `GET /api/store` gives its state, which the page reads again each second while it
-runs. One sync runs at a time: a second request gets the one running. Its end is notified (`storeInstalled`,
-`storeUpdated`, `storeInstallFailed`, `storeUpdateFailed`); until the notifications are kept, the server logs them.
-The page shows why a sync failed in the store's words, never git's output, which the log holds.
+on once the page is closed, and `GET /api/store` gives its state, which the page reads again each second while it runs.
+One sync runs at a time: a second request gets the one running. While it runs, a save of `hangar.yml`, an install or an
+uninstall is refused with a 409, rather than race it; those changes otherwise take turns. A sync's end is notified
+(`storeInstalled`, `storeUpdated`, `storeInstallFailed`, `storeUpdateFailed`); until the notifications are kept, the
+server logs them. The page shows why a sync failed, its code and its English message, never git's output, which the log
+holds.
 
 **Settings → Configuration** saves `hangar.yml` once it is valid, and links the apps and shared files it lists; an
-invalid file is refused with the field at fault, and not written. **Settings → Environment** saves `.env.global`
-merged into the file as it is on disk, after its copy aside, `.env.global.<time>.bak`: a variable added by hand
-meanwhile is kept, and only the ones removed on the page are lost. Its values are hidden until shown, as most are
-secrets, and its answer is never cached (`Cache-Control: no-store`).
+invalid file is refused with the field at fault, and not written. **Settings → Environment** saves `.env.global` merged
+into the file as it is on disk, after its copy aside, `.env.global.<time>.bak`: the page sends only what changed since
+it read the file, so a variable added, changed or removed by hand meanwhile stays as the file has it, and only the ones
+removed on the page are lost. A save that changes nothing writes nothing, and makes no copy. A new variable needs a name
+compose takes; one the file holds already, as `OLD-KEY` written by hand, may be changed or removed. Its values are
+hidden until shown, as most are secrets, and its answer is never cached (`Cache-Control: no-store`).
 
 ## Database
 
