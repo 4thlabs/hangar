@@ -269,7 +269,7 @@ This partly reverses the 2026-11-24 line "its text is written in English in its 
   next to their code (`apps-view.test.ts`, `store-sync.test.ts`).
 - **`libs/` against `modules/`.** `libs/` holds what has no React and no page domain: the API transport, formats,
   preferences. `modules/common/` holds the shell, `ui/`, and the generic hooks and components (`use-event-feed`,
-  `use-event-stream`, `Region`, `action-toast`).
+  `use-event-stream`, `Region`, `components/toast.ts`, which was `action-toast` until #195).
 - **Naming.** A file is named after its main export (`apps-view.ts` exports `appsView`). A function's name carries
   its context, as #195 says (`describeSync`, `parseSettingsTab`, `availableMemory`). The query and mutation option
   objects (`appsQueries`, `settingsMutations`) are the one object of functions allowed: it is TanStack's documented

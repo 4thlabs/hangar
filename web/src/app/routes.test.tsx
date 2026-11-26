@@ -4,6 +4,7 @@ import { ana, coded, renderAt, serve, unauthorized } from "#app/mock/page.tsx";
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.cookie = "theme=; max-age=0; path=/";
   document.cookie = "theme_palette=; max-age=0; path=/";
@@ -45,13 +46,7 @@ describe("the shell", () => {
     document.cookie = "theme=dark; path=/";
     document.cookie = "theme_palette=nord; path=/";
 
-    const written: string[] = [];
-    const cookie = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
-
-    vi.spyOn(document, "cookie", "set").mockImplementation(value => {
-      written.push(value);
-      cookie?.set?.call(document, value);
-    });
+    const set = vi.spyOn(document, "cookie", "set");
 
     renderAt("/");
 
@@ -59,8 +54,11 @@ describe("the shell", () => {
 
     expect(document.documentElement.dataset.theme).toBe("nord");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
+    const written = set.mock.calls.map(([value]) => value);
+
     expect(written).toContainEqual(expect.stringMatching(/^theme=dark; path=\/; max-age=31536000/));
     expect(written).toContainEqual(expect.stringMatching(/^theme_palette=nord; path=\/; max-age=31536000/));
+    expect(document.cookie).toContain("theme=dark");
   });
 
   it("names the signed-in user in the navbar", async () => {
