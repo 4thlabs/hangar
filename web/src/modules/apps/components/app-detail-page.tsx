@@ -1,6 +1,7 @@
 import { Link, useParams } from "@tanstack/react-router";
 import { BoxIcon, CpuIcon, HardDriveIcon, MemoryStickIcon, NetworkIcon } from "lucide-react";
 import { ApiError, useDockerOverview, useDockerProject, type ProjectDetail } from "#libs/api";
+import { ProjectActions } from "#modules/apps/components/project-actions.tsx";
 import { ReconnectingNotice } from "#modules/apps/components/reconnecting-notice.tsx";
 import { ServiceCard } from "#modules/apps/components/service-card.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
@@ -107,8 +108,8 @@ function AppNotFound({ project }: { project: string }) {
 
 /**
  * `/apps/:project`: an installed app as Docker runs it, its services and containers, read again when the server says
- * the daemon changed them, and their usage live. Its compose commands come with #173, its backups with #177, the
- * update badge with the image check of #176, and the link to its editor with #172.
+ * the daemon changed them, their usage live, and its compose commands. Its backups come with #177, the update badge
+ * with the image check of #176, and the link to its editor with #172.
  */
 export function AppDetailPage() {
   const { project } = useParams({ from: "/app/apps/$project" });
@@ -137,6 +138,7 @@ export function AppDetailPage() {
       {data && !error && (
         <>
           <AppHeader detail={data} />
+          <ProjectActions project={data.summary.name} />
           <AppLiveStats detail={data} />
         </>
       )}

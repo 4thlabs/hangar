@@ -108,9 +108,14 @@ export class ServerEvents {
 
   /**
    * Reads a stream once, with `fetch`, until it ends or the function it returns is called: an answer that is not a
-   * 200 is its `ApiError`, which `onEnd` is told, and nothing connects again.
+   * 200 is its `ApiError`, which `onEnd` is told, and nothing connects again. `request` is the call, a `GET` unless it
+   * says otherwise, as a `POST` whose answer is the stream.
    */
-  static read<T>(url: string, { onItem, onOpen = () => {}, onEnd = () => {} }: EventHandlers<T>): () => void {
+  static read<T>(
+    url: string,
+    { onItem, onOpen = () => {}, onEnd = () => {} }: EventHandlers<T>,
+    request: RequestInit = {},
+  ): () => void {
     const controller = new AbortController();
 
     function ended(error?: unknown) {
@@ -119,13 +124,13 @@ export class ServerEvents {
       }
     }
 
-    ServerEvents.readAll(url, onItem, onOpen, controller.signal).then(() => ended(), ended);
+    ServerEvents.readAll(url, { ...request, signal: controller.signal }, onItem, onOpen).then(() => ended(), ended);
 
     return () => controller.abort();
   }
 
-  private static async readAll<T>(url: string, onItem: (item: T) => void, onOpen: () => void, signal: AbortSignal) {
-    const response = await fetch(url, { signal });
+  private static async readAll<T>(url: string, request: RequestInit, onItem: (item: T) => void, onOpen: () => void) {
+    const response = await fetch(url, request);
 
     if (!response.ok) {
       throw await ApiError.read(response);
