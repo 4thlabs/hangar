@@ -12,20 +12,45 @@ path = "src/main.rs"
 
 [dependencies]
 axum = { version = "0.8", default-features = false }
+# What the cookies hold, JSON in base64url, which a cookie's value takes as it is.
+base64 = "0.22"
+# The jars axum-extra's `SignedCookieJar` and `PrivateCookieJar` wrap, under quoll's handlers, which take no extractor:
+# HMAC-signed and AES-GCM-encrypted cookies, their keys derived from `HANGAR_SECRET` with HKDF.
+cookie = { version = "0.18", features = ["key-expansion", "private", "signed"] }
 hangar-api = { workspace = true, features = ["server"] }
 hangar-core.workspace = true
+http.workspace = true
+# The sign-in through an OpenID Connect provider. Its default features pull reqwest 0.12: the server gives it a client
+# on reqwest 0.13, quoll's.
+openidconnect = { version = "4", default-features = false }
 # The decoded path of a request, which the trailing-slash redirect compares with the page's directories.
 percent-encoding = "2"
 quoll = { workspace = true, features = ["server"] }
+# The provider's discovery, keys and token endpoint, over rustls with the platform's roots, as quoll's client.
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+serde.workspace = true
+serde_json.workspace = true
+# The `state` of a sign-in through the provider, compared in constant time.
+subtle = "2"
 thiserror.workspace = true
-tokio = { workspace = true, features = ["fs", "macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["fs", "macros", "rt-multi-thread", "sync"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
+# `HANGAR_URL` and the provider's URLs, and the origin a request that changes something must come from.
+url = "2"
 
 [dev-dependencies]
+# The OpenID Connect provider the tests fake, on port 0.
+axum = { version = "0.8", default-features = false, features = ["form", "http1", "json", "query", "tokio"] }
+# The times of the ID tokens the fake provider signs.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# The key the fake provider signs with, made from fixed bytes: no key is committed.
+ed25519-dalek = { version = "3", features = ["pem"] }
 hangar-api = { workspace = true, features = ["client"] }
 http.workspace = true
-reqwest = { version = "0.13", default-features = false }
+reqwest = { version = "0.13", default-features = false, features = ["json", "query"] }
+# The PKCE challenge the fake provider checks the verifier against.
+sha2 = "0.10"
 tempfile.workspace = true
 
 [lints]

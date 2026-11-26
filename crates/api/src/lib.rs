@@ -3,7 +3,9 @@
 //! TypeScript that orval writes from its OpenAPI document, which the binary `openapi` prints.
 
 mod api;
+mod auth;
 mod health;
 
 pub use api::*;
+pub use auth::*;
 pub use health::*;

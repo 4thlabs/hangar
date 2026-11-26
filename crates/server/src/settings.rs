@@ -1,11 +1,15 @@
 //! The settings of the server, read from the environment once at the start, as the Waku version reads them in
 //! `src/libs/env/env.ts`: a value that is missing or bad stops the server with a message that names its variable.
 
+mod auth;
+
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 
 use hangar_core::{DataDir, Environment, StoreError};
+
+pub use auth::{AuthSettings, OidcSettings};
 
 /// What the server reads from the environment. A variable that is empty is not set, as the `hangar` binary reads it.
 ///
@@ -18,12 +22,15 @@ use hangar_core::{DataDir, Environment, StoreError};
 ///     ("HANGAR_DATA_DIR", "/srv/hangar"),
 ///     ("HANGAR_STORE_URL", "https://example.com/store.git"),
 ///     ("DOMAIN", "example.com"),
+///     ("HANGAR_URL", "https://hangar.example.com"),
+///     ("HANGAR_SECRET", "0123456789abcdef0123456789abcdef"),
 /// ]);
 /// let settings = Settings::read(|name| variables.get(name).map(|value| value.to_string()))?;
 ///
 /// assert_eq!(settings.domain, "example.com");
 /// assert_eq!(settings.address.to_string(), "0.0.0.0:3010");
 /// assert!(settings.github_token.is_none());
+/// assert!(settings.auth.oidc.is_none());
 /// # Ok::<(), hangar_server::SettingsError>(())
 /// ```
 #[derive(Debug, Clone)]
@@ -50,6 +57,8 @@ pub struct Settings {
     /// The directory of the page the server serves beside its API, the Vite build of `web/`, from `HANGAR_PAGE_DIR`.
     /// Unset, the server serves its API alone, as in development, where Vite serves the page.
     pub page: Option<PathBuf>,
+    /// How users sign in: the page's URL, the cookies' secret, and the OpenID Connect provider.
+    pub auth: AuthSettings,
 }
 
 impl Settings {
@@ -97,7 +106,8 @@ impl Settings {
     ///
     /// Returns a [`SettingsError`] that lists every variable missing or bad: `HANGAR_DATA_DIR`, `HANGAR_STORE_URL` or
     /// `DOMAIN` not set, a `HOST` that is no IP address, a data directory that is no usable path, a port that is not 1
-    /// to 65535, or a page's directory with no `index.html`.
+    /// to 65535, a page's directory with no `index.html`, and those of [`AuthSettings`]: `HANGAR_URL` that is no
+    /// `http` URL, `HANGAR_SECRET` shorter than 32 bytes, or a provider's issuer without its client id.
     pub fn read(variable: impl Fn(&str) -> Option<String>) -> Result<Self, SettingsError> {
         let variable = |name: &str| variable(name).filter(|value| !value.is_empty());
 
@@ -109,8 +119,11 @@ impl Settings {
         let domain = Self::required(Self::DOMAIN, variable(Self::DOMAIN));
         let ssh_port = Self::port(Self::SSH_PORT, variable(Self::SSH_PORT));
         let page = Self::page(variable(Self::PAGE_DIR));
+        let auth = AuthSettings::read(variable);
 
-        match (host, port, data_dir, store_url, domain, ssh_port, page) {
+        match (
+            host, port, data_dir, store_url, domain, ssh_port, page, auth,
+        ) {
             (
                 Ok(host),
                 Ok(port),
@@ -119,6 +132,7 @@ impl Settings {
                 Ok(domain),
                 Ok(ssh_port),
                 Ok(page),
+                Ok(auth),
             ) => Ok(Self {
                 address: SocketAddr::new(host, port.unwrap_or(Self::DEFAULT_PORT)),
                 data_dir,
@@ -130,8 +144,9 @@ impl Settings {
                 ssh_user: variable(Self::SSH_USER),
                 ssh_port,
                 page,
+                auth,
             }),
-            (host, port, data_dir, store_url, domain, ssh_port, page) => {
+            (host, port, data_dir, store_url, domain, ssh_port, page, auth) => {
                 let errors = [
                     host.err(),
                     port.err(),
@@ -143,7 +158,11 @@ impl Settings {
                 ];
 
                 Err(SettingsError {
-                    errors: errors.into_iter().flatten().collect(),
+                    errors: errors
+                        .into_iter()
+                        .flatten()
+                        .chain(auth.err().into_iter().flatten())
+                        .collect(),
                 })
             }
         }
@@ -266,6 +285,28 @@ pub enum SettingError {
         /// The directory.
         dir: PathBuf,
     },
+
+    /// A variable that is no `http` or `https` URL.
+    #[error("{variable} must be an http or https URL, not {value:?}")]
+    NotAUrl {
+        /// The variable.
+        variable: &'static str,
+        /// Its value.
+        value: String,
+    },
+
+    /// `HANGAR_SECRET` is shorter than 32 bytes.
+    #[error("HANGAR_SECRET must be at least 32 bytes: `openssl rand -base64 32` prints one")]
+    ShortSecret,
+
+    /// A variable that another one set needs, as the provider's client id beside its issuer.
+    #[error("{variable} is not set, which {by} needs")]
+    NeededBy {
+        /// The variable that is not set.
+        variable: &'static str,
+        /// The variable that needs it.
+        by: &'static str,
+    },
 }
 
 impl SettingError {
@@ -274,9 +315,12 @@ impl SettingError {
         match self {
             Self::NotSet { variable }
             | Self::NotAnAddress { variable, .. }
-            | Self::NotAPort { variable, .. } => variable,
+            | Self::NotAPort { variable, .. }
+            | Self::NotAUrl { variable, .. }
+            | Self::NeededBy { variable, .. } => variable,
             Self::DataDir { .. } => DataDir::VARIABLE,
             Self::NoPage { .. } => Settings::PAGE_DIR,
+            Self::ShortSecret => AuthSettings::SECRET,
         }
     }
 }
@@ -335,10 +379,12 @@ mod tests {
         Settings::read(|name| variables.get(name).cloned())
     }
 
-    const REQUIRED: [(&str, &str); 3] = [
+    const REQUIRED: [(&str, &str); 5] = [
         ("HANGAR_DATA_DIR", "/srv/hangar"),
         ("HANGAR_STORE_URL", "https://example.com/store.git"),
         ("DOMAIN", "example.com"),
+        ("HANGAR_URL", "https://hangar.example.com"),
+        ("HANGAR_SECRET", "0123456789abcdef0123456789abcdef"),
     ];
 
     fn with_required<'a>(more: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
@@ -366,7 +412,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "invalid environment: HANGAR_DATA_DIR, HANGAR_STORE_URL, DOMAIN"
+            "invalid environment: HANGAR_DATA_DIR, HANGAR_STORE_URL, DOMAIN, HANGAR_URL, HANGAR_SECRET"
         );
         assert_eq!(
             error
@@ -377,7 +423,9 @@ mod tests {
             [
                 "HANGAR_DATA_DIR is not set",
                 "HANGAR_STORE_URL is not set",
-                "DOMAIN is not set"
+                "DOMAIN is not set",
+                "HANGAR_URL is not set",
+                "HANGAR_SECRET is not set"
             ]
         );
     }
@@ -473,9 +521,17 @@ mod tests {
 
     #[test]
     fn keeps_the_secrets_out_of_debug() {
-        let settings = read(&with_required(&[("GITHUB_TOKEN", "ghp_secret")]))
-            .expect("the settings are valid");
+        let settings = read(&with_required(&[
+            ("GITHUB_TOKEN", "ghp_secret"),
+            ("HANGAR_OIDC_ISSUER", "https://auth.example.com"),
+            ("HANGAR_OIDC_CLIENT_ID", "hangar"),
+            ("HANGAR_OIDC_CLIENT_SECRET", "oidc_secret"),
+        ]))
+        .expect("the settings are valid");
+        let debug = format!("{settings:?}");
 
-        assert!(!format!("{settings:?}").contains("ghp_secret"));
+        assert!(!debug.contains("ghp_secret"));
+        assert!(!debug.contains("oidc_secret"));
+        assert!(!debug.contains("0123456789abcdef"));
     }
 }

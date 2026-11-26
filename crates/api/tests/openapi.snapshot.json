@@ -1,6 +1,16 @@
 {
   "components": {
     "responses": {
+      "BadRequest": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "A parameter or the body is missing, or does not read as its type."
+      },
       "Problem": {
         "content": {
           "application/problem+json": {
@@ -10,9 +20,55 @@
           }
         },
         "description": "An error, as an RFC 9457 problem."
+      },
+      "Unauthorized": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "The request carries no valid credential of a scheme the route takes.",
+        "headers": {
+          "WWW-Authenticate": {
+            "description": "A challenge per scheme the route takes, in the order it takes them.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "The body does not have the content type the route reads."
       }
     },
     "schemas": {
+      "Credentials": {
+        "description": "The email and the password of a user of `hangar.yml`.",
+        "properties": {
+          "email": {
+            "description": "The user's email, whatever its case.",
+            "type": "string"
+          },
+          "password": {
+            "description": "The password.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object"
+      },
       "Problem": {
         "description": "An RFC 9457 problem: what went wrong with a request, the body of every error, as `application/problem+json`.",
         "properties": {
@@ -56,16 +112,249 @@
           "version"
         ],
         "type": "object"
+      },
+      "SessionUser": {
+        "description": "The user a session is for.",
+        "properties": {
+          "email": {
+            "description": "The user's email, as `hangar.yml` writes it.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The name `hangar.yml` gives the user.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "email"
+        ],
+        "type": "object"
+      },
+      "SignInOptions": {
+        "description": "What the sign-in page offers.",
+        "properties": {
+          "oidc": {
+            "description": "Whether an OpenID Connect provider is configured: the page then offers to sign in with it.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "oidc"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "OidcFlow": {
+        "description": "The sign-in through the provider, from its start to its callback: a cookie the server encrypts, which holds\nthe state, the nonce and the PKCE verifier for ten minutes.",
+        "in": "cookie",
+        "name": "__Host-hangar-oidc",
+        "type": "apiKey"
+      },
+      "Session": {
+        "description": "The session of the page: a cookie the server signs, `HttpOnly`, `Secure` and `SameSite=Lax`, which a subdomain\ncannot set.",
+        "in": "cookie",
+        "name": "__Host-hangar-session",
+        "type": "apiKey"
       }
     }
   },
   "info": {
-    "description": "Hangar's API, which its page calls. Every error is a problem, in English.",
+    "description": "Hangar's API, which its page calls. Every error is a problem, in English. Every route but those of `Auth` and\n`Health` takes a `Session`.",
     "title": "hangar-api",
     "version": "0.1.0"
   },
   "openapi": "3.1.1",
   "paths": {
+    "/api/auth/login": {
+      "post": {
+        "operationId": "auth_login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credentials"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionUser"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Signs in a user of `hangar.yml` by password, and sets the session's cookie. A wrong email or password is a 401, and too many of them for one email a 429.",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "auth_logout",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Signs out: the session's cookie is cleared.",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/oidc/callback": {
+      "get": {
+        "operationId": "auth_oidc_callback",
+        "parameters": [
+          {
+            "description": "The code to exchange for the tokens.",
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The provider's error, as `access_denied` when the user declines.",
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The state the sign-in sent the provider, which must come back as it went.",
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "OidcFlow": []
+          },
+          {}
+        ],
+        "summary": "Where the provider sends the browser back: the session's cookie for a user `hangar.yml` lists, by its subject or its verified email, and a redirect to the page; any other is sent back to `/login` with an `error` that says why.",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/oidc/login": {
+      "get": {
+        "operationId": "auth_oidc_login",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Starts a sign-in through the provider: a redirect to it, with the flow's cookie. A 404 when no provider is configured.",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/options": {
+      "get": {
+        "operationId": "auth_options",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInOptions"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "What the sign-in page offers.",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/session": {
+      "get": {
+        "operationId": "auth_session",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionUser"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The signed-in user. A session past a day is renewed for seven more, so that one in use does not expire.",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "health_check",
@@ -95,6 +384,10 @@
     {
       "description": "The server's health, which needs no session.",
       "name": "Health"
+    },
+    {
+      "description": "Signing in and out. Every other route but the health route takes a `Session`, or answers 401.",
+      "name": "Auth"
     }
   ]
 }
