@@ -10,13 +10,13 @@ import {
   useStoreSync,
   type StoreStatus,
 } from "#libs/api";
-import { toastFailure, toastSuccess } from "#modules/common/components/action-toast.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
+import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/error-message.ts";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
-import { describeSync, syncPollMs, syncStarted } from "#modules/settings/store-sync.ts";
+import { describeSync, syncPollMs, syncStartedText } from "#modules/settings/store-sync.ts";
 
 /**
  * The store's URL, whether it is cloned, and its sync: started here, run by the server apart from the request, and
@@ -36,7 +36,7 @@ export function StoreSettingsCard() {
           previous ? { ...previous, sync: started } : previous,
         );
 
-        toastSuccess("Synchronization started", syncStarted(started));
+        toastSuccess("Synchronization started", syncStartedText(started));
       },
       onError: failure => toastFailure("Launch failed", failure),
     },

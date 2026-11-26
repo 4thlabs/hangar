@@ -30,7 +30,7 @@ export function describeSync(sync: StoreSync): string {
 }
 
 /** What the toast of a sync started says. */
-export function syncStarted(sync: StoreSync): string {
+export function syncStartedText(sync: StoreSync): string {
   return sync.operation === "install"
     ? "The installation of the store was started."
     : "The update of the store was started.";

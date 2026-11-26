@@ -2,8 +2,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { DownloadIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { getEnvReadQueryKey, getStoreAppsQueryKey, useStoreInstall, useStoreUninstall, type StoreApp } from "#libs/api";
-import { toastFailure, toastSuccess } from "#modules/common/components/action-toast.ts";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
+import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 

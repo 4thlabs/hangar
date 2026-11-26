@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { JobRun } from "#libs/api";
 import {
-  askedAgain,
+  askedAgainText,
   formatRunTime,
   isRunActive,
   jobName,
@@ -58,7 +58,7 @@ describe("the jobs' words", () => {
   });
 
   it("says whether the job asked for again waits or runs", () => {
-    expect(askedAgain(run)).toBe("Image check waits its turn.");
-    expect(askedAgain({ ...run, job: "auto_update", state: "running" })).toBe("Update of the apps runs.");
+    expect(askedAgainText(run)).toBe("Image check waits its turn.");
+    expect(askedAgainText({ ...run, job: "auto_update", state: "running" })).toBe("Update of the apps runs.");
   });
 });

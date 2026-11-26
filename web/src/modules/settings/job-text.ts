@@ -61,7 +61,7 @@ export function runFailure(run: JobRun): string | undefined {
 }
 
 /** What the toast of a job asked for again says: its run waits its turn, or already runs. */
-export function askedAgain(asked: JobRun): string {
+export function askedAgainText(asked: JobRun): string {
   const name = jobName(asked.job);
 
   return asked.state === "running" ? `${name} runs.` : `${name} waits its turn.`;

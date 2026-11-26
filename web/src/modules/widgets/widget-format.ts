@@ -11,7 +11,7 @@ export function formatInteger(value: number) {
 }
 
 /** Bytes in the unit that keeps the number readable (`700 MB`, not `0.7 GB`), with one decimal from MB up. */
-export function formatSize(bytes: number) {
+export function formatBytes(bytes: number) {
   const magnitude = bytes > 0 ? Math.floor(Math.log(bytes) / Math.log(1024)) : 0;
   const unit = Math.min(magnitude, byteUnits.length - 1);
   const decimals = unit < 2 ? 0 : 1;
