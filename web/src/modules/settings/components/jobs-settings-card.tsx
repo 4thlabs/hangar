@@ -16,7 +16,7 @@ import {
   jobsPollDelay,
   jobStateLabel,
   runFailure,
-} from "#modules/settings/job-text.ts";
+} from "#modules/settings/helpers/job-text.ts";
 
 /**
  * The runs of the server's jobs, the last 50 it keeps in memory, the newest first: each can be run again, and one that

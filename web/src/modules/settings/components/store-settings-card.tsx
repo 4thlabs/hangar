@@ -16,7 +16,7 @@ import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
-import { describeSync, syncPollMs, syncStartedText } from "#modules/settings/store-sync.ts";
+import { describeSync, syncPollMs, syncStartedText } from "#modules/settings/helpers/store-sync.ts";
 
 /**
  * The store's URL, whether it is cloned, and its sync: started here, run by the server apart from the request, and

@@ -8,7 +8,7 @@ import {
   jobsPollDelay,
   jobStateLabel,
   runFailure,
-} from "#modules/settings/job-text.ts";
+} from "#modules/settings/helpers/job-text.ts";
 
 const run: JobRun = {
   id: 1,
