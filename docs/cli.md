@@ -13,9 +13,9 @@ cp .env.example .env   # point HANGAR_DATA_DIR and HANGAR_STORE_URL at your setu
 node bin/cli.js --help
 ```
 
-The CLI is not shipped in the container image. A Rust binary, `hangar`, takes the same `store`
-commands: see [the Rust binary](#the-rust-binary). The Node CLI stays until the switch to the Rust
-server.
+The Node CLI is not shipped in the container image. A Rust binary, `hangar`, takes the same `store`
+commands, and is: in the image, and released as a static binary for the host. See
+[the Rust binary](#the-rust-binary). The Node CLI stays until the switch to the Rust server.
 
 ## Commands
 
@@ -117,6 +117,9 @@ Runs `docker stack ls`: the stacks running in the swarm, deployed by Hangar or n
 core, with the same invocations: same targets, same order, same `docker compose` calls. The Node CLI
 stays until the switch, and is still the one for `swarm`.
 
+It runs [in the container](#in-the-container), [on the host](#on-an-unraid-host) from a release, or
+from a checkout:
+
 ```bash
 cargo build --release -p hangar-cli     # target/release/hangar
 cargo run -p hangar-cli -- store up     # or straight from the checkout
@@ -157,6 +160,8 @@ cargo run -p hangar-cli -- store Media stop
 Where it differs from the Node CLI:
 
 - It has no `swarm` command yet.
+- It says when `docker` or `git` is not installed, and, once a compose command failed, when docker
+  has no `compose`, where the Node CLI prints the system's error, or docker's.
 - Every stack is checked before any runs: a listed stack that is not installed fails the command
   before the others run, where the Node CLI runs those before it.
 - On a category, a stack listed in several categories runs at its first place in `hangar.yml`.
@@ -185,3 +190,68 @@ later. A third exits at once, with 130, killing what is left.
 
 A command given the terminal keeps its Ctrl-C, as compose run by hand: the binary says nothing,
 stops nothing, waits for it to end, and exits with its code, 0 included.
+
+### In the container
+
+The image holds the binary at `/usr/local/bin/hangar`, with what it runs: the docker CLI, compose,
+git, the socket and the data directory. The container's environment gives it `HANGAR_DATA_DIR` and
+`HANGAR_STORE_URL`, so it needs no `.env`:
+
+```bash
+docker exec -it hangar hangar store up
+alias hangar='docker exec -it hangar hangar'   # in the host's shell profile
+```
+
+`-it` hands compose a terminal, for its TTY and its Ctrl-C: without it, a Ctrl-C stops the
+`docker exec` and leaves compose running in the container. A script or a cron job, which has no
+terminal, runs it with `docker exec hangar hangar …`.
+
+### On an Unraid host
+
+A `docker exec` adds its start-up time to every command: typed often, the binary runs better on
+the host itself. Each release attaches it, static, with its checksum: `hangar-x86_64-unknown-linux-musl`,
+and `hangar-aarch64-unknown-linux-musl` for an ARM host. It needs two things on the host; check
+both:
+
+```bash
+docker compose version   # the Compose Manager plugin provides it on Unraid
+git --version
+```
+
+Unraid's root lives in RAM and is rebuilt at each boot, so the binary is kept on the flash drive
+and copied into place by `/boot/config/go`, the script Unraid runs at boot. Download it and check
+it:
+
+```bash
+mkdir -p /boot/config/hangar && cd /boot/config/hangar
+release=https://github.com/4thlabs/hangar/releases/latest/download
+curl -fsSLO "$release/hangar-x86_64-unknown-linux-musl"
+curl -fsSLO "$release/hangar-x86_64-unknown-linux-musl.sha256"
+sha256sum -c hangar-x86_64-unknown-linux-musl.sha256
+```
+
+Then add to `/boot/config/go`, and run the line once to have it before the next boot (the flash
+drive is FAT32, which keeps no executable bit, hence the copy):
+
+```bash
+install -m 755 /boot/config/hangar/hangar-x86_64-unknown-linux-musl /usr/local/bin/hangar
+```
+
+The User Scripts plugin does the same with that line in a script set to run at the first array
+start. To update, download it again and run the line.
+
+The binary reads the `.env` of the folder it runs from, the environment taking precedence, as
+above. The `.env` beside Hangar's `compose.yml` already holds `HANGAR_STORE_URL`; add
+`HANGAR_DATA_DIR`, set to the folder the container mounts at the same path, `<that folder>/.data`
+with the `compose.yml` of this repository. Run from there, the binary then reads the same
+`compose.yml` and `.env.global` as in the container:
+
+```bash
+cd /mnt/user/appdata/hangar   # the folder of Hangar's compose.yml and .env
+echo 'HANGAR_DATA_DIR="/mnt/user/appdata/hangar/.data"' >> .env
+hangar store up
+```
+
+The `compose.yml` sets `HANGAR_DATA_DIR` for the container itself, so the line changes nothing
+there. To run it from any folder, export both variables in root's shell profile, which `go` has to
+write again at each boot as well.
