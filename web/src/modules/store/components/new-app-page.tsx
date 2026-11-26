@@ -3,9 +3,9 @@ import { useNavigate } from "@tanstack/react-router";
 import { SaveIcon } from "lucide-react";
 import { useState } from "react";
 import { getStoreAppsQueryKey, useEditorCreateApp, useStoreNewApp } from "#libs/api";
-import { ActionToast } from "#modules/common/action-toast.ts";
+import { toastFailure, toastSuccess } from "#modules/common/components/action-toast.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/error-message.ts";
 import { useYamlEditor } from "#modules/common/hooks/use-yaml-editor.tsx";
 import { Field, FieldDescription, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
@@ -18,7 +18,7 @@ export function NewAppPage() {
     <main>
       <title>New app | Hangar</title>
       <h1 className="text-2xl font-semibold">New app</h1>
-      {error && <p className="text-sm text-destructive">{ErrorMessage.describe(error)}</p>}
+      {error && <p className="text-sm text-destructive">{describeError(error)}</p>}
       {template && <NewAppEditor source={template.compose} />}
     </main>
   );
@@ -34,14 +34,14 @@ function NewAppEditor({ source }: { source: string }) {
   const create = useEditorCreateApp({
     mutation: {
       onSuccess: async app => {
-        ActionToast.success("App saved", `${app.id} was added to the store.`);
+        toastSuccess("App saved", `${app.id} was added to the store.`);
         await queryClient.invalidateQueries({ queryKey: getStoreAppsQueryKey() });
         // The new app gets its own editor, so that a second save edits it rather than create it again.
         await navigate({ to: "/store/$id/edit", params: { id: app.id } });
       },
       onError: failure => {
-        setRefusal(ErrorMessage.describe(failure));
-        ActionToast.failure("App rejected", failure);
+        setRefusal(describeError(failure));
+        toastFailure("App rejected", failure);
       },
     },
   });

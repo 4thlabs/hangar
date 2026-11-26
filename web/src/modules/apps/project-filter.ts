@@ -1,7 +1,7 @@
 import type { ProjectStatus, ProjectSummary } from "#libs/api";
 import { AppsSearchParams, type AppSortColumn, type AppsSort, type AppUpdate } from "#modules/apps/apps-search.ts";
-import { NameSearch } from "#modules/common/search.ts";
-import { TableSort } from "#modules/common/table-sort.ts";
+import { searchByName } from "#modules/common/search-by-name.ts";
+import { sortRows } from "#modules/common/table-sort.ts";
 
 /** What narrows the apps' table: the query, the statuses, the categories and the sides of the update filter ticked, and
  * the order. */
@@ -46,9 +46,9 @@ export class ProjectFilter {
     const updating =
       updates.length === 0 ? matching : matching.filter(project => updates.includes(ProjectFilter.update(project)));
 
-    const found = NameSearch.apply(q, updating);
+    const found = searchByName(q, updating);
 
-    return sort ? TableSort.apply(found, sort, ProjectFilter.SortValue[sort.column]) : found;
+    return sort ? sortRows(found, sort, ProjectFilter.SortValue[sort.column]) : found;
   }
 
   /** The side of the update filter `project` falls on: one no check has answered for yet counts as up to date. */

@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { DownloadIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { getEnvReadQueryKey, getStoreAppsQueryKey, useStoreInstall, useStoreUninstall, type StoreApp } from "#libs/api";
-import { ActionToast } from "#modules/common/action-toast.ts";
+import { toastFailure, toastSuccess } from "#modules/common/components/action-toast.ts";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
@@ -39,16 +39,16 @@ export function StoreAppButton({ app }: StoreAppButtonProps) {
 
   const install = useStoreInstall({
     mutation: {
-      onSuccess: () => ActionToast.success("App installed", `${app.name} was installed.`),
-      onError: error => ActionToast.failure("Installation failed", error),
+      onSuccess: () => toastSuccess("App installed", `${app.name} was installed.`),
+      onError: error => toastFailure("Installation failed", error),
       onSettled: installSettled,
     },
   });
 
   const uninstall = useStoreUninstall({
     mutation: {
-      onSuccess: () => ActionToast.success("App uninstalled", `${app.name} was uninstalled.`),
-      onError: error => ActionToast.failure("Uninstallation failed", error),
+      onSuccess: () => toastSuccess("App uninstalled", `${app.name} was uninstalled.`),
+      onError: error => toastFailure("Uninstallation failed", error),
       onSettled: settled,
     },
   });

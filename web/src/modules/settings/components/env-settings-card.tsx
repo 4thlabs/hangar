@@ -2,9 +2,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { EyeIcon, EyeOffIcon, KeyRoundIcon, PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { getEnvReadQueryKey, useEnvRead, useEnvSave } from "#libs/api";
-import { ActionToast } from "#modules/common/action-toast.ts";
+import { toastFailure, toastSuccess } from "#modules/common/components/action-toast.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/error-message.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
@@ -40,7 +40,7 @@ export function EnvSettingsCard() {
       </CardHeader>
       {error && (
         <CardContent>
-          <p className="text-sm text-destructive">{ErrorMessage.describe(error)}</p>
+          <p className="text-sm text-destructive">{describeError(error)}</p>
         </CardContent>
       )}
       {/* Keyed by the read: a save, which gives the file as written, starts the form again from it. */}
@@ -61,9 +61,9 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
     mutation: {
       onSuccess: written => {
         queryClient.setQueryData(getEnvReadQueryKey(), written);
-        ActionToast.success("Environment saved", "The global environment was saved.");
+        toastSuccess("Environment saved", "The global environment was saved.");
       },
-      onError: failure => ActionToast.failure("Save failed", failure),
+      onError: failure => toastFailure("Save failed", failure),
     },
   });
 

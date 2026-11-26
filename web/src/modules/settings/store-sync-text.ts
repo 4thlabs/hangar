@@ -1,5 +1,5 @@
 import type { StoreSync } from "#libs/api";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeErrorDetail } from "#modules/common/error-message.ts";
 
 /** What the store's card says of its last sync. */
 export class StoreSyncText {
@@ -18,7 +18,7 @@ export class StoreSyncText {
     }
 
     if (sync.state === "failed") {
-      const reason = sync.error ? ErrorMessage.describeDetail(sync.error) : "See the server's log.";
+      const reason = sync.error ? describeErrorDetail(sync.error) : "See the server's log.";
 
       return `The ${noun} of the store failed: ${reason}`;
     }

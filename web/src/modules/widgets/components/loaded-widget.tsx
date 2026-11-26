@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { WidgetPlacement } from "#libs/api";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/error-message.ts";
 import { useWidgetData, type LoadingWidgetType, type WidgetDataOf } from "#modules/widgets/hooks/use-widget-data.ts";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
 import { WidgetBoundary } from "./widget-boundary.tsx";
@@ -33,7 +33,7 @@ export function LoadedWidget<Type extends LoadingWidgetType>({ placement, type, 
   }
 
   if (error) {
-    return <WidgetError look={look} reason={ErrorMessage.describe(error)} />;
+    return <WidgetError look={look} reason={describeError(error)} />;
   }
 
   return <WidgetSkeleton look={look} />;

@@ -1,8 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { getEditorReadQueryOptions, useEditorCreate, useEditorWrite, type AppFile, type SavedFile } from "#libs/api";
-import { ActionToast } from "#modules/common/action-toast.ts";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { toastFailure, toastSuccess } from "#modules/common/components/action-toast.ts";
+import { describeError } from "#modules/common/error-message.ts";
 
 export type AppFilesOptions = {
   id: string;
@@ -55,7 +55,7 @@ export function useAppFiles({ id, files, initialFile, onSaved }: AppFilesOptions
     queryClient
       .fetchQuery({ ...getEditorReadQueryOptions(id, { path }), staleTime: 0 })
       .then(file => remember(path, file.source))
-      .catch((error: unknown) => setError(path, ErrorMessage.describe(error)))
+      .catch((error: unknown) => setError(path, describeError(error)))
       .finally(() => setLoadingPath(current => (current === path ? null : current)));
   };
 
@@ -75,12 +75,12 @@ export function useAppFiles({ id, files, initialFile, onSaved }: AppFilesOptions
         onSuccess: saved => {
           setError(path, null);
           setSavedSources(current => new Map(current).set(path, source));
-          ActionToast.success("File saved", `${path} was saved.`);
+          toastSuccess("File saved", `${path} was saved.`);
           onSaved(saved);
         },
         onError: error => {
-          setError(path, ErrorMessage.describe(error));
-          ActionToast.failure("File rejected", error);
+          setError(path, describeError(error));
+          toastFailure("File rejected", error);
         },
       },
     );
@@ -105,11 +105,11 @@ export function useAppFiles({ id, files, initialFile, onSaved }: AppFilesOptions
           setPaths(current => [...current, path].sort());
           remember(path, "");
           setSelectedPath(path);
-          ActionToast.success("File created", `${path} was created.`);
+          toastSuccess("File created", `${path} was created.`);
         },
         onError: error => {
-          setError(openPath, ErrorMessage.describe(error));
-          ActionToast.failure("File rejected", error);
+          setError(openPath, describeError(error));
+          toastFailure("File rejected", error);
         },
       },
     );

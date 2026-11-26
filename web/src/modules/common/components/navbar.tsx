@@ -5,7 +5,7 @@ import { useState } from "react";
 import { NavbarSearch } from "#modules/common/components/searchbar.tsx";
 import { UserMenu } from "#modules/common/components/user-menu.tsx";
 import { useCurrentPath } from "#modules/common/hooks/use-current-path.ts";
-import { Navigations } from "#modules/common/navigations.ts";
+import { isNavigationActive, navigationCategories } from "#modules/common/navigations.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Tabs, TabsList, TabsTrigger } from "#modules/common/ui/tabs.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
@@ -32,13 +32,13 @@ function Brand() {
 function DesktopNavigation() {
   const path = useCurrentPath();
 
-  const items = Navigations.Categories.filter(category => category.position !== "bottom").flatMap(
-    category => category.items,
-  );
+  const items = navigationCategories
+    .filter(category => category.position !== "bottom")
+    .flatMap(category => category.items);
 
   // The tab strip matches on equality, so it is handed the active href rather than the raw path:
   // `/apps/alpha` must still light up Apps. No item matches on `/settings` — that one is a button.
-  const active = items.find(item => Navigations.isActive(path, item.href))?.href ?? "";
+  const active = items.find(item => isNavigationActive(path, item.href))?.href ?? "";
 
   return (
     <nav className="hidden h-full sm:block" aria-label="Main navigation">
@@ -70,7 +70,7 @@ function SettingsButton() {
       <TooltipTrigger
         render={
           <Button
-            variant={Navigations.isActive(path, "/settings") ? "secondary" : "ghost"}
+            variant={isNavigationActive(path, "/settings") ? "secondary" : "ghost"}
             size="icon"
             className="hidden sm:inline-flex"
             render={

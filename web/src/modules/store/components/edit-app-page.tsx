@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { getEditorFilesQueryKey, getStoreAppsQueryKey, useEditorFiles, useEditorRead, type SavedFile } from "#libs/api";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { AppEditor } from "#modules/store/components/app-editor.tsx";
 import { ComposeFile } from "#modules/store/compose-file.ts";
@@ -43,11 +43,11 @@ export function EditAppPage() {
           starts.
         </p>
       </div>
-      {opened.error && <p className="text-sm text-destructive">{ErrorMessage.describe(opened.error)}</p>}
+      {opened.error && <p className="text-sm text-destructive">{describeError(opened.error)}</p>}
       {!opened.error && compose.error && (
         <Alert variant="destructive">
           <AlertTitle>This app cannot be edited here</AlertTitle>
-          <AlertDescription>{ErrorMessage.describe(compose.error)}</AlertDescription>
+          <AlertDescription>{describeError(compose.error)}</AlertDescription>
         </Alert>
       )}
       {isRead && opened.data && compose.data && (

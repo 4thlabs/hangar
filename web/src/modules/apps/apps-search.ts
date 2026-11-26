@@ -1,5 +1,5 @@
 import { ProjectStatus } from "#libs/api";
-import { TableSort, type SortState } from "#modules/common/table-sort.ts";
+import { parseSort, serializeSort, type SortState } from "#modules/common/table-sort.ts";
 
 /** The sortable columns of the apps' table. */
 export type AppSortColumn = "name" | "category" | "status" | "services" | "containers" | "unhealthy";
@@ -59,7 +59,7 @@ export class AppsSearchParams {
       status: AppsSearchParams.write(AppsSearchParams.statuses(search.status)),
       category: AppsSearchParams.write(AppsSearchParams.categories(search.category)),
       update: AppsSearchParams.write(AppsSearchParams.updates(search.update)),
-      sort: sort ? TableSort.serialize(sort) : undefined,
+      sort: sort ? serializeSort(sort) : undefined,
     };
 
     return Object.fromEntries(Object.entries(validated).filter(([, value]) => value !== undefined));
@@ -86,7 +86,7 @@ export class AppsSearchParams {
 
   /** The order `sort` names, `null` for the default one. */
   static sort(sort: unknown): AppsSort {
-    return typeof sort === "string" ? TableSort.parse(sort, AppsSearchParams.SortColumns) : null;
+    return typeof sort === "string" ? parseSort(sort, AppsSearchParams.SortColumns) : null;
   }
 
   /** The comma-separated `values`, `undefined` for none. */

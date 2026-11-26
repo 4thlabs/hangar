@@ -1,8 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { RotateCcwIcon, XIcon } from "lucide-react";
 import { getJobsListQueryKey, useJobsCancel, useJobsList, useJobsRun, type JobRun } from "#libs/api";
-import { ActionToast } from "#modules/common/action-toast.ts";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { toastFailure, toastSuccess } from "#modules/common/components/action-toast.ts";
+import { describeError } from "#modules/common/error-message.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
@@ -29,16 +29,16 @@ export function JobsSettingsCard() {
   // Read again whatever the outcome: a run refused, as one that ended, has changed since the list was read.
   const runAgain = useJobsRun({
     mutation: {
-      onSuccess: asked => ActionToast.success("Job asked for again", JobText.askedAgain(asked)),
-      onError: failure => ActionToast.failure("Run again failed", failure),
+      onSuccess: asked => toastSuccess("Job asked for again", JobText.askedAgain(asked)),
+      onError: failure => toastFailure("Run again failed", failure),
       onSettled: readAgain,
     },
   });
 
   const cancel = useJobsCancel({
     mutation: {
-      onSuccess: canceled => ActionToast.success("Job canceled", `${JobText.name(canceled.job)} stops.`),
-      onError: failure => ActionToast.failure("Cancel failed", failure),
+      onSuccess: canceled => toastSuccess("Job canceled", `${JobText.name(canceled.job)} stops.`),
+      onError: failure => toastFailure("Cancel failed", failure),
       onSettled: readAgain,
     },
   });
@@ -55,7 +55,7 @@ export function JobsSettingsCard() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {error && <p className="text-sm text-destructive">{ErrorMessage.describe(error)}</p>}
+        {error && <p className="text-sm text-destructive">{describeError(error)}</p>}
         {runs && runs.length === 0 && (
           <Empty>
             <EmptyHeader>

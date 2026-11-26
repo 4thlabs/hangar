@@ -3,7 +3,7 @@ import { ComposeActions } from "#modules/apps/compose-actions.ts";
 import type { AppRun, AppRunStatus } from "#modules/apps/compose-output.ts";
 import type { ComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import type { ComposeStreamStatus } from "#modules/apps/hooks/use-compose-stream.ts";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeErrorDetail } from "#modules/common/error-message.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "#modules/common/ui/sheet.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
@@ -51,7 +51,7 @@ function AppRunSection({ run }: { run: AppRun }) {
           {ComposeOutputView.AppLabels[run.status]}
         </Badge>
       </div>
-      {run.error && <p className="text-sm text-destructive">{ErrorMessage.describeDetail(run.error)}</p>}
+      {run.error && <p className="text-sm text-destructive">{describeErrorDetail(run.error)}</p>}
       {run.lines.length > 0 && (
         <pre className="rounded-lg bg-muted p-3 font-mono text-xs whitespace-pre-wrap">{run.lines.join("\n")}</pre>
       )}

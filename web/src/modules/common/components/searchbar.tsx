@@ -4,11 +4,8 @@ import { useEffect, useState } from "react";
 import { Field, FieldLabel } from "#modules/common/ui/field.tsx";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "#modules/common/ui/input-group.tsx";
 
-/** How the field waits for the typing to pause before it writes `?q=`. */
-class SearchDebounce {
-  /** The pause, in milliseconds. */
-  static readonly Delay = 250;
-}
+/** How long the field waits for the typing to pause before it writes `?q=`, in milliseconds. */
+const typingPause = 250;
 
 /**
  * The search field of the navbar, which drives the `?q=` of a page whose route says it is `searchable` in its
@@ -59,7 +56,7 @@ export function NavbarSearch({ id }: { id: string }) {
         search: (previous: Record<string, unknown>) => ({ ...previous, q: value || undefined }),
         replace: true,
       } as never);
-    }, SearchDebounce.Delay);
+    }, typingPause);
 
     return () => clearTimeout(timer);
   }, [value, page.query, page.searchable, navigate]);

@@ -10,7 +10,7 @@ import {
   type ComposeRequest,
 } from "#libs/api";
 import { ComposeOutput, type ComposeOutputState } from "#modules/apps/compose-output.ts";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/error-message.ts";
 
 /** What the panel says of its stream. */
 class ComposeStreamText {
@@ -91,7 +91,7 @@ export function useComposeStream() {
 
             // Cut before its `end`, the batch goes on all the same: the listing says how it ends.
             setStatus("error");
-            setError(failure === undefined ? ComposeStreamText.CutShort : ErrorMessage.describe(failure));
+            setError(failure === undefined ? ComposeStreamText.CutShort : describeError(failure));
           },
         },
         request,

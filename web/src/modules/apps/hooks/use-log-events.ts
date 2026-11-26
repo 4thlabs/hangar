@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { readEvents, type LogEvent } from "#libs/api";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/error-message.ts";
 
 /** Where a followed log is. */
 export type LogStatus = "connecting" | "connected" | "ended" | "error";
@@ -83,7 +83,7 @@ export function useLogEvents(url: string) {
         }
 
         setStatus("error");
-        setError(ErrorMessage.describe(failure));
+        setError(describeError(failure));
       },
     });
 

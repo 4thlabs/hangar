@@ -12,7 +12,7 @@ import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import { MemoryLimit } from "#modules/apps/memory-limit.ts";
 import { MetricFormat } from "#modules/apps/metric-format.ts";
 import { ProjectStatusView } from "#modules/apps/project-status.ts";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/error-message.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -137,7 +137,7 @@ function AppDetail({ project }: { project: string }) {
       {error && !isNotFound && (
         <Alert variant="destructive">
           <AlertTitle>Could not read this app</AlertTitle>
-          <AlertDescription>{ErrorMessage.describe(error)}</AlertDescription>
+          <AlertDescription>{describeError(error)}</AlertDescription>
           <AlertAction>
             <Button type="button" variant="outline" size="sm" disabled={isRefetching} onClick={() => void refetch()}>
               Retry

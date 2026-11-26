@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useComposeBatches, type ComposeAction, type ComposeBatch } from "#libs/api";
 import { ComposeActions, type UpFlag } from "#modules/apps/compose-actions.ts";
 import { useComposeStream } from "#modules/apps/hooks/use-compose-stream.ts";
-import { ToggledSet } from "#modules/common/toggled-set.ts";
+import { toggledSet } from "#modules/common/toggled-set.ts";
 
 /** The batch the output panel shows: its command and its apps. */
 export type ShownBatch = { action: ComposeAction; apps: readonly string[] };
@@ -71,7 +71,7 @@ export function useComposeCommand(apps: readonly string[]) {
     confirmation,
     cancel: () => setConfirmation(null),
     flags,
-    toggleFlag: (flag: UpFlag, ticked: boolean) => setFlags(current => ToggledSet.create(current, flag, ticked)),
+    toggleFlag: (flag: UpFlag, ticked: boolean) => setFlags(current => toggledSet(current, flag, ticked)),
     request,
     run,
     show,

@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useDockerOverview, useDockerProjects } from "#libs/api";
 import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/error-message.ts";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
 import { Units } from "#modules/widgets/widget-format.ts";
 import { WidgetError, WidgetSkeleton } from "../widget-states.tsx";
@@ -26,7 +26,7 @@ export function DockerCard() {
   useDockerChanges();
 
   if (error) {
-    return <WidgetError look={look} reason={ErrorMessage.describe(error)} />;
+    return <WidgetError look={look} reason={describeError(error)} />;
   }
 
   if (overview === undefined) {
