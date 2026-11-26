@@ -25,7 +25,9 @@ enum Commands {
         arg_required_else_help = true,
         after_help = "\
 hangar store <target> <command> [args...] runs any compose command on a target: an app by its id, a category of \
-hangar.yml, or `pull` for every listed app. The arguments are passed to docker compose as they are.
+hangar.yml, or `pull` for every listed app. The arguments are passed to docker compose as they are. On one app, \
+compose gets the terminal; on several, their output is printed on stdout, `up`, `start` and `restart` running one \
+app at a time, `down` and `stop` in reverse, any other on every app at once.
 
 Examples:
   hangar store up --pull always
