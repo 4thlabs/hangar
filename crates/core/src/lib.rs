@@ -9,8 +9,8 @@ mod store;
 mod version;
 
 pub use compose::{
-    AppOutcome, BatchEvent, BatchReport, Compose, ComposeBatch, ComposeCommand, ComposeError,
-    UpOptions,
+    AppOutcome, AppStatus, BatchEvent, BatchReport, Compose, ComposeBatch, ComposeCommand,
+    ComposeError, OnFailure, UpOptions,
 };
 pub use docker::{
     ComposeContainer, ComposeContainers, ComposeProjectDetail, ComposeProjectSummary,
