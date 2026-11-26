@@ -68,7 +68,8 @@ impl ComposeViews {
             },
             BatchEvent::Output { app, line } => ComposeEvent::Line {
                 app: app.to_string(),
-                line: Failure::redacted(&secrets.mask(&Self::line(&line))).into_owned(),
+                // The credentials first: a value masked out of a URL, as `https`, would hide it from their pattern.
+                line: secrets.mask(&Failure::redacted(&Self::line(&line))),
             },
             BatchEvent::Finished(outcome) => {
                 ComposeEvent::Finished(Self::outcome(&outcome, command))
@@ -142,6 +143,23 @@ mod tests {
         assert_eq!(
             ComposeViews::command(up(true, true)).to_string(),
             "docker compose up -d --pull always --force-recreate"
+        );
+    }
+
+    #[test]
+    fn takes_the_credentials_of_a_url_out_whatever_value_is_masked() {
+        let secrets = hangar_core::Secrets::new(["https", "s3cret"]);
+        let line = hangar_core::BatchEvent::Output {
+            app: "alpha".into(),
+            line: b"pull https://ana:registry-token@registry.example.com/image\n".to_vec(),
+        };
+
+        assert_eq!(
+            ComposeViews::event(line, "docker compose pull", &secrets),
+            hangar_api::ComposeEvent::Line {
+                app: "alpha".to_owned(),
+                line: "pull ***://***@registry.example.com/image".to_owned(),
+            }
         );
     }
 

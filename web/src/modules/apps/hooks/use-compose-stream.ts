@@ -37,30 +37,26 @@ export function useComposeStream() {
     (url: string, apps: readonly string[], request: RequestInit = {}) => {
       stopRef.current();
 
-      // The lines come in bursts, as an image's layers are pulled: they are kept once a frame, not once a line.
-      let pending: ComposeEvent[] = [];
+      // The lines come in bursts, as an image's layers are pulled: each event is folded as it comes, which bounds the
+      // lines kept even while a hidden tab runs no frame, and the output is rendered once a frame, not once a line.
+      let folded = ComposeOutput.create(apps);
       let frame: number | undefined;
       let hasEnded = false;
 
-      const flush = () => {
-        const added = pending;
-
-        pending = [];
+      const render = () => {
         frame = undefined;
-        setOutput(current => ComposeOutput.apply(current, added));
+        setOutput(folded);
       };
 
-      const flushNow = () => {
+      const renderNow = () => {
         if (frame !== undefined) {
           cancelAnimationFrame(frame);
         }
 
-        if (pending.length > 0) {
-          flush();
-        }
+        render();
       };
 
-      setOutput(ComposeOutput.create(apps));
+      setOutput(folded);
       setStatus("connecting");
       setError(null);
 
@@ -73,21 +69,21 @@ export function useComposeStream() {
             void queryClient.invalidateQueries({ queryKey: getComposeBatchesQueryKey() });
           },
           onItem: event => {
-            pending.push(event);
+            folded = ComposeOutput.apply(folded, [event]);
 
             if (event.kind !== "end") {
-              frame ??= requestAnimationFrame(flush);
+              frame ??= requestAnimationFrame(render);
 
               return;
             }
 
             hasEnded = true;
-            flushNow();
+            renderNow();
             setStatus("ended");
             void queryClient.invalidateQueries({ queryKey: getComposeBatchesQueryKey() });
           },
           onEnd: failure => {
-            flushNow();
+            renderNow();
 
             if (hasEnded) {
               return;
