@@ -209,10 +209,13 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
         loading
     }
 
-    /// Keeps what a load gave, or the failure and the wait it starts, and starts the load a refresh queued meanwhile.
+    /// Keeps what a load gave, or the failure and the wait it starts, and starts the load a refresh queued meanwhile. A
+    /// failed reload is tried again once its wait has passed, as nothing else may ask for it: the event that made the
+    /// value stale has come and gone, and the pages read again only once the value changes.
     fn finish(self: &Arc<Self>, loaded: &Loaded<T>) {
-        let has_changed = {
+        let (has_changed, retry_at) = {
             let mut state = self.lock();
+            let mut retry_at = None;
             let has_changed = match loaded {
                 Ok(value) => {
                     let has_changed = state
@@ -239,10 +242,16 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
                         );
                     }
 
+                    let at = Instant::now() + wait;
+
+                    if state.value.is_some() {
+                        retry_at = Some(at);
+                    }
+
                     state.failure = Some(LoadFailure {
                         error: Arc::clone(error),
                         wait,
-                        retry_at: Instant::now() + wait,
+                        retry_at: at,
                     });
 
                     false
@@ -255,11 +264,34 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
                 self.start(&mut state);
             }
 
-            has_changed
+            (has_changed, retry_at)
         };
 
         if has_changed {
             (self.on_change)();
+        }
+
+        if let Some(at) = retry_at {
+            let this = Arc::clone(self);
+
+            tokio::spawn(async move {
+                tokio::time::sleep_until(at).await;
+                this.retry(at);
+            });
+        }
+    }
+
+    /// Reloads the value after the failure whose wait ended `at`, unless a load ran since: one that succeeded, or one
+    /// that failed and is tried again after a wait of its own.
+    fn retry(self: &Arc<Self>, at: Instant) {
+        let mut state = self.lock();
+        let is_same_failure = state
+            .failure
+            .as_ref()
+            .is_some_and(|failure| failure.retry_at == at);
+
+        if is_same_failure {
+            self.start(&mut state);
         }
     }
 
@@ -500,6 +532,30 @@ mod tests {
         assert_eq!(read_after(3).await, (1, 3), "within the second wait, 4 s");
         assert_eq!(read_after(1).await, (1, 4), "after it: reloaded");
         assert_eq!(read_after(0).await, (2, 4));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn tries_a_failed_reload_again_once_its_wait_has_passed_unasked() {
+        let source = Source::new([Answer::Gives(1), Answer::Fails, Answer::Gives(2)], OPEN);
+        let cached = source.cached();
+
+        assert_eq!(value(&cached).await, 1);
+
+        cached.refresh();
+        cached.settled().await;
+
+        assert_eq!(source.loads(), 2, "the reload an event asked for failed");
+
+        tokio::time::advance(Duration::from_secs(2)).await;
+
+        // The retry's task runs once the clock moved: it is awaited, never slept for.
+        while source.loads() < 3 {
+            tokio::task::yield_now().await;
+        }
+
+        cached.settled().await;
+
+        assert_eq!((value(&cached).await, source.changes()), (2, 1));
     }
 
     #[tokio::test(start_paused = true)]
