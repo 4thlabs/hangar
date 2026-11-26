@@ -286,6 +286,60 @@ pub struct JellyfinItem {
     pub subtitle: Option<String>,
 }
 
+/// The prices of the cards tcg-collector follows, in euros, from Cardmarket's price guides.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TcgCollectorCards {
+    /// How many days the price curves cover.
+    pub days: u16,
+    /// The cards, in the order `hangar.yml` lists them.
+    pub cards: Vec<TcgFollowedCard>,
+}
+
+/// A card tcg-collector follows: a version of it, by its Cardmarket ids.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TcgFollowedCard {
+    /// Cardmarket's game id: 1 for Magic, 21 for Star Wars Unlimited.
+    pub game: u32,
+    /// Cardmarket's product id, of this version of the card.
+    pub product: u32,
+    /// The id of its image, relayed by `GET /widgets/{key}/image/{id}`.
+    pub image_id: String,
+    /// The card, `None` when tcg-collector does not know the product.
+    pub card: Option<TcgCard>,
+    /// Its prices over the days of the curve, oldest first, from the first day that has one.
+    pub history: Vec<TcgDailyPrices>,
+}
+
+/// A product of a game's catalog, with its latest prices.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TcgCard {
+    /// Its name.
+    pub name: String,
+    /// Its expansion.
+    pub expansion: Option<String>,
+    /// 1, 2... when its expansion has several products of its name, Cardmarket's V.1, V.2...
+    pub version: Option<u32>,
+    /// Its trend price.
+    pub trend: Option<f64>,
+    /// Its lowest price.
+    pub low: Option<f64>,
+    /// The trend price of its foil.
+    pub trend_foil: Option<f64>,
+}
+
+/// A day of a card's prices. A day without a new price guide repeats the day before.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TcgDailyPrices {
+    /// The day, `YYYY-MM-DD`.
+    pub day: String,
+    /// The trend price.
+    pub trend: Option<f64>,
+    /// The lowest price.
+    pub low: Option<f64>,
+}
+
 /// What a widget loaded from its service, by its `type`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", content = "data", rename_all = "kebab-case")]
@@ -305,6 +359,8 @@ pub enum WidgetData {
     MinifluxEntries(MinifluxEntries),
     /// `jellyfin-latest`.
     JellyfinLatest(JellyfinLatest),
+    /// `tcg-collector-cards`.
+    TcgCollectorCards(TcgCollectorCards),
 }
 
 quoll::group! {
