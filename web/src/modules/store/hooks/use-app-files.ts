@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { getEditorReadQueryOptions, useEditorCreate, useEditorWrite, type AppFile, type SavedFile } from "#libs/api";
-import { toastFailure, toastSuccess } from "#modules/common/components/action-toast.ts";
+import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/error-message.ts";
 
 export type AppFilesOptions = {

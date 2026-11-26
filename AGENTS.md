@@ -86,7 +86,7 @@ descriptor reaches its components only through `import()`.
     auto_update: "Update of the apps",
   };
 
-  export function askedAgain(asked: JobRun): string {
+  export function askedAgainText(asked: JobRun): string {
     return asked.state === "running" ? `${jobName(asked.job)} runs.` : `${jobName(asked.job)} waits its turn.`;
   }
   ```

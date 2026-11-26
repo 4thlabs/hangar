@@ -26,7 +26,7 @@ type UpFlagSpec = {
 export const upFlagOrder: readonly UpFlag[] = ["pull", "forceRecreate"];
 
 /** What each option of Up adds to the command, and how the page words it. */
-export const upFlags: Readonly<Record<UpFlag, UpFlagSpec>> = {
+export const upFlagSpecs: Readonly<Record<UpFlag, UpFlagSpec>> = {
   pull: {
     arguments: ["--pull", "always"],
     label: "Update the images",
@@ -89,16 +89,16 @@ export function composeActionOfNotification(operation: string, flags: string): C
 
 /** What `action` did to `project`, as "jellyfin was updated from its registry and recreated.". */
 export function composeOutcome(action: ComposeAction, project: string): string {
-  const flags = upFlagsOf(action);
+  const flags = actionFlags(action);
 
   const outcomes =
-    flags.length === 0 ? [operationOutcomes[action.operation]] : flags.map(flag => upFlags[flag].outcome);
+    flags.length === 0 ? [operationOutcomes[action.operation]] : flags.map(flag => upFlagSpecs[flag].outcome);
 
   return `${project} was ${outcomes.join(" and ")}.`;
 }
 
 /** The options `action` carries, in their order. */
-export function upFlagsOf(action: ComposeAction): UpFlag[] {
+export function actionFlags(action: ComposeAction): UpFlag[] {
   if (action.operation !== "up") {
     return [];
   }
@@ -108,25 +108,25 @@ export function upFlagsOf(action: ComposeAction): UpFlag[] {
 
 /** The command line, as `docker compose up -d --pull always`, for the tooltips and the output. */
 export function composeCommandLine(action: ComposeAction): string {
-  const options = upFlagsOf(action).flatMap(flag => upFlags[flag].arguments);
+  const options = actionFlags(action).flatMap(flag => upFlagSpecs[flag].arguments);
 
   return ["docker", "compose", ...operationArguments[action.operation], ...options].join(" ");
 }
 
 /** Whether the run takes the apps down, even briefly: anything but a plain `up -d`, which only adds what is missing. */
 export function needsConfirmation(action: ComposeAction): boolean {
-  return action.operation !== "up" || upFlagsOf(action).length > 0;
+  return action.operation !== "up" || actionFlags(action).length > 0;
 }
 
 /** "Up", "Update", "Update and recreate", "Restart"…: the options' verbs when there are some. */
 export function composeLabel(action: ComposeAction): string {
-  const flags = upFlagsOf(action);
+  const flags = actionFlags(action);
 
   if (flags.length === 0) {
     return operationLabels[action.operation];
   }
 
-  const clauses = flags.map(flag => upFlags[flag].verb.toLowerCase()).join(" and ");
+  const clauses = flags.map(flag => upFlagSpecs[flag].verb.toLowerCase()).join(" and ");
 
   return `${clauses.charAt(0).toUpperCase()}${clauses.slice(1)}`;
 }
@@ -168,7 +168,7 @@ export function confirmationDescription(action: ComposeAction, count: number): s
     return `The containers of ${apps} will be restarted without being recreated: a changed configuration will not apply.`;
   }
 
-  return upFlagsOf(action)
-    .map(flag => upFlags[flag].consequence(apps))
+  return actionFlags(action)
+    .map(flag => upFlagSpecs[flag].consequence(apps))
     .join(" ");
 }

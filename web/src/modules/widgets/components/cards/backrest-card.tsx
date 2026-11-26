@@ -3,7 +3,7 @@ import type { BackrestHealth, BackrestSummary } from "#libs/api";
 import { compactRelativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
 import { widgetLook } from "#modules/widgets/widget-appearance.ts";
-import { formatCount, formatInteger, formatSize } from "#modules/widgets/widget-format.ts";
+import { formatBytes, formatCount, formatInteger } from "#modules/widgets/widget-format.ts";
 import {
   WidgetCard,
   WidgetContent,
@@ -41,7 +41,7 @@ export function BackrestCard({ summary: { repositories }, link }: BackrestCardPr
         description={
           <WidgetMetadata>
             <span>{formatCount(repositories.length, "repo", "repos")}</span>
-            <span>{formatSize(protectedBytes)} protected</span>
+            <span>{formatBytes(protectedBytes)} protected</span>
           </WidgetMetadata>
         }
       />
@@ -72,8 +72,8 @@ export function BackrestCard({ summary: { repositories }, link }: BackrestCardPr
                     {repository.status ?? "No backup yet"}
                   </span>
                   <span>{formatInteger(repository.successes)} ok / 30d</span>
-                  <span>{formatSize(repository.bytesAdded)} added</span>
-                  <span>{formatSize(repository.protectedBytes)} protected</span>
+                  <span>{formatBytes(repository.bytesAdded)} added</span>
+                  <span>{formatBytes(repository.protectedBytes)} protected</span>
                   {repository.nextBackupAt && (
                     <span>next {compactRelativeTime(Date.parse(repository.nextBackupAt), now)}</span>
                   )}

@@ -1,8 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { SaveIcon } from "lucide-react";
 import { getConfigReadQueryKey, getStoreAppsQueryKey, useConfigRead, useConfigSave } from "#libs/api";
-import { toastFailure, toastSuccess } from "#modules/common/components/action-toast.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
+import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/error-message.ts";
 import { useYamlEditor } from "#modules/common/hooks/use-yaml-editor.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";

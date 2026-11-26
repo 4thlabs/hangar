@@ -15,7 +15,7 @@ import {
   confirmationTitle,
   upAction,
   upFlagOrder,
-  upFlags,
+  upFlagSpecs,
   type ComposeOperation,
   type UpFlag,
 } from "#modules/apps/compose-actions.ts";
@@ -96,8 +96,10 @@ export function ComposeOperationButtons({ compose, size }: ComposeOperationButto
                 >
                   <Icon />
                   <span className="flex flex-col">
-                    {upFlags[flag].label}
-                    <span className="font-mono text-xs text-muted-foreground">{upFlags[flag].arguments.join(" ")}</span>
+                    {upFlagSpecs[flag].label}
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {upFlagSpecs[flag].arguments.join(" ")}
+                    </span>
                   </span>
                 </DropdownMenuCheckboxItem>
               );

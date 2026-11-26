@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { RotateCcwIcon, XIcon } from "lucide-react";
 import { getJobsListQueryKey, useJobsCancel, useJobsList, useJobsRun, type JobRun } from "#libs/api";
-import { toastFailure, toastSuccess } from "#modules/common/components/action-toast.ts";
+import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/error-message.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modu
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#modules/common/ui/empty.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
 import {
-  askedAgain,
+  askedAgainText,
   formatRunTime,
   isRunActive,
   jobName,
@@ -37,7 +37,7 @@ export function JobsSettingsCard() {
   // Read again whatever the outcome: a run refused, as one that ended, has changed since the list was read.
   const runAgain = useJobsRun({
     mutation: {
-      onSuccess: asked => toastSuccess("Job asked for again", askedAgain(asked)),
+      onSuccess: asked => toastSuccess("Job asked for again", askedAgainText(asked)),
       onError: failure => toastFailure("Run again failed", failure),
       onSettled: readAgain,
     },
