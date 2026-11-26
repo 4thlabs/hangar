@@ -1,44 +1,39 @@
 //! The users of `hangar.yml`, read again at each sign-in and each request, so that a user removed is signed out.
 
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::Arc;
 
-use hangar_core::{Config, Runtime, Store, User};
+use hangar_core::{Runtime, Store, User};
 
 /// The users the store's `hangar.yml` lists.
 ///
-/// The file is read at each call: a user added can sign in at once, and one removed, whose cookie is still signed, is
-/// refused at their next request, which a signed cookie alone cannot do. Reading and parsing a small file costs less
-/// than a millisecond. When the file is broken, by a pull that brought an invalid one, the users of the last file
-/// that read are kept, so that whoever can fix it from the page is not locked out; nobody signs in when no file has
-/// read since the start.
+/// The file is read at each call: a user added can sign in at once, and one removed, or whose credentials changed,
+/// is refused at their next request, which a signed cookie alone cannot do. Reading a small file costs less than a
+/// millisecond.
+///
+/// The users are read apart from the rest of the file, with [`User::list`]: a mistake among them leaves the store's
+/// other readers, the CLI, compose and the editor, working. The server then signs nobody in, and logs why, until the
+/// file is fixed: it never guesses which users a broken list meant.
 #[derive(Debug)]
 pub(crate) struct Users {
     store: Store<Runtime>,
-    last: Mutex<Arc<[User]>>,
 }
 
 impl Users {
     /// The users of `store`'s `hangar.yml`.
     pub(crate) fn new(store: Store<Runtime>) -> Self {
-        Self {
-            store,
-            last: Mutex::new(Arc::from([])),
-        }
+        Self { store }
     }
 
-    /// The users listed now, or those of the last file that read.
+    /// The users listed now; none while the file cannot be read, or its users are wrong.
     pub(crate) async fn current(&self) -> Arc<[User]> {
         match self.read().await {
-            Ok(users) => {
-                let users: Arc<[User]> = Arc::from(users);
-
-                *self.last.lock().unwrap_or_else(PoisonError::into_inner) = Arc::clone(&users);
-                users
-            }
+            Ok(users) => Arc::from(users),
             Err(error) => {
-                tracing::warn!("hangar.yml cannot be read, its last users are kept: {error}");
+                tracing::error!(
+                    "the users of hangar.yml cannot be read, nobody can sign in: {error}"
+                );
 
-                Arc::clone(&self.last.lock().unwrap_or_else(PoisonError::into_inner))
+                Arc::from([])
             }
         }
     }
@@ -64,9 +59,7 @@ impl Users {
             return Ok(Vec::new());
         }
 
-        Config::parse(&source)
-            .map(|config| config.users)
-            .map_err(|error| error.to_string())
+        User::list(&source).map_err(|error| error.to_string())
     }
 }
 
@@ -76,13 +69,14 @@ mod tests {
 
     use super::Users;
 
-    /// The users of a data directory whose `hangar.yml` is `source`, if any.
+    /// The users of the data directory at `dir`.
     fn users(dir: &tempfile::TempDir) -> Users {
         let data_dir = DataDir::new(dir.path()).expect("a data directory");
 
         Users::new(Store::new(String::new(), data_dir, Runtime::new()))
     }
 
+    /// Writes `source` to the `hangar.yml` of `dir`.
     fn write(dir: &tempfile::TempDir, source: &str) {
         let data_dir = DataDir::new(dir.path()).expect("a data directory");
         let file = data_dir.config_file();
@@ -119,17 +113,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn keeps_the_last_users_when_the_file_breaks() {
+    async fn signs_nobody_in_while_a_user_is_wrong() {
         let dir = tempfile::tempdir().expect("a temporary directory");
         let users = users(&dir);
 
         write(
             &dir,
-            "categories: []\nusers:\n  - { name: Ana, email: ana@example.com }\n",
+            "categories: []\nusers:\n  - { name: Ana, email: ana@example.com }\n  - { name: Bo, email: bo }\n",
         );
-        users.current().await;
-        write(&dir, "categories: [");
 
-        assert!(users.find("ana@example.com").await.is_some());
+        assert!(users.find("ana@example.com").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn reads_the_users_whatever_the_rest_of_the_file_holds() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+
+        write(
+            &dir,
+            "categories: 3\nusers:\n  - { name: Ana, email: ana@example.com }\n",
+        );
+
+        assert!(users(&dir).find("ana@example.com").await.is_some());
     }
 }

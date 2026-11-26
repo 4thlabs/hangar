@@ -30,10 +30,15 @@ quoll = { workspace = true, features = ["server"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 serde.workspace = true
 serde_json.workspace = true
+# The value of a user's credentials a session holds.
+sha2 = "0.10"
 # The `state` of a sign-in through the provider, compared in constant time.
 subtle = "2"
 thiserror.workspace = true
 tokio = { workspace = true, features = ["fs", "macros", "rt-multi-thread", "sync"] }
+# quoll's `body_limit` around the routes of signing in alone, applied from a middleware.
+tower-layer = "0.3"
+tower-service = "0.3"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 # `HANGAR_URL` and the provider's URLs, and the origin a request that changes something must come from.
@@ -46,11 +51,11 @@ axum = { version = "0.8", default-features = false, features = ["form", "http1",
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # The key the fake provider signs with, made from fixed bytes: no key is committed.
 ed25519-dalek = { version = "3", features = ["pem"] }
+# The sign-ins a test sends at once.
+futures.workspace = true
 hangar-api = { workspace = true, features = ["client"] }
 http.workspace = true
 reqwest = { version = "0.13", default-features = false, features = ["json", "query"] }
-# The PKCE challenge the fake provider checks the verifier against.
-sha2 = "0.10"
 tempfile.workspace = true
 
 [lints]

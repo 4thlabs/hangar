@@ -3,6 +3,7 @@
 //!
 //! There are no roles: a user signed in may do everything, as with the Waku version's one account.
 
+mod body_limit;
 mod cookies;
 mod failed_sign_ins;
 mod oidc;
@@ -26,6 +27,7 @@ use oidc::{Identity, Oidc};
 use session::Session;
 use users::Users;
 
+pub(crate) use body_limit::AuthBodyLimit;
 pub(crate) use origin::OriginCheck;
 
 /// What signing in runs on: the keys of the cookies, the users, the failures of the password sign-in, and the
@@ -34,8 +36,8 @@ pub(crate) struct Auth {
     cookies: Cookies,
     users: Users,
     failures: FailedSignIns,
-    /// The password checks running at once. Each takes 19 MiB and some 50 ms of a core: a burst of sign-ins waits
-    /// its turn rather than take the server's memory.
+    /// The password checks running at once. Each takes 19 MiB and some 50 ms of a core, every hash being of the
+    /// default costs: a burst of sign-ins waits its turn rather than take the server's memory.
     checks: Semaphore,
     oidc: Option<Oidc>,
 }
@@ -53,6 +55,8 @@ pub struct SignedIn {
 impl Auth {
     /// The password checks that run at once.
     const CONCURRENT_CHECKS: usize = 2;
+    /// The longest email `hangar.yml` takes, as SMTP bounds one.
+    const MAX_EMAIL_LENGTH: usize = 254;
 
     /// Signing in with the settings of the server, its users read from the store of its data directory.
     pub(crate) fn new(settings: &Settings) -> Self {
@@ -106,31 +110,37 @@ impl Auth {
     /// Signs in by password: the user, and the `Set-Cookie` of their session.
     ///
     /// The password is checked whether the user is listed or not, against a hash of nobody's for a user unknown or
-    /// with none, so that the time of the answer does not tell which emails are users.
+    /// with none, so that the time of the answer does not tell which emails are users. The attempt is counted before
+    /// the check, and forgotten if it succeeds. An email longer than any `hangar.yml` takes is refused at once, before
+    /// it is counted, so that what the rate limit keeps is bounded.
     pub(crate) async fn sign_in(&self, credentials: Credentials) -> quoll::Result<(User, String)> {
         let Credentials { email, password } = credentials;
 
-        self.failures
-            .check(&email, Instant::now())
-            .map_err(Self::too_many_failures)?;
+        if email.len() > Self::MAX_EMAIL_LENGTH {
+            return Err(Self::invalid_credentials());
+        }
 
         let user = self.users.find(&email).await;
+
+        self.failures
+            .reserve(&email, user.is_some(), Instant::now())
+            .map_err(Self::too_many_failures)?;
+
         let hash = user.as_ref().and_then(|user| user.password_hash.clone());
         let is_valid = self.check(hash, password).await?;
         let Some(user) = user.filter(|_| is_valid) else {
-            self.failures.record(&email, Instant::now());
-
-            return Err(Error::unauthorized("invalid email or password"));
+            return Err(Self::invalid_credentials());
         };
 
         self.failures.clear(&email);
 
-        let cookie = Session::new(&user.email, SystemTime::now()).cookie(&self.cookies);
+        let now = SystemTime::now();
+        let cookie = Session::new(&user, now).cookie(&self.cookies, now);
 
         Ok((user, cookie))
     }
 
-    /// The session the cookie of value `sealed` holds, for a user `hangar.yml` still lists.
+    /// The session the cookie of value `sealed` holds, for a user `hangar.yml` still lists with the same credentials.
     pub(crate) async fn signed_in(&self, sealed: &str) -> quoll::Result<SignedIn> {
         let Some(session) = Session::open(&self.cookies, sealed, SystemTime::now()) else {
             return Err(Error::unauthorized(
@@ -142,6 +152,12 @@ impl Auth {
                 "the session's user is no longer in hangar.yml",
             ));
         };
+
+        if !session.has_credentials_of(&user) {
+            return Err(Error::unauthorized(
+                "the user's credentials have changed: sign in again",
+            ));
+        }
 
         Ok(SignedIn { user, session })
     }
@@ -178,6 +194,11 @@ impl Auth {
         })
         .await
         .map_err(Error::internal)
+    }
+
+    /// The 401 of a wrong email or password.
+    fn invalid_credentials() -> Error {
+        Error::unauthorized("invalid email or password")
     }
 
     /// The 429 of an email whose sign-ins are refused for `wait`.

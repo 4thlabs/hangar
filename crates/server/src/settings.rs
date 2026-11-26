@@ -107,7 +107,7 @@ impl Settings {
     /// Returns a [`SettingsError`] that lists every variable missing or bad: `HANGAR_DATA_DIR`, `HANGAR_STORE_URL` or
     /// `DOMAIN` not set, a `HOST` that is no IP address, a data directory that is no usable path, a port that is not 1
     /// to 65535, a page's directory with no `index.html`, and those of [`AuthSettings`]: `HANGAR_URL` that is no
-    /// `http` URL, `HANGAR_SECRET` shorter than 32 bytes, or a provider's issuer without its client id.
+    /// `http` origin, `HANGAR_SECRET` shorter than 32 bytes, or a provider's issuer without its client id.
     pub fn read(variable: impl Fn(&str) -> Option<String>) -> Result<Self, SettingsError> {
         let variable = |name: &str| variable(name).filter(|value| !value.is_empty());
 
@@ -295,6 +295,17 @@ pub enum SettingError {
         value: String,
     },
 
+    /// `HANGAR_URL` has a path, a query or credentials: the page is served at the root of its origin.
+    #[error(
+        "{variable} must be an origin, as https://hangar.example.com, with no path: not {value:?}"
+    )]
+    NotAnOrigin {
+        /// The variable.
+        variable: &'static str,
+        /// Its value.
+        value: String,
+    },
+
     /// `HANGAR_SECRET` is shorter than 32 bytes.
     #[error("HANGAR_SECRET must be at least 32 bytes: `openssl rand -base64 32` prints one")]
     ShortSecret,
@@ -317,6 +328,7 @@ impl SettingError {
             | Self::NotAnAddress { variable, .. }
             | Self::NotAPort { variable, .. }
             | Self::NotAUrl { variable, .. }
+            | Self::NotAnOrigin { variable, .. }
             | Self::NeededBy { variable, .. } => variable,
             Self::DataDir { .. } => DataDir::VARIABLE,
             Self::NoPage { .. } => Settings::PAGE_DIR,

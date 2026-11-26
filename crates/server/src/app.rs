@@ -7,7 +7,7 @@ use hangar_api::{Api, ApiServices};
 use quoll::server;
 
 use crate::Settings;
-use crate::auth::{Auth, OriginCheck};
+use crate::auth::{Auth, AuthBodyLimit, OriginCheck};
 use crate::trailing_slash::TrailingSlash;
 
 /// The state the routes run on, which each group of the contract is implemented for; its clones share it.
@@ -39,8 +39,9 @@ pub fn router(app: App) -> axum::Router {
 }
 
 /// The server, as `main` serves it and the tests too: an id and a span per request, answers compressed as the caller
-/// accepts but streams, a request that changes something refused from another origin than `HANGAR_URL`'s, a path
-/// with a final `/` redirected to the one without, and the page when `settings` names one. A client that stops
+/// accepts but streams, a request that changes something refused from another origin than `HANGAR_URL`'s, the bodies
+/// of signing in bounded to 16 KiB, a path with a final `/` redirected to the one without, and the page when
+/// `settings` names one. A client that stops
 /// reading is cut after quoll's default `send_timeout`.
 pub fn server(settings: &Settings) -> server::Builder {
     let builder = server::builder()
@@ -51,6 +52,7 @@ pub fn server(settings: &Settings) -> server::Builder {
             OriginCheck::new(&settings.auth.url),
             OriginCheck::check,
         ))
+        .with(middleware::from_fn(AuthBodyLimit::limit))
         .with(middleware::from_fn_with_state(
             TrailingSlash::new(settings.page.clone()),
             TrailingSlash::redirect,
