@@ -3,7 +3,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { CircleAlertIcon, KeyRoundIcon } from "lucide-react";
 import { useState, type SubmitEvent } from "react";
 import { getAuthOidcLoginUrl, getAuthSessionQueryKey, useAuthLogin, useAuthOptions } from "#libs/api";
-import { describeSignInFailure, isSignInRefusal, signInRefusals } from "#modules/auth/sign-in-messages.ts";
+import { describeSignInFailure, isSignInRefusal, signInRefusals } from "#modules/auth/helpers/sign-in-messages.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
