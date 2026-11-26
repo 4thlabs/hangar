@@ -53,9 +53,11 @@ class NotificationCache {
 export function useNotifications() {
   const queryClient = useQueryClient();
   const { data, isSuccess } = useNotificationsList();
-  const { mutate: markSeen } = useNotificationsSeen();
+  // A mark that fails leaves the page's list as it marked it, not as the server holds it: the list is read again.
+  const onError = () => void queryClient.invalidateQueries({ queryKey: getNotificationsListQueryKey() });
+  const { mutate: markSeen } = useNotificationsSeen({ mutation: { onError } });
   // Kept alive, as the bell is read when a notification's link is followed too, which unloads the page.
-  const { mutate: markRead } = useNotificationsRead({ request: { keepalive: true } });
+  const { mutate: markRead } = useNotificationsRead({ mutation: { onError }, request: { keepalive: true } });
   const notifications = useMemo(() => data?.notifications ?? [], [data]);
   const epoch = data?.epoch;
 
