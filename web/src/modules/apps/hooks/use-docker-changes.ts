@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { getDockerChangesUrl, ServerEvents, type DockerChange } from "#libs/api";
+import { getDockerChangesUrl, keepEvents, type DockerChange } from "#libs/api";
 
 /** The query keys each change of the daemon makes stale, by the start of their URL. */
 class DockerQueries {
@@ -34,7 +34,7 @@ export function useDockerChanges() {
       });
 
     const open = () => {
-      stop ??= ServerEvents.keep<DockerChange>(getDockerChangesUrl(), {
+      stop ??= keepEvents<DockerChange>(getDockerChangesUrl(), {
         onOpen: () => {
           setReconnecting(false);
 

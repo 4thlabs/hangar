@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from "react";
 import {
   getNotificationsEventsUrl,
   getNotificationsListQueryKey,
-  ServerEvents,
+  keepEvents,
   useNotificationsList,
   useNotificationsRead,
   useNotificationsSeen,
@@ -87,7 +87,7 @@ export function useNotifications() {
 
     const url = getNotificationsEventsUrl({ since: NotificationFeed.since(held), epoch: held.epoch });
 
-    return ServerEvents.keep<NotificationEvent>(url, { onItem: follow });
+    return keepEvents<NotificationEvent>(url, { onItem: follow });
   }, [isSuccess, queryClient]);
 
   useEffect(() => {

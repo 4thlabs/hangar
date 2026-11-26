@@ -1,28 +1,33 @@
 import * as cookie from "cookie";
-import { Theme, type ColorMode, type ThemePalette } from "./theme.ts";
+import {
+  colorModeCookie,
+  defaultColorMode,
+  defaultPalette,
+  isColorMode,
+  isThemePalette,
+  paletteCookie,
+  type ColorMode,
+  type ThemePalette,
+} from "./theme.ts";
 
+/** The look the user picked. */
 export type UserPreferences = {
   theme: ColorMode;
   themePalette: ThemePalette;
 };
 
 /**
- * The look the user picked, read from its cookies in the browser: the page is a single-page app, which the server
- * sends the same to everyone, so the cookies the settings write are read here, before the first render.
+ * Reads the preferences out of a `Cookie` header or `document.cookie`, falling back on the defaults for anything
+ * missing or unknown. The page is a single-page app, which the server sends the same to everyone, so the cookies the
+ * settings write are read in the browser, before the first render.
  */
-export class UserPreferencesCookies {
-  /**
-   * Reads the preferences out of a `Cookie` header or `document.cookie`, falling back on the defaults for anything
-   * missing or unknown.
-   */
-  static parse(cookieHeader: string): UserPreferences {
-    const cookies = cookie.parseCookie(cookieHeader);
-    const theme = cookies[Theme.ColorModeCookie];
-    const themePalette = cookies[Theme.PaletteCookie];
+export function parsePreferences(cookieHeader: string): UserPreferences {
+  const cookies = cookie.parseCookie(cookieHeader);
+  const theme = cookies[colorModeCookie];
+  const themePalette = cookies[paletteCookie];
 
-    return {
-      theme: Theme.isColorMode(theme) ? theme : Theme.DefaultColorMode,
-      themePalette: Theme.isPalette(themePalette) ? themePalette : Theme.DefaultPalette,
-    };
-  }
+  return {
+    theme: isColorMode(theme) ? theme : defaultColorMode,
+    themePalette: isThemePalette(themePalette) ? themePalette : defaultPalette,
+  };
 }

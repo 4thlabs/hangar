@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import type { BeszelServerStats } from "#libs/api";
-import { RelativeTime } from "#libs/format";
+import { compactRelativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
 import { Units } from "#modules/widgets/widget-format.ts";
@@ -73,7 +73,7 @@ export function BeszelCard({ stats: { systems }, link }: BeszelCardProps) {
                 <p className="shrink-0 text-xs text-muted-foreground">
                   <WidgetMetadata>
                     {system.up && system.uptime !== null && (
-                      <span>{RelativeTime.compact(now - system.uptime * 1_000, now)} up</span>
+                      <span>{compactRelativeTime(now - system.uptime * 1_000, now)} up</span>
                     )}
                     {system.temperature !== null && (
                       <span className={system.temperature >= Usage.HotSensor ? "text-destructive" : undefined}>

@@ -6,8 +6,8 @@ import "@fontsource-variable/nunito";
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClients } from "#libs/api";
-import { UserPreferencesCookies } from "#libs/preferences";
+import { createQueryClient } from "#libs/api";
+import { Preferences } from "#libs/preferences";
 import { Routes } from "#app/routes.tsx";
 import { SessionGuard } from "#modules/auth/session-guard.ts";
 import { AppProviders } from "#modules/common/components/app-providers.tsx";
@@ -19,12 +19,12 @@ if (!root) {
 }
 
 // A 401 of any call sends the page to /login: the session expired, or its user left hangar.yml.
-const queryClient = QueryClients.create(() => SessionGuard.signedOut(router, queryClient));
+const queryClient = createQueryClient(() => SessionGuard.signedOut(router, queryClient));
 const router = Routes.createRouter(queryClient);
 
 createRoot(root).render(
   <StrictMode>
-    <AppProviders queryClient={queryClient} preferences={UserPreferencesCookies.parse(document.cookie)}>
+    <AppProviders queryClient={queryClient} preferences={Preferences.fromCookies(document.cookie)}>
       <RouterProvider router={router} />
     </AppProviders>
   </StrictMode>,
