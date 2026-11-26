@@ -1,16 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { SettingsIcon } from "lucide-react";
 import { useCurrentPath } from "#modules/common/hooks/use-current-path.ts";
-import { useTranslation } from "#modules/common/hooks/use-translation.ts";
-import { CommonMessages } from "#modules/common/messages.ts";
 import { Navigations } from "#modules/common/navigations.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Tabs, TabsList, TabsTrigger } from "#modules/common/ui/tabs.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
 
 function Brand() {
-  const { t } = useTranslation(CommonMessages);
-
   return (
     <Button
       variant="ghost"
@@ -19,7 +15,7 @@ function Brand() {
       // left-hand cluster from `sm` up. Cheaper than a second header laid out differently.
       className="absolute left-1/2 -translate-x-1/2 sm:static sm:translate-x-0"
       render={
-        <Link to="/" aria-label={t("navbar.home")}>
+        <Link to="/" aria-label="Hangar — Dashboard">
           <img src="/images/icon.png" alt="" className="size-7" />
           <span className="text-lg font-semibold">Hangar</span>
         </Link>
@@ -30,16 +26,17 @@ function Brand() {
 
 function DesktopNavigation() {
   const path = useCurrentPath();
-  const { t } = useTranslation(CommonMessages);
+
   const items = Navigations.Categories.filter(category => category.position !== "bottom").flatMap(
     category => category.items,
   );
+
   // The tab strip matches on equality, so it is handed the active href rather than the raw path:
   // `/apps/alpha` must still light up Apps. No item matches on `/settings` — that one is a button.
   const active = items.find(item => Navigations.isActive(path, item.href))?.href ?? "";
 
   return (
-    <nav className="hidden h-full sm:block" aria-label={t("navigation.label")}>
+    <nav className="hidden h-full sm:block" aria-label="Main navigation">
       <Tabs value={active} className="h-full gap-0">
         <TabsList variant="line" className="h-full! gap-2 p-0">
           {items.map(item => (
@@ -49,7 +46,7 @@ function DesktopNavigation() {
               className="h-full! px-3 after:-bottom-px! after:bg-sidebar-ring!"
               render={
                 <Link to={item.href} aria-current={active === item.href ? "page" : undefined} preload="intent">
-                  {t(`navigation.${item.label}`)}
+                  {item.label}
                 </Link>
               }
             />
@@ -62,7 +59,6 @@ function DesktopNavigation() {
 
 function SettingsButton() {
   const path = useCurrentPath();
-  const { t } = useTranslation(CommonMessages);
 
   return (
     <Tooltip>
@@ -73,14 +69,14 @@ function SettingsButton() {
             size="icon"
             className="hidden sm:inline-flex"
             render={
-              <Link to="/settings" aria-label={t("navbar.settings")} preload="intent">
+              <Link to="/settings" aria-label="Settings" preload="intent">
                 <SettingsIcon />
               </Link>
             }
           />
         }
       />
-      <TooltipContent>{t("navbar.settings")}</TooltipContent>
+      <TooltipContent>Settings</TooltipContent>
     </Tooltip>
   );
 }

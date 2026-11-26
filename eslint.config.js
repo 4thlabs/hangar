@@ -22,17 +22,25 @@ const blankLines = [
 ];
 
 export default [
-  { ignores: ["src/modules/common/ui/**", "src/app/pages.gen.ts"] },
+  // `web/src` is the Rust server's page, which follows the same rules.
   {
-    files: ["src/**/*.ts"],
+    ignores: [
+      "src/modules/common/ui/**",
+      "src/app/pages.gen.ts",
+      "web/src/modules/common/ui/**",
+      "web/src/libs/api/generated.ts",
+    ],
+  },
+  {
+    files: ["src/**/*.ts", "web/src/**/*.ts"],
     languageOptions: parserFor(["typescript"]),
   },
   {
-    files: ["src/**/*.tsx"],
+    files: ["src/**/*.tsx", "web/src/**/*.tsx"],
     languageOptions: parserFor(["typescript", "jsx"]),
   },
   {
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["src/**/*.{ts,tsx}", "web/src/**/*.{ts,tsx}"],
     linterOptions: { reportUnusedDisableDirectives: "off" },
     plugins: { "@stylistic": stylistic },
     rules: {

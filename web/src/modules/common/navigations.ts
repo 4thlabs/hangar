@@ -1,19 +1,15 @@
 import { BoxesIcon, LayoutDashboardIcon, NetworkIcon, SettingsIcon, StoreIcon, type LucideIcon } from "lucide-react";
-import type { CommonMessages } from "#modules/common/messages.ts";
 
 export type NavigationPath = "/" | "/apps" | "/cluster" | "/store" | "/settings";
 
-/** A name under `navigation` in {@link CommonMessages}, resolved in the reader's language. */
-type NavigationLabel = keyof typeof CommonMessages.en.navigation;
-
 type NavigationItem = {
-  label: NavigationLabel;
+  label: string;
   href: NavigationPath;
   icon: LucideIcon;
 };
 
 type NavigationCategory = {
-  label: NavigationLabel;
+  label: string;
   position?: "bottom";
   items: readonly NavigationItem[];
 };
@@ -22,18 +18,18 @@ type NavigationCategory = {
 export class Navigations {
   static readonly Categories: readonly NavigationCategory[] = [
     {
-      label: "general",
+      label: "General",
       items: [
-        { label: "dashboard", href: "/", icon: LayoutDashboardIcon },
-        { label: "apps", href: "/apps", icon: BoxesIcon },
-        { label: "cluster", href: "/cluster", icon: NetworkIcon },
-        { label: "store", href: "/store", icon: StoreIcon },
+        { label: "Dashboard", href: "/", icon: LayoutDashboardIcon },
+        { label: "Apps", href: "/apps", icon: BoxesIcon },
+        { label: "Cluster", href: "/cluster", icon: NetworkIcon },
+        { label: "Store", href: "/store", icon: StoreIcon },
       ],
     },
     {
-      label: "administration",
+      label: "Administration",
       position: "bottom",
-      items: [{ label: "settings", href: "/settings", icon: SettingsIcon }],
+      items: [{ label: "Settings", href: "/settings", icon: SettingsIcon }],
     },
   ];
 

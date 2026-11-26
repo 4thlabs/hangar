@@ -5,10 +5,10 @@ import type { UserPreferences } from "#libs/preferences";
 import { Routes } from "#app/routes.tsx";
 import { AppProviders } from "#modules/common/components/app-providers.tsx";
 
-const english: UserPreferences = { theme: "light", themePalette: "claude", locale: "en" };
+const light: UserPreferences = { theme: "light", themePalette: "claude" };
 
 /** The page at `path`, with the preferences the cookies gave. */
-function renderAt(path: string, preferences: UserPreferences = english) {
+function renderAt(path: string, preferences: UserPreferences = light) {
   const router = Routes.createRouter(createMemoryHistory({ initialEntries: [path] }));
 
   render(
@@ -43,16 +43,8 @@ describe("the shell", () => {
     expect(current.map(link => link.textContent)).toContain("Apps");
   });
 
-  it("speaks the language of the cookie", async () => {
-    renderAt("/settings", { ...english, locale: "fr" });
-
-    expect(await screen.findByRole("heading", { name: "Pas encore ici" })).toBeDefined();
-    expect(screen.getAllByRole("link", { name: "Paramètres" }).length).toBeGreaterThan(0);
-    expect(document.documentElement.lang).toBe("fr");
-  });
-
   it("applies the palette and the mode of the cookies, and keeps them", async () => {
-    renderAt("/", { ...english, theme: "dark", themePalette: "nord" });
+    renderAt("/", { theme: "dark", themePalette: "nord" });
 
     await screen.findByRole("heading", { name: "Not here yet" });
 
