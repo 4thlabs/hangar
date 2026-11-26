@@ -126,9 +126,14 @@ web/              # the server's page: a Vite SPA on the TanStack Query hooks or
 ```
 
 `web/` is a package of its own, beside Waku's: the switch removes the root's without touching it. It follows the
-TypeScript conventions above, with the same import mapping and the root's Prettier, and takes from `src/` what a page
-it moves needs, copied: the Waku version keeps its own until the switch. Its `src/libs/api/generated.ts` and
-`web/openapi.json` are written by `cargo quoll gen`, never committed.
+TypeScript conventions above, with the same import mapping and the root's Prettier and eslint (`npm run lint` covers
+`web/src`), and takes from `src/` what a page it moves needs, copied: the Waku version keeps its own until the switch.
+Its `src/libs/api/generated.ts` and `web/openapi.json` are written by `cargo quoll gen`, never committed.
+
+The page is English only, decided with the maintainer on 2026-11-24: the Translations section above is the Waku
+version's alone, until the switch. `web/` has no catalog, no translation helper, no language cookie or switch; its
+text is written in English in its components, and `Intl` formats dates and numbers in English. A page moved from
+`src/` leaves its `messages.ts` behind and takes the English words.
 
 What CI's `rust` job runs, warnings as errors:
 
@@ -152,7 +157,9 @@ npm test --prefix web
 A change to the contract rewrites its snapshot: `SNAPSHOT=overwrite cargo test -p hangar-api --test openapi`, and
 the diff is reviewed.
 
-`cargo run -p hangar-cli -- <args>` runs the binary, and `cargo quoll dev` the server, orval and Vite. The Docker
-image builds the binary in its `cli` stage, on Alpine, and ships it at `/usr/local/bin/hangar`; nothing else of the
-workspace goes into the image. CI's `cli` job builds it static for the host, x86_64 and aarch64 musl, and a `v*` tag attaches it to its release. A build given `HANGAR_VERSION`,
-the tag, prints it for `--version`, its `v` left out; any other prints the workspace's version with `-dev`.
+`cargo run -p hangar-cli -- <args>` runs the binary, and `HOST=127.0.0.1 PORT=3011 cargo quoll dev` the server,
+orval and Vite, beside the Waku version's `npm run dev`. The Docker image builds the binary in its `cli` stage, on
+Alpine, and ships it at `/usr/local/bin/hangar`; nothing else of the workspace goes into the image. CI's `cli` job
+builds it static for the host, x86_64 and aarch64 musl, and a `v*` tag attaches it to its release. A build given
+`HANGAR_VERSION`, the tag, prints it for `--version`, its `v` left out; any other prints the workspace's version with
+`-dev`.

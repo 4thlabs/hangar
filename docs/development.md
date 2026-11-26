@@ -46,18 +46,20 @@ A tag pushed alone, with `git push`, gets a release without notes, which `gh rel
 ## The Rust server
 
 The server rewritten in Rust (see the Rust section of [`AGENTS.md`](../AGENTS.md)) runs beside the Waku version, on
-the same data directory and the same `.env`. Its page is in `web/`. You need Rust, and `cargo quoll`, at the tag of
-the quoll the contract uses:
+the same data directory and the same `.env`. Its page is in `web/`, in English only. You need Rust, and
+`cargo quoll`, at the tag of the quoll the contract uses:
 
 ```bash
 cargo install --git https://github.com/4thlabs/quoll --tag v0.10.0 quoll-cli --locked
 npm ci --prefix web
-cargo quoll dev
+HOST=127.0.0.1 PORT=3011 cargo quoll dev
 ```
 
-`cargo quoll dev` writes the OpenAPI document and orval's hooks, starts the server on port 3010, then Vite, which
-serves the page at <http://localhost:5173> and proxies `/api` to the server. A change to a crate rebuilds and
-restarts the server, a change to the contract writes the hooks again.
+`cargo quoll dev` writes the OpenAPI document and orval's hooks, starts the server, then Vite, which serves the page
+at <http://localhost:5173> and proxies `/api` to the server. A change to a crate rebuilds and restarts the server, a
+change to the contract writes the hooks again. The server listens where `HOST` and `PORT` say, which `cargo quoll
+dev` passes on, as it gives the server no variable of its own: on 3011, the `url` of
+`[[workspace.metadata.quoll.server]]` and the proxy's target, so that it runs beside `npm run dev` on 3010.
 
 `cargo quoll build` builds the page in `web/dist`, which the server serves when `HANGAR_PAGE_DIR` names it:
 `HANGAR_PAGE_DIR=web/dist cargo run -p hangar-server`, at <http://localhost:3010>.
@@ -66,14 +68,15 @@ The server reads its settings from the environment, then from the `.env` of the 
 `hangar` binary does; an empty variable is not set. A value missing or bad stops it at the start, with every variable
 at fault named.
 
-| Variable                                                | What it is                                              |
-| ------------------------------------------------------- | ------------------------------------------------------- |
-| `HANGAR_DATA_DIR`                                       | The data directory, required                            |
-| `HANGAR_STORE_URL`                                      | The git URL of the store, required                      |
-| `DOMAIN`                                                | The domain the apps are served under, required          |
-| `GITHUB_TOKEN`, `FINNHUB_API_KEY`                       | The keys of the widgets that call those services        |
-| `HANGAR_SSH_HOST`, `HANGAR_SSH_USER`, `HANGAR_SSH_PORT` | The host the terminal signs in to; a port 1–65535       |
-| `HANGAR_PAGE_DIR`                                       | The page to serve beside the API, with its `index.html` |
+| Variable                                                | What it is                                               |
+| ------------------------------------------------------- | -------------------------------------------------------- |
+| `HOST`, `PORT`                                          | Where it listens, an IP and a port; `0.0.0.0:3010` unset |
+| `HANGAR_DATA_DIR`                                       | The data directory, required                             |
+| `HANGAR_STORE_URL`                                      | The git URL of the store, required                       |
+| `DOMAIN`                                                | The domain the apps are served under, required           |
+| `GITHUB_TOKEN`, `FINNHUB_API_KEY`                       | The keys of the widgets that call those services         |
+| `HANGAR_SSH_HOST`, `HANGAR_SSH_USER`, `HANGAR_SSH_PORT` | The host the terminal signs in to; a port 1–65535        |
+| `HANGAR_PAGE_DIR`                                       | The page to serve beside the API, with its `index.html`  |
 
 ## Database
 
