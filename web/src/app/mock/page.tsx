@@ -25,6 +25,56 @@ export function unauthorized(): Response {
   return problem(401, "no session");
 }
 
+/** The JSON `items`, as the server streams the items of an `Events` route. */
+export function events(items: readonly unknown[]): Response {
+  const body = items.map(item => `data: ${JSON.stringify(item)}\n\n`).join("");
+
+  return new Response(`:\n\n${body}`, { headers: { "Content-Type": "text/event-stream" } });
+}
+
+/** An `EventSource` the test drives: each one the page opens is kept, which the test opens and sends items on. */
+export class FakeEventSource {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+
+  /** Every source opened since `serve`. */
+  static sources: FakeEventSource[] = [];
+
+  readonly url: string;
+  readyState = FakeEventSource.CONNECTING;
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onerror: (() => void) | null = null;
+
+  constructor(url: string) {
+    this.url = url;
+    FakeEventSource.sources.push(this);
+  }
+
+  /** The last source of `url` the page holds open. */
+  static of(url: string): FakeEventSource | undefined {
+    return FakeEventSource.sources.findLast(source => source.url === url && source.readyState !== FakeEventSource.CLOSED);
+  }
+
+  addEventListener() {}
+
+  close() {
+    this.readyState = FakeEventSource.CLOSED;
+  }
+
+  /** The server answered: the stream is open. */
+  open() {
+    this.readyState = FakeEventSource.OPEN;
+    this.onopen?.();
+  }
+
+  /** An item of the stream. */
+  send(item: unknown) {
+    this.onmessage?.({ data: JSON.stringify(item) });
+  }
+}
+
 /** Answers every `fetch` from `answers`, a signed-in session with no provider unless they say otherwise. */
 export function serve(answers: Answers = {}) {
   const all: Answers = {
@@ -41,6 +91,8 @@ export function serve(answers: Answers = {}) {
   });
 
   vi.stubGlobal("fetch", fetch);
+  FakeEventSource.sources = [];
+  vi.stubGlobal("EventSource", FakeEventSource);
 
   return fetch;
 }

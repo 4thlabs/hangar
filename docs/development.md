@@ -168,6 +168,24 @@ variable needs a name compose takes; one the file holds already, as `OLD-KEY` wr
 removed. Its values are hidden until shown, as most are secrets, and its answer is never cached (`Cache-Control:
 no-store`). Both tabs read their file anew each time they open, as a sync or an install may have changed it.
 
+### Docker
+
+The server reaches the daemon that `DOCKER_HOST` names, `unix:///path` or `tcp://host:port` without TLS, else Docker's
+own socket; a `DOCKER_HOST` it does not support, or `DOCKER_TLS_VERIFY` set, stops it at the start. **Apps** and an app's page read the containers of
+the compose projects, and `GET /api/docker/overview` the usage of the whole host (`info` and `df`), from a cache: one
+read of the daemon shared by the requests that wait for it, served as it is for a minute, then served while it is read
+again, as the Waku version's `Cache` does; the overview, whose `df` is the daemon's slowest call, for five minutes. A
+failed read is not kept, and a failed reread keeps the last value. The server follows the daemon's events from its
+start, and reads again what they make stale, the events of a quarter of a second gathered, two seconds for the
+overview; when the events are followed again after the daemon went away, everything is read again.
+
+A reread that changes what the cache holds is pushed to the page on `GET /api/docker/changes`, which reads again what
+it shows: the page no longer reloads every 30 seconds. The stats, a frame a second, and the log of a container, its
+last 200 lines then followed, are streamed from the daemon, never kept; a log ends with an `end` event once its
+container stops, and an id that is not one of a container of the app is a 404. A daemon that does not answer is a 503,
+`docker.unavailable`. The update badge and its filter come with the image check (#176), the compose commands with
+#173, the backups with #177, and a container's console with the terminal.
+
 ## Database
 
 Hangar keeps its own state in SQLite, through Drizzle: the Better Auth tables
