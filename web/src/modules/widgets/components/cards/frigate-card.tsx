@@ -1,4 +1,5 @@
 import type { FrigateEvents } from "#libs/api";
+import { useNow } from "#modules/common/hooks/use-now.ts";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
 import { Units } from "#modules/widgets/widget-format.ts";
 import { WidgetImage } from "#modules/widgets/widget-image.ts";
@@ -24,8 +25,6 @@ type FrigateCardProps = {
   /** The placement's key, which its thumbnails are relayed by. */
   placementKey: string;
   link: string | null;
-  /** For a test that pins the clock. */
-  now?: number;
 };
 
 /** Frigate's latest events, with their thumbnails, and how its detection runs. */
@@ -33,8 +32,8 @@ export function FrigateCard({
   events: { cameraCount, detectionFps, detectors, events },
   placementKey,
   link,
-  now = Date.now(),
 }: FrigateCardProps) {
+  const now = useNow();
   const look = WidgetAppearance.get("frigate-events");
 
   return (

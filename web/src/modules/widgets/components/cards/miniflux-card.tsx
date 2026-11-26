@@ -1,5 +1,6 @@
 import { cn } from "cn";
 import type { MinifluxEntries } from "#libs/api";
+import { useNow } from "#modules/common/hooks/use-now.ts";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
 import { Units } from "#modules/widgets/widget-format.ts";
 import {
@@ -15,12 +16,11 @@ import {
 type MinifluxCardProps = {
   entries: MinifluxEntries;
   link: string | null;
-  /** For a test that pins the clock. */
-  now?: number;
 };
 
 /** Miniflux's newest entries, each marked when not read yet, and how many are unread. */
-export function MinifluxCard({ entries: { unread, entries }, link, now = Date.now() }: MinifluxCardProps) {
+export function MinifluxCard({ entries: { unread, entries }, link }: MinifluxCardProps) {
+  const now = useNow();
   const look = WidgetAppearance.get("miniflux-entries");
 
   return (

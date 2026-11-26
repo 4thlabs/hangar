@@ -326,6 +326,27 @@ describe("/apps/:project", () => {
     expect(screen.getByText(/hello\s+2026-11-26T10:00:01Z world/)).toBeDefined();
   });
 
+  it("reads the log again from its tail on Reconnect, without the lines of the last read", async () => {
+    const reads = [
+      [{ kind: "line", line: "2026-11-26T10:00:00Z first read" }, { kind: "end" }],
+      [{ kind: "line", line: "2026-11-26T10:05:00Z second read" }, { kind: "end" }],
+    ];
+
+    serve({
+      "GET /api/docker/apps/alpha": () => Response.json(alpha),
+      [`GET /api/docker/apps/alpha/containers/${alphaId}/logs`]: () => events(reads.shift() ?? []),
+    });
+
+    renderAt("/apps/alpha");
+    fireEvent.click(await screen.findByRole("button", { name: "View the logs of alpha-web-1" }));
+    expect(await screen.findByText(/first read/)).toBeDefined();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Reconnect" }));
+
+    expect(await screen.findByText(/second read/)).toBeDefined();
+    expect(screen.queryByText(/first read/)).toBeNull();
+  });
+
   it("says why a log could not be followed", async () => {
     serve({
       "GET /api/docker/apps/alpha": () => Response.json(alpha),
@@ -482,8 +503,8 @@ describe("compose commands", () => {
 
     expect(await screen.findByText(/Restart runs on 2 apps/)).toBeDefined();
     // Another command holds the app: none of its buttons runs one.
-    expect((screen.getByRole("button", { name: "Restart" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Up: docker compose up -d" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Restart" }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Up: docker compose up -d" }).disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Show output" }));
 
@@ -565,7 +586,7 @@ describe("compose commands", () => {
     act(() => changes.send("containers"));
 
     expect(await screen.findByText(/Up runs on alpha/)).toBeDefined();
-    expect((screen.getByRole("button", { name: "Down" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Down" }).disabled).toBe(true);
   });
 
   it("keeps the panel when the apps read again leave no row to the filter", async () => {

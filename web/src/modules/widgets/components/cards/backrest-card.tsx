@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import type { BackrestHealth, BackrestSummary } from "#libs/api";
 import { RelativeTime } from "#libs/format";
+import { useNow } from "#modules/common/hooks/use-now.ts";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
 import { Units } from "#modules/widgets/widget-format.ts";
 import {
@@ -25,12 +26,11 @@ class HealthDot {
 type BackrestCardProps = {
   summary: BackrestSummary;
   link: string | null;
-  /** For a test that pins the clock. */
-  now?: number;
 };
 
 /** Each repository of Backrest's, and how its last backup went. */
-export function BackrestCard({ summary: { repositories }, link, now = Date.now() }: BackrestCardProps) {
+export function BackrestCard({ summary: { repositories }, link }: BackrestCardProps) {
+  const now = useNow();
   const look = WidgetAppearance.get("backrest-summary");
   const protectedBytes = repositories.reduce((total, repository) => total + repository.protectedBytes, 0);
 

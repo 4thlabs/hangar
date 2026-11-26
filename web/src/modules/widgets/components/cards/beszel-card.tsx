@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import type { BeszelServerStats } from "#libs/api";
 import { RelativeTime } from "#libs/format";
+import { useNow } from "#modules/common/hooks/use-now.ts";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
 import { Units } from "#modules/widgets/widget-format.ts";
 import { WidgetCard, WidgetContent, WidgetHeader, WidgetList, WidgetListItem, WidgetMetadata } from "../widget.tsx";
@@ -36,12 +37,11 @@ function Gauge({ label, value }: { label: string; value: number }) {
 type BeszelCardProps = {
   stats: BeszelServerStats;
   link: string | null;
-  /** For a test that pins the clock. */
-  now?: number;
 };
 
 /** The systems a Beszel hub monitors, with their CPU, memory and disk. */
-export function BeszelCard({ stats: { systems }, link, now = Date.now() }: BeszelCardProps) {
+export function BeszelCard({ stats: { systems }, link }: BeszelCardProps) {
+  const now = useNow();
   const look = WidgetAppearance.get("beszel-server-stats");
   const down = systems.filter(system => !system.up).length;
 
