@@ -407,6 +407,37 @@ pub struct GithubRelease {
     pub published_at: String,
 }
 
+/// Stock quotes from Finnhub, in the order the widget lists them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StockPrices {
+    /// The stocks: a symbol Finnhub cannot quote is left out.
+    pub stocks: Vec<Stock>,
+}
+
+/// A stock, as Finnhub quotes it, in the currency it is quoted in.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Stock {
+    /// Its symbol, as `hangar.yml` writes it.
+    pub symbol: String,
+    /// The company's name; `None` when Finnhub has no profile of it.
+    pub name: Option<String>,
+    /// The ISO 4217 code of the currency it is quoted in; `None` when Finnhub has no profile of it.
+    pub currency: Option<String>,
+    /// Its last price.
+    pub price: f64,
+    /// Its change since the previous close, in percent.
+    pub change_percent: f64,
+    /// The day's high.
+    pub high: f64,
+    /// The day's low.
+    pub low: f64,
+    /// The day's open.
+    pub open: f64,
+    /// Its daily closes over the last month, oldest first; none when Finnhub's plan gives none.
+    pub closes: Vec<f64>,
+}
+
 /// What a widget loaded from its service, by its `type`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", content = "data", rename_all = "kebab-case")]
@@ -432,6 +463,8 @@ pub enum WidgetData {
     TcgCollectorCards(TcgCollectorCards),
     /// `github-releases`.
     GithubReleases(GithubReleases),
+    /// `stock-prices`.
+    StockPrices(StockPrices),
 }
 
 quoll::group! {
