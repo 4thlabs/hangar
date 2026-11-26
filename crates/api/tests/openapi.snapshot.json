@@ -2560,6 +2560,110 @@
         ],
         "type": "object"
       },
+      "ForgejoCi": {
+        "description": "What Forgejo Actions runs, and the repositories updated last.",
+        "properties": {
+          "activeRuns": {
+            "description": "Every run not finished yet, running ones first, then newest first.",
+            "items": {
+              "$ref": "#/components/schemas/ForgejoRun"
+            },
+            "type": "array"
+          },
+          "recentRepositories": {
+            "description": "The three repositories updated last, newest first, archived ones left out.",
+            "items": {
+              "$ref": "#/components/schemas/ForgejoRepository"
+            },
+            "type": "array"
+          },
+          "repositoryCount": {
+            "description": "How many repositories the card covers.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "repositoryCount",
+          "activeRuns",
+          "recentRepositories"
+        ],
+        "type": "object"
+      },
+      "ForgejoRepository": {
+        "description": "A repository of Forgejo's.",
+        "properties": {
+          "fullName": {
+            "description": "`owner/name`.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "When it was pushed to or changed last, in RFC 3339.",
+            "type": "string"
+          },
+          "url": {
+            "description": "Its page.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fullName",
+          "url",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "ForgejoRun": {
+        "description": "A run of Forgejo Actions that has not finished.",
+        "properties": {
+          "id": {
+            "description": "Its id.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "isQueued": {
+            "description": "Whether it waits for a runner or an approval, rather than runs.",
+            "type": "boolean"
+          },
+          "reference": {
+            "description": "The branch, tag or pull request it runs on, as `main` or `#2`.",
+            "type": "string"
+          },
+          "repository": {
+            "description": "The repository it runs in, `owner/name`.",
+            "type": "string"
+          },
+          "since": {
+            "description": "When it started, or, until it does, when it was queued, in RFC 3339.",
+            "type": "string"
+          },
+          "status": {
+            "description": "`running`, `waiting` or `blocked`.",
+            "type": "string"
+          },
+          "title": {
+            "description": "The title of the commit or pull request it runs for.",
+            "type": "string"
+          },
+          "url": {
+            "description": "Its page.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "repository",
+          "title",
+          "status",
+          "isQueued",
+          "reference",
+          "url",
+          "since"
+        ],
+        "type": "object"
+      },
       "FrigateDetector": {
         "description": "A detector of Frigate's, and how fast it runs.",
         "properties": {
@@ -4237,6 +4341,23 @@
               },
               "type": {
                 "const": "beszel-server-stats",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "data"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`forgejo-ci`.",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/ForgejoCi"
+              },
+              "type": {
+                "const": "forgejo-ci",
                 "type": "string"
               }
             },
