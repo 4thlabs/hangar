@@ -92,6 +92,27 @@ describe("/settings#env", () => {
   });
 });
 
+describe("/settings tabs", () => {
+  it("read their file anew each time they open, as a sync may have changed it", async () => {
+    let source = "categories: []\n";
+
+    serve({
+      "GET /api/config": () => Response.json({ source }),
+      "GET /api/store": () => Response.json({ url: "u", installed: true, sync: null }),
+    });
+
+    renderAt("/settings#config");
+
+    await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("categories: []"));
+    // The settings' own tab, after the navbar's of the same name.
+    fireEvent.click(screen.getAllByRole("tab", { name: "Store" }).at(-1)!);
+    source = "categories: [pulled]\n";
+    fireEvent.click(await screen.findByRole("tab", { name: "Configuration" }));
+
+    await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("categories: [pulled]"));
+  });
+});
+
 describe("/settings#config", () => {
   it("takes no typing while a save runs", async () => {
     let answer: (response: Response) => void = () => {};

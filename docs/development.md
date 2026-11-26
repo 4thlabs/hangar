@@ -143,12 +143,13 @@ server logs them. The page shows why a sync failed, its code and its English mes
 holds.
 
 **Settings → Configuration** saves `hangar.yml` once it is valid, its users included, and links the apps and shared
-files it lists; an invalid file is refused with the field at fault, and not written. **Settings → Environment** saves `.env.global` merged
-into the file as it is on disk, after its copy aside, `.env.global.<time>.bak`: the page sends only what changed since
-it read the file, so a variable added, changed or removed by hand meanwhile stays as the file has it, and only the ones
-removed on the page are lost. A save that changes nothing writes nothing, and makes no copy. A new variable needs a name
-compose takes; one the file holds already, as `OLD-KEY` written by hand, may be changed or removed. Its values are
-hidden until shown, as most are secrets, and its answer is never cached (`Cache-Control: no-store`).
+files it lists; an invalid file is refused with the field at fault, and not written. **Settings → Environment** saves
+`.env.global` merged into the file as it is on disk, after its copy aside, `.env.global.<time>.bak`: the page sends only
+what changed since it read the file, so a variable added, changed or removed by hand meanwhile stays as the file has it,
+and only the ones removed on the page are lost. A save that changes nothing writes nothing, and makes no copy. A new
+variable needs a name compose takes; one the file holds already, as `OLD-KEY` written by hand, may be changed or
+removed. Its values are hidden until shown, as most are secrets, and its answer is never cached (`Cache-Control:
+no-store`). Both tabs read their file anew each time they open, as a sync or an install may have changed it.
 
 ## Database
 
