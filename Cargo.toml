@@ -26,6 +26,14 @@ tokio = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
+# argon2 optimised in the builds of tests and `cargo run` too: unoptimised, one hash of its default costs, 19 MiB,
+# takes seconds, and each sign-in of the server's tests computes one.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

@@ -1,10 +1,12 @@
 //! `hangar.yml`, the configuration a store ships: its categories, its shared files, the dashboard, the pause between
-//! two registry calls and the backups, checked by the rules of the Waku version's zod schema, so that a file one
-//! version takes, the other takes too.
+//! two registry calls, the backups and the users, checked by the rules of the Waku version's zod schema, so that a
+//! file one version takes, the other takes too. The users are the Rust server's alone: zod leaves out a field it does
+//! not know, and the Waku version saves the file as it is written.
 
 mod backup;
 mod cron;
 mod rules;
+mod user;
 mod widget;
 
 use std::time::Duration;
@@ -13,6 +15,7 @@ use serde::Deserialize;
 use serde_norway::Value;
 
 pub use backup::Backup;
+pub use user::User;
 pub use widget::{Column, FollowedCard, ServiceOptions, Widget, WidgetKind};
 
 use super::{Yaml, YamlError};
@@ -20,6 +23,7 @@ use backup::BackupFields;
 use rules::{
     AppIdPattern, EntryName, Integer, List, MAX_SAFE_INTEGER, Matching, NonEmpty, present,
 };
+use user::UserList;
 
 /// A `hangar.yml` that does not parse.
 #[derive(Debug, thiserror::Error)]
@@ -65,6 +69,8 @@ pub struct Config {
     pub registry_throttling: Duration,
     /// The apps whose data folder is backed up, each once.
     pub backups: Vec<Backup>,
+    /// Who may sign in to the server, each email and each subject once; nobody when the file lists no one.
+    pub users: Vec<User>,
 }
 
 /// A group of apps.
@@ -93,6 +99,8 @@ struct ConfigFields {
     registry_throttling: Integer<0, MAX_SAFE_INTEGER>,
     #[serde(default)]
     backups: List<BackupFields>,
+    #[serde(default)]
+    users: UserList,
 }
 
 impl ConfigFields {
@@ -132,7 +140,10 @@ impl Config {
         };
         let backups: Vec<Backup> = fields.backups.0.into_iter().map(Backup::from).collect();
 
+        let users: Vec<User> = fields.users.0.into_iter().map(User::from).collect();
+
         Backup::check_unique(&backups)?;
+        User::check_unique(&users)?;
 
         Ok(Self {
             categories: fields
@@ -145,6 +156,7 @@ impl Config {
             widgets,
             registry_throttling: Duration::from_millis(fields.registry_throttling.unsigned()),
             backups,
+            users,
         })
     }
 
@@ -165,6 +177,11 @@ impl Config {
     pub fn backup(&self, app: &str) -> Option<&Backup> {
         self.backups.iter().find(|backup| backup.app == app)
     }
+
+    /// The user whose email is `email`, whatever its case; `None` when `hangar.yml` lists no such user.
+    pub fn user(&self, email: &str) -> Option<&User> {
+        self.users.iter().find(|user| user.has_email(email))
+    }
 }
 
 impl Default for Config {
@@ -176,6 +193,7 @@ impl Default for Config {
             widgets: Widget::defaults(),
             registry_throttling: Duration::from_millis(100),
             backups: Vec::new(),
+            users: Vec::new(),
         }
     }
 }
@@ -237,6 +255,7 @@ mod tests {
     use std::time::Duration;
 
     use super::{Backup, Category, Config, ConfigError, WidgetKind};
+    use crate::PasswordHash;
 
     /// The field and the message of a configuration that does not follow the rules.
     fn invalid(source: &str) -> (String, String) {
@@ -264,6 +283,7 @@ mod tests {
         assert!(config.shared.is_empty());
         assert_eq!(config.registry_throttling, Duration::from_millis(100));
         assert!(config.backups.is_empty());
+        assert!(config.users.is_empty());
 
         let widget_kinds: Vec<_> = config.widgets.iter().map(|widget| &widget.kind).collect();
 
@@ -490,5 +510,100 @@ mod tests {
 
             assert!(Config::parse(&source).is_err(), "{entry}");
         }
+    }
+
+    /// A hash of `password`, as `hangar user hash` prints it.
+    fn hash(password: &str) -> String {
+        PasswordHash::new(password).expect("hashed").to_string()
+    }
+
+    #[test]
+    fn reads_the_users_and_finds_one_by_email_whatever_its_case() {
+        let source = format!(
+            "categories: []\nusers:\n  - name: Ana\n    email: ana@example.com\n    passwordHash: \"{}\"\n  - name: Bo\n    email: Bo@Example.com\n    oidcSubject: \"248289761001\"\n",
+            hash("correct horse")
+        );
+        let config = Config::parse(&source).expect("the configuration is valid");
+
+        let ana = config.user("ANA@example.com").expect("Ana is listed");
+        let bo = config.user("bo@example.com").expect("Bo is listed");
+
+        assert_eq!(ana.name, "Ana");
+        assert!(
+            ana.password_hash
+                .as_ref()
+                .is_some_and(|hash| hash.verify("correct horse"))
+        );
+        assert_eq!(ana.oidc_subject, None);
+        assert_eq!(bo.email, "Bo@Example.com");
+        assert_eq!(bo.password_hash, None);
+        assert_eq!(bo.oidc_subject.as_deref(), Some("248289761001"));
+        assert_eq!(config.user("cy@example.com"), None);
+    }
+
+    #[test]
+    fn rejects_a_user_without_a_name_or_with_no_email() {
+        for (entry, field) in [
+            ("{ email: ana@example.com }", "users[0].name"),
+            ("{ name: '', email: ana@example.com }", "users[0].name"),
+            ("{ name: Ana }", "users[0].email"),
+        ] {
+            let source = format!("categories: []\nusers:\n  - {entry}\n");
+
+            assert_eq!(invalid(&source).0, field, "{entry}");
+        }
+    }
+
+    #[test]
+    fn rejects_what_is_no_email() {
+        for email in [
+            "ana",
+            "@example.com",
+            "ana@",
+            "ana@b@example.com",
+            "ana @example.com",
+            "",
+        ] {
+            let source = format!("categories: []\nusers:\n  - {{ name: Ana, email: '{email}' }}\n");
+
+            assert_eq!(
+                invalid(&source),
+                ("users[0].email".to_owned(), "must be an email".to_owned()),
+                "{email:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_a_password_hash_that_is_no_argon2id_hash() {
+        for hash in ["hunter22", "$2b$12$abcdefghijklmnopqrstuv"] {
+            let source = format!(
+                "categories: []\nusers:\n  - {{ name: Ana, email: ana@example.com, passwordHash: '{hash}' }}\n"
+            );
+            let (field, message) = invalid(&source);
+
+            assert_eq!(field, "users[0].passwordHash", "{hash}");
+            assert!(message.contains("argon2id"), "{message}");
+        }
+    }
+
+    #[test]
+    fn rejects_an_email_or_a_subject_listed_twice() {
+        assert_eq!(
+            invalid(
+                "categories: []\nusers:\n  - { name: Ana, email: ana@example.com }\n  - { name: Ana, email: ANA@example.com }\n"
+            ),
+            (
+                "users[1].email".to_owned(),
+                "ANA@example.com is listed twice".to_owned()
+            )
+        );
+        assert_eq!(
+            invalid(
+                "categories: []\nusers:\n  - { name: Ana, email: ana@example.com, oidcSubject: '1' }\n  - { name: Bo, email: bo@example.com, oidcSubject: '1' }\n"
+            )
+            .0,
+            "users[1].oidcSubject"
+        );
     }
 }
