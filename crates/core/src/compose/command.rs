@@ -93,8 +93,8 @@ impl ComposeCommand {
     }
 
     /// Whether the command attaches to its app and runs until it is stopped: an [`Args`](Self::Args) `up` that
-    /// nothing detaches, neither `--detach` nor `--wait`, as a flag, with a true value or as `-d` in a group of short
-    /// flags (`-dV`). The last value of each flag wins, as compose reads them. The typed [`Up`](Self::Up) is always
+    /// nothing detaches, neither `--detach` nor `--wait`, as a flag or with a true value, nor `-d`, alone, with a true
+    /// value or in a group of short flags (`-dV`). The last value of each flag wins, as compose reads them. The typed [`Up`](Self::Up) is always
     /// detached.
     ///
     /// ```
@@ -114,8 +114,8 @@ impl ComposeCommand {
         let mut wait = false;
 
         for arg in args {
-            if Self::is_short_detach(arg) {
-                detach = true;
+            if let Some(value) = Self::short_detach(arg) {
+                detach = value;
             }
 
             if let Some(value) = Self::flag_value(arg, "detach") {
@@ -154,13 +154,26 @@ impl ComposeCommand {
         value.strip_prefix('=').map(Self::is_true)
     }
 
-    /// Whether `arg` is a group of short flags holding `-d`, as `-d` or `-dV`.
-    fn is_short_detach(arg: &str) -> bool {
-        let Some(group) = arg.strip_prefix('-') else {
-            return false;
+    /// The value `arg` gives `-d`, as `pflag` reads a group of short flags: true in `-d` or `-dV`, and the value in
+    /// `-d=false` or `-Vd=false`, where it is the last of the group; `None` when it does not hold `-d`.
+    fn short_detach(arg: &str) -> Option<bool> {
+        let group = arg
+            .strip_prefix('-')
+            .filter(|group| !group.starts_with('-'))?;
+        let (flags, value) = match group.split_once('=') {
+            Some((flags, value)) => (flags, Some(value)),
+            None => (group, None),
         };
+        let is_group = !flags.is_empty() && flags.chars().all(|flag| flag.is_ascii_alphabetic());
 
-        group.contains('d') && group.chars().all(|flag| flag.is_ascii_alphabetic())
+        if !is_group || !flags.contains('d') {
+            return None;
+        }
+
+        match value {
+            Some(value) if flags.ends_with('d') => Some(Self::is_true(value)),
+            _ => Some(true),
+        }
     }
 
     /// Whether `pflag` reads `value` as true.
@@ -264,6 +277,8 @@ mod tests {
             &["up", "--wait", "--wait=false"],
             &["up", "--wait-timeout", "5"],
             &["up", "--detach-keys", "ctrl-d"],
+            &["up", "-d=false"],
+            &["up", "-Vd=0"],
         ] {
             assert!(args(line).is_attached(), "{line:?}");
         }
@@ -278,6 +293,8 @@ mod tests {
             &["up", "-Vd"],
             &["up", "--detach=false", "-d"],
             &["up", "--detach=false", "--wait"],
+            &["up", "-d=true"],
+            &["up", "-dV=false"],
         ] {
             assert!(!args(line).is_attached(), "{line:?}");
         }
