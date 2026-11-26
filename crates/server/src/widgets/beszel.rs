@@ -1,7 +1,6 @@
 //! `beszel-server-stats`: the systems a Beszel hub monitors, from its PocketBase.
 
 use hangar_api::{BeszelServerStats, BeszelSystem};
-use reqwest_middleware::ClientWithMiddleware;
 use serde::Deserialize;
 
 use super::error::LoadError;
@@ -15,8 +14,7 @@ quoll::api! {
 
     group Beszel {
         GET "/collections/systems/records?sort={sort}&fields={fields}&perPage={per_page}"
-            => systems(header("Authorization") key: Option<&str>, sort: &str, fields: &str, per_page: u32)
-                -> Page<System>;
+            => systems(sort: &str, fields: &str, per_page: u32) -> Page<System>;
     }
 }
 
@@ -64,16 +62,41 @@ const PER_PAGE: u32 = 100;
 /// The status of a system whose readings are current.
 const UP: &str = "up";
 
-/// The systems of the Beszel hub of `service`, by name, as the hub's own page lists them.
-pub(super) async fn load(
-    http: &ClientWithMiddleware,
-    service: &Service,
-) -> Result<BeszelServerStats, LoadError> {
-    let client = BeszelApi::client_with(http.clone(), &service.api)
-        .map_err(LoadError::call("reach Beszel"))?;
+/// The client of a placement's service, built once for its address and its key.
+#[derive(Debug, Clone)]
+pub(super) struct Client(BeszelApiClient);
+
+impl Client {
+    /// The client of the service `service`, with its key.
+    ///
+    /// # Errors
+    ///
+    /// When the client cannot be built, or the key cannot be sent.
+    pub(super) fn new(service: &Service) -> Result<Self, LoadError> {
+        build(service).map(Self)
+    }
+}
+
+/// The client of the Beszel hub of `service`, which sends its token as the whole of `Authorization`, written by hand:
+/// quoll leaves that header to its `Bearer` and `Basic`.
+///
+/// # Errors
+///
+/// When the token cannot go in a header, as one with a line break.
+fn build(service: &Service) -> Result<BeszelApiClient, LoadError> {
+    let Some(token) = service.key() else {
+        return service.keyless_client::<BeszelApi>("Beszel");
+    };
+
+    service.client::<BeszelApi>("Beszel", Some(Service::authorization(token, "Beszel")?))
+}
+
+/// The systems of the Beszel hub of `client`, by name, as the hub's own page lists them.
+pub(super) async fn load(client: &Client) -> Result<BeszelServerStats, LoadError> {
     let page = client
+        .0
         .beszel()
-        .systems(service.key(), "name", FIELDS, PER_PAGE)
+        .systems("name", FIELDS, PER_PAGE)
         .await
         .map_err(LoadError::call("list Beszel's systems"))?;
 

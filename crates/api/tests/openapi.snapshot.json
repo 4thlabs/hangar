@@ -234,12 +234,18 @@
             "type": "string"
           },
           "newest": {
-            "description": "The newest version out.",
-            "type": "string"
+            "description": "The newest version out; `None` when Arcane does not know it, as when its checks are off.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "releaseUrl": {
-            "description": "The page of the newest release.",
-            "type": "string"
+            "description": "The page of the newest release, when Arcane gives it.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "updateAvailable": {
             "description": "Whether `newest` is newer than `current`.",

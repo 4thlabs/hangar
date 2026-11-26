@@ -55,7 +55,8 @@ async fn profile(headers: HeaderMap, Query(query): Query<HashMap<String, String>
 
     let profile: Value = match query["symbol"].as_str() {
         "AAPL" => json!({ "name": "Apple Inc", "currency": "USD", "ticker": "AAPL" }),
-        _ => json!({}),
+        // Finnhub writes an unknown currency as empty, which no number format takes.
+        _ => json!({ "name": "", "currency": "" }),
     };
 
     Json(profile).into_response()

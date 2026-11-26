@@ -1,11 +1,13 @@
 //! `frigate-events`: Frigate's latest events and how its detection runs, and the thumbnail of each event, relayed.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
+use std::fmt;
+use std::marker::PhantomData;
 
 use hangar_api::{FrigateDetector, FrigateEvent, FrigateEvents};
 use http::StatusCode;
-use quoll::Bytes;
-use reqwest_middleware::ClientWithMiddleware;
+use quoll::{Bytes, client};
+use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
 use super::error::LoadError;
@@ -13,14 +15,18 @@ use super::service::Service;
 use super::time::Moment;
 
 quoll::api! {
-    /// Frigate's API, under `/api`. Its key, when it asks for one, goes in `X-API-Key`.
+    /// Frigate's API, under `/api`.
     #[server(none)]
     api FrigateApi = "/api";
 
+    /// A key, when Frigate asks for one.
+    scheme ApiKey = header "X-API-Key";
+
+    #[auth(ApiKey)]
     group Frigate {
-        GET "/events?limit={limit}" => events(header("X-API-Key") key: Option<&str>, limit: u32) -> Vec<Event>;
-        GET "/stats" => stats(header("X-API-Key") key: Option<&str>) -> Stats;
-        GET "/events/{id}/thumbnail.jpg" => thumbnail(id: &str, header("X-API-Key") key: Option<&str>) -> Bytes;
+        GET "/events?limit={limit}" => events(limit: u32) -> Vec<Event>;
+        GET "/stats" => stats() -> Stats;
+        GET "/events/{id}/thumbnail.jpg" => thumbnail(id: &str) -> Bytes;
     }
 }
 
@@ -58,7 +64,43 @@ impl Event {
 struct Stats {
     detection_fps: f64,
     cameras: HashMap<String, serde_json::Value>,
-    detectors: BTreeMap<String, Detector>,
+    detectors: InOrder<Detector>,
+}
+
+/// The entries of a JSON object in the order Frigate writes them, its config's: a map would sort them by name.
+#[derive(Debug)]
+struct InOrder<T>(Vec<(String, T)>);
+
+impl<T> Default for InOrder<T> {
+    fn default() -> Self {
+        Self(Vec::new())
+    }
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for InOrder<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Entries<T>(PhantomData<T>);
+
+        impl<'de, T: Deserialize<'de>> Visitor<'de> for Entries<T> {
+            type Value = InOrder<T>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("an object")
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                let mut entries = Vec::new();
+
+                while let Some(entry) = map.next_entry()? {
+                    entries.push(entry);
+                }
+
+                Ok(InOrder(entries))
+            }
+        }
+
+        deserializer.deserialize_map(Entries(PhantomData))
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -71,18 +113,30 @@ struct Detector {
 /// How many of the latest events the card lists.
 const EVENTS: u32 = 5;
 
-/// The latest events and the stats of the Frigate of `service`, asked at once.
-pub(super) async fn load(
-    http: &ClientWithMiddleware,
-    service: &Service,
-) -> Result<FrigateEvents, LoadError> {
-    let client = FrigateApi::client_with(http.clone(), &service.api)
-        .map_err(LoadError::call("reach Frigate"))?;
-    let frigate = client.frigate();
-    let (events, stats) = tokio::join!(
-        frigate.events(service.key(), EVENTS),
-        frigate.stats(service.key())
-    );
+/// The client of a placement's service, built once for its address and its key.
+#[derive(Debug, Clone)]
+pub(super) struct Client(FrigateApiClient);
+
+impl Client {
+    /// The client of the service `service`, with its key.
+    ///
+    /// # Errors
+    ///
+    /// When the client cannot be built, or the key cannot be sent.
+    pub(super) fn new(service: &Service) -> Result<Self, LoadError> {
+        build(service).map(Self)
+    }
+}
+
+/// The client of the Frigate of `service`, with its key.
+fn build(service: &Service) -> Result<FrigateApiClient, LoadError> {
+    service.client::<FrigateApi>("Frigate", service.key().map(client::key::<ApiKey>))
+}
+
+/// The latest events and the stats of the Frigate of `client`, asked at once.
+pub(super) async fn load(client: &Client) -> Result<FrigateEvents, LoadError> {
+    let frigate = client.0.frigate();
+    let (events, stats) = tokio::join!(frigate.events(EVENTS), frigate.stats());
     let events = events.map_err(LoadError::call("list Frigate's events"))?;
     let stats = stats.map_err(LoadError::call("read Frigate's stats"))?;
 
@@ -91,6 +145,7 @@ pub(super) async fn load(
         detection_fps: stats.detection_fps,
         detectors: stats
             .detectors
+            .0
             .into_iter()
             .map(|(name, detector)| FrigateDetector {
                 name,
@@ -111,15 +166,8 @@ pub(super) async fn load(
 }
 
 /// The thumbnail of the event `id`, `None` when Frigate has no such event.
-pub(super) async fn thumbnail(
-    http: &ClientWithMiddleware,
-    service: &Service,
-    id: &str,
-) -> Result<Option<Bytes>, LoadError> {
-    let client = FrigateApi::client_with(http.clone(), &service.api)
-        .map_err(LoadError::call("reach Frigate"))?;
-
-    match client.frigate().thumbnail(id, service.key()).await {
+pub(super) async fn thumbnail(client: &Client, id: &str) -> Result<Option<Bytes>, LoadError> {
+    match client.0.frigate().thumbnail(id).await {
         Ok(thumbnail) => Ok(Some(thumbnail)),
         Err(error) if error.status() == Some(StatusCode::NOT_FOUND) => Ok(None),
         Err(error) => Err(LoadError::call("fetch a thumbnail of Frigate's")(error)),

@@ -5,31 +5,23 @@ use std::collections::{HashMap, HashSet};
 use hangar_api::{JellyfinCounts, JellyfinItem, JellyfinLatest};
 use http::StatusCode;
 use quoll::Bytes;
-use reqwest_middleware::ClientWithMiddleware;
 use serde::Deserialize;
 
 use super::error::LoadError;
 use super::service::Service;
 
 quoll::api! {
-    /// Jellyfin's API, at the root. Its key goes in `Authorization: MediaBrowser Token="..."`, the one scheme
-    /// Jellyfin 12 takes.
+    /// Jellyfin's API, at the root. Its key goes in `Authorization: MediaBrowser Token="..."`, the one form Jellyfin
+    /// takes since 10.11 turned its legacy headers off: the client adds it to each of its calls.
     #[server(none)]
     api JellyfinApi = "";
 
     group Jellyfin {
-        GET "/Items/Counts" => counts(header("Authorization") key: Option<&str>) -> Counts;
-        GET "/Users" => users(header("Authorization") key: Option<&str>) -> Vec<User>;
+        GET "/Items/Counts" => counts() -> Counts;
+        GET "/Users" => users() -> Vec<User>;
         GET "/Items/Latest?userId={user}&limit={limit}&includeItemTypes={types}&groupItems={grouped}&enableImageTypes={images}"
-            => latest(
-                header("Authorization") key: Option<&str>,
-                user: &str,
-                limit: u32,
-                types: &str,
-                grouped: bool,
-                images: &str,
-            ) -> Vec<Item>;
-        GET "/Items/{id}/Images/Primary" => poster(id: &str, header("Authorization") key: Option<&str>) -> Bytes;
+            => latest(user: &str, limit: u32, types: &str, grouped: bool, images: &str) -> Vec<Item>;
+        GET "/Items/{id}/Images/Primary" => poster(id: &str) -> Bytes;
     }
 }
 
@@ -109,26 +101,41 @@ const OVERFETCH: u32 = 10;
 /// What "latest" mixes, as Glance's widget does.
 const TYPES: &str = "Movie,Episode,MusicAlbum";
 
-/// The header of the key of `service`, when it has one.
-fn authorization(service: &Service) -> Option<String> {
-    service
-        .key()
-        .map(|key| format!("MediaBrowser Token=\"{key}\""))
+/// The client of a placement's service, built once for its address and its key.
+#[derive(Debug, Clone)]
+pub(super) struct Client(JellyfinApiClient);
+
+impl Client {
+    /// The client of the service `service`, with its key.
+    ///
+    /// # Errors
+    ///
+    /// When the client cannot be built, or the key cannot be sent.
+    pub(super) fn new(service: &Service) -> Result<Self, LoadError> {
+        build(service).map(Self)
+    }
 }
 
-/// What the Jellyfin of `service` holds, and what `user` may see of what was added last: Jellyfin has no latest of
+/// The client of the Jellyfin of `service`, which sends its key as `MediaBrowser Token="..."`, written by hand:
+/// quoll's header schemes cannot say the form of a value.
+///
+/// # Errors
+///
+/// When the key cannot go in a header, as one with a line break.
+fn build(service: &Service) -> Result<JellyfinApiClient, LoadError> {
+    let Some(key) = service.key() else {
+        return service.keyless_client::<JellyfinApi>("Jellyfin");
+    };
+    let credential = Service::authorization(&format!("MediaBrowser Token=\"{key}\""), "Jellyfin")?;
+
+    service.client::<JellyfinApi>("Jellyfin", Some(credential))
+}
+
+/// What the Jellyfin of `client` holds, and what `user` may see of what was added last: Jellyfin has no latest of
 /// the whole server.
-pub(super) async fn load(
-    http: &ClientWithMiddleware,
-    service: &Service,
-    user: &str,
-) -> Result<JellyfinLatest, LoadError> {
-    let client = JellyfinApi::client_with(http.clone(), &service.api)
-        .map_err(LoadError::call("reach Jellyfin"))?;
-    let jellyfin = client.jellyfin();
-    let key = authorization(service);
-    let key = key.as_deref();
-    let (counts, users) = tokio::join!(jellyfin.counts(key), jellyfin.users(key));
+pub(super) async fn load(client: &Client, user: &str) -> Result<JellyfinLatest, LoadError> {
+    let jellyfin = client.0.jellyfin();
+    let (counts, users) = tokio::join!(jellyfin.counts(), jellyfin.users());
     let counts = counts.map_err(LoadError::call("count Jellyfin's items"))?;
     let users = users.map_err(LoadError::call("list Jellyfin's users"))?;
     // Naming the operator's typo beats a card that only says it could not load.
@@ -138,7 +145,6 @@ pub(super) async fn load(
         .ok_or_else(|| LoadError::refused(format!("Jellyfin has no user named {user}")))?;
     let latest = jellyfin
         .latest(
-            key,
             &account.id,
             ITEMS as u32 * OVERFETCH,
             TYPES,
@@ -168,19 +174,8 @@ pub(super) async fn load(
 }
 
 /// The poster of the item `id`, `None` when Jellyfin has none.
-pub(super) async fn poster(
-    http: &ClientWithMiddleware,
-    service: &Service,
-    id: &str,
-) -> Result<Option<Bytes>, LoadError> {
-    let client = JellyfinApi::client_with(http.clone(), &service.api)
-        .map_err(LoadError::call("reach Jellyfin"))?;
-
-    match client
-        .jellyfin()
-        .poster(id, authorization(service).as_deref())
-        .await
-    {
+pub(super) async fn poster(client: &Client, id: &str) -> Result<Option<Bytes>, LoadError> {
+    match client.0.jellyfin().poster(id).await {
         Ok(poster) => Ok(Some(poster)),
         Err(error) if error.status() == Some(StatusCode::NOT_FOUND) => Ok(None),
         Err(error) => Err(LoadError::call("fetch a poster of Jellyfin's")(error)),

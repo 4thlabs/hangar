@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use axum::Json;
+use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
@@ -66,13 +67,17 @@ async fn stats(headers: HeaderMap) -> Response {
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
-    Json(json!({
-        "detection_fps": 4.25,
-        "cameras": { "frigate_front_door": { "camera_fps": 5.0 }, "garden": {} },
-        "detectors": { "coral": { "inference_speed": 8.5, "pid": 42 } },
-        "service": { "version": "0.14.1" },
-    }))
-    .into_response()
+    // Written as text: `json!` would sort the detectors, which come in the order of Frigate's config.
+    (
+        [(CONTENT_TYPE, "application/json")],
+        r#"{
+            "detection_fps": 4.25,
+            "cameras": { "frigate_front_door": { "camera_fps": 5.0 }, "garden": {} },
+            "detectors": { "tpu": { "inference_speed": 8.5, "pid": 42 }, "cpu": { "inference_speed": 30.0 } },
+            "service": { "version": "0.14.1" }
+        }"#,
+    )
+        .into_response()
 }
 
 async fn thumbnail(Path(id): Path<String>, headers: HeaderMap) -> Response {
@@ -83,6 +88,13 @@ async fn thumbnail(Path(id): Path<String>, headers: HeaderMap) -> Response {
     match id.as_str() {
         "1700000000.5-abc" => ([(CONTENT_TYPE, "image/jpeg")], "jpeg bytes").into_response(),
         "a-page" => ([(CONTENT_TYPE, "text/html")], "<script>alert(1)</script>").into_response(),
+        "an-svg" => (
+            [(CONTENT_TYPE, "image/svg+xml")],
+            "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+        )
+            .into_response(),
+        "no-type" => Response::new(Body::from("jpeg bytes")),
+        "upper-case" => ([(CONTENT_TYPE, "Image/PNG")], "png bytes").into_response(),
         _ => StatusCode::NOT_FOUND.into_response(),
     }
 }
@@ -118,10 +130,16 @@ async fn loads_the_latest_events_and_the_stats_with_the_key_of_its_container() -
         WidgetData::FrigateEvents(FrigateEvents {
             camera_count: 2,
             detection_fps: 4.25,
-            detectors: vec![FrigateDetector {
-                name: "coral".to_owned(),
-                inference_speed: 8.5,
-            }],
+            detectors: vec![
+                FrigateDetector {
+                    name: "tpu".to_owned(),
+                    inference_speed: 8.5,
+                },
+                FrigateDetector {
+                    name: "cpu".to_owned(),
+                    inference_speed: 30.0,
+                },
+            ],
             events: vec![
                 FrigateEvent {
                     id: "1700000000.5-abc".to_owned(),
@@ -202,7 +220,34 @@ async fn relays_a_thumbnail_kept_a_day_by_the_browser() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(headers[CONTENT_TYPE], "image/jpeg");
     assert_eq!(headers[CACHE_CONTROL], "private, max-age=86400");
+    assert_eq!(headers["x-content-type-options"], "nosniff");
     assert_eq!(body, b"jpeg bytes");
+}
+
+#[tokio::test]
+async fn relays_an_image_of_no_type_as_a_jpeg_and_one_of_its_type_in_any_case() {
+    let url = frigate(Calls::default()).await;
+    let fixture = fixture(&url);
+    let server = fixture.serve().await;
+    let key = server.key("frigate-events").await;
+
+    let (status, headers, _) = server
+        .get(&format!("/api/widgets/{key}/image/no-type"))
+        .await;
+
+    assert_eq!(
+        (status, &headers[CONTENT_TYPE]),
+        (StatusCode::OK, &"image/jpeg".parse().expect("a header"))
+    );
+
+    let (status, headers, _) = server
+        .get(&format!("/api/widgets/{key}/image/upper-case"))
+        .await;
+
+    assert_eq!(
+        (status, &headers[CONTENT_TYPE]),
+        (StatusCode::OK, &"Image/PNG".parse().expect("a header"))
+    );
 }
 
 #[tokio::test]
@@ -212,7 +257,8 @@ async fn answers_404_for_an_image_the_service_has_not_or_that_is_none() {
     let server = fixture.serve().await;
     let key = server.key("frigate-events").await;
 
-    for id in ["unknown", "a-page", "a%2F..%2Fstats", "a%20b"] {
+    // An SVG may hold a script, which would run on Hangar's origin, with its session.
+    for id in ["unknown", "a-page", "an-svg", "a%2F..%2Fstats", "a%20b"] {
         assert_eq!(
             server
                 .problem(&format!("/api/widgets/{key}/image/{id}"))

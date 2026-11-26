@@ -82,7 +82,10 @@ export function FrigateCard({
                   {event.subLabel && ` · ${event.subLabel}`}
                 </a>
               ) : (
-                <p className="truncate font-medium text-primary">{event.label}</p>
+                <p className="truncate font-medium text-primary">
+                  {event.label}
+                  {event.subLabel && ` · ${event.subLabel}`}
+                </p>
               )}
               <p className="truncate text-xs text-muted-foreground">{CameraName.format(event.camera)}</p>
             </WidgetListItem>

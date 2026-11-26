@@ -19,11 +19,16 @@ export class StockFormat {
 
   /** A price in the currency the stock is quoted in: Finnhub converts nothing, so neither does the card. */
   static price(price: number, currency: string | null) {
-    if (currency === null) {
+    if (currency === null || !StockFormat.isCurrency(currency)) {
       return StockFormat.amount(price);
     }
 
     return new Intl.NumberFormat("en", { style: "currency", currency, ...StockFormat.Decimals }).format(price);
+  }
+
+  /** Whether `currency` is a code `Intl` formats, which throws for any other. */
+  private static isCurrency(currency: string) {
+    return /^[A-Za-z]{3}$/.test(currency);
   }
 
   /** A bare number, for a stock whose currency Finnhub does not say, and for the day's high, low and open. */

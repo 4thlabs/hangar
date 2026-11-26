@@ -7,13 +7,14 @@ use std::time::Duration;
 
 use futures::future;
 use hangar_api::{GithubRelease, GithubReleases};
-use reqwest_middleware::ClientWithMiddleware;
+use quoll::client;
 use serde::Deserialize;
 
 use super::cache::{Kept, Policy};
 use super::error::LoadError;
+use super::service::Service;
+use crate::Settings;
 use crate::failure::Failure;
-use crate::{Secret, Settings};
 
 /// The version of GitHub's REST API the contract follows.
 const VERSION: &str = "2022-11-28";
@@ -26,9 +27,9 @@ quoll::api! {
     #[error(GithubMessage)]
     api GithubApi = "";
 
+    #[auth(Bearer)]
     group Releases {
-        GET "/repos/{owner}/{repo}/releases/latest"
-            => latest(owner: &str, repo: &str, header("Authorization") token: Option<&str>) -> Release;
+        GET "/repos/{owner}/{repo}/releases/latest" => latest(owner: &str, repo: &str) -> Release;
     }
 }
 
@@ -55,8 +56,7 @@ struct Release {
 /// GitHub, as the widgets call it, and the releases they read, kept per repository.
 #[derive(Debug, Clone)]
 pub(super) struct Github {
-    url: String,
-    token: Option<Secret>,
+    client: GithubApiClient,
     releases: Arc<Kept<GithubRelease>>,
 }
 
@@ -69,10 +69,20 @@ impl Github {
     };
 
     /// GitHub at the URL of `settings`, with their token.
+    ///
+    /// # Panics
+    ///
+    /// When its client cannot be built, as when the system's TLS settings do not load.
     pub(super) fn new(settings: &Settings) -> Self {
+        let builder = match &settings.github_token {
+            Some(token) => Service::builder().with(client::bearer(token.expose())),
+            None => Service::builder(),
+        };
+
         Self {
-            url: settings.github_api_url.clone(),
-            token: settings.github_token.clone(),
+            client: builder
+                .build::<GithubApi>(&settings.github_api_url)
+                .expect("the client of GitHub builds"),
             releases: Kept::new("GitHub release"),
         }
     }
@@ -81,15 +91,12 @@ impl Github {
     /// logged and left out, so that one bad entry does not take the card down.
     pub(super) async fn latest_releases(
         &self,
-        http: &ClientWithMiddleware,
         repositories: &[String],
     ) -> Result<GithubReleases, LoadError> {
-        let client = GithubApi::client_with(http.clone(), &self.url)
-            .map_err(LoadError::call("reach GitHub"))?;
         let releases = future::join_all(
             repositories
                 .iter()
-                .map(|repository| self.latest(&client, repository)),
+                .map(|repository| self.latest(repository)),
         )
         .await;
         let mut found: Vec<_> = repositories
@@ -116,16 +123,8 @@ impl Github {
     }
 
     /// The latest release of `repository`, `owner/repo`, kept.
-    async fn latest(
-        &self,
-        client: &GithubApiClient,
-        repository: &str,
-    ) -> Result<Arc<GithubRelease>, Arc<LoadError>> {
-        let client = client.clone();
-        let token = self
-            .token
-            .as_ref()
-            .map(|token| format!("Bearer {}", token.expose()));
+    async fn latest(&self, repository: &str) -> Result<Arc<GithubRelease>, Arc<LoadError>> {
+        let client = self.client.clone();
         let owned = repository.to_owned();
 
         self.releases
@@ -133,13 +132,14 @@ impl Github {
                 let (owner, repo) = owned.split_once('/').ok_or_else(|| {
                     LoadError::refused(format!("{owned} is not a repository, owner/repo"))
                 })?;
-                let release = client
-                    .releases()
-                    .latest(owner, repo, token.as_deref())
-                    .await
-                    .map_err(LoadError::call(format!(
-                        "read the latest release of {owned} on GitHub"
-                    )))?;
+                let release =
+                    client
+                        .releases()
+                        .latest(owner, repo)
+                        .await
+                        .map_err(LoadError::call(format!(
+                            "read the latest release of {owned} on GitHub"
+                        )))?;
 
                 Ok(GithubRelease {
                     repository: owned.clone(),

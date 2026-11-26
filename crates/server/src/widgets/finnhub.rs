@@ -7,27 +7,31 @@ use std::time::Duration;
 use futures::future;
 use hangar_api::{Stock, StockPrices};
 use jiff::Timestamp;
-use reqwest_middleware::ClientWithMiddleware;
+use quoll::client;
 use serde::Deserialize;
 
 use super::cache::{Kept, Policy};
 use super::error::LoadError;
+use super::service::Service;
+use crate::Settings;
 use crate::failure::Failure;
-use crate::{Secret, Settings};
 
 quoll::api! {
-    /// Finnhub's API, under `/api/v1`. Its key goes in `X-Finnhub-Token`.
+    /// Finnhub's API, under `/api/v1`.
     #[server(none)]
     api FinnhubApi = "/api/v1";
 
+    /// A Finnhub API key.
+    scheme Token = header "X-Finnhub-Token";
+
+    #[auth(Token)]
     group Quotes {
         /// A symbol Finnhub does not know is quoted at zeros, its changes `null`, rather than refused.
-        GET "/quote?symbol={symbol}" => quote(header("X-Finnhub-Token") key: &str, symbol: &str) -> Quote;
+        GET "/quote?symbol={symbol}" => quote(symbol: &str) -> Quote;
         /// One object, empty for a symbol of no profile.
-        GET "/stock/profile2?symbol={symbol}" => profile(header("X-Finnhub-Token") key: &str, symbol: &str) -> Profile;
+        GET "/stock/profile2?symbol={symbol}" => profile(symbol: &str) -> Profile;
         GET "/stock/candle?symbol={symbol}&resolution={resolution}&from={from}&to={to}"
-            => candles(header("X-Finnhub-Token") key: &str, symbol: &str, resolution: &str, from: i64, to: i64)
-                -> Candles;
+            => candles(symbol: &str, resolution: &str, from: i64, to: i64) -> Candles;
     }
 }
 
@@ -74,8 +78,8 @@ struct Candles {
 /// Finnhub, as the widgets call it, and what they read of it, kept per symbol.
 #[derive(Debug, Clone)]
 pub(super) struct Finnhub {
-    url: String,
-    key: Option<Secret>,
+    /// `None` without a key, which Finnhub asks of every call.
+    client: Option<FinnhubApiClient>,
     quotes: Arc<Kept<Quoted>>,
     profiles: Arc<Kept<Profile>>,
     closes: Arc<Kept<Vec<f64>>>,
@@ -104,10 +108,20 @@ impl Finnhub {
     const CLOSES_PERIOD: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
     /// Finnhub at the URL of `settings`, with their key.
+    ///
+    /// # Panics
+    ///
+    /// When its client cannot be built, as when the system's TLS settings do not load.
     pub(super) fn new(settings: &Settings) -> Self {
+        let client = settings.finnhub_api_key.as_ref().map(|key| {
+            Service::builder()
+                .with(client::key::<Token>(key.expose()))
+                .build::<FinnhubApi>(&settings.finnhub_api_url)
+                .expect("the client of Finnhub builds")
+        });
+
         Self {
-            url: settings.finnhub_api_url.clone(),
-            key: settings.finnhub_api_key.clone(),
+            client,
             quotes: Kept::new("Finnhub quote"),
             profiles: Kept::new("Finnhub profile"),
             closes: Kept::new("Finnhub closes"),
@@ -116,22 +130,15 @@ impl Finnhub {
 
     /// The stock of each of `symbols`, in their order. A symbol Finnhub cannot quote is logged and left out, so that one
     /// bad entry does not take the card down; when none can be quoted, the card fails.
-    pub(super) async fn stocks(
-        &self,
-        http: &ClientWithMiddleware,
-        symbols: &[String],
-    ) -> Result<StockPrices, LoadError> {
-        let Some(key) = &self.key else {
+    pub(super) async fn stocks(&self, symbols: &[String]) -> Result<StockPrices, LoadError> {
+        let Some(client) = &self.client else {
             return Err(LoadError::refused(
                 "FINNHUB_API_KEY is not set: the stocks card needs a Finnhub API key",
             ));
         };
-        let client = FinnhubApi::client_with(http.clone(), &self.url)
-            .map_err(LoadError::call("reach Finnhub"))?;
         let calls = Calls {
             finnhub: self,
-            client: &client,
-            key: key.expose(),
+            client,
         };
         let stocks = future::join_all(symbols.iter().map(|symbol| calls.stock(symbol))).await;
         let mut quoted = Vec::new();
@@ -161,11 +168,10 @@ impl Finnhub {
     }
 }
 
-/// The calls of one load of the card, with the key.
+/// The calls of one load of the card.
 struct Calls<'a> {
     finnhub: &'a Finnhub,
     client: &'a FinnhubApiClient,
-    key: &'a str,
 }
 
 impl Calls<'_> {
@@ -185,8 +191,8 @@ impl Calls<'_> {
         });
         Ok(Stock {
             symbol: symbol.to_owned(),
-            name: profile.name.clone(),
-            currency: profile.currency.clone(),
+            name: Self::given(profile.name.as_deref()),
+            currency: Self::given(profile.currency.as_deref()),
             price: quote.price,
             change_percent: quote.change_percent,
             high: quote.high,
@@ -196,16 +202,23 @@ impl Calls<'_> {
         })
     }
 
+    /// A field of a profile, `None` when Finnhub leaves it empty: a currency of `""` is none.
+    fn given(field: Option<&str>) -> Option<String> {
+        field
+            .filter(|field| !field.trim().is_empty())
+            .map(str::to_owned)
+    }
+
     /// The quote of `symbol`, kept, refused for a symbol Finnhub does not know rather than shown at 0.
     async fn quote(&self, symbol: &str) -> Result<Arc<Quoted>, Arc<LoadError>> {
-        let (client, key, owned) = (self.client.clone(), self.key.to_owned(), symbol.to_owned());
+        let (client, owned) = (self.client.clone(), symbol.to_owned());
 
         self.finnhub
             .quotes
             .get(symbol, Finnhub::QUOTE_POLICY, move || async move {
                 let quote = client
                     .quotes()
-                    .quote(&key, &owned)
+                    .quote(&owned)
                     .await
                     .map_err(LoadError::call(format!("quote {owned} on Finnhub")))?;
 
@@ -228,14 +241,14 @@ impl Calls<'_> {
 
     /// The profile of `symbol`, kept.
     async fn profile(&self, symbol: &str) -> Result<Arc<Profile>, Arc<LoadError>> {
-        let (client, key, owned) = (self.client.clone(), self.key.to_owned(), symbol.to_owned());
+        let (client, owned) = (self.client.clone(), symbol.to_owned());
 
         self.finnhub
             .profiles
             .get(symbol, Finnhub::PROFILE_POLICY, move || async move {
                 client
                     .quotes()
-                    .profile(&key, &owned)
+                    .profile(&owned)
                     .await
                     .map_err(LoadError::call(format!(
                         "read the profile of {owned} on Finnhub"
@@ -247,14 +260,14 @@ impl Calls<'_> {
     /// The daily closes of `symbol` over the last month, kept. The free plan refuses them: the card then shows no
     /// curve, but the quote still, and the refusal is logged and kept as long as a curve would be.
     async fn closes(&self, symbol: &str) -> Arc<Vec<f64>> {
-        let (client, key, owned) = (self.client.clone(), self.key.to_owned(), symbol.to_owned());
+        let (client, owned) = (self.client.clone(), symbol.to_owned());
         let kept = self
             .finnhub
             .closes
             .get(symbol, Finnhub::CLOSES_POLICY, move || async move {
                 let to = Timestamp::now().as_second();
                 let from = to - Finnhub::CLOSES_PERIOD.as_secs() as i64;
-                let candles = client.quotes().candles(&key, &owned, "D", from, to).await;
+                let candles = client.quotes().candles(&owned, "D", from, to).await;
 
                 match candles {
                     Ok(candles) if candles.s == "ok" => Ok(candles.c),

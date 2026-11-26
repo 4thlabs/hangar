@@ -5,7 +5,6 @@ use hangar_api::{TcgCard, TcgCollectorCards, TcgDailyPrices, TcgFollowedCard};
 use hangar_core::FollowedCard;
 use http::StatusCode;
 use quoll::Bytes;
-use reqwest_middleware::ClientWithMiddleware;
 use serde::Deserialize;
 
 use super::error::LoadError;
@@ -75,17 +74,34 @@ fn parse_image_id(id: &str) -> Option<(u32, u32)> {
     Some((game.parse().ok()?, product.parse().ok()?))
 }
 
-/// The catalog's entry and the prices over `days` of each card of `cards`, from the tcg-collector of `service`, all
+/// The client of a placement's service, built once for its address and its key.
+#[derive(Debug, Clone)]
+pub(super) struct Client(TcgCollectorApiClient);
+
+impl Client {
+    /// The client of the service `service`, with its key.
+    ///
+    /// # Errors
+    ///
+    /// When the client cannot be built, or the key cannot be sent.
+    pub(super) fn new(service: &Service) -> Result<Self, LoadError> {
+        build(service).map(Self)
+    }
+}
+
+/// The client of the tcg-collector of `service`, which takes no key.
+fn build(service: &Service) -> Result<TcgCollectorApiClient, LoadError> {
+    service.keyless_client::<TcgCollectorApi>("tcg-collector")
+}
+
+/// The catalog's entry and the prices over `days` of each card of `cards`, from the tcg-collector of `client`, all
 /// asked at once.
 pub(super) async fn load(
-    http: &ClientWithMiddleware,
-    service: &Service,
+    client: &Client,
     days: u16,
     cards: &[FollowedCard],
 ) -> Result<TcgCollectorCards, LoadError> {
-    let client = TcgCollectorApi::client_with(http.clone(), &service.api)
-        .map_err(LoadError::call("reach tcg-collector"))?;
-    let tcg_collector = client.tcg_collector();
+    let tcg_collector = client.0.tcg_collector();
     let followed = future::try_join_all(cards.iter().map(|followed| async {
         let (catalog, daily) = tokio::join!(
             tcg_collector.card(followed.game, followed.product),
@@ -133,18 +149,13 @@ pub(super) async fn load(
 
 /// The image of the card `id` names, `None` for an id the widget never gives or a card with no image, which is
 /// common, and no failure.
-pub(super) async fn image(
-    http: &ClientWithMiddleware,
-    service: &Service,
-    id: &str,
-) -> Result<Option<Bytes>, LoadError> {
+pub(super) async fn image(client: &Client, id: &str) -> Result<Option<Bytes>, LoadError> {
     let Some((game, product)) = parse_image_id(id) else {
         return Ok(None);
     };
-    let client = TcgCollectorApi::client_with(http.clone(), &service.api)
-        .map_err(LoadError::call("reach tcg-collector"))?;
 
     match client
+        .0
         .tcg_collector()
         .image(game, product, IMAGE_SIZE)
         .await

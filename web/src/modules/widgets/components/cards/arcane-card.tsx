@@ -1,4 +1,4 @@
-import type { ArcaneGeneralStats } from "#libs/api";
+import type { ArcaneGeneralStats, ArcaneVersion } from "#libs/api";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
 import { Units } from "#modules/widgets/widget-format.ts";
 import { WidgetCard, WidgetContent, WidgetFooter, WidgetHeader, WidgetMetadata } from "../widget.tsx";
@@ -19,6 +19,30 @@ class Severity {
   }
 }
 
+/** Arcane's version, and the newest when it is out, linked to its release when Arcane gives one. */
+function VersionLabel({ version }: { version: ArcaneVersion }) {
+  if (!version.updateAvailable || version.newest === null) {
+    return <span>{version.current}</span>;
+  }
+
+  const update = `${version.current} → ${version.newest}`;
+
+  if (version.releaseUrl === null) {
+    return <span className="font-medium text-destructive">{update}</span>;
+  }
+
+  return (
+    <a
+      href={version.releaseUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="font-medium text-destructive hover:underline"
+    >
+      {update}
+    </a>
+  );
+}
+
 type ArcaneCardProps = {
   stats: ArcaneGeneralStats;
   link: string | null;
@@ -36,18 +60,7 @@ export function ArcaneCard({ stats: { version, containers, images, volumes, acti
         title={look.title}
         description={
           <WidgetMetadata>
-            {version.updateAvailable ? (
-              <a
-                href={version.releaseUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-destructive hover:underline"
-              >
-                {version.current} → {version.newest}
-              </a>
-            ) : (
-              <span>{version.current}</span>
-            )}
+            <VersionLabel version={version} />
             <span>{Units.count(containers.total, "container", "containers")}</span>
           </WidgetMetadata>
         }

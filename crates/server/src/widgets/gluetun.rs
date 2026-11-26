@@ -1,20 +1,24 @@
 //! `gluetun-vpn-status`: where gluetun's tunnel exits, from its control server.
 
 use hangar_api::GluetunVpnStatus;
-use reqwest_middleware::ClientWithMiddleware;
+use quoll::client;
 use serde::{Deserialize, Deserializer};
 
 use super::error::LoadError;
 use super::service::Service;
 
 quoll::api! {
-    /// The control server of gluetun, which versions its API under `/v1`. Its key goes in `X-API-Key`.
+    /// The control server of gluetun, which versions its API under `/v1`.
     #[server(none)]
     api GluetunApi = "/v1";
 
+    /// A key of the control server.
+    scheme ApiKey = header "X-API-Key";
+
+    #[auth(ApiKey)]
     group Gluetun {
         /// `null` before gluetun has looked its address up.
-        GET "/publicip/ip" => public_ip(header("X-API-Key") key: Option<&str>) -> Option<PublicIp>;
+        GET "/publicip/ip" => public_ip() -> Option<PublicIp>;
     }
 }
 
@@ -40,17 +44,33 @@ impl PublicIp {
     }
 }
 
-/// Where the tunnel of the gluetun of `service` exits. A failed call says that the control server did not answer,
+/// The client of a placement's service, built once for its address and its key.
+#[derive(Debug, Clone)]
+pub(super) struct Client(GluetunApiClient);
+
+impl Client {
+    /// The client of the service `service`, with its key.
+    ///
+    /// # Errors
+    ///
+    /// When the client cannot be built, or the key cannot be sent.
+    pub(super) fn new(service: &Service) -> Result<Self, LoadError> {
+        build(service).map(Self)
+    }
+}
+
+/// The client of the gluetun of `service`, with its key.
+fn build(service: &Service) -> Result<GluetunApiClient, LoadError> {
+    service.client::<GluetunApi>("gluetun", service.key().map(client::key::<ApiKey>))
+}
+
+/// Where the tunnel of the gluetun of `client` exits. A failed call says that the control server did not answer,
 /// not that the tunnel is down: an empty address says that.
-pub(super) async fn load(
-    http: &ClientWithMiddleware,
-    service: &Service,
-) -> Result<GluetunVpnStatus, LoadError> {
-    let client = GluetunApi::client_with(http.clone(), &service.api)
-        .map_err(LoadError::call("reach gluetun"))?;
+pub(super) async fn load(client: &Client) -> Result<GluetunVpnStatus, LoadError> {
     let public_ip = client
+        .0
         .gluetun()
-        .public_ip(service.key())
+        .public_ip()
         .await
         .map_err(LoadError::call("read gluetun's public address"))?
         .unwrap_or_default();

@@ -75,10 +75,11 @@ async fn reads_the_host_of_arcane_s_own_environment() -> quoll::Result<()> {
         WidgetData::ArcaneGeneralStats(ArcaneGeneralStats {
             version: ArcaneVersion {
                 current: "v1.1.0".to_owned(),
-                newest: "v1.2.0".to_owned(),
+                newest: Some("v1.2.0".to_owned()),
                 update_available: true,
-                release_url: "https://github.com/getarcaneapp/arcane/releases/tag/v1.2.0"
-                    .to_owned(),
+                release_url: Some(
+                    "https://github.com/getarcaneapp/arcane/releases/tag/v1.2.0".to_owned()
+                ),
             },
             containers: ContainerCounts {
                 total: 12,
@@ -105,11 +106,50 @@ async fn reads_the_host_of_arcane_s_own_environment() -> quoll::Result<()> {
     Ok(())
 }
 
+/// A dashboard whose version is `version_info`.
+fn a_dashboard(version_info: Value) -> Value {
+    json!({
+        "versionInfo": version_info,
+        "containers": { "counts": { "totalContainers": 1, "runningContainers": 1, "stoppedContainers": 0 } },
+        "imageUsageCounts": { "totalImages": 1, "imagesUnused": 0, "totalImageSize": 1 },
+        "volumeUsageCounts": { "total": 0, "inuse": 0, "unused": 0 },
+    })
+}
+
 #[tokio::test]
-async fn fails_on_an_answer_of_200_that_is_no_success() {
-    let error = stats(json!({ "success": false, "detail": "environment 0 is offline" }))
-        .await
-        .expect_err("Arcane refused");
+async fn reads_a_version_with_no_newest_nor_release_as_no_update() -> quoll::Result<()> {
+    // As Arcane answers with its update checks off, or when GitHub failed it.
+    let data = stats(json!({
+        "success": true,
+        "data": a_dashboard(json!({ "updateAvailable": false, "displayVersion": "v1.1.0-next" })),
+    }))
+    .await?;
+    let WidgetData::ArcaneGeneralStats(stats) = data else {
+        panic!("Arcane's data: {data:?}");
+    };
+
+    assert_eq!(
+        stats.version,
+        ArcaneVersion {
+            current: "v1.1.0-next".to_owned(),
+            newest: None,
+            update_available: false,
+            release_url: None,
+        }
+    );
+    assert!(stats.action_items.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn fails_on_an_answer_of_200_that_is_no_success_even_with_data() {
+    let error = stats(json!({
+        "success": false,
+        "detail": "environment 0 is offline",
+        "data": a_dashboard(json!({ "displayVersion": "v1.1.0" })),
+    }))
+    .await
+    .expect_err("Arcane refused");
 
     assert_eq!(error.status(), Some(StatusCode::BAD_GATEWAY));
 }

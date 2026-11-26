@@ -77,12 +77,12 @@ pub struct ArcaneGeneralStats {
 pub struct ArcaneVersion {
     /// The version it runs, as it shows it.
     pub current: String,
-    /// The newest version out.
-    pub newest: String,
+    /// The newest version out; `None` when Arcane does not know it, as when its checks are off.
+    pub newest: Option<String>,
     /// Whether `newest` is newer than `current`.
     pub update_available: bool,
-    /// The page of the newest release.
-    pub release_url: String,
+    /// The page of the newest release, when Arcane gives it.
+    pub release_url: Option<String>,
 }
 
 /// What Arcane says needs attention.
