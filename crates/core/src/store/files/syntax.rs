@@ -3,11 +3,19 @@
 
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 use serde::Deserialize;
 use serde_norway::Value;
 
 use crate::store::{Dotenv, StoreError};
+
+/// The last line of a quoted value over several lines: its text, the closing quote, then blanks and a comment, as
+/// dotenv reads them after a value. The text runs to the last quote that only those follow.
+static CLOSING_LINE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^(.*)["'`]\s*(?:#.*)?$"#).expect("the pattern is valid"));
 
 /// The syntax check of an app's file.
 pub(super) struct FileSyntax;
@@ -75,9 +83,10 @@ impl FileSyntax {
             let trimmed = line.trim_matches(Dotenv::is_space);
             let is_blank_or_comment = trimmed.is_empty() || trimmed.starts_with('#');
             let is_declaration = !Dotenv::parse(line).is_empty();
-            let closing = line.trim_end_matches(Dotenv::is_space);
-            let closing = closing.strip_suffix(['"', '\'', '`']).unwrap_or(closing);
-            let is_inside_value = value_lines.contains(line) || value_lines.contains(closing);
+            let is_closing = CLOSING_LINE
+                .captures(line)
+                .is_some_and(|closing| value_lines.contains(&closing[1]));
+            let is_inside_value = value_lines.contains(line) || is_closing;
 
             if !is_blank_or_comment && !is_declaration && !is_inside_value {
                 return Some(format!(
@@ -131,7 +140,7 @@ mod tests {
 
     #[test]
     fn takes_variables_comments_blanks_and_values_over_several_lines_as_valid_dotenv() {
-        let source = "# a comment\n\nA=1\nexport B = two\nC=\"first\nsecond\"\nD='x'\r\nE: colon\n";
+        let source = "# a comment\n\nA=1\nexport B = two\nC=\"first\nsecond\"\nD='x'\r\nE: colon\nF=\"one\ntwo\" # it's commented\n";
 
         assert_eq!(reason("web.env", source), None);
     }

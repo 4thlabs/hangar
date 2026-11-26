@@ -5,6 +5,7 @@ mod editable;
 mod location;
 mod syntax;
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use super::{Access, Disk, Store, StoreApp, StoreError};
@@ -129,6 +130,15 @@ impl<'a, R: CommandRunner> AppFiles<'a, R> {
     /// written, or `.env.global` read for `docker stack config`.
     pub async fn write(&self, path: &str, source: &str) -> Result<SavedFile, StoreError> {
         let location = self.locate(path).await?;
+        let size = source.len() as u64;
+
+        // What the editor could not open again, `compose.yml` and the whole page with it.
+        if size > EditableFile::MAX_SIZE {
+            return Err(StoreError::TooLarge {
+                path: path.to_owned(),
+                size,
+            });
+        }
 
         for (name, kind) in [
             (StoreApp::COMPOSE_FILE, ComposeFile::Compose),
@@ -205,8 +215,15 @@ impl<'a, R: CommandRunner> AppFiles<'a, R> {
         kind: ComposeFile,
         source: &str,
     ) -> Result<(), StoreError> {
+        if kind == ComposeFile::Swarm && source.trim().is_empty() {
+            return Ok(());
+        }
+
         let compose = Compose::new(self.store.data_dir.clone(), &self.store.runner);
-        let refusal = |error| Self::refusal(error, folder, pending, path);
+        // Read whatever the check, for the values its complaint must not carry: `docker compose` reads them from
+        // `--env-file`, `docker stack` from its environment.
+        let variables = self.store.env.read().await?;
+        let refusal = |error| Self::refusal(error, folder, pending, path, &variables);
 
         match kind {
             ComposeFile::Compose => {
@@ -216,17 +233,13 @@ impl<'a, R: CommandRunner> AppFiles<'a, R> {
                 let swarm = folder.join(StoreApp::SWARM_FILE);
 
                 if Disk::has_content(&swarm).await {
-                    let variables = self.store.env.read().await?;
-
                     compose
                         .validate_stack(pending, &swarm, &variables)
                         .await
                         .map_err(refusal)?;
                 }
             }
-            ComposeFile::Swarm if source.trim().is_empty() => {}
             ComposeFile::Swarm => {
-                let variables = self.store.env.read().await?;
                 let compose_file = folder.join(StoreApp::COMPOSE_FILE);
 
                 compose
@@ -240,8 +253,15 @@ impl<'a, R: CommandRunner> AppFiles<'a, R> {
     }
 
     /// The error of a check of `pending`, the file at `path` in `folder`, that did not pass: Docker's complaint, with
-    /// the pending copy named as the file it stands for, and the files of the folder by their paths in it.
-    fn refusal(error: ComposeError, folder: &Path, pending: &Path, path: &str) -> StoreError {
+    /// the pending copy named as the file it stands for, the files of the folder by their paths in it, and the values
+    /// of `variables` and of this process's environment taken out, as an interpolation error echoes the value at fault.
+    fn refusal(
+        error: ComposeError,
+        folder: &Path,
+        pending: &Path,
+        path: &str,
+        variables: &BTreeMap<String, String>,
+    ) -> StoreError {
         let ComposeError::Invalid { source, .. } = &error else {
             return StoreError::Unchecked {
                 path: path.to_owned(),
@@ -258,11 +278,44 @@ impl<'a, R: CommandRunner> AppFiles<'a, R> {
 
         complaint = complaint.replace(&format!("{}/", folder.to_string_lossy()), "");
 
+        let environment: Vec<String> = std::env::vars_os()
+            .filter_map(|(_, value)| value.into_string().ok())
+            .collect();
+        let values = variables
+            .values()
+            .map(String::as_str)
+            .chain(environment.iter().map(String::as_str));
+
+        complaint = Self::without_values(&complaint, values);
+
         StoreError::Rejected {
             path: path.to_owned(),
             complaint,
             source: Box::new(error),
         }
+    }
+}
+
+impl<R> AppFiles<'_, R> {
+    /// The fewest characters a value has to be taken out of a complaint: a shorter one, as `1` or `UTC`, is no secret,
+    /// and taken out it would take every number of the complaint with it.
+    const SHORTEST_SECRET: usize = 4;
+
+    /// `complaint` with each of `values` replaced by `***`, the longest first, so that a value inside another goes
+    /// with it.
+    fn without_values<'v>(complaint: &str, values: impl Iterator<Item = &'v str>) -> String {
+        let mut values: Vec<&str> = values
+            .filter(|value| value.chars().count() >= Self::SHORTEST_SECRET)
+            .collect();
+
+        values.sort_by_key(|value| std::cmp::Reverse(value.len()));
+        values.dedup();
+
+        values
+            .into_iter()
+            .fold(complaint.to_owned(), |complaint, value| {
+                complaint.replace(value, "***")
+            })
     }
 }
 
@@ -1090,6 +1143,72 @@ mod tests {
 
         assert!(matches!(error, StoreError::NotInstalled));
         assert!(!fixture.root.join("app-store/store/new-app").exists());
+    }
+
+    #[tokio::test]
+    async fn refuses_a_file_over_the_size_the_editor_opens_before_anything_runs() {
+        let fixture = Fixture::new();
+        let files = fixture.store.files("web").await.expect("web is an app");
+        let large = "a".repeat(1024 * 1024 + 1);
+
+        for path in ["config/settings.yml", "compose.yml"] {
+            let error = files.write(path, &large).await.expect_err("too large");
+
+            assert!(
+                matches!(
+                    error,
+                    StoreError::TooLarge {
+                        size: 1_048_577,
+                        ..
+                    }
+                ),
+                "{error:?}"
+            );
+        }
+
+        files
+            .write("config/settings.yml", &"a".repeat(1024 * 1024))
+            .await
+            .expect("1 MiB is the limit");
+
+        assert!(fixture.store.runner.runs().is_empty(), "docker never ran");
+        assert_eq!(
+            fixture.read(&fixture.web().join("compose.yml")),
+            "services:\n  web: {}\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn takes_the_values_of_the_environment_out_of_docker_s_complaint() {
+        let fixture = Fixture::new();
+        let path = std::env::var("PATH").expect("the tests have a PATH");
+
+        fs::write(
+            fixture.root.join(".env.global"),
+            "WEB_TOKEN=hunter2-secret\nWEB_REPLICAS=2\n",
+        )
+        .expect("written");
+        fixture.store.runner.reply(Reply::Failure {
+            code: 15,
+            stderr: format!(
+                "line 2: invalid interpolation format for services.web.image: \"hunter2-secret\", replicas 2\nsee {path}\n"
+            ),
+        });
+
+        let files = fixture.store.files("web").await.expect("web is an app");
+        let error = files
+            .write("compose.yml", "services:\n  web:\n    image: ${WEB_TOKEN\n")
+            .await
+            .expect_err("refused");
+        let StoreError::Rejected { complaint, .. } = &error else {
+            panic!("{error:?}");
+        };
+
+        assert_eq!(
+            complaint,
+            "line 2: invalid interpolation format for services.web.image: \"***\", replicas 2\nsee ***",
+            "a value too short to be a secret stays"
+        );
     }
 
     /// A runner whose commands never start.
