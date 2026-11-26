@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { composeCommandLine, composeLabel, composeSubject } from "#modules/apps/compose-actions.ts";
-import type { AppRun, AppRunStatus } from "#modules/apps/compose-output.ts";
+import { composeCommandLine, composeLabel, composeSubject } from "#modules/apps/helpers/compose-actions.ts";
+import type { AppRun, AppRunStatus } from "#modules/apps/helpers/compose-output.ts";
 import type { ComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import type { ComposeStreamStatus } from "#modules/apps/hooks/use-compose-stream.ts";
 import { describeErrorDetail } from "#modules/common/error-message.ts";

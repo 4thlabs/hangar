@@ -8,9 +8,9 @@ import {
   parseAppCategories,
   parseAppStatuses,
   parseAppUpdates,
-} from "#modules/apps/apps-search.ts";
-import { countBy, updateSideOf } from "#modules/apps/project-filter.ts";
-import { projectStatusLabels } from "#modules/apps/project-status.ts";
+} from "#modules/apps/helpers/apps-search.ts";
+import { countBy, updateSideOf } from "#modules/apps/helpers/project-filter.ts";
+import { projectStatusLabels } from "#modules/apps/helpers/project-status.ts";
 import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
 
 type AppsFilterMenusProps = {

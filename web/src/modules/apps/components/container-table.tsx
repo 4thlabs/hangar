@@ -1,8 +1,8 @@
 import type { ProjectContainer } from "#libs/api";
 import { ContainerStatus } from "#modules/apps/components/container-status.tsx";
 import { LogsSheet } from "#modules/apps/components/logs-sheet.tsx";
+import { formatBytes, formatPercent, noMetrics, noReading } from "#modules/apps/helpers/metric-format.ts";
 import type { ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { formatBytes, formatPercent, noMetrics, noReading } from "#modules/apps/metric-format.ts";
 import { Progress } from "#modules/common/ui/progress.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
 

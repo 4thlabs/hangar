@@ -1,5 +1,5 @@
 import { TerminalIcon } from "lucide-react";
-import { composeLabel, composeSubject } from "#modules/apps/compose-actions.ts";
+import { composeLabel, composeSubject } from "#modules/apps/helpers/compose-actions.ts";
 import type { ComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";

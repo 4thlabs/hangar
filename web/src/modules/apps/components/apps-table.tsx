@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import type { ProjectSummary } from "#libs/api";
-import type { AppSortColumn, AppsSort } from "#modules/apps/apps-search.ts";
-import { categoryBadgeClasses } from "#modules/apps/category-badge.ts";
-import { projectStatusLabels, statusBadgeVariant } from "#modules/apps/project-status.ts";
+import type { AppSortColumn, AppsSort } from "#modules/apps/helpers/apps-search.ts";
+import { categoryBadgeClasses } from "#modules/apps/helpers/category-badge.ts";
+import { projectStatusLabels, statusBadgeVariant } from "#modules/apps/helpers/project-status.ts";
 import { SortableHead } from "#modules/common/components/sortable-head.tsx";
 import { toggledSet } from "#modules/common/toggled-set.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";

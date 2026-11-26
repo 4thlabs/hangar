@@ -1,7 +1,7 @@
 import type { ProjectService } from "#libs/api";
 import { ContainerTable } from "#modules/apps/components/container-table.tsx";
+import { projectStatusLabels, statusBadgeVariant } from "#modules/apps/helpers/project-status.ts";
 import type { ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { projectStatusLabels, statusBadgeVariant } from "#modules/apps/project-status.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 
