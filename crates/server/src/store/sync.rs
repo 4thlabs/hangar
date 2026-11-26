@@ -3,13 +3,16 @@
 
 use std::sync::Arc;
 
-use hangar_api::{ErrorCode, ErrorDetail, StoreSync, SyncOperation, SyncState};
+use hangar_api::{
+    ErrorCode, ErrorDetail, NotificationLevel, NotificationMessage, StoreSync, SyncOperation,
+    SyncState,
+};
 use hangar_core::StoreError;
 
 use super::StoreState;
 use super::command_log::CommandLog;
 use crate::failure::Failure;
-use crate::notifications::{Level, Message, Notification};
+use crate::notifications::Notification;
 
 impl StoreState {
     /// The page a sync's notification leads to.
@@ -124,16 +127,16 @@ impl StoreState {
     /// Records the end of the sync `operation`, and notifies it.
     fn finish(&self, operation: SyncOperation, outcome: Result<(), ErrorCode>) {
         let message = match (&outcome, operation) {
-            (Ok(()), SyncOperation::Install) => Message::StoreInstalled,
-            (Ok(()), SyncOperation::Update) => Message::StoreUpdated,
-            (Err(_), SyncOperation::Install) => Message::StoreInstallFailed,
-            (Err(_), SyncOperation::Update) => Message::StoreUpdateFailed,
+            (Ok(()), SyncOperation::Install) => NotificationMessage::StoreInstalled,
+            (Ok(()), SyncOperation::Update) => NotificationMessage::StoreUpdated,
+            (Err(_), SyncOperation::Install) => NotificationMessage::StoreInstallFailed,
+            (Err(_), SyncOperation::Update) => NotificationMessage::StoreUpdateFailed,
         };
         let (state, level, error) = match outcome {
-            Ok(()) => (SyncState::Succeeded, Level::Success, None),
+            Ok(()) => (SyncState::Succeeded, NotificationLevel::Success, None),
             Err(code) => (
                 SyncState::Failed,
-                Level::Error,
+                NotificationLevel::Error,
                 Some(ErrorDetail::from(code)),
             ),
         };
@@ -153,7 +156,8 @@ impl StoreState {
         self.notifier.notify(Notification {
             level,
             message,
-            href: Self::SYNC_HREF,
+            href: Some(Self::SYNC_HREF.to_owned()),
+            dedupe_key: None,
         });
     }
 
@@ -177,11 +181,13 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
-    use hangar_api::{ErrorCode, ErrorDetail, SyncOperation, SyncState};
+    use hangar_api::{
+        ErrorCode, ErrorDetail, NotificationLevel, NotificationMessage, SyncOperation, SyncState,
+    };
     use hangar_core::{Runtime, StoreError};
 
     use crate::Settings;
-    use crate::notifications::{Level, Message};
+    use crate::notifications::Notifier;
     use crate::store::StoreState;
 
     /// A data directory, and a bare repository holding a store of one app, `alpha`, that `hangar.yml` lists.
@@ -249,7 +255,12 @@ mod tests {
             })
             .expect("the settings are valid");
 
-            StoreState::new(&settings, runtime, crate::docker::DockerChanges::new())
+            StoreState::new(
+                &settings,
+                runtime,
+                crate::docker::DockerChanges::new(),
+                Notifier::load(&settings.data_dir),
+            )
         }
     }
 
@@ -286,13 +297,21 @@ mod tests {
         assert_eq!(
             state
                 .notifier
-                .sent()
-                .iter()
-                .map(|sent| (sent.level, sent.message, sent.href))
+                .newest()
+                .into_iter()
+                .map(|filed| (filed.level, filed.message, filed.href))
                 .collect::<Vec<_>>(),
             [
-                (Level::Success, Message::StoreInstalled, "/settings"),
-                (Level::Success, Message::StoreUpdated, "/settings")
+                (
+                    NotificationLevel::Success,
+                    NotificationMessage::StoreUpdated,
+                    Some("/settings".to_owned())
+                ),
+                (
+                    NotificationLevel::Success,
+                    NotificationMessage::StoreInstalled,
+                    Some("/settings".to_owned())
+                )
             ]
         );
     }
@@ -316,8 +335,8 @@ mod tests {
             })
         );
         assert_eq!(
-            state.notifier.sent()[0].message,
-            Message::StoreInstallFailed
+            state.notifier.newest()[0].message,
+            NotificationMessage::StoreInstallFailed
         );
     }
 
@@ -367,7 +386,7 @@ mod tests {
             1,
             "git ran once"
         );
-        assert_eq!(state.notifier.sent().len(), 1, "one notification");
+        assert_eq!(state.notifier.newest().len(), 1, "one notification");
     }
 
     /// A sync whose work panics, as a store whose code has a bug would.
@@ -390,8 +409,8 @@ mod tests {
             Some(ErrorCode::SyncCrashed)
         );
         assert_eq!(
-            state.notifier.sent()[0].message,
-            Message::StoreInstallFailed
+            state.notifier.newest()[0].message,
+            NotificationMessage::StoreInstallFailed
         );
 
         assert_eq!(

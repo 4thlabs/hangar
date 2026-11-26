@@ -1715,6 +1715,144 @@
         ],
         "type": "object"
       },
+      "Notification": {
+        "description": "A notification, as the page shows it.",
+        "properties": {
+          "createdAt": {
+            "description": "When it was filed, in RFC 3339.",
+            "type": "string"
+          },
+          "href": {
+            "description": "The page it leads to, as `/settings`; `None` for none.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "Its id, from 1, greater than that of every notification filed before it: what a stream is followed from.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "level": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NotificationLevel"
+              }
+            ],
+            "description": "How it reads."
+          },
+          "message": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NotificationMessage"
+              }
+            ],
+            "description": "What it says."
+          },
+          "read": {
+            "description": "Whether a user has read it, in the list: it no longer counts as unread.",
+            "type": "boolean"
+          },
+          "seen": {
+            "description": "Whether a page has shown it already, as a toast: no page shows it again so.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "level",
+          "message",
+          "href",
+          "seen",
+          "read",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "NotificationLevel": {
+        "description": "How a notification reads.",
+        "oneOf": [
+          {
+            "const": "success",
+            "description": "What was asked for is done.",
+            "type": "string"
+          },
+          {
+            "const": "error",
+            "description": "What was asked for failed.",
+            "type": "string"
+          },
+          {
+            "const": "warning",
+            "description": "Something wants a look, as an update available.",
+            "type": "string"
+          },
+          {
+            "const": "info",
+            "description": "News.",
+            "type": "string"
+          }
+        ]
+      },
+      "NotificationMessage": {
+        "description": "What a notification says: its key, as `storeInstalled`, and its params, which the page words. It is filed in no\nlanguage, as an error's code is, so that a catalog can word it in another later. The keys are the Waku version's,\neach area adding its own:\n\n```\nuse hangar_api::NotificationMessage;\n\nassert_eq!(\n    serde_json::to_value(NotificationMessage::StoreInstalled).expect(\"JSON\"),\n    serde_json::json!({ \"key\": \"storeInstalled\" })\n);\n```",
+        "oneOf": [
+          {
+            "description": "The store was cloned.",
+            "properties": {
+              "key": {
+                "const": "storeInstalled",
+                "type": "string"
+              }
+            },
+            "required": [
+              "key"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The store was pulled.",
+            "properties": {
+              "key": {
+                "const": "storeUpdated",
+                "type": "string"
+              }
+            },
+            "required": [
+              "key"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The store's clone failed: why is in the server's log, and in the store's last sync.",
+            "properties": {
+              "key": {
+                "const": "storeInstallFailed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "key"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The store's pull failed: why is in the server's log, and in the store's last sync.",
+            "properties": {
+              "key": {
+                "const": "storeUpdateFailed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "key"
+            ],
+            "type": "object"
+          }
+        ]
+      },
       "Problem": {
         "description": "An RFC 9457 problem: what went wrong with a request, the body of every error, as `application/problem+json`.",
         "properties": {
@@ -2035,6 +2173,24 @@
         },
         "required": [
           "composeChanged"
+        ],
+        "type": "object"
+      },
+      "SeenNotifications": {
+        "description": "The notifications a page has shown, as toasts.",
+        "properties": {
+          "ids": {
+            "description": "Their ids; one the server no longer keeps is passed over.",
+            "items": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
         ],
         "type": "object"
       },
@@ -2935,6 +3091,160 @@
         ]
       }
     },
+    "/api/notifications": {
+      "get": {
+        "operationId": "notifications_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Notification"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The newest 30, the newest first.",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/notifications/events": {
+      "get": {
+        "operationId": "notifications_events",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                },
+                "x-item": {
+                  "$ref": "#/components/schemas/Notification"
+                }
+              }
+            },
+            "description": "Server-sent events, the data of each the JSON of an item, whose schema is `x-item`. A failure ends the stream with an event `problem`, whose data is a `Problem`."
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The notifications filed from now on, as they are, and first, given `since`, those of a greater id the server still keeps, the oldest first: a page follows the stream from the newest it holds, so that what was filed between its read of the list and the stream's opening is in it. It does not end.",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/notifications/read": {
+      "post": {
+        "operationId": "notifications_read",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Marks every notification as read.",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/notifications/seen": {
+      "post": {
+        "operationId": "notifications_seen",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeenNotifications"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Marks notifications as shown, so that no page shows them again as toasts.",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
     "/api/store": {
       "get": {
         "operationId": "store_status",
@@ -3477,6 +3787,10 @@
     {
       "description": "The installed apps as the daemon runs them, read from the server's cache, which the daemon's events keep fresh.",
       "name": "Docker"
+    },
+    {
+      "description": "The notifications, one list for every user: the server keeps the last 100.",
+      "name": "Notifications"
     }
   ]
 }

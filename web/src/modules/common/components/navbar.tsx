@@ -9,6 +9,7 @@ import { Navigations } from "#modules/common/navigations.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Tabs, TabsList, TabsTrigger } from "#modules/common/ui/tabs.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
+import { NotificationsMenu } from "#modules/notifications/components/notifications-menu.tsx";
 
 function Brand() {
   return (
@@ -86,8 +87,8 @@ function SettingsButton() {
 }
 
 /**
- * The bar at the top of every page, with the search field of the pages that have one. Its spotlight, terminal and
- * notifications come with the issues of their areas, in the places the Waku version gives them.
+ * The bar at the top of every page, with the search field of the pages that have one, and the notifications' bell. Its
+ * spotlight and terminal come with the issues of their areas, in the places the Waku version gives them.
  */
 export function AppNavbar() {
   // Below `md`, the field drops under the bar once the magnifier opens it; from `md` it sits in the bar.
@@ -144,6 +145,7 @@ export function AppNavbar() {
         </div>
 
         <div className="col-start-3 flex items-center justify-end gap-2">
+          <NotificationsMenu />
           <SettingsButton />
           <UserMenu />
         </div>

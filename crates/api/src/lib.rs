@@ -10,6 +10,7 @@ mod editor;
 mod env;
 mod error;
 mod health;
+mod notifications;
 mod store;
 
 pub use api::*;
@@ -20,4 +21,5 @@ pub use editor::*;
 pub use env::*;
 pub use error::*;
 pub use health::*;
+pub use notifications::*;
 pub use store::*;

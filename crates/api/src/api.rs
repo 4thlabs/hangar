@@ -12,6 +12,7 @@ quoll::api! {
         crate::config::Config,
         crate::env::Env,
         crate::docker::Docker,
+        crate::notifications::Notifications,
     };
 
 }

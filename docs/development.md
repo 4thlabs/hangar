@@ -155,8 +155,7 @@ a 409 while a sync runs. Edits land in the clone, as a saved `hangar.yml` does.
 on once the page is closed, and `GET /api/store` gives its state, which the page reads again each second while it runs.
 One sync runs at a time: a second request gets the one running. While it runs, a save of `hangar.yml`, an install or an
 uninstall is refused with a 409, rather than race it; those changes otherwise take turns. A sync's end is notified
-(`storeInstalled`, `storeUpdated`, `storeInstallFailed`, `storeUpdateFailed`); until the notifications are kept, the
-server logs them. The page shows why a sync failed, its code and its English message, never git's output, which the log
+(`storeInstalled`, `storeUpdated`, `storeInstallFailed`, `storeUpdateFailed`). The page shows why a sync failed, its code and its English message, never git's output, which the log
 holds.
 
 **Settings → Configuration** saves `hangar.yml` once it is valid, its users included, and links the apps and shared
@@ -167,6 +166,19 @@ and only the ones removed on the page are lost. A save that changes nothing writ
 variable needs a name compose takes; one the file holds already, as `OLD-KEY` written by hand, may be changed or
 removed. Its values are hidden until shown, as most are secrets, and its answer is never cached (`Cache-Control:
 no-store`). Both tabs read their file anew each time they open, as a sync or an install may have changed it.
+
+### Notifications
+
+The server keeps one list of notifications for every user, as there are no roles: the last 100, in
+`app-data/hangar/notifications.json`, which it reads as it starts and replaces whole at each change, written beside then
+renamed in its place. A file it cannot read as a list is put aside, as `notifications.json.bad`, and the list starts
+empty. Each notification has an id that only grows, its level, its message as a key and its params (`storeUpdated`),
+which the page words in English, the page it leads to, and whether it was seen and read; one filed with a dedupe key
+replaces the one before it of that key, and comes first. The navbar's bell reads the newest 30 from
+`GET /api/notifications`, then follows `GET /api/notifications/events?since=<id>`, which gives those filed after the
+newest it holds, then each new one as it is filed, pushed in process. A new one is shown as a toast once, which marks it
+seen for every page, as a page that comes back would show it again; it counts as unread until a user closes the bell,
+which marks every one read, for everyone.
 
 ### Docker
 
