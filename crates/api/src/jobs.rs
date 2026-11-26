@@ -47,7 +47,8 @@ pub enum JobState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct JobRun {
-    /// Its id, from 1, greater than that of every run before it since the server started.
+    /// Its id, greater than that of every run before it: the first run's is the time the server started, in
+    /// milliseconds since 1970, so that the id of a run of the server before a restart names no run of this one.
     pub id: u64,
     /// The job it runs.
     pub job: Job,

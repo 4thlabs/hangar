@@ -260,8 +260,8 @@ async fn checks_the_images_as_its_jobs_start_and_tells_the_pages_which_apps_have
 
     assert_eq!(runs.len(), 1);
     assert_eq!(
-        (runs[0].id, runs[0].job, runs[0].queue),
-        (1, Job::ImageCheck, JobQueue::Default)
+        (runs[0].job, runs[0].queue),
+        (Job::ImageCheck, JobQueue::Default)
     );
     assert_eq!(
         next("the change", &mut changes).await?,

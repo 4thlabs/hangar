@@ -106,12 +106,22 @@ pub(crate) struct Port {
     pub(crate) protocol: String,
 }
 
-/// What `GET /containers/{id}/json` adds to the list: the healthcheck and the restarts.
+/// What `GET /containers/{id}/json` adds to the list: the image as it was written, the healthcheck and the restarts.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "PascalCase", default)]
 pub(crate) struct ContainerInspection {
     pub(crate) restart_count: Option<u64>,
     pub(crate) state: InspectedState,
+    #[serde(deserialize_with = "null_as_default")]
+    pub(crate) config: InspectedConfig,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase", default)]
+pub(crate) struct InspectedConfig {
+    /// The image as the container was created with it, `nginx:alpine`, which the list rewrites as the image's id,
+    /// `sha256:...`, once the reference names another image.
+    pub(crate) image: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]

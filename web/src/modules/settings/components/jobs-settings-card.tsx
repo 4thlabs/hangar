@@ -25,23 +25,20 @@ export function JobsSettingsCard() {
 
   const readAgain = () => void queryClient.invalidateQueries({ queryKey: getJobsListQueryKey() });
 
+  // Read again whatever the outcome: a run refused, as one that ended, has changed since the list was read.
   const runAgain = useJobsRun({
     mutation: {
-      onSuccess: asked => {
-        ActionToast.success("Job asked for again", JobText.askedAgain(asked));
-        readAgain();
-      },
+      onSuccess: asked => ActionToast.success("Job asked for again", JobText.askedAgain(asked)),
       onError: failure => ActionToast.failure("Run again failed", failure),
+      onSettled: readAgain,
     },
   });
 
   const cancel = useJobsCancel({
     mutation: {
-      onSuccess: canceled => {
-        ActionToast.success("Job canceled", `${JobText.Names[canceled.job]} stops.`);
-        readAgain();
-      },
+      onSuccess: canceled => ActionToast.success("Job canceled", `${JobText.name(canceled.job)} stops.`),
       onError: failure => ActionToast.failure("Cancel failed", failure),
+      onSettled: readAgain,
     },
   });
 
@@ -106,7 +103,7 @@ type JobRowProps = {
 
 /** A run: its job, its queue, its state and why it failed, its times, and its buttons. */
 function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
-  const name = JobText.Names[run.job];
+  const name = JobText.name(run.job);
   const failure = JobText.failure(run);
 
   return (
@@ -115,7 +112,7 @@ function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
       <TableCell>{run.queue}</TableCell>
       <TableCell>
         <div className="flex flex-col items-start gap-1">
-          <Badge variant={run.state === "failed" ? "destructive" : "secondary"}>{JobText.States[run.state]}</Badge>
+          <Badge variant={run.state === "failed" ? "destructive" : "secondary"}>{JobText.state(run.state)}</Badge>
           {failure && <span className="text-xs whitespace-normal text-muted-foreground">{failure}</span>}
         </div>
       </TableCell>

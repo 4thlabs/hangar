@@ -37,6 +37,12 @@ describe("JobText", () => {
     expect(JobText.time(run.createdAt)).toContain("2026");
   });
 
+  it("names a job or a state it does not know, from a newer server, as the server does", () => {
+    expect(JobText.name("image_check")).toBe("Image check");
+    expect(JobText.name("backup")).toBe("backup");
+    expect(JobText.state("paused")).toBe("paused");
+  });
+
   it("says whether the job asked for again waits or runs", () => {
     expect(JobText.askedAgain(run)).toBe("Image check waits its turn.");
     expect(JobText.askedAgain({ ...run, job: "auto_update", state: "running" })).toBe("Update of the apps runs.");

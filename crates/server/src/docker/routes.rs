@@ -80,7 +80,7 @@ impl DockerState {
         let (containers, installed) = tokio::join!(self.containers(), self.installed());
         let containers = containers.map_err(|error| Self::unavailable(&error))?;
         let installed = installed?;
-        let outdated = self.outdated(&containers, installed.ids()).await;
+        let outdated = self.outdated(&containers, &installed.apps).await;
 
         Ok(containers
             .summaries(installed.ids())
@@ -103,7 +103,7 @@ impl DockerState {
                 .into(),
                 other => Self::unavailable(&other),
             })?;
-        let outdated = self.outdated(&containers, installed.ids()).await;
+        let outdated = self.outdated(&containers, &installed.apps).await;
 
         Ok(installed.detail(detail, &outdated))
     }

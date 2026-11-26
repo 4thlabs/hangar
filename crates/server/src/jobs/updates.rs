@@ -166,39 +166,44 @@ impl Updates {
     }
 
     /// Asks the registries what they serve for the images the installed apps run, as `hangar.yml` spaces the calls,
-    /// keeps their answers in the Docker state, and gives the apps they moved past; `None` once canceled.
+    /// those no check answered first, then those answered the longest ago; keeps their answers in the Docker state,
+    /// the last one for a reference this check did not answer; and gives the apps they moved past. `None` once
+    /// canceled.
     async fn check(&self, cancel: &CancellationToken) -> Result<Option<Checked>, ErrorCode> {
         let config = self
             .store
             .config()
             .await
             .map_err(|error| Failure::store_code(ErrorCode::ConfigUnreadable, &error))?;
-        let installed: Vec<String> = self
+        let apps = self
             .store
             .apps_with(&config)
             .await
-            .map_err(|error| Failure::store_code(ErrorCode::AppsUnreadable, &error))?
-            .into_iter()
-            .filter(|app| app.installed)
-            .map(|app| app.id)
-            .collect();
+            .map_err(|error| Failure::store_code(ErrorCode::AppsUnreadable, &error))?;
         // Read afresh, not from the cache: the update of the apps recreates what they say.
         let (containers, digests) =
             tokio::try_join!(self.docker.containers(), self.docker.image_digests())
                 .map_err(|error| Failure::logged_code(ErrorCode::DockerUnavailable, &error))?;
-        let running = containers.running_images(&installed, &digests);
+        let previous = self.docker_state.registry_digests();
+        let mut running = DockerState::registry_images(&containers, &apps, &digests);
+
+        previous.order_for_next_check(&mut running);
+
         let asked = self
             .docker
             .registry_digests(&running, config.registry_throttling);
-        let registry = tokio::select! {
+        let answered = tokio::select! {
             biased;
             () = cancel.cancelled() => return Ok(None),
-            registry = asked => registry,
+            answered = asked => answered,
         };
+        let answers = answered.len();
+        let registry = previous.refreshed(answered, &running);
         let outdated = registry.outdated(&running);
 
         tracing::info!(
-            references = registry.len(),
+            answered = answers,
+            known = registry.len(),
             outdated = %outdated.iter().cloned().collect::<Vec<_>>().join(", "),
             "the images are checked for an update"
         );
@@ -234,7 +239,10 @@ impl Updates {
         // The sender went with the run: the drain has ended, or ends now.
         let _ = drained.await;
 
-        tracing::info!(app, "an app is updated from its registry");
+        if updated.is_ok() {
+            tracing::info!(app, "an app is updated from its registry");
+        }
+
         updated
     }
 
@@ -274,8 +282,10 @@ done
 "#;
 
     /// The installed apps, the image each runs, the digest of the image it runs, and the digest its registry serves:
-    /// `gamma` and `alpha` run an image the registry has moved past, `beta` the one it serves.
-    const APPS: [(&str, &str, &str, &str); 3] = [
+    /// `gamma` and `alpha` run an image the registry has moved past, `beta` the one it serves, and `delta` one its
+    /// `compose.yml` builds, its registry digest its own id as on containerd's store, of a name a registry serves
+    /// another image of.
+    const APPS: [(&str, &str, &str, &str); 4] = [
         (
             "alpha",
             "nginx:alpine",
@@ -284,16 +294,19 @@ done
         ),
         ("beta", "traefik:3", "sha256:traefik", "sha256:traefik"),
         ("gamma", "redis:7", "sha256:old-redis", "sha256:new-redis"),
+        (
+            "delta",
+            "acme/delta:dev",
+            "sha256:delta",
+            "sha256:registry-delta",
+        ),
     ];
 
     /// A daemon on port 0 that runs a container of each of [`APPS`], and answers for their registries.
     async fn daemon() -> Docker {
         let router = axum::Router::new()
             .route("/v1.44/containers/json", get(containers))
-            .route(
-                "/v1.44/containers/{id}/json",
-                get(|| async { Json(json!({})) }),
-            )
+            .route("/v1.44/containers/{id}/json", get(inspect))
             .route("/v1.44/images/json", get(images))
             .route("/v1.44/distribution/{reference}/json", get(distribution));
         let url = quoll::test::spawn(router).await;
@@ -306,10 +319,17 @@ done
             APPS.iter()
                 .enumerate()
                 .map(|(index, (app, image, _, _))| {
+                    // A pull for another app moved `nginx:alpine`: the list names `alpha`'s image by its id.
+                    let listed = if *app == "alpha" {
+                        format!("sha256:{app}")
+                    } else {
+                        (*image).to_owned()
+                    };
+
                     json!({
                         "Id": format!("{index}").repeat(64),
                         "Names": [format!("/{app}-web-1")],
-                        "Image": image,
+                        "Image": listed,
                         "ImageID": format!("sha256:{app}"),
                         "State": "running",
                         "Status": "Up 2 hours",
@@ -322,6 +342,17 @@ done
                 })
                 .collect(),
         )
+    }
+
+    /// The container `id`, created with its image as [`APPS`] writes it.
+    async fn inspect(Path(id): Path<String>) -> Json<Value> {
+        let image = id
+            .get(..1)
+            .and_then(|index| index.parse::<usize>().ok())
+            .and_then(|index| APPS.get(index))
+            .map_or("", |(_, image, _, _)| *image);
+
+        Json(json!({ "Config": { "Image": image } }))
     }
 
     async fn images() -> Json<Vec<Value>> {
@@ -368,11 +399,12 @@ done
 
             for (app, image, _, _) in APPS {
                 let folder = store.join("store").join(app);
+                let build = if app == "delta" { "    build: .\n" } else { "" };
 
                 fs::create_dir_all(&folder).expect("created");
                 fs::write(
                     folder.join("compose.yml"),
-                    format!("services:\n  web:\n    image: {image}\n"),
+                    format!("services:\n  web:\n    image: {image}\n{build}"),
                 )
                 .expect("written");
                 std::os::unix::fs::symlink(&folder, data.join("app-installed").join(app))
@@ -381,7 +413,7 @@ done
 
             fs::write(
                 store.join("config/hangar.yml"),
-                "categories:\n  - { name: Apps, color: blue, stacks: [gamma, beta, alpha] }\nregistryThrottling: 0\n",
+                "categories:\n  - { name: Apps, color: blue, stacks: [gamma, beta, alpha, delta] }\nregistryThrottling: 0\n",
             )
             .expect("written");
             fs::create_dir_all(&bin).expect("created");
@@ -480,10 +512,16 @@ done
             .containers()
             .await
             .expect("the containers");
+        let apps = fixture
+            .updates
+            .store
+            .installed_apps()
+            .await
+            .expect("the apps");
         let outdated = fixture
             .updates
             .docker_state
-            .outdated(&containers, ["alpha", "beta", "gamma"])
+            .outdated(&containers, &apps)
             .await;
 
         assert_eq!(outdated.into_iter().collect::<Vec<_>>(), ["alpha", "gamma"]);

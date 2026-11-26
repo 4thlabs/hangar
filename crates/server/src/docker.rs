@@ -17,7 +17,8 @@ use std::time::Duration;
 use futures::StreamExt;
 use hangar_api::DockerChange;
 use hangar_core::{
-    ComposeContainers, Docker, DockerOverview, ImageDigests, RegistryDigests, Runtime, Store,
+    ComposeContainers, Docker, DockerOverview, ImageDigests, RegistryDigests, RunningImage,
+    Runtime, Store, StoreApp,
 };
 use tokio::sync::broadcast;
 
@@ -159,25 +160,30 @@ impl DockerState {
         self.overview.get().await
     }
 
-    /// Keeps what the registries served at an image check, and tells the pages that follow the changes when it
-    /// changes which apps have an update.
+    /// What the registries served at the image checks, by the last one for each reference.
+    pub(crate) fn registry_digests(&self) -> Arc<RegistryDigests> {
+        Arc::clone(&self.registry())
+    }
+
+    /// Keeps what the registries served at an image check, and tells the pages that follow the changes when a digest
+    /// changed, which may change which apps have an update.
     pub(crate) fn keep_registry_digests(&self, digests: RegistryDigests) {
         let previous = std::mem::replace(&mut *self.registry(), Arc::new(digests));
 
-        if *previous != **self.registry() {
+        if !previous.has_same_digests(&self.registry()) {
             self.changes.send(DockerChange::Containers);
         }
     }
 
-    /// The apps among `installed` that one of `containers` runs an image of that the registry has moved past, at the
-    /// last image check: none before the first, nor while the images cannot be read, as the update badge must not fail
-    /// a page.
-    pub(crate) async fn outdated<'a>(
+    /// The installed `apps` that one of `containers` runs an image of that the registry has moved past, at the last
+    /// image checks: none before the first, nor while the images cannot be read, as the update badge must not fail a
+    /// page.
+    pub(crate) async fn outdated(
         &self,
         containers: &ComposeContainers,
-        installed: impl IntoIterator<Item = &'a str>,
+        apps: &[StoreApp],
     ) -> BTreeSet<String> {
-        let registry = Arc::clone(&self.registry());
+        let registry = self.registry_digests();
 
         if registry.is_empty() {
             return BTreeSet::new();
@@ -188,10 +194,33 @@ impl DockerState {
             return BTreeSet::new();
         };
 
-        registry.outdated(&containers.running_images(installed, &digests))
+        registry.outdated(&Self::registry_images(containers, apps, &digests))
     }
 
-    /// What the registries served at the last image check, whatever a panic left it: it is replaced whole.
+    /// The images that the containers of the installed `apps` run, of `digests`, those of a service that its
+    /// `compose.yml` builds counted built on the host, whatever their registry digests say: on containerd's store, an
+    /// image built on the host has one, as a pulled image does.
+    pub(crate) fn registry_images(
+        containers: &ComposeContainers,
+        apps: &[StoreApp],
+        digests: &ImageDigests,
+    ) -> Vec<RunningImage> {
+        let installed = apps.iter().filter(|app| app.installed);
+        let mut running =
+            containers.running_images(installed.clone().map(|app| app.id.as_str()), digests);
+
+        for image in &mut running {
+            let is_built = installed
+                .clone()
+                .any(|app| app.id == image.project && app.built_services.contains(&image.service));
+
+            image.is_built_here |= is_built;
+        }
+
+        running
+    }
+
+    /// What the registries served at the image checks, whatever a panic left it: it is replaced whole.
     fn registry(&self) -> std::sync::MutexGuard<'_, Arc<RegistryDigests>> {
         self.registry.lock().unwrap_or_else(PoisonError::into_inner)
     }

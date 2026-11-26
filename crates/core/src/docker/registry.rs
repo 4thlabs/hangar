@@ -15,8 +15,8 @@ const REGISTRY_DEADLINE: Duration = Duration::from_secs(10);
 const TOO_MANY_REQUESTS: u16 = 429;
 
 /// What a registry served for each reference when it was asked, by the reference as compose runs it, such as
-/// `nginx:alpine`: the digest of its manifest, `sha256:...`. A reference it was not asked for, or did not answer for,
-/// is not in it: whether an app that runs it is behind is not known.
+/// `nginx:alpine`: the digest of its manifest, or of its index of manifests, `sha256:...`, and which check answered it.
+/// A reference no check answered is not in it: whether an app that runs it is behind is not known.
 ///
 /// ```
 /// use hangar_core::{RegistryDigests, RunningImage};
@@ -24,15 +24,27 @@ const TOO_MANY_REQUESTS: u16 = 429;
 /// let registry: RegistryDigests = [("nginx:alpine".to_owned(), "sha256:new".to_owned())].into_iter().collect();
 /// let running = RunningImage {
 ///     project: "alpha".to_owned(),
+///     service: "web".to_owned(),
 ///     image: "nginx:alpine".to_owned(),
+///     image_id: "sha256:config".to_owned(),
 ///     digests: vec!["nginx@sha256:old".to_owned()],
+///     is_built_here: false,
 /// };
 ///
 /// assert!(registry.outdated(&[running]).contains("alpha"));
 /// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RegistryDigests {
-    by_reference: BTreeMap<String, String>,
+    by_reference: BTreeMap<String, Served>,
+    /// The number of the last check, from 1; 0 for the answers of one check alone.
+    checks: u64,
+}
+
+/// What a registry served for a reference, and the number of the check that asked it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Served {
+    digest: String,
+    check: u64,
 }
 
 /// What a registry answered for one reference.
@@ -47,9 +59,11 @@ enum Answer {
 }
 
 impl RegistryDigests {
-    /// The digest the registry served for `reference`, when it was asked and answered.
+    /// The digest the registry served for `reference`, when a check answered it.
     pub fn get(&self, reference: &str) -> Option<&str> {
-        self.by_reference.get(reference).map(String::as_str)
+        self.by_reference
+            .get(reference)
+            .map(|served| served.digest.as_str())
     }
 
     /// How many references it holds a digest of.
@@ -62,9 +76,20 @@ impl RegistryDigests {
         self.by_reference.is_empty()
     }
 
-    /// The projects of `running` that run an image the registry has moved past: by the digests of the image each
-    /// container was created from, never by its reference, which a pull moves before the container is recreated. A
-    /// container counts only when its image's digests and the registry's answer are both known.
+    /// Whether it holds the digests `other` holds, for the same references, whichever checks answered them.
+    pub fn has_same_digests(&self, other: &Self) -> bool {
+        self.by_reference.len() == other.by_reference.len()
+            && self
+                .by_reference
+                .iter()
+                .all(|(reference, served)| other.get(reference) == Some(served.digest.as_str()))
+    }
+
+    /// The projects of `running` that run an image the registry has moved past: by the image each container was
+    /// created from, never by its reference, which a pull moves before the container is recreated. A container runs
+    /// what the registry serves when one of its image's registry digests, or its id, as on containerd's store, is the
+    /// digest served. A container counts only when the registry's answer is known, and its image was not built on
+    /// the host.
     pub fn outdated(&self, running: &[RunningImage]) -> BTreeSet<String> {
         running
             .iter()
@@ -72,35 +97,94 @@ impl RegistryDigests {
                 let Some(served) = self.get(&container.image) else {
                     return false;
                 };
-                let runs_it = container.digests.iter().any(|digest| {
-                    digest
-                        .rsplit_once('@')
-                        .is_some_and(|(_, local)| local == served)
-                });
+                let runs_it = container.image_id == served
+                    || container.digests.iter().any(|digest| {
+                        digest
+                            .rsplit_once('@')
+                            .is_some_and(|(_, local)| local == served)
+                    });
 
-                !container.digests.is_empty() && !runs_it
+                !container.is_built_here && !runs_it
             })
             .map(|container| container.project.clone())
             .collect()
     }
+
+    /// These digests after a check whose answers are `answered`, of the references `running` names: the check's
+    /// answer for a reference it answered, the last one for a reference it did not, as when a rate limit stopped it,
+    /// and none for a reference no container runs any more.
+    pub fn refreshed(&self, answered: Self, running: &[RunningImage]) -> Self {
+        let check = self.checks + 1;
+        let mut answered = answered.by_reference;
+        let by_reference = Self::checked_references(running)
+            .into_iter()
+            .filter_map(|reference| {
+                let served = match answered.remove(reference) {
+                    Some(served) => Served {
+                        digest: served.digest,
+                        check,
+                    },
+                    None => self.by_reference.get(reference)?.clone(),
+                };
+
+                Some((reference.to_owned(), served))
+            })
+            .collect();
+
+        Self {
+            by_reference,
+            checks: check,
+        }
+    }
+
+    /// Orders `running` for the next check: the references no check answered first, then those answered the longest
+    /// ago, so that a rate limit met at the same point each time does not leave the same references out each time.
+    pub fn order_for_next_check(&self, running: &mut [RunningImage]) {
+        running.sort_by_key(|container| {
+            self.by_reference
+                .get(&container.image)
+                .map_or(0, |served| served.check)
+        });
+    }
+
+    /// The references of `running` a registry can say something of, once each, in order: not those pinned to a
+    /// digest, nor the images built on the host.
+    fn checked_references(running: &[RunningImage]) -> Vec<&str> {
+        let mut references: Vec<&str> = Vec::new();
+
+        for container in running {
+            let is_pinned =
+                container.image.contains("@sha256:") || container.image.starts_with("sha256:");
+            let is_listed = references.contains(&container.image.as_str());
+
+            if !is_pinned && !container.is_built_here && !is_listed {
+                references.push(&container.image);
+            }
+        }
+
+        references
+    }
 }
 
 impl FromIterator<(String, String)> for RegistryDigests {
-    /// The digests of `(reference, digest)` pairs.
+    /// The digests of `(reference, digest)` pairs, the answers of one check.
     fn from_iter<I: IntoIterator<Item = (String, String)>>(pairs: I) -> Self {
         Self {
-            by_reference: pairs.into_iter().collect(),
+            by_reference: pairs
+                .into_iter()
+                .map(|(reference, digest)| (reference, Served { digest, check: 0 }))
+                .collect(),
+            checks: 0,
         }
     }
 }
 
 impl Docker {
     /// Asks the registries, through the daemon so that its credentials apply, what they serve for each reference that
-    /// `running` names, once each, one at a time, `spacing` apart: the calls count against a registry's rate limit.
-    /// A reference pinned to a digest, as `nginx@sha256:...`, or an image built on the host, which has no registry
-    /// digest, is not asked. A registry has 10 seconds to answer; one that does not, or fails, is left out, and the
-    /// first that refuses the call for asking too often, a 429, stops the check: the references after it are left out
-    /// too, until the next.
+    /// `running` names, once each, in its order, one at a time, `spacing` apart: the calls count against a registry's
+    /// rate limit. A reference pinned to a digest, as `nginx@sha256:...`, or an image built on the host is not asked.
+    /// A registry has 10 seconds to answer; one that does not, or fails, is left out, and the first that refuses the
+    /// call for asking too often, a 429, stops the check: the references after it are left out too, until the next.
     pub async fn registry_digests(
         &self,
         running: &[RunningImage],
@@ -117,8 +201,8 @@ impl Docker {
         spacing: Duration,
         deadline: Duration,
     ) -> RegistryDigests {
-        let references = Self::checked_references(running);
-        let mut digests = RegistryDigests::default();
+        let references = RegistryDigests::checked_references(running);
+        let mut answered = Vec::new();
 
         for (index, reference) in references.iter().enumerate() {
             if index > 0 {
@@ -126,9 +210,7 @@ impl Docker {
             }
 
             match self.registry_digest(reference, deadline).await {
-                Answer::Digest(digest) => {
-                    digests.by_reference.insert((*reference).to_owned(), digest);
-                }
+                Answer::Digest(digest) => answered.push(((*reference).to_owned(), digest)),
                 Answer::Unknown => {}
                 Answer::RateLimited => {
                     tracing::warn!(
@@ -136,7 +218,7 @@ impl Docker {
                         checked = index,
                         skipped = references.len() - index - 1,
                         "a registry refused the image check for asking too often: the images after it are checked \
-                         next time"
+                         first next time"
                     );
 
                     break;
@@ -144,26 +226,7 @@ impl Docker {
             }
         }
 
-        digests
-    }
-
-    /// The references of `running` a registry can say something of, once each, in order: not those pinned to a
-    /// digest, nor the images built on the host.
-    fn checked_references(running: &[RunningImage]) -> Vec<&str> {
-        let mut references: Vec<&str> = Vec::new();
-
-        for container in running {
-            let is_pinned =
-                container.image.contains("@sha256:") || container.image.starts_with("sha256:");
-            let is_built_here = container.digests.is_empty();
-            let is_listed = references.contains(&container.image.as_str());
-
-            if !is_pinned && !is_built_here && !is_listed {
-                references.push(&container.image);
-            }
-        }
-
-        references
+        answered.into_iter().collect()
     }
 
     /// What the registry of `reference` answers within `deadline`.
@@ -356,12 +419,26 @@ mod tests {
         }
     }
 
-    /// A container of `project` that runs `image`, created from an image of `digests`.
+    /// A container of `project` that runs `image`, created from an image of `digests` on the classic store: an id of
+    /// its own, which no registry serves, and built on the host when it has no digest.
     fn running(project: &str, image: &str, digests: &[&str]) -> RunningImage {
         RunningImage {
             project: project.to_owned(),
+            service: "web".to_owned(),
             image: image.to_owned(),
+            image_id: format!("sha256:{project}-config"),
             digests: digests.iter().map(|digest| (*digest).to_owned()).collect(),
+            is_built_here: digests.is_empty(),
+        }
+    }
+
+    /// A container of `project` that runs `image`, created from the image `image_id` on containerd's store, whose
+    /// registry digests are `digests`.
+    fn on_containerd(project: &str, image: &str, image_id: &str, digests: &[&str]) -> RunningImage {
+        RunningImage {
+            image_id: image_id.to_owned(),
+            is_built_here: false,
+            ..running(project, image, digests)
         }
     }
 
@@ -411,11 +488,22 @@ mod tests {
     #[tokio::test]
     async fn skips_the_pinned_references_and_the_images_built_on_the_host() {
         let daemon = FakeDaemon::serve(&[("redis:7", Reply::Digest("sha256:redis"))]).await;
+        let built_on_containerd = RunningImage {
+            is_built_here: true,
+            ..on_containerd(
+                "epsilon",
+                "acme/api:dev",
+                "sha256:api",
+                &["acme/api@sha256:api"],
+            )
+        };
         let running = [
             running("alpha", "nginx@sha256:abc", &["nginx@sha256:abc"]),
+            // Written as an image's id in the compose file, as the container was created with it.
             running("beta", "sha256:0123", &["nginx@sha256:0123"]),
             running("gamma", "acme/app:dev", &[]),
             running("delta", "redis:7", &["redis@sha256:redis"]),
+            built_on_containerd,
         ];
 
         let served = daemon
@@ -539,5 +627,82 @@ mod tests {
             served.outdated(&running),
             BTreeSet::from(["delta".to_owned()])
         );
+    }
+
+    #[tokio::test]
+    async fn asks_for_an_image_pulled_but_not_recreated_and_calls_its_app_outdated() {
+        let daemon = FakeDaemon::serve(&[("nginx:alpine", Reply::Digest("sha256:new"))]).await;
+        // containerd's store: `beta`'s update pulled `nginx:alpine`, and `alpha` still runs the image it was created
+        // from, which lost its registry digest.
+        let running = [
+            on_containerd("alpha", "nginx:alpine", "sha256:old", &[]),
+            on_containerd("beta", "nginx:alpine", "sha256:new", &["nginx@sha256:new"]),
+            // An image the host lists no registry digest of, whose id is the digest the registry serves.
+            on_containerd("gamma", "nginx:alpine", "sha256:new", &[]),
+        ];
+
+        let served = daemon
+            .docker
+            .registry_digests(&running, Duration::ZERO)
+            .await;
+
+        assert_eq!(daemon.asked(), ["nginx:alpine"]);
+        assert_eq!(
+            served.outdated(&running),
+            BTreeSet::from(["alpha".to_owned()])
+        );
+    }
+
+    #[test]
+    fn keeps_the_last_answer_of_a_reference_a_check_did_not_answer() {
+        let running = [
+            running("alpha", "alpha:1", &["alpha@sha256:old"]),
+            running("beta", "beta:1", &["beta@sha256:old"]),
+            running("gamma", "gamma:1", &["gamma@sha256:old"]),
+        ];
+        let first = RegistryDigests::default().refreshed(
+            digests(&[
+                ("alpha:1", "sha256:a1"),
+                ("beta:1", "sha256:b1"),
+                ("gone:1", "sha256:gone"),
+            ]),
+            &running,
+        );
+
+        // A rate limit stopped the second check after `gamma`, asked first as no check had answered it.
+        let second = first.refreshed(digests(&[("gamma:1", "sha256:g2")]), &running);
+
+        assert_eq!(first.get("gone:1"), None, "no container runs it");
+        assert!(second.has_same_digests(&digests(&[
+            ("alpha:1", "sha256:a1"),
+            ("beta:1", "sha256:b1"),
+            ("gamma:1", "sha256:g2"),
+        ])));
+        assert_eq!(
+            second.outdated(&running),
+            BTreeSet::from(["alpha".to_owned(), "beta".to_owned(), "gamma".to_owned()])
+        );
+    }
+
+    #[test]
+    fn asks_first_the_references_answered_the_longest_ago() {
+        let running = [
+            running("alpha", "alpha:1", &["alpha@sha256:old"]),
+            running("beta", "beta:1", &["beta@sha256:old"]),
+            running("gamma", "gamma:1", &["gamma@sha256:old"]),
+        ];
+        let first =
+            RegistryDigests::default().refreshed(digests(&[("alpha:1", "sha256:a1")]), &running);
+        let second = first.refreshed(digests(&[("beta:1", "sha256:b2")]), &running);
+        let mut next = running.to_vec();
+
+        second.order_for_next_check(&mut next);
+
+        let projects: Vec<&str> = next
+            .iter()
+            .map(|container| container.project.as_str())
+            .collect();
+
+        assert_eq!(projects, ["gamma", "alpha", "beta"]);
     }
 }
