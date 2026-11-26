@@ -82,10 +82,16 @@ impl Failure {
         Self::exit(self.exit_code())
     }
 
-    /// What the binary says of the failure: the failure, then its causes. A batch's says which app failed and the
-    /// code alone, as compose's stderr went with its output already, and the core logged the error.
+    /// What the binary says of the failure: the failure, then its causes. A batch whose compose exited with a code
+    /// says which app failed and the code alone, as compose's stderr went with its output already; any other cause,
+    /// as a `docker` that does not start, is said in full, as it was printed nowhere.
     fn message(&self) -> String {
-        if let Self::Batch(error) = self {
+        if let Self::Batch(error) = self
+            && let ComposeError::Failed {
+                source: RunError::Failed { .. },
+                ..
+            } = error.as_ref()
+        {
             return format!("{error}, exit {}", self.exit_code());
         }
 
@@ -116,6 +122,7 @@ impl Failure {
 
 #[cfg(test)]
 mod tests {
+    use std::io;
     use std::sync::Arc;
 
     use hangar_core::{ComposeCommand, ComposeError, RunError, StoreError};
@@ -149,6 +156,24 @@ mod tests {
         );
         assert_eq!(git.exit_code(), 128);
         assert_eq!(Failure::NoCommand.exit_code(), 1);
+    }
+
+    #[test]
+    fn says_why_compose_did_not_start() {
+        let batch = Failure::Batch(Arc::new(ComposeError::Failed {
+            app: "jellyfin".into(),
+            command: ComposeCommand::Restart,
+            source: RunError::Spawn {
+                program: "docker".into(),
+                source: io::Error::from(io::ErrorKind::NotFound),
+            },
+        }));
+
+        assert_eq!(
+            batch.message(),
+            "docker compose restart failed on jellyfin: could not run docker: entity not found"
+        );
+        assert_eq!(batch.exit_code(), 1);
     }
 
     #[test]
