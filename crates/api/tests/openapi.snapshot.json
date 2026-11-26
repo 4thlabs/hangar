@@ -149,6 +149,111 @@
           }
         ]
       },
+      "ArcaneActionItem": {
+        "description": "What Arcane says needs attention.",
+        "properties": {
+          "count": {
+            "description": "How many there are.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "description": "What it is, in snake case, as `image_update`.",
+            "type": "string"
+          },
+          "severity": {
+            "description": "How pressing it is: `critical`, `warning`, or another.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "severity",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ArcaneGeneralStats": {
+        "description": "The Docker host as Arcane reports it for its first environment.",
+        "properties": {
+          "actionItems": {
+            "description": "What Arcane says needs attention, as images to update.",
+            "items": {
+              "$ref": "#/components/schemas/ArcaneActionItem"
+            },
+            "type": "array"
+          },
+          "containers": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContainerCounts"
+              }
+            ],
+            "description": "The host's containers."
+          },
+          "images": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImageCounts"
+              }
+            ],
+            "description": "The host's images."
+          },
+          "version": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ArcaneVersion"
+              }
+            ],
+            "description": "Arcane's version, and its newest."
+          },
+          "volumes": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VolumeCounts"
+              }
+            ],
+            "description": "The host's volumes."
+          }
+        },
+        "required": [
+          "version",
+          "containers",
+          "images",
+          "volumes",
+          "actionItems"
+        ],
+        "type": "object"
+      },
+      "ArcaneVersion": {
+        "description": "The version of Arcane, and whether a newer one is out.",
+        "properties": {
+          "current": {
+            "description": "The version it runs, as it shows it.",
+            "type": "string"
+          },
+          "newest": {
+            "description": "The newest version out.",
+            "type": "string"
+          },
+          "releaseUrl": {
+            "description": "The page of the newest release.",
+            "type": "string"
+          },
+          "updateAvailable": {
+            "description": "Whether `newest` is newer than `current`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "current",
+          "newest",
+          "updateAvailable",
+          "releaseUrl"
+        ],
+        "type": "object"
+      },
       "ComposeAction": {
         "description": "A compose command the Apps pages run: `up -d` with its options, `restart` or `down`.",
         "oneOf": [
@@ -3580,6 +3685,23 @@
       "WidgetData": {
         "description": "What a widget loaded from its service, by its `type`.",
         "oneOf": [
+          {
+            "description": "`arcane-general-stats`.",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/ArcaneGeneralStats"
+              },
+              "type": {
+                "const": "arcane-general-stats",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "data"
+            ],
+            "type": "object"
+          },
           {
             "description": "`frigate-events`.",
             "properties": {

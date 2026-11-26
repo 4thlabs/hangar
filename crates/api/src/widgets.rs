@@ -5,6 +5,8 @@ use quoll::Bytes;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::{ContainerCounts, ImageCounts, VolumeCounts};
+
 /// Which widget a placement is, its `type` in `hangar.yml`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
@@ -51,6 +53,47 @@ pub struct WidgetPlacement {
     /// Where its card links to in the browser: `link`, or `https://<container>.<DOMAIN>`; `None` for a widget that
     /// reads no store app.
     pub link: Option<String>,
+}
+
+/// The Docker host as Arcane reports it for its first environment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ArcaneGeneralStats {
+    /// Arcane's version, and its newest.
+    pub version: ArcaneVersion,
+    /// The host's containers.
+    pub containers: ContainerCounts,
+    /// The host's images.
+    pub images: ImageCounts,
+    /// The host's volumes.
+    pub volumes: VolumeCounts,
+    /// What Arcane says needs attention, as images to update.
+    pub action_items: Vec<ArcaneActionItem>,
+}
+
+/// The version of Arcane, and whether a newer one is out.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ArcaneVersion {
+    /// The version it runs, as it shows it.
+    pub current: String,
+    /// The newest version out.
+    pub newest: String,
+    /// Whether `newest` is newer than `current`.
+    pub update_available: bool,
+    /// The page of the newest release.
+    pub release_url: String,
+}
+
+/// What Arcane says needs attention.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ArcaneActionItem {
+    /// What it is, in snake case, as `image_update`.
+    pub kind: String,
+    /// How pressing it is: `critical`, `warning`, or another.
+    pub severity: String,
+    /// How many there are.
+    pub count: u64,
 }
 
 /// Frigate's latest events, and how its detection runs.
@@ -111,6 +154,8 @@ pub struct GluetunVpnStatus {
 #[serde(tag = "type", content = "data", rename_all = "kebab-case")]
 #[non_exhaustive]
 pub enum WidgetData {
+    /// `arcane-general-stats`.
+    ArcaneGeneralStats(ArcaneGeneralStats),
     /// `frigate-events`.
     FrigateEvents(FrigateEvents),
     /// `gluetun-vpn-status`.
