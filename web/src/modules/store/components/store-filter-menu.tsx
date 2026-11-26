@@ -1,7 +1,12 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { AppCounts } from "#libs/api";
 import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
-import { joinStoreFilters, parseStoreFilters, storeFilterLabels, storeFilters } from "#modules/store/store-search.ts";
+import {
+  joinStoreFilters,
+  parseStoreFilters,
+  storeFilterLabels,
+  storeFilters,
+} from "#modules/store/helpers/store-search.ts";
 
 type StoreFilterMenuProps = {
   /** How many apps are installed and how many are not, shown beside each checkbox. */
