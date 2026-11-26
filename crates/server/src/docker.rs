@@ -202,6 +202,11 @@ impl DockerState {
         });
     }
 
+    /// Tells the pages that follow the changes that `change` happened, as a compose batch that starts or ends.
+    pub(crate) fn tell(&self, change: DockerChange) {
+        self.changes.send(change);
+    }
+
     /// The changes from now on.
     pub(crate) fn subscribe(&self) -> broadcast::Receiver<DockerChange> {
         self.changes.subscribe()

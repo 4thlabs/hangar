@@ -7,11 +7,6 @@ import { ToggledSet } from "#modules/common/toggled-set.ts";
 /** The batch the output panel shows: its command and its apps. */
 export type ShownBatch = { action: ComposeAction; apps: readonly string[] };
 
-/** How often the batches are read again while one runs, so that its end frees the buttons of its apps. */
-class BatchesPolling {
-  static readonly Interval = 5_000;
-}
-
 /**
  * The compose commands of the table and of an app's page, on `apps`: the confirmation, Up's options, the batches the
  * server runs, whichever page started them, whose apps' buttons are disabled, and the output of the batch the panel
@@ -26,12 +21,8 @@ export function useComposeCommand(apps: readonly string[]) {
   // forced recreate never carries over to the next Up.
   const [flags, setFlags] = useState<ReadonlySet<UpFlag>>(() => new Set());
 
-  const { data: batches } = useComposeBatches({
-    query: {
-      refetchInterval: query =>
-        query.state.data?.some(batch => batch.report === null) ? BatchesPolling.Interval : false,
-    },
-  });
+  // Read again as a batch starts or ends, whichever page started it, which the server says on its Docker changes.
+  const { data: batches } = useComposeBatches();
 
   const running = (batches ?? []).filter(batch => batch.report === null);
   const isHeld = apps.some(app => running.some(batch => batch.apps.includes(app)));

@@ -201,7 +201,7 @@ second gathered, two seconds for the overview; when the events are followed agai
 everything is read again, and when the daemon refuses them for good, each value is read again as it goes stale.
 
 A reread that changes what the cache holds is pushed to the page on `GET /api/docker/changes`, as are an install, an
-uninstall, a saved `hangar.yml` and the end of a store sync, which change the apps listed; the page reads again what it
+uninstall, a saved `hangar.yml`, the end of a store sync, and the start and the end of a compose batch, which change the apps listed; the page reads again what it
 shows, and no longer reloads every 30 seconds. When that stream is lost, the page says so and connects again, after a
 wait from a second doubled up to 30 seconds, then reads everything again. The stats of the installed apps' containers, a frame a second, and the log of a
 container, its last 200 lines then followed, are streamed from the daemon, never kept; a log ends with an `end` event

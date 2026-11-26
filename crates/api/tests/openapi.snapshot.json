@@ -694,7 +694,7 @@
         "oneOf": [
           {
             "const": "containers",
-            "description": "The apps: their containers, or which of them are installed, and how `hangar.yml` files them. The projects and each\nproject's detail.",
+            "description": "The apps: their containers, or which of them are installed, and how `hangar.yml` files them, and the compose\nbatches that run on them, as one starts or ends. The projects, each project's detail, and the batches.",
             "type": "string"
           },
           {

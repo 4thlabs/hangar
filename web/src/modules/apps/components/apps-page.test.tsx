@@ -516,4 +516,52 @@ describe("compose commands", () => {
     expect(await screen.findByText("Could not read this app")).toBeDefined();
     expect(screen.getByRole("region", { name: "alpha" })).toBeDefined();
   });
+
+  it("lists a batch another page started once the server says the containers changed", async () => {
+    let listed: unknown[] = [];
+
+    serve({
+      "GET /api/docker/apps/alpha": () => Response.json(alpha),
+      "GET /api/docker/compose": () => Response.json(listed),
+    });
+
+    renderAt("/apps/alpha");
+    await screen.findByRole("heading", { name: "alpha" });
+
+    const changes = await source("/api/docker/changes");
+
+    listed = [batch(5, plainUp, ["alpha"])];
+    act(() => changes.send("containers"));
+
+    expect(await screen.findByText(/Up runs on alpha/)).toBeDefined();
+    expect((screen.getByRole("button", { name: "Down" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("keeps the panel when the apps read again leave no row to the filter", async () => {
+    let status: ProjectStatus = "running";
+
+    serve({
+      "GET /api/docker/apps": () => Response.json([project("jellyfin", status)]),
+      "GET /api/docker/compose": () => Response.json([]),
+      "POST /api/docker/compose": () =>
+        events([
+          { kind: "batch", ...batch(1, { operation: "down" }, ["jellyfin"]) },
+          { kind: "started", app: "jellyfin" },
+        ]),
+    });
+
+    renderAt("/apps?status=running");
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Select jellyfin" }));
+    fireEvent.click(screen.getByRole("button", { name: "Down" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+    expect(await screen.findByRole("region", { name: "jellyfin" })).toBeDefined();
+
+    const changes = await source("/api/docker/changes");
+
+    status = "stopped";
+    act(() => changes.send("containers"));
+
+    expect(await screen.findByText("No results")).toBeDefined();
+    expect(screen.getByRole("region", { name: "jellyfin" })).toBeDefined();
+  });
 });

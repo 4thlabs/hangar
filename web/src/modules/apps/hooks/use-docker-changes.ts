@@ -7,10 +7,10 @@ class DockerQueries {
   /** Every query of the Docker routes. */
   static readonly All = "/api/docker/";
 
-  static readonly ByChange: Readonly<Record<DockerChange, string>> = {
-    // The projects, and each project's detail.
-    containers: "/api/docker/apps",
-    overview: "/api/docker/overview",
+  static readonly ByChange: Readonly<Record<DockerChange, readonly string[]>> = {
+    // The projects, each project's detail, and the compose batches, as one starts or ends.
+    containers: ["/api/docker/apps", "/api/docker/compose"],
+    overview: ["/api/docker/overview"],
   };
 }
 
@@ -43,7 +43,7 @@ export function useDockerChanges() {
           invalidate(DockerQueries.All);
         },
         onDown: () => setReconnecting(true),
-        onItem: change => invalidate(DockerQueries.ByChange[change]),
+        onItem: change => DockerQueries.ByChange[change].forEach(invalidate),
       });
     };
 
