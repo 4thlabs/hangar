@@ -4003,6 +4003,166 @@
           }
         ]
       },
+      "TcgCard": {
+        "description": "A product of a game's catalog, with its latest prices.",
+        "properties": {
+          "expansion": {
+            "description": "Its expansion.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "low": {
+            "description": "Its lowest price.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "Its name.",
+            "type": "string"
+          },
+          "trend": {
+            "description": "Its trend price.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "trendFoil": {
+            "description": "The trend price of its foil.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "version": {
+            "description": "1, 2... when its expansion has several products of its name, Cardmarket's V.1, V.2...",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "expansion",
+          "version",
+          "trend",
+          "low",
+          "trendFoil"
+        ],
+        "type": "object"
+      },
+      "TcgCollectorCards": {
+        "description": "The prices of the cards tcg-collector follows, in euros, from Cardmarket's price guides.",
+        "properties": {
+          "cards": {
+            "description": "The cards, in the order `hangar.yml` lists them.",
+            "items": {
+              "$ref": "#/components/schemas/TcgFollowedCard"
+            },
+            "type": "array"
+          },
+          "days": {
+            "description": "How many days the price curves cover.",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "days",
+          "cards"
+        ],
+        "type": "object"
+      },
+      "TcgDailyPrices": {
+        "description": "A day of a card's prices. A day without a new price guide repeats the day before.",
+        "properties": {
+          "day": {
+            "description": "The day, `YYYY-MM-DD`.",
+            "type": "string"
+          },
+          "low": {
+            "description": "The lowest price.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "trend": {
+            "description": "The trend price.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "day",
+          "trend",
+          "low"
+        ],
+        "type": "object"
+      },
+      "TcgFollowedCard": {
+        "description": "A card tcg-collector follows: a version of it, by its Cardmarket ids.",
+        "properties": {
+          "card": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TcgCard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The card, `None` when tcg-collector does not know the product."
+          },
+          "game": {
+            "description": "Cardmarket's game id: 1 for Magic, 21 for Star Wars Unlimited.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "history": {
+            "description": "Its prices over the days of the curve, oldest first, from the first day that has one.",
+            "items": {
+              "$ref": "#/components/schemas/TcgDailyPrices"
+            },
+            "type": "array"
+          },
+          "imageId": {
+            "description": "The id of its image, relayed by `GET /widgets/{key}/image/{id}`.",
+            "type": "string"
+          },
+          "product": {
+            "description": "Cardmarket's product id, of this version of the card.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "game",
+          "product",
+          "imageId",
+          "card",
+          "history"
+        ],
+        "type": "object"
+      },
       "VolumeCounts": {
         "description": "How many volumes the host has.",
         "properties": {
@@ -4145,6 +4305,23 @@
               },
               "type": {
                 "const": "jellyfin-latest",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "data"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`tcg-collector-cards`.",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/TcgCollectorCards"
+              },
+              "type": {
+                "const": "tcg-collector-cards",
                 "type": "string"
               }
             },

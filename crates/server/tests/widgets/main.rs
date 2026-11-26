@@ -8,6 +8,7 @@ mod frigate;
 mod gluetun;
 mod jellyfin;
 mod miniflux;
+mod tcg_collector;
 
 use std::fs;
 use std::path::PathBuf;

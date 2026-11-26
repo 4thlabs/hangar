@@ -13,6 +13,7 @@ mod miniflux;
 mod placement;
 mod routes;
 mod service;
+mod tcg_collector;
 mod time;
 
 use std::sync::Arc;
@@ -232,6 +233,13 @@ impl Loader {
                     .await
                     .map(WidgetData::JellyfinLatest)
             }
+            WidgetKind::TcgCollectorCards { days, cards, .. } => {
+                let service = self.service(&kind).await?;
+
+                tcg_collector::load(&self.http, &service, *days, cards)
+                    .await
+                    .map(WidgetData::TcgCollectorCards)
+            }
             other => Err(LoadError::refused(format!(
                 "the {} widget loads nothing",
                 other.name()
@@ -248,6 +256,9 @@ impl Loader {
             }
             WidgetKind::JellyfinLatest { .. } => {
                 jellyfin::poster(&self.http, &self.service(kind).await?, id).await
+            }
+            WidgetKind::TcgCollectorCards { .. } => {
+                tcg_collector::image(&self.http, &self.service(kind).await?, id).await
             }
             _ => Ok(None),
         }
