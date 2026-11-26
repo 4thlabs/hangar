@@ -205,8 +205,8 @@ A route's loader only warms what its page reads in a region with `useSuspenseQue
 
 ```ts
 loader: ({ context }) => {
-  void context.queryClient.prefetchQuery(settingsQueries.storeStatus());
-  void context.queryClient.prefetchQuery(settingsQueries.jobs());
+  void context.queryClient.prefetchQuery({ ...settingsQueries.storeStatus(), staleTime: warmedFor });
+  void context.queryClient.prefetchQuery({ ...settingsQueries.jobs(), staleTime: warmedFor });
 },
 ```
 
@@ -214,6 +214,8 @@ loader: ({ context }) => {
   and the navigation would wait for the retries of a server that answers 502.
 - Not a `useQuery` read with `staleTime: 0`: it would be read twice, by the loader, then again as the page mounts. A
   suspense query is fresh for a second after its read, which covers the mount.
+- `warmedFor`, a second: a hover then a click runs the loader twice (`defaultPreloadStaleTime: 0`), and the prefetch
+  of the click reads nothing again. ADR 0002, rule 15, as #203 amended it.
 
 - One file per route under `web/src/routes/`, `export const Route = createFileRoute(...)`. The generator writes the
   path from the file's name: rename the file, never the string. `_app.tsx` is the shell, a layout route with no path
@@ -321,11 +323,14 @@ const stream = useEventStream<ComposeEvent, ComposeOutputState>(() => emptyCompo
   and `onError`, with words from the module's messages. No global toast on every failure.
 - A 401 goes through the caches' `onError` to `session.signedOut(router)`.
 - **`Region`** (`common/components/region.tsx`) wraps each card and widget. It combines `Suspense`, TanStack
-  Router's `CatchBoundary` and `QueryErrorResetBoundary`. It fails alone, and its retry asks its failed queries again;
-  a failed region retries too when the window gets the focus back, as a query would. A query inside a region uses
-  `useSuspenseQuery`, warmed by the route's loader. A failed refetch keeps the stale data on screen.
+  Router's `CatchBoundary` and `QueryErrorResetBoundary`. It fails alone, and its retry asks its failed queries again. A
+  query inside a region uses `useSuspenseQuery`, warmed by the route's loader. A failed refetch keeps the stale data on
+  screen.
+- A failed region comes back as a query would: opened again, it reads its failed queries again; while it shows its
+  failure, an invalidation of the failed query (a feed's, a mutation's) or a focus reads it again, and its success
+  renders the region; it renders again on a focus, and on its Retry.
 - `failure` is the title of an alert with a Retry, which says why only for the server's `ApiError`, or a render of its
-  own, `({ error, retry }) => ...`. `resetKey` renders a failed region again once it changes, as a card's
+  own, `({ error, retry }) => ...`, with a `RetryButton`. `resetKey` renders a failed region again once it changes, as a card's
   `dataUpdatedAt`: a card that threw on one answer renders the next.
 - Where the failure is said depends on where it is caught: a region around the read says why the service failed, one
   around the card (inside the read) that the card could not show its answer.
@@ -335,7 +340,10 @@ const stream = useEventStream<ComposeEvent, ComposeOutputState>(() => emptyCompo
   <JobRuns />
 </Region>
 
-<Region fallback={<WidgetSkeleton look={look} />} failure={({ error }) => <WidgetError look={look} reason={describeError(error)} />}>
+<Region
+  fallback={<WidgetSkeleton look={look} />}
+  failure={({ error, retry }) => <WidgetError look={look} reason={describeError(error)} retry={retry} />}
+>
   <LoadedCard ... />
 </Region>
 ```

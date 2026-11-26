@@ -140,11 +140,13 @@ descriptor reaches its components only through `import()`.
   ```ts
   export function useDockerChanges() {
     const queryClient = useQueryClient();
+    const invalidate = (queryKey: QueryKey) => void queryClient.invalidateQueries({ queryKey });
 
-    useEffect(() => {
-      const invalidate = (prefix: string) => void queryClient.invalidateQueries({ predicate: startsWith(prefix) });
-      // ...
-    }, [queryClient]);
+    const { isDown } = useEventFeed<DockerChange>(getDockerChangesUrl(), {
+      onOpen: () => invalidate(allDockerQueries),
+      onItem: change => staleAfterDockerChange[change].forEach(invalidate),
+    });
+    // ...
   }
   ```
 

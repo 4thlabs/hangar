@@ -6,7 +6,11 @@
 - **Amended:** by #207 on 2026-11-26, [decisions 1](#decision-1-layers-and-what-each-may-import), [6](#decision-6-files)
   and [10](#decision-10-the-migration)'s rule 4: TanStack Router's own layout (a route file is its page, the shell a
   layout route, the wiring at `src/`), and modules that import only `common` and `libs`. What this record says of a
-  module's root `.ts` applies to its `helpers/`.
+  module's root `.ts` applies to its `helpers/`. By #203 on 2026-11-27, [decisions 3](#decision-3-one-model-for-quoll-events),
+  [4](#decision-4-errors-and-feedback) and [10](#decision-10-the-migration), and
+  [rule 15](#rule-15-route-preloading): loaders that warm with `prefetchQuery` and wait for nothing, the edited files
+  read with `useQuery` inside their region, how a failed region comes back, the suspense reads built on `queryOptions`,
+  and the bell's feed closed while the tab is hidden.
 - **Deciders:** Thomas
 - **Study:** read-only, on `origin/main` at `d4eeec5` (#176 merged since, at `e37fd06`), and the web changes of
   `4thlabs/issue-176` and `4thlabs/issue-178`. The rewrite of two modules was made in a scratch worktree. Its patch
@@ -242,8 +246,10 @@ useEventStream<T, S>(initial, { fold, isEnd, requiresEnd?, onOpen?, onEnd? })
 - **Replaced.** `use-docker-changes` went from 68 to 24 lines, `use-docker-stats` from 60 to 22, `use-compose-stream`
   from 135 to 59, and `use-log-events` from 99 to 46. The two common hooks are 202 lines, for every page to come
   (#179's stack deploy output, #178's Docker card, #177's backup runs).
-- **Not ported yet:** `use-notifications`. Its URL takes a cursor from the cache once, and its changes are chained in
-  order. It moves to `useEventFeed` with that URL kept in state.
+- **Notifications, amended by #203 on 2026-11-27:** `use-notifications` is on `useEventFeed` too. Its URL takes a
+  cursor from the first list read, kept in state, and its changes are chained in order. As every feed, it closes
+  while the tab is hidden, which it did not before, and resumes from that cursor once shown: what was filed meanwhile
+  comes then, and the list holds each once.
 - **Not chosen:** TanStack Query's `experimental_streamedQuery`. It turns an AsyncIterable into a query, but a
   compose run is a POST started by a click, and its output belongs to no cache entry. A server-side multiplexer of all
   feeds was not chosen either: it changes the contract for no gain at this size.
@@ -263,6 +269,20 @@ useEventStream<T, S>(initial, { fold, isEnd, requiresEnd?, onOpen?, onEnd? })
   route's loader.
   - Behaviour change, accepted: a failed refetch then keeps the stale data, as suspense queries throw only without
     data, where `/apps` shows the error alone today.
+  - **Amended by #203 on 2026-11-27.** The edited files (env, config) are read with `useQuery` inside their region,
+    not `useSuspenseQuery`: one that suspends reads the file, then `refetchOnMount: "always"` reads it again as it
+    mounts. Their region still catches what their card throws as it renders.
+  - **A failed region comes back, as a query in a component would** (amended by #203). A failed query has no
+    observer while its region shows its failure, and a fresh `QueryErrorResetBoundary` has a suspense query throw its
+    cached error with no read. So the region resets its boundary as it mounts, before its children render, and a
+    region opened again reads its failed queries again. While it shows its failure, it keeps an observer on the query
+    that failed, found by its error, which reads nothing as it subscribes: an invalidation (a feed's, a mutation's) or
+    a focus reads it again, and its success renders the region again. It also renders again when the window gets the
+    focus back, and on the Retry its failure view offers. A failed query cannot be found by a cache event: a failure
+    already marks it invalidated, so `invalidateQueries` dispatches nothing for it.
+  - A read a suspense query or a loader takes is built with TanStack's `queryOptions` on orval's key and fetcher:
+    orval's options type their function as possibly `skipToken`, which `useSuspenseQuery` and `prefetchQuery` refuse
+    under `exactOptionalPropertyTypes`.
 - **401.** The `QueryCache` and `MutationCache` `onError` call `session.signedOut(router)`. The route's `beforeLoad`
   calls `context.session.require()`, which redirects. The behaviour is the same as today. The instance comes from
   decision 7.
@@ -553,7 +573,9 @@ must be written with `regex`, not `group`.
    includes #178's classes if #178 merges first, and it should: converting after costs less than reworking an open
    branch. [AGENTS.md's "Classes" section](../../AGENTS.md#classes) is rewritten there, with the closure corollary of decision 7.
 2. **#186**, file routes, on `createPage`. The route files hold `validateSearch` from the module's `helpers/`, and
-   loaders with `ensureQueryData` once PR 3 gives the options. If PR 3 is not merged yet, the loaders come with it.
+   loaders once PR 3 gives the options. If PR 3 is not merged yet, the loaders come with it. Amended by #203 on
+   2026-11-27: the loaders warm with `prefetchQuery` and wait for nothing, as [rule 15](#rule-15-route-preloading)
+   says.
 3. **A new issue, "web: a data layer and one stream model".** `api/` per module, `shouldSplitQueryKey`,
    `meta.invalidates`, `useEventFeed` and `useEventStream` with notifications ported, `Region` on the settings cards
    and the dashboard (closing #150 and replacing `WidgetBoundary`), and rules 2 and 3.
@@ -597,8 +619,8 @@ Accepted by the maintainer on 2026-11-26, as recommended:
 
 - Route loaders with `ensureQueryData`, and `useSuspenseQuery` inside the settings cards: their
   `refetchOnMount: "always"` and the `key={dataUpdatedAt}` form may need `gcTime` care under suspense. Only `Region`
-  itself was tested.
-- Porting `use-notifications` to `useEventFeed`.
+  itself was tested. Checked by #203: see the amendments of decision 4 and rule 15.
+- Porting `use-notifications` to `useEventFeed`. Done by #203: see decision 3.
 - Paraglide's actual import of a `messages.ts`: the shape matches its message functions, but it was not run.
 - The bundle size against #186's budget: `vite build` passes, and the size was not compared.
 
@@ -1021,6 +1043,19 @@ decides freshness, and the region's `useSuspenseQuery` (decision 4) finds its da
 
 Not checked: preloading was not run in this study.
 
+**Amended by #203 on 2026-11-27.** A loader warms with `void context.queryClient.prefetchQuery(...)`, given a
+`staleTime` of a second, and waits for nothing. Today only `/settings` (the store's status and the jobs) and
+`/store/new` (the template) have one:
+
+- **Not `ensureQueryData`.** Its failure would be the route's, the whole page down through `errorComponent` where a
+  card or an alert says why, and the navigation would wait for the retries of a server that answers 502.
+- **The `staleTime`.** `defaultPreloadStaleTime: 0` runs the loader again on the click that follows a hover, and a
+  prefetch with the options' `staleTime: 0` would read again what the hover just read. A second covers it, as long as
+  a suspense read takes its data as fresh.
+- **Only before a suspense read, or a read with a long `staleTime`.** A `useQuery` read with `staleTime: 0` would be
+  read twice, by the loader, then again as the page mounts: the dashboard's placements and the store's apps have no
+  loader.
+
 ### Rule 16: client global state
 
 No client store library: jotai goes (decided by the maintainer, 2026-11-26). On main it holds two atoms, `themePaletteAtom` and `colorModeAtom`, seeded once from the cookies in `AppProviders`, read by `theme-effects` alone and written by nothing: a dependency for two constants.
@@ -1057,7 +1092,7 @@ Accepted by the maintainer on 2026-11-26, as recommended:
 - The `// @ts-nocheck` hook on orval's mocks until orval fixes TS2698
 - `eventsource` as the tests' `EventSource`, and `FakeEventSource` kept only for reconnection tests
 - No virtualization until a list can pass a thousand rows uncapped; then TanStack Virtual in a leaf component
-- `defaultPreload: "intent"`, `defaultPreloadStaleTime: 0`, loaders of `ensureQueryData` only, the edited files and feeds left out
+- `defaultPreload: "intent"`, `defaultPreloadStaleTime: 0`, loaders of `ensureQueryData` only, the edited files and feeds left out (amended by #203: loaders of `prefetchQuery` with a `staleTime` of a second, only before a suspense read or a long-lived one)
 - No client store library (jotai removed): preferences in a `Preferences` instance created by `createPage`, read with `useSyncExternalStore`
 
 Left open, with no recommendation: a `pattern` in the contract for the rules the server holds (the app id), or not. It
