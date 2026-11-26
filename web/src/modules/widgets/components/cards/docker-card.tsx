@@ -1,4 +1,5 @@
 import { useDockerOverview } from "#libs/api";
+import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { ErrorMessage } from "#modules/common/error-message.ts";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
 import { Units } from "#modules/widgets/widget-format.ts";
@@ -7,12 +8,14 @@ import { WidgetCard, WidgetContent, WidgetHeader, WidgetMetadata } from "../widg
 import { HostMetrics } from "./host-metrics.tsx";
 
 /**
- * The containers, images and volumes of the Docker host Hangar runs on, from the Docker routes, which the daemon's
- * changes keep fresh: the dashboard follows them, and reads the overview again as it changes.
+ * The containers, images and volumes of the Docker host Hangar runs on, from the Docker routes: the card follows the
+ * daemon's changes, and reads the overview again as it changes.
  */
 export function DockerCard() {
   const look = WidgetAppearance.get("docker-general-stats");
   const { data: overview, error } = useDockerOverview();
+
+  useDockerChanges();
 
   if (error) {
     return <WidgetError look={look} reason={ErrorMessage.describe(error)} />;

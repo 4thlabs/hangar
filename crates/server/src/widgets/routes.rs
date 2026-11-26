@@ -78,18 +78,25 @@ impl WidgetsState {
         }
     }
 
+    /// Whether `id` may be an image's id: letters, digits, `_`, `.` and `-`, as the services write theirs. Checked rather
+    /// than escaped: the id goes in the service's path, and the relay is no proxy of the service. `.` and `..` would
+    /// name the segment, or the one above it.
+    fn is_image_id(id: &str) -> bool {
+        let is_word = id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'));
+        let is_dots = id.bytes().all(|byte| byte == b'.');
+
+        !id.is_empty() && is_word && !is_dots
+    }
+
     /// The image `id` of the widget placed as `key`, from its service, if it relays images and the service has it.
     async fn image(&self, key: &str, id: &str) -> Result<Bytes> {
         let unknown = || ErrorCode::UnknownImage {
             key: key.to_owned(),
             image: id.to_owned(),
         };
-        let is_id = id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'));
-
-        // Checked rather than escaped: the id goes in the service's path, and the relay is no proxy of the service.
-        if !is_id {
+        if !Self::is_image_id(id) {
             return Err(unknown().into());
         }
 
@@ -135,5 +142,21 @@ impl WidgetsServer for App {
         let image = self.widgets.image(&key, &id).await?;
 
         Ok(Response::new(image).header(CACHE_CONTROL, WidgetsState::IMAGE_CACHE))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WidgetsState;
+
+    #[test]
+    fn takes_an_image_id_of_the_services_and_no_path() {
+        for id in ["1700000000.5-abc", "6c1e2f0a9b", "21-755143", "a_b"] {
+            assert!(WidgetsState::is_image_id(id), "{id}");
+        }
+
+        for id in ["", ".", "..", "a/b", "a b", "a%2Fb", "é"] {
+            assert!(!WidgetsState::is_image_id(id), "{id}");
+        }
     }
 }
