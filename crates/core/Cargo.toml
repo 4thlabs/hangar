@@ -7,7 +7,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-futures = "0.3"
+futures.workspace = true
 # The timestamps of `.env.global`'s header and of its `.bak` copies.
 jiff = { version = "0.2", default-features = false, features = ["std"] }
 # The client side alone: the core depends on no web framework.
@@ -20,27 +20,27 @@ serde_json = "1"
 serde_norway = "0.9"
 # The path of the field at fault in a `hangar.yml` that does not parse.
 serde_path_to_error = "0.1"
-thiserror = "2"
-tokio = { version = "1", features = ["fs", "io-util", "macros", "process", "rt", "sync", "time"] }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "process", "rt", "sync", "time"] }
 tokio-util = "0.7"
-tracing = "0.1"
+tracing.workspace = true
 # The URL of a daemon on TCP, checked before the client is built, which reqwest reads with it too.
 url = "2"
 
 # SIGTERM, which lets a child stop on its own before the SIGKILL of tokio's `Child::kill`.
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.32", features = ["signal"] }
+nix = { workspace = true, features = ["signal"] }
 
 [dev-dependencies]
 # The statuses a fake answer of the daemon has.
 http = "1"
 # The data directory of a test.
-tempfile = "3"
-tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "test-util", "time"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "test-util", "time"] }
 
 # waitid, to see a child exit without reaping it.
 [target.'cfg(unix)'.dev-dependencies]
-nix = { version = "0.32", features = ["process", "signal"] }
+nix = { workspace = true, features = ["process", "signal"] }
 
 [lints]
 workspace = true
