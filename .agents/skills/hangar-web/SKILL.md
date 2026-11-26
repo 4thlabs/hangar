@@ -162,12 +162,19 @@ or invalidate a key, open a stream, or write a word chosen by a code or an enum.
 
 ```ts
 // routes/_app/apps.tsx
+/** `/apps`, the installed apps, filtered by its search. */
 export const Route = createFileRoute("/_app/apps")({
   validateSearch: validateAppsSearch,
   staticData: { searchable: true },
-  loader: ({ context }) => context.queryClient.ensureQueryData(appsQueries.projects()),
   component: AppsPage,
 });
+```
+
+No route has a loader yet: they come with the data layer, once a module's `api/` gives its options. A route's loader
+then only warms its page's queries:
+
+```ts
+loader: ({ context }) => context.queryClient.ensureQueryData(appsQueries.projects()),
 ```
 
 - One file per route under `web/src/routes/`, `export const Route = createFileRoute(...)`. The generator writes the
@@ -188,7 +195,7 @@ export const Route = createFileRoute("/_app/apps")({
   `vite.config.ts`: the entry, the component of `_app` (the frame), the chunks they import, and their CSS. A change
   that passes it loads what it added from a route's component, or raises the budget and says why.
 - The router has `defaultPreload: "intent"` and `defaultPreloadStaleTime: 0`: Query alone decides freshness.
-- A loader only calls `ensureQueryData` with its module's options.
+- A loader, once the data layer brings them, only calls `ensureQueryData` with its module's options.
 - The edited files (env, config, an app's file) are read with `refetchOnMount: "always"`, and their routes do not
   preload them.
 - Feeds and streams open in components, never in loaders.
