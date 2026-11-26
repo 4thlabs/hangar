@@ -4,6 +4,7 @@ import { type ProjectSummary, useDockerProjects } from "#libs/api";
 import { AppsSearchParams, type AppSortColumn } from "#modules/apps/apps-search.ts";
 import { AppsFilterMenus } from "#modules/apps/components/apps-filter-menus.tsx";
 import { AppsTable } from "#modules/apps/components/apps-table.tsx";
+import { ReconnectingNotice } from "#modules/apps/components/reconnecting-notice.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
 import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
@@ -48,7 +49,7 @@ function AppsTotals({ projects }: { projects: readonly ProjectSummary[] }) {
       <StatCard title="Services" value={sum(project => project.serviceCount)} icon={LayersIcon} />
       <StatCard title="Running containers" value={sum(project => project.runningCount)} icon={PlayIcon} />
       <StatCard
-        title="Stopped containers"
+        title="Not running"
         value={sum(project => project.containerIds.length - project.runningCount)}
         icon={SquareIcon}
       />
@@ -102,7 +103,7 @@ export function AppsPage() {
     });
   };
 
-  useDockerChanges();
+  const { isReconnecting } = useDockerChanges();
 
   return (
     <main>
@@ -116,6 +117,7 @@ export function AppsPage() {
           <AppsFilterMenus projects={projects} />
         </div>
       </div>
+      <ReconnectingNotice isReconnecting={isReconnecting} />
       {error && (
         <Alert variant="destructive">
           <AlertTitle>Could not read the apps</AlertTitle>
@@ -127,7 +129,8 @@ export function AppsPage() {
           </AlertAction>
         </Alert>
       )}
-      {data && (
+      {/* A read again that failed shows why alone, not the apps as they were below it. */}
+      {data && !error && (
         <>
           <AppsTotals projects={projects} />
           {visible.length > 0 ? (

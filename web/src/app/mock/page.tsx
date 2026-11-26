@@ -73,6 +73,12 @@ export class FakeEventSource {
   send(item: unknown) {
     this.onmessage?.({ data: JSON.stringify(item) });
   }
+
+  /** The stream is lost for good, as when the server answers a 502 while it restarts. */
+  fail() {
+    this.readyState = FakeEventSource.CLOSED;
+    this.onerror?.();
+  }
 }
 
 /** Answers every `fetch` from `answers`, a signed-in session with no provider unless they say otherwise. */

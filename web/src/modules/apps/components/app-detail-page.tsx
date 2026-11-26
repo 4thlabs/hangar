@@ -1,10 +1,12 @@
 import { Link, useParams } from "@tanstack/react-router";
 import { BoxIcon, CpuIcon, HardDriveIcon, MemoryStickIcon, NetworkIcon } from "lucide-react";
-import { ApiError, type ProjectDetail, useDockerProject } from "#libs/api";
+import { ApiError, type ProjectDetail, useDockerOverview, useDockerProject } from "#libs/api";
+import { ReconnectingNotice } from "#modules/apps/components/reconnecting-notice.tsx";
 import { ServiceCard } from "#modules/apps/components/service-card.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
 import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
+import { MemoryLimit } from "#modules/apps/memory-limit.ts";
 import { MetricFormat } from "#modules/apps/metric-format.ts";
 import { ProjectStatusView } from "#modules/apps/project-status.ts";
 import { ErrorMessage } from "#modules/common/error-message.ts";
@@ -23,7 +25,10 @@ import {
 /** The usage of the app and its services; they hold the stats, so that a frame leaves the header alone. */
 function AppLiveStats({ detail }: { detail: ProjectDetail }) {
   const { stats, total } = useDockerStats(detail.summary.containerIds);
+  const { data: overview } = useDockerOverview();
   const bytes = (pick: Parameters<typeof total>[0]) => MetricFormat.bytes(total(pick));
+  const limits = detail.summary.containerIds.flatMap(id => (stats[id] ? [stats[id].memoryLimit] : []));
+  const available = MemoryLimit.available(limits, overview?.memory);
 
   return (
     <>
@@ -37,7 +42,9 @@ function AppLiveStats({ detail }: { detail: ProjectDetail }) {
         <StatCard
           title="Memory"
           value={bytes(metrics => metrics.memoryUsage)}
-          detail={`${bytes(metrics => metrics.memoryLimit)} available`}
+          {...(available
+            ? { detail: `${MetricFormat.bytes(available.bytes)} ${available.isHost ? "on the host" : "available"}` }
+            : {})}
           icon={MemoryStickIcon}
         />
         <StatCard
@@ -107,13 +114,13 @@ export function AppDetailPage() {
   const { project } = useParams({ from: "/app/apps/$project" });
   const { data, error, refetch, isPending, isRefetching } = useDockerProject(project);
   const isNotFound = error instanceof ApiError && error.status === 404;
-
-  useDockerChanges();
+  const { isReconnecting } = useDockerChanges();
 
   return (
     <main>
       <title>{`${project} | Apps | Hangar`}</title>
       <Button variant="link" className="w-fit px-0" render={<Link to="/apps">← All apps</Link>} />
+      <ReconnectingNotice isReconnecting={isReconnecting} />
       {isNotFound && <AppNotFound project={project} />}
       {error && !isNotFound && (
         <Alert variant="destructive">
@@ -126,7 +133,8 @@ export function AppDetailPage() {
           </AlertAction>
         </Alert>
       )}
-      {data && (
+      {/* A read again that failed shows why alone, not the app as it was above it. */}
+      {data && !error && (
         <>
           <AppHeader detail={data} />
           <AppLiveStats detail={data} />

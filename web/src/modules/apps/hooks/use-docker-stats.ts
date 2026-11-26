@@ -5,8 +5,9 @@ import { type ContainerMetrics, getDockerStatsUrl, ServerEvents, type StatsFrame
 export type ContainerStats = StatsFrame["containers"];
 
 /**
- * The live usage of the containers, a frame a second, totalled over `containerIds`; closed while the tab is hidden, and
- * never opened without a container: each frame costs the daemon a call per running container.
+ * The live usage of the containers, a frame a second, totalled over `containerIds`; closed while the tab is hidden,
+ * never opened without a container, as each frame costs the daemon a call per running container, and connected again
+ * when it is lost, its figures cleared meanwhile rather than left as they were.
  */
 export function useDockerStats(containerIds: readonly string[]) {
   const [stats, setStats] = useState<ContainerStats>({});
@@ -20,7 +21,10 @@ export function useDockerStats(containerIds: readonly string[]) {
     let stop: (() => void) | undefined;
 
     const open = () => {
-      stop ??= ServerEvents.follow<StatsFrame>(getDockerStatsUrl(), { onItem: frame => setStats(frame.containers) });
+      stop ??= ServerEvents.keep<StatsFrame>(getDockerStatsUrl(), {
+        onItem: frame => setStats(frame.containers),
+        onDown: () => setStats({}),
+      });
     };
 
     const close = () => {
