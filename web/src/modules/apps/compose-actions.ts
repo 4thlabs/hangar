@@ -13,6 +13,8 @@ type UpFlagSpec = {
   label: string;
   /** What the run is called with this option, as a verb. */
   verb: string;
+  /** What it did to an app, completing "<app> was …". */
+  outcome: string;
   /** What confirming commits to, about `apps` ("this app", "these apps"). */
   consequence: (apps: string) => string;
 };
@@ -30,12 +32,14 @@ export class ComposeActions {
       arguments: ["--pull", "always"],
       label: "Update the images",
       verb: "Update",
+      outcome: "updated from its registry",
       consequence: () => "The images will be pulled from the registry and the containers recreated.",
     },
     forceRecreate: {
       arguments: ["--force-recreate"],
       label: "Force recreation",
       verb: "Recreate",
+      outcome: "recreated",
       consequence: apps => `Every container of ${apps} will be recreated, even if its configuration did not change.`,
     },
   };
@@ -44,6 +48,13 @@ export class ComposeActions {
     up: "Up",
     restart: "Restart",
     down: "Down",
+  };
+
+  /** What each run without options did to an app, completing "<app> was …". */
+  private static readonly OperationOutcomes: Readonly<Record<ComposeOperation, string>> = {
+    up: "started or updated",
+    restart: "restarted",
+    down: "stopped and removed",
   };
 
   private static readonly OperationArguments: Readonly<Record<ComposeOperation, readonly string[]>> = {
@@ -57,6 +68,36 @@ export class ComposeActions {
     const ticked = new Set(flags);
 
     return { operation: "up", pull: ticked.has("pull"), forceRecreate: ticked.has("forceRecreate") };
+  }
+
+  /**
+   * The action a notification names, by its operation and its options, comma-separated as `pull,forceRecreate`;
+   * `null` for an operation this page does not know, from a newer server. An option it does not know is left out.
+   */
+  static fromNotification(operation: string, flags: string): ComposeAction | null {
+    if (operation === "restart" || operation === "down") {
+      return { operation };
+    }
+
+    if (operation !== "up") {
+      return null;
+    }
+
+    const named = new Set(flags.split(","));
+
+    return ComposeActions.up(ComposeActions.FlagOrder.filter(flag => named.has(flag)));
+  }
+
+  /** What `action` did to `project`, as "jellyfin was updated from its registry and recreated.". */
+  static outcome(action: ComposeAction, project: string): string {
+    const flags = ComposeActions.flags(action);
+
+    const outcomes =
+      flags.length === 0
+        ? [ComposeActions.OperationOutcomes[action.operation]]
+        : flags.map(flag => ComposeActions.Flags[flag].outcome);
+
+    return `${project} was ${outcomes.join(" and ")}.`;
   }
 
   /** The options `action` carries, in their order. */
