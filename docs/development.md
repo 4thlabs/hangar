@@ -373,6 +373,6 @@ On the Rust server, a widget is:
    `Service::options` for a widget of a store app. A key that goes in `Authorization` in a form of its own, as
    Beszel's raw token and Jellyfin's `MediaBrowser Token="..."`, goes through `Service::authorization`: quoll's header
    schemes leave that header to its `Bearer` and `Basic`.
-4. Its card in `web/src/modules/widgets/components/cards/`, its title and icon in `widget-appearance.ts`, placed by
+4. Its card in `web/src/modules/widgets/components/cards/`, its title and icon in `helpers/widget-appearance.ts`, placed by
    `DashboardPage`.
 5. A test in `crates/server/tests/widgets/`, against its service faked on port 0.

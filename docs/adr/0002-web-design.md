@@ -3,6 +3,10 @@
 - **Status:** Accepted on 2026-11-26: option A, with the [decisions](#decisions) below and the
   [addendum's](#decisions-of-the-addendum)
 - **Date:** 2026-11-26
+- **Amended:** by #207 on 2026-11-26, [decisions 1](#decision-1-layers-and-what-each-may-import) and
+  [6](#decision-6-files): TanStack Router's own layout (a route file is its page, the shell a layout route, the wiring
+  at `src/`), and modules that import only `common` and `libs`. What this record says of a module's root `.ts` applies
+  to its `helpers/`.
 - **Deciders:** Thomas
 - **Study:** read-only, on `origin/main` at `d4eeec5` (#176 merged since, at `e37fd06`), and the web changes of
   `4thlabs/issue-176` and `4thlabs/issue-178`. The rewrite of two modules was made in a scratch worktree. Its patch
@@ -124,6 +128,8 @@ fetcher, a `queryOptions` and a hook per request.
 - Not taken: the ban on imports between features. Hangar's domains call each other on purpose: notifications word
   compose actions, spotlight lists each module's source, settings reads the store. The fetcher per request is not
   taken either, as orval writes it. Renaming `modules/` to `features/` would only cost a diff.
+- Taken since, by #207 on 2026-11-26: the ban on imports between modules. What two modules share goes down into
+  `common`, and the routes compose the modules, as TanStack Router's examples compose their pages.
 
 [Feature-Sliced Design](https://feature-sliced.design/) (app, pages, widgets, features, entities, shared, each slice with a public API) goes further in
 the same direction. Its seven layers are too many for twelve pages.
@@ -154,25 +160,40 @@ before/after below is written in the baseline's form.
 
 ## Decision 1: layers, and what each may import
 
+Amended by #207 on 2026-11-26, to follow TanStack Router's own examples (`kitchen-sink-react-query-file-based`,
+`authenticated-routes`, `start-trellaux`) and keep the modules apart: the route file is the page, the shell is the
+layout route `_app.tsx`, the wiring is a few files at `src/`, and the domain `.ts` of a module is in its `helpers/`.
+
 ```
-#libs/api            orval's generated.ts, apiFetch/ApiError, createQueryClient, the Events transport functions
-modules/<d>/api/     query and mutation options on orval's, keys, staleness maps, services with dependencies (Session)
-modules/<d>/*.ts     the domain: pure functions, view models, search params, formats, messages.ts
-modules/<d>/hooks/   compose queries, feeds and local state machines (useComposeCommand, useStoreSync)
-modules/<d>/components/  render; the route's component is the page
-routes/ (#186)       path, validateSearch, beforeLoad, loader, component: thin
+src/main.tsx, page.ts, router.ts   the wiring: createPage (QueryClient, Session, Preferences, router), the router,
+                                   the providers (app-providers.tsx, theme-effects.tsx); no app/ folder
+src/routes/                        one file per route = its page: path, validateSearch, beforeLoad, loader, and the
+                                   component that composes the modules; _app.tsx is the shell, its pieces in -shell/;
+                                   a page's own pieces in -<page>/; the not-found and pending pages beside their routes
+src/modules/<d>/api/               query and mutation options on orval's, keys, staleness maps, services (Session)
+src/modules/<d>/helpers/           the domain: pure functions, view models, search params, formats, labels, parsers
+src/modules/<d>/hooks/             compose queries, feeds and local state machines (useComposeCommand, useStoreSync)
+src/modules/<d>/components/        the pieces the pages are made of
+src/modules/<d>/messages.ts        the module's words (decision 5), the one file at a module's root
+src/modules/common/                what two modules or more share: ui/, components/, hooks/, api/, helpers/
+src/libs/                          the API client, formats, preferences
 ```
 
-| Layer         | May import                                                | Must not import                                                                                           |
-| ------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| root `.ts`    | types and enums of `#libs/api`, other modules' root `.ts` | React, `@tanstack/*`, orval's hooks/keys/fetchers, `api/`, `hooks/`, `components/`, `ui/` (types allowed) |
-| `api/`        | `#libs/api` options, keys, URLs; root `.ts`               | React, orval's `use*` hooks, `hooks/`, `components/`                                                      |
-| `hooks/`      | `api/`, root `.ts`, `common/hooks`                        | orval's `use*` hooks                                                                                      |
-| `components/` | everything above, `ui/`                                   | orval's `use*` hooks                                                                                      |
+| Layer                     | May import                                                         | Must not import                                                                                           |
+| ------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `helpers/`, `messages.ts` | types and enums of `#libs/api`, `helpers/` of its own and `common` | React, `@tanstack/*`, orval's hooks/keys/fetchers, `api/`, `hooks/`, `components/`, `ui/` (types allowed) |
+| `api/`                    | `#libs/api` options, keys, URLs; `helpers/`                        | React, orval's `use*` hooks, `hooks/`, `components/`                                                      |
+| `hooks/`                  | `api/`, `helpers/`, `common/hooks`                                 | orval's `use*` hooks                                                                                      |
+| `components/`             | everything above, `ui/`                                            | orval's `use*` hooks                                                                                      |
+| a module, any layer       | its own folders, `common`, `#libs/...`                             | another module, `routes/`, the wiring; `common` imports no other module                                   |
+| `routes/`                 | every module, the wiring's types                                   | orval's `use*` hooks                                                                                      |
 
 Every one of these is a lint rule (decision 10), checked on probe files and on the violations it finds in the code.
+A module goes down into `common` only when two modules really use it: the compose vocabulary (`compose-actions.ts`,
+which the bell words) and the Docker changes feed (`use-docker-changes.ts`, which the Docker card follows) did. The
+bell is composed by the shell, in `routes/-shell/`.
 
-**Where computations live.** In root `.ts` functions, tested without rendering. **A page component may** read the
+**Where computations live.** In `helpers/` functions, tested without rendering. **A page component may** read the
 route (`useSearch`, `useParams`), call its module's hooks and `useQuery(xQueries.y())`, hold UI state it owns (the
 selection), call one view-model function, and lay out regions. **It may not** reduce, filter or sort inline, build
 or invalidate a key, open a stream, or write a word that is chosen by a code or an enum.
@@ -263,13 +284,26 @@ This partly reverses the 2026-11-24 line "its text is written in English in its 
 
 ## Decision 6: files
 
-- **By domain, not by route.** The modules stay as they are, and `routes/` (#186) holds thin files that import from
-  them. A route's loader calls `context.queryClient.ensureQueryData(appsQueries.projects())`.
-- **In a module:** `api/`, `hooks/`, `components/`, and at the root the domain `.ts` and `messages.ts`. Tests sit
-  next to their code (`apps-view.test.ts`, `store-sync.test.ts`).
+Amended by #207 on 2026-11-26: TanStack Router's layout, and modules kept apart, as decision 1 now says.
+
+- **By domain, and the pages by route.** The modules stay by domain, and import only `common` and `libs`. A page is
+  its route file in `routes/`, the one place that composes modules: its component, its `validateSearch` from its
+  module's `helpers/`, its loader, which calls `context.queryClient.ensureQueryData(appsQueries.projects())`. Its
+  tests sit beside it (`routes/_app/apps.test.tsx`), which the route generator ignores (`routeFileIgnorePattern`), and
+  `autoCodeSplitting` still loads its component with the page. What only a page uses and composes from several
+  modules goes in `routes/-<page>/`, which the generator ignores as it does any name starting with `-`.
+- **The shell** is `_app.tsx`, the layout route around every page but `/login`, with its pieces in `routes/-shell/`:
+  `app-layout`, `navbar`, `navbar-mobile`, `searchbar`, `user-menu`, `app-error-page` and the `navigations` they list.
+  The not-found and pending pages sit beside the routes that show them, as `routes/_app/-not-found-page.tsx`.
+- **The wiring** is at `src/`, with no `app/` folder: `main.tsx`, `page.ts` (`createPage`), `router.ts`
+  (`createPageRouter`), `app-providers.tsx` and `theme-effects.tsx`, `routeTree.gen.ts`, and `mock/page.tsx`, the
+  tests' page.
+- **In a module:** `api/`, `hooks/`, `components/`, `helpers/` for the domain `.ts`, and `messages.ts`, the one file
+  at its root: lint refuses any other file directly under a module. Tests sit next to their code
+  (`helpers/apps-view.test.ts`, `helpers/store-sync.test.ts`).
 - **`libs/` against `modules/`.** `libs/` holds what has no React and no page domain: the API transport, formats,
-  preferences. `modules/common/` holds the shell, `ui/`, and the generic hooks and components (`use-event-feed`,
-  `use-event-stream`, `Region`, `components/toast.ts`, which was `action-toast` until #195).
+  preferences. `modules/common/` holds what two modules or more share: `ui/`, and the generic hooks and components
+  (`use-event-feed`, `use-event-stream`, `Region`, `components/toast.ts`, which was `action-toast` until #195).
 - **Naming.** A file is named after its main export (`apps-view.ts` exports `appsView`). A function's name carries
   its context, as #195 says (`describeSync`, `parseSettingsTab`, `availableMemory`). The query and mutation option
   objects (`appsQueries`, `settingsMutations`) are the one object of functions allowed: it is TanStack's documented
@@ -295,7 +329,7 @@ The lint selector `ClassDeclaration[superClass=null] > ClassBody:not(:has(> [sta
 
 - `SessionGuard` becomes `Session`, in `modules/auth/api/session.ts`, with `constructor(queryClient)`, `require()` and
   `signedOut(router)`. The root `.ts` rule moved it into `api/` on its own: it imports `@tanstack/*`.
-- The `QueryClient`, the `Session` and the router are created once in `app/page.ts`, which `main.tsx` and the tests'
+- The `QueryClient`, the `Session` and the router are created once in `page.ts`, which `main.tsx` and the tests'
   `renderAt` both call. The router's context carries `{ queryClient, session }` to the routes:
 
   ```ts
@@ -498,8 +532,11 @@ specifier, which core `no-restricted-imports` reads as a regex, with `importName
    regexes see every import. Flat config does not merge a rule's options across blocks, so each block repeats the
    shared pattern.
 3. On `modules/*/api/`: no React, no `hooks/` or `components/`.
-4. On `modules/*/*.ts` (tests excepted): no React, no `@tanstack/`, no `use|get|prefetch|create*` from `#libs/api`,
-   and only types from `api/`, `hooks/`, `components/` or `ui/`.
+4. On `modules/*/helpers/` and `modules/*/messages.ts` (tests excepted): no React, no `@tanstack/`, no
+   `use|get|prefetch|create*` from `#libs/api`, and only types from `api/`, `hooks/`, `components/` or `ui/`. Amended
+   by #207 on 2026-11-26: it was on `modules/*/*.ts`, a module's root, where lint now refuses any file but
+   `messages.ts`. #207 adds the isolation of decision 1: on `modules/<a>/`, no `#...` import but `#libs/`,
+   `#modules/common/` and `#modules/<a>/` (`#mock/` too in a test), and no `../`.
 
 One trap: `.gitignore`-style patterns in `no-restricted-imports` treat a leading `#` as a comment, so `#modules/...`
 must be written with `regex`, not `group`.
@@ -509,8 +546,8 @@ must be written with `regex`, not `group`.
 1. **#195**, as written, plus `createPage` and `Session`, and the lint rules 1 and 4. One commit per module. It
    includes #178's classes if #178 merges first, and it should: converting after costs less than reworking an open
    branch. [AGENTS.md's "Classes" section](../../AGENTS.md#classes) is rewritten there, with the closure corollary of decision 7.
-2. **#186**, file routes, on `createPage`. The route files hold `validateSearch` from the module's root, and loaders
-   with `ensureQueryData` once PR 3 gives the options. If PR 3 is not merged yet, the loaders come with it.
+2. **#186**, file routes, on `createPage`. The route files hold `validateSearch` from the module's `helpers/`, and
+   loaders with `ensureQueryData` once PR 3 gives the options. If PR 3 is not merged yet, the loaders come with it.
 3. **A new issue, "web: a data layer and one stream model".** `api/` per module, `shouldSplitQueryKey`,
    `meta.invalidates`, `useEventFeed` and `useEventStream` with notifications ported, `Region` on the settings cards
    and the dashboard (closing #150 and replacing `WidgetBoundary`), and rules 2 and 3.
@@ -521,7 +558,7 @@ must be written with `regex`, not `group`.
 
 - #177 (backups) is a card on an app's page with its mutations and their `invalidates`.
 - #179 (swarm) is a cluster page whose stack deploy output is `useEventStream`.
-- #180 (spotlight) keeps its sources in each module's root, as pure functions over the queries' data.
+- #180 (spotlight) keeps its sources in each module's `helpers/`, as pure functions over the queries' data.
 - #181 (the switch) removes `src/` and the Waku TypeScript sections of AGENTS.md, which this ADR then replaces.
 - #182 (terminals, WebSocket) is outside the `Events` model and keeps its own hook.
 
@@ -544,7 +581,7 @@ Accepted by the maintainer on 2026-11-26, as recommended:
 - `useEventFeed` and `useEventStream` as the only ways to read `Events` on the page
 - `Region` (Suspense, CatchBoundary, QueryErrorResetBoundary) per card and widget, with `useSuspenseQuery`, and stale data kept on a failed refetch
 - `messages.ts` per module, English only, partly reversing 2026-11-24
-- `createPage` in `app/page.ts` as the one place the `QueryClient`, the `Session` and the router are created
+- `createPage` in `page.ts` (`app/page.ts` until #207) as the one place the `QueryClient`, the `Session` and the router are created
 - The closure corollary: a helper of one hook that needs the hook's values is a closure, not a class (amended by #195
   on 2026-11-26: a module function beside the hook when several of its effects call it)
 - The lint rules in core ESLint, not typescript-eslint or a boundaries plugin, while on TypeScript 7
@@ -631,8 +668,8 @@ The forms have two client rules in all: the variable name and the app id. A sche
 
 #### One mechanism for the server's refusals, whatever the library
 
-`modules/common/form-errors.ts` (root `.ts`: no React) places a problem in a form. A form gives, by code, the field the
-code's params name. The words stay `ErrorMessage.describe`'s (decision 4):
+`modules/common/helpers/form-errors.ts` (`helpers/`: no React) places a problem in a form. A form gives, by code, the
+field the code's params name. The words stay `ErrorMessage.describe`'s (decision 4):
 
 ```ts
 export type FieldsByCode<Field extends string> = {
@@ -849,10 +886,10 @@ covers every reader.
 
 #### The case
 
-`app/mock/page.tsx`'s `serve({ "PUT /api/env": body => ... })` stubs `fetch` with string keys, answers 404 to
-anything it does not list, and stubs `EventSource` with `FakeEventSource`. It is shared, but it is not typed. Run with
-a probe, `serve({ "GET /api/envs": () => Response.json({ variable: {} }) })` compiles. The silent 404 hid calls in
-every module ported here:
+`mock/page.tsx`'s (`app/mock/page.tsx` until #207) `serve({ "PUT /api/env": body => ... })` stubs `fetch` with string
+keys, answers 404 to anything it does not list, and stubs `EventSource` with `FakeEventSource`. It is shared, but it is
+not typed. Run with a probe, `serve({ "GET /api/envs": () => Response.json({ variable: {} }) })` compiles. The silent
+404 hid calls in every module ported here:
 
 - every settings test also calls `GET /api/notifications`, the navbar's bell;
 - `/apps` calls `GET /api/docker/compose` and `GET /api/docker/changes`;
@@ -1003,9 +1040,9 @@ No client store library: jotai goes (decided by the maintainer, 2026-11-26). On 
 Accepted by the maintainer on 2026-11-26, as recommended:
 
 - TanStack Form for every form of the page (react-hook-form not taken)
-- `formErrorsOf` and a `FieldsByCode` table per form, in `modules/common/form-errors.ts`
+- `formErrorsOf` and a `FieldsByCode` table per form, in `modules/common/helpers/form-errors.ts`
 - A form's refusal shows in the form (field or form error), with no toast; a toast is for an action outside a form
-- No schema library for now; the client checks are plain functions beside the form's root `.ts`
+- No schema library for now; the client checks are plain functions in its module's `helpers/`
 - Optimistic only for the bell's marks and changes like them, by the rule of decision 12
 - Optimistic changes in the cache through `onMutate` in `api/`, read again on failure, never a snapshot
 - `meta.invalidates` success-only; "read again whatever the outcome" stays in the mutation's own `onSettled`

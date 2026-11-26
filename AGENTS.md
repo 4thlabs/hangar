@@ -20,7 +20,7 @@ coding rules.
 
 ## Modules under `src/modules`
 
-`src/` only, until #181. `web/`'s layers are ADR 0002's decision 1.
+`src/` only, until #181. `web/`'s are [below](#the-page-in-websrc).
 
 - One module per page domain (`apps`, `store`, `settings`, `auth`, `notifications`, `widgets`
   for the dashboard), holding its `actions/`, `components/`, `hooks/` and plain `.ts` helpers at
@@ -32,6 +32,29 @@ coding rules.
   re-exporting both `"use server"` and `"use client"` files drags server code into client bundles.
 - `src/app` keeps only what Waku needs (`srcDir`): `pages/` as thin shells, `middleware/`, `api/`,
   styles.
+
+## The page in `web/src`
+
+ADR 0002's decisions 1 and 6, as #207 amended them: TanStack Router's own layout, and modules kept apart.
+
+```
+main.tsx, page.ts, router.ts   the wiring: createPage, the router, the providers; no app/ folder
+routes/                        one file per route = its page; _app.tsx is the shell, its pieces in -shell/;
+                               a page's own pieces in -<page>/; its tests beside it (apps.test.tsx)
+modules/<d>/
+  components/                  the pieces the pages are made of
+  hooks/
+  api/                         query and mutation options, keys, invalidation, services such as Session
+  helpers/                     plain functions and consts, no React: search params, filters, formats, labels
+  messages.ts                  the module's words, the one file at a module's root
+modules/common/                what two modules or more share: ui/, components/, hooks/, api/, helpers/
+libs/                          the API client, formats, preferences
+```
+
+A module imports only `common`, `#libs/...` and its own files, and `common` no other module: the routes compose the
+modules. ESLint holds it, with `#modules/...` imports and no `../`, along with rule 4 on `helpers/` and `messages.ts`
+(no React, no TanStack, only types from `api/`, `hooks/`, `components/`, `ui/`) and no other file directly under a
+module.
 
 ## Import mapping
 
@@ -80,7 +103,7 @@ descriptor reaches its components only through `import()`.
 - **What has no state is module functions and consts**, imported by name. A function's name carries its context.
 
   ```ts
-  // modules/settings/job-text.ts
+  // modules/settings/helpers/job-text.ts
   export const jobNames: Readonly<Record<Job, string>> = {
     image_check: "Image check",
     auto_update: "Update of the apps",
@@ -92,7 +115,7 @@ descriptor reaches its components only through `import()`.
   ```
 
 - **What has state or dependencies is a class created with `new`**, its dependencies as constructor arguments. Its one
-  instance is created in `createPage` (`web/src/app/page.ts`), and a test builds its own with `new`, with no module
+  instance is created in `createPage` (`web/src/page.ts`), and a test builds its own with `new`, with no module
   mock.
 
   ```ts
@@ -187,7 +210,7 @@ web/              # the server's page: a Vite SPA on the TanStack Query hooks or
 (`npm run lint` covers `web/src`), and its own oxlint for the rules that read types (`npm run lint --prefix web`). It
 takes from `src/` what a page it moves needs, copied: the Waku version keeps its own until the switch. Its
 `src/libs/api/generated.ts` and `web/openapi.json` are written by `cargo quoll gen`, never committed. Its
-`src/app/routeTree.gen.ts` is not committed either: TanStack Router writes it from the route files of `src/routes/`,
+`src/routeTree.gen.ts` is not committed either: TanStack Router writes it from the route files of `src/routes/`,
 by its Vite plugin in `vite` and the tests, and by `tsr generate` at the start of the `build`, `typecheck` and `lint`
 scripts, which run `tsc` and oxlint before Vite. Its design is [ADR 0002](docs/adr/0002-web-design.md), accepted on
 2026-11-26, and the `hangar-web` skill gives its rules in short. Where the ADR and the sections for `src/` differ,
@@ -228,7 +251,7 @@ builds text for the user alone: what it says to the page is a code and its param
   No code in the detail, no header of Hangar's own, no body written by hand.
 - **Web.** `ApiError.detail` reads a problem's code and params into the `ErrorDetail` a body carries. The page says
   why a call failed through `describeError(error)`, and words an `ErrorDetail` through
-  `describeErrorDetail(detail)` (`web/src/modules/common/error-message.ts`): the one place that keys the words
+  `describeErrorDetail(detail)` (`web/src/modules/common/helpers/error-message.ts`): the one place that keys the words
   by the code, typed by the codes of the contract, so that a code without words is a type error, and that a catalog
   will word in another language. A code the page does not know, from a server newer than it, shows the server's
   message; a problem of no code, one quoll answers itself, its detail. The page's own words stay in its components,
