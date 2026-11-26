@@ -172,6 +172,21 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
         }
     }
 
+    /// Refreshes the value every time it goes stale, from now until the server stops, for a caller that can no longer
+    /// learn it changed, as when the daemon refuses its events: a page then learns of a change late, but learns of it.
+    pub(crate) fn poll(self: &Arc<Self>) {
+        let this = Arc::clone(self);
+
+        tokio::spawn(async move {
+            let mut ticks = tokio::time::interval(this.policy.fresh);
+
+            loop {
+                ticks.tick().await;
+                this.refresh();
+            }
+        });
+    }
+
     /// Starts a load, unless one runs.
     fn start(self: &Arc<Self>, state: &mut State<T>) {
         // The load's own task drives it: nobody needs to await it.
@@ -554,6 +569,28 @@ mod tests {
         }
 
         cached.settled().await;
+
+        assert_eq!((value(&cached).await, source.changes()), (2, 1));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn polled_reloads_the_value_each_time_it_goes_stale() {
+        let source = Source::new([Answer::Gives(1), Answer::Gives(1), Answer::Gives(2)], OPEN);
+        let cached = source.cached();
+
+        assert_eq!(value(&cached).await, 1);
+
+        cached.poll();
+
+        for loads in 2..=3 {
+            // The poll's task runs once the clock moved: it is awaited, never slept for.
+            while source.loads() < loads {
+                tokio::task::yield_now().await;
+            }
+
+            cached.settled().await;
+            tokio::time::advance(Duration::from_secs(10)).await;
+        }
 
         assert_eq!((value(&cached).await, source.changes()), (2, 1));
     }
