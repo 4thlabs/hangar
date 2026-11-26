@@ -12,8 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-# The `.env` of the working directory, read as the Node CLI's `dotenv/config` reads it.
-dotenvy = "0.15"
 futures.workspace = true
 hangar-core.workspace = true
 thiserror.workspace = true

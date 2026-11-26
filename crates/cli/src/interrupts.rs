@@ -22,7 +22,8 @@ type Listener = tokio::signal::windows::CtrlC;
 /// A terminal's Ctrl-C reaches every process of its foreground group: the running children got SIGINT already, and
 /// most end on it. The first Ctrl-C then [interrupts](Runtime::interrupt) the runtime, so that nothing new starts and
 /// a batch stops at the app it was on, and the command ends once its children did. A child that does not end on
-/// SIGINT is stopped by a second Ctrl-C, which cancels the runtime: SIGTERM, then SIGKILL after its grace period.
+/// SIGINT is stopped by a second Ctrl-C, which cancels the runtime: SIGTERM, then SIGKILL after its grace period. A
+/// third exits at once, without waiting for the children, which are killed as the binary exits.
 ///
 /// An interrupted command exits with the code of the run that failed, 130 for a child that SIGINT killed, and with
 /// 130 when nothing failed, as a shell gives an interrupted command.
@@ -73,10 +74,15 @@ impl Interrupts {
             biased;
             outcome = &mut command => outcome,
             Some(()) = ctrl_c.recv() => {
-                tracing::warn!("stopping the running commands");
+                tracing::warn!("stopping the running commands, Ctrl-C again exits without waiting for them");
                 self.cancellation.cancel();
 
-                command.await
+                tokio::select! {
+                    biased;
+                    outcome = &mut command => outcome,
+                    // A child that ignores SIGTERM too, or a pipe that a grandchild holds open, is left behind.
+                    Some(()) = ctrl_c.recv() => return Failure::exit(Self::INTERRUPTED),
+                }
             }
         };
 

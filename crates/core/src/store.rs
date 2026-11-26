@@ -38,7 +38,7 @@ pub use config::{
     Backup, Category, Column, Config, ConfigError, FollowedCard, ServiceOptions, Widget, WidgetKind,
 };
 pub use data_dir::DataDir;
-pub use env::GlobalEnv;
+pub use env::{Dotenv, GlobalEnv};
 pub use error::StoreError;
 pub use yaml::YamlError;
 

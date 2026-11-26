@@ -122,8 +122,10 @@ cargo build --release -p hangar-cli     # target/release/hangar
 cargo run -p hangar-cli -- store up     # or straight from the checkout
 ```
 
-Like the Node CLI, it reads the `.env` of the working directory, the environment taking precedence,
-but needs only what a command uses: `HANGAR_DATA_DIR`, and `HANGAR_STORE_URL` for `store install`.
+Like the Node CLI, it reads the `.env` of the working directory as dotenv does (values as they are
+written, `$` included, a line it cannot read skipped), the environment taking precedence, and passes
+its variables on to `docker` and `git`. It needs only what a command uses: `HANGAR_DATA_DIR`, and
+`HANGAR_STORE_URL` for `store install`.
 
 | Command                                            | Runs                                                                 |
 | -------------------------------------------------- | -------------------------------------------------------------------- |
@@ -158,4 +160,4 @@ stack and reports the first failure at the end. The binary exits with the failed
 Ctrl-C reaches the running `docker compose` or `git`, which most often ends on it, and nothing new
 starts: a batch stops at the stack it was on, and the binary exits with 130, or the code of the
 child. A child that ignores Ctrl-C is stopped by a second Ctrl-C: SIGTERM, then SIGKILL 10 seconds
-later.
+later. A third exits at once, with 130, killing what is left.

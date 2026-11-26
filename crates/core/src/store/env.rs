@@ -3,6 +3,8 @@
 mod dotenv;
 mod format;
 
+pub use dotenv::Dotenv;
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -11,7 +13,6 @@ use std::sync::{Arc, LazyLock, Mutex};
 use regex::Regex;
 
 use super::{Access, DataDir, Disk, StoreError};
-use dotenv::Dotenv;
 use format::EnvFormat;
 
 /// A reference to a variable in a compose file, `$FOO` or `${FOO…}`, capturing its name: what compose accepts as one.

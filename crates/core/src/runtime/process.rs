@@ -4,6 +4,7 @@ mod children;
 mod reader;
 mod supervisor;
 
+use std::collections::BTreeMap;
 use std::io;
 use std::pin::pin;
 use std::process::{ExitStatus, Stdio};
@@ -102,6 +103,8 @@ pub struct Runtime {
     cancellation: CancellationToken,
     /// How long a child has between SIGTERM and SIGKILL.
     grace: Duration,
+    /// The variables every child gets, under those of its command.
+    env: Arc<BTreeMap<String, String>>,
 }
 
 /// What a run does with the child's output.
@@ -135,7 +138,37 @@ impl Runtime {
             children: Arc::new(Children::new()),
             cancellation,
             grace: Self::GRACE,
+            env: Arc::default(),
         }
+    }
+
+    /// Sets variables for every child of this runtime and of the clones made after, on top of this process's
+    /// environment and under those of each command, as the CLI passes on the `.env` it reads: this process's own
+    /// environment is not changed, which a library cannot do safely.
+    ///
+    /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), hangar_core::RunError> {
+    /// use hangar_core::{Command, CommandRunner, Runtime};
+    ///
+    /// let runtime = Runtime::new().envs([("STACK", "web"), ("TZ", "UTC")]);
+    /// let command = Command::new("sh").args(["-c", "echo $STACK $TZ"]).env("TZ", "Europe/Paris");
+    ///
+    /// assert_eq!(runtime.capture(&command).await?, "web Europe/Paris\n");
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn envs(
+        mut self,
+        variables: impl IntoIterator<Item = (impl Into<String>, impl Into<String>)>,
+    ) -> Self {
+        Arc::make_mut(&mut self.env).extend(
+            variables
+                .into_iter()
+                .map(|(key, value)| (key.into(), value.into())),
+        );
+        self
     }
 
     /// Refuses the runs to come, which fail with [`RunError::Interrupted`], and lets the running children end: on
@@ -170,7 +203,7 @@ impl Runtime {
             return Err(RunError::Cancelled { program: program() });
         }
 
-        let child = Self::spawn(command, &destination)?;
+        let child = self.spawn(command, &destination)?;
         let stop = CancellationToken::new();
 
         // A run dropped asks its child to stop, as a cancelled one does.
@@ -245,12 +278,13 @@ impl Runtime {
     }
 
     /// Starts the child, its stdin closed and its output piped, unless it inherits this process's.
-    fn spawn(command: &Command, destination: &Destination) -> Result<Child, RunError> {
+    fn spawn(&self, command: &Command, destination: &Destination) -> Result<Child, RunError> {
         let mut process = tokio::process::Command::new(&command.program);
 
         // Its supervisor stops a child gracefully; this is the last resort, when the tokio runtime shuts down.
         process
             .args(&command.args)
+            .envs(self.env.iter())
             .envs(&command.env)
             .kill_on_drop(true);
 
