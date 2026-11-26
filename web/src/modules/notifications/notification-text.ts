@@ -10,66 +10,64 @@ type NotificationKey = NotificationMessage["key"];
 /** The words of each key, from the message, which carries its params. */
 type Words = { [Key in NotificationKey]: (message: Extract<NotificationMessage, { key: Key }>) => NotificationWords };
 
-/**
- * What the page says of a notification. The server files it as a key and its params, in no language: this is the one
- * place that words each key, typed by the keys of the contract, so that a key without words is a type error, and that a
- * catalog will word in another language. A key this page does not know, from a server newer than it, reads as a plain
- * notification.
- */
-export class NotificationText {
-  /** What a notification of a key this page does not know says. */
-  static readonly Unknown: NotificationWords = { title: "Notification" };
+// What the page says of a notification. The server files it as a key and its params, in no language: this is the one
+// place that words each key, typed by the keys of the contract, so that a key without words is a type error, and that a
+// catalog will word in another language. A key this page does not know, from a server newer than it, reads as a plain
+// notification.
 
-  private static readonly Words: Words = {
-    storeInstalled: () => ({ title: "Store: installation finished", description: "The store was installed." }),
-    storeUpdated: () => ({ title: "Store: update finished", description: "The store was updated." }),
-    storeInstallFailed: () => ({
-      title: "Store: installation failed",
-      description: "The installation of the store failed. See the server's log.",
-    }),
-    storeUpdateFailed: () => ({
-      title: "Store: update failed",
-      description: "The update of the store failed. See the server's log.",
-    }),
-    composeSucceeded: ({ params: { project, operation, flags } }) => {
-      const action = composeActionOfNotification(operation, flags);
+/** What a notification of a key this page does not know says. */
+export const unknownNotification: NotificationWords = { title: "Notification" };
 
-      if (action === null) {
-        return { title: "Docker Compose finished", description: `The command succeeded for ${project}.` };
-      }
+/** The words of each key. */
+const wordsByKey: Words = {
+  storeInstalled: () => ({ title: "Store: installation finished", description: "The store was installed." }),
+  storeUpdated: () => ({ title: "Store: update finished", description: "The store was updated." }),
+  storeInstallFailed: () => ({
+    title: "Store: installation failed",
+    description: "The installation of the store failed. See the server's log.",
+  }),
+  storeUpdateFailed: () => ({
+    title: "Store: update failed",
+    description: "The update of the store failed. See the server's log.",
+  }),
+  composeSucceeded: ({ params: { project, operation, flags } }) => {
+    const action = composeActionOfNotification(operation, flags);
 
-      return {
-        title: `${composeLabel(action)} finished`,
-        description: composeOutcome(action, project),
-      };
-    },
-    composeFailed: ({ params: { project, operation, flags } }) => {
-      const action = composeActionOfNotification(operation, flags);
-      const label = action === null ? "Docker Compose" : composeLabel(action);
-
-      return {
-        title: `${label} failed`,
-        description: `The Docker Compose command failed for ${project}. See the server's log.`,
-      };
-    },
-    updatesAvailable: ({ params: { count } }) => ({
-      title: "Updates available",
-      description: `${count} ${count === 1 ? "app has" : "apps have"} a newer image in the registry.`,
-    }),
-    autoUpdate: ({ params: { updated, failed } }) => ({
-      title: "Automatic update",
-      description: `${updated} ${updated === 1 ? "app was" : "apps were"} updated.${failed ? ` Failed for: ${failed}.` : ""}`,
-    }),
-  };
-
-  /** What `message` says. */
-  static describe(message: NotificationMessage): NotificationWords {
-    if (!Object.hasOwn(NotificationText.Words, message.key)) {
-      return NotificationText.Unknown;
+    if (action === null) {
+      return { title: "Docker Compose finished", description: `The command succeeded for ${project}.` };
     }
 
-    const words = NotificationText.Words[message.key] as (message: NotificationMessage) => NotificationWords;
+    return {
+      title: `${composeLabel(action)} finished`,
+      description: composeOutcome(action, project),
+    };
+  },
+  composeFailed: ({ params: { project, operation, flags } }) => {
+    const action = composeActionOfNotification(operation, flags);
+    const label = action === null ? "Docker Compose" : composeLabel(action);
 
-    return words(message);
+    return {
+      title: `${label} failed`,
+      description: `The Docker Compose command failed for ${project}. See the server's log.`,
+    };
+  },
+  updatesAvailable: ({ params: { count } }) => ({
+    title: "Updates available",
+    description: `${count} ${count === 1 ? "app has" : "apps have"} a newer image in the registry.`,
+  }),
+  autoUpdate: ({ params: { updated, failed } }) => ({
+    title: "Automatic update",
+    description: `${updated} ${updated === 1 ? "app was" : "apps were"} updated.${failed ? ` Failed for: ${failed}.` : ""}`,
+  }),
+};
+
+/** What `message` says. */
+export function describeNotification(message: NotificationMessage): NotificationWords {
+  if (!Object.hasOwn(wordsByKey, message.key)) {
+    return unknownNotification;
   }
+
+  const words = wordsByKey[message.key] as (message: NotificationMessage) => NotificationWords;
+
+  return words(message);
 }

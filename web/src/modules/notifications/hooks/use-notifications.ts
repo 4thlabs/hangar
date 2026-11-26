@@ -11,32 +11,29 @@ import {
   type RecentNotifications,
 } from "#libs/api";
 import { toast } from "#modules/common/ui/toast.tsx";
-import { NotificationFeed } from "#modules/notifications/notification-feed.ts";
-import { NotificationText } from "#modules/notifications/notification-text.ts";
+import { newestId, openedIn, withNotification, withRead, withSeen } from "#modules/notifications/notification-feed.ts";
+import { describeNotification } from "#modules/notifications/notification-text.ts";
 
-/** How the notifications are shown as they come. */
-class NotificationToasts {
-  /** How many unseen notifications may toast at once; the rest wait in the bell. */
-  static readonly Limit = 3;
+/** How many unseen notifications may toast at once, as they come; the rest wait in the bell. */
+const toastLimit = 3;
 
-  /** What tells one notification from another, in every epoch. */
-  static key(epoch: string, id: number): string {
-    return `${epoch}:${id}`;
-  }
+/** What tells one notification from another, in every epoch. */
+function toastKey(epoch: string, id: number): string {
+  return `${epoch}:${id}`;
 }
 
-/** The list the page holds, in its query's cache. */
-class NotificationCache {
-  /**
-   * Changes the list the page holds by `change`, once a read of it in flight is cancelled: its answer, read before the
-   * change, would put back what the change took out.
-   */
-  static async change(queryClient: QueryClient, change: (recent: RecentNotifications) => RecentNotifications) {
-    const queryKey = getNotificationsListQueryKey();
+/**
+ * Changes the list the page holds, in its query's cache, by `change`, once a read of it in flight is cancelled: its
+ * answer, read before the change, would put back what the change took out.
+ */
+async function changeNotifications(
+  queryClient: QueryClient,
+  change: (recent: RecentNotifications) => RecentNotifications,
+) {
+  const queryKey = getNotificationsListQueryKey();
 
-    await queryClient.cancelQueries({ queryKey });
-    queryClient.setQueryData<RecentNotifications>(queryKey, recent => recent && change(recent));
-  }
+  await queryClient.cancelQueries({ queryKey });
+  queryClient.setQueryData<RecentNotifications>(queryKey, recent => recent && change(recent));
 }
 
 /**
@@ -77,15 +74,13 @@ export function useNotifications() {
 
     const follow = (event: NotificationEvent) => {
       changes = changes.then(() =>
-        NotificationCache.change(queryClient, recent =>
-          event.kind === "opened"
-            ? NotificationFeed.open(recent, event.epoch)
-            : NotificationFeed.add(recent, event.notification),
+        changeNotifications(queryClient, recent =>
+          event.kind === "opened" ? openedIn(recent, event.epoch) : withNotification(recent, event.notification),
         ),
       );
     };
 
-    const url = getNotificationsEventsUrl({ since: NotificationFeed.since(held), epoch: held.epoch });
+    const url = getNotificationsEventsUrl({ since: newestId(held), epoch: held.epoch });
 
     return keepEvents<NotificationEvent>(url, { onItem: follow });
   }, [isSuccess, queryClient]);
@@ -95,9 +90,7 @@ export function useNotifications() {
       return;
     }
 
-    const pending = notifications.filter(
-      item => !item.seen && !toasted.current.has(NotificationToasts.key(epoch, item.id)),
-    );
+    const pending = notifications.filter(item => !item.seen && !toasted.current.has(toastKey(epoch, item.id)));
 
     if (pending.length === 0) {
       return;
@@ -106,16 +99,16 @@ export function useNotifications() {
     const ids = pending.map(item => item.id);
 
     for (const id of ids) {
-      toasted.current.add(NotificationToasts.key(epoch, id));
+      toasted.current.add(toastKey(epoch, id));
     }
 
-    for (const item of pending.slice(0, NotificationToasts.Limit)) {
-      toast.add({ ...NotificationText.describe(item.message), type: item.level });
+    for (const item of pending.slice(0, toastLimit)) {
+      toast.add({ ...describeNotification(item.message), type: item.level });
     }
 
     // Every one of them, not just those toasted: the others were withheld, and showing them at the next page load
     // would be stale news.
-    void NotificationCache.change(queryClient, recent => NotificationFeed.seen(recent, ids));
+    void changeNotifications(queryClient, recent => withSeen(recent, ids));
     markSeen({ data: { ids } });
   }, [epoch, notifications, markSeen, queryClient]);
 
@@ -126,7 +119,7 @@ export function useNotifications() {
       return;
     }
 
-    void NotificationCache.change(queryClient, NotificationFeed.read);
+    void changeNotifications(queryClient, withRead);
     markRead();
   };
 

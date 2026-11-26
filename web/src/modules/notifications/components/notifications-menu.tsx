@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "#modules/common/ui/popo
 import { ToastIcon } from "#modules/common/ui/toast.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
 import { useNotifications } from "#modules/notifications/hooks/use-notifications.ts";
-import { NotificationText } from "#modules/notifications/notification-text.ts";
+import { describeNotification } from "#modules/notifications/notification-text.ts";
 
 type NotificationItemProps = {
   notification: Notification;
@@ -19,7 +19,7 @@ type NotificationItemProps = {
 
 /** A notification of the list; following its link reads the list, as the bell is not closed then. */
 function NotificationItem({ notification, now, onFollow }: NotificationItemProps) {
-  const { title, description } = NotificationText.describe(notification.message);
+  const { title, description } = describeNotification(notification.message);
   const createdAt = Date.parse(notification.createdAt);
 
   const body = (
