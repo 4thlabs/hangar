@@ -23,7 +23,7 @@ export function ConfigSettingsCard() {
       </CardHeader>
       {error && (
         <CardContent>
-          <p className="text-sm text-destructive">{ErrorMessage.of(error)}</p>
+          <p className="text-sm text-destructive">{ErrorMessage.describe(error)}</p>
         </CardContent>
       )}
       {data && <ConfigEditor key={dataUpdatedAt} source={data.source} />}
@@ -46,7 +46,7 @@ function ConfigEditor({ source }: { source: string }) {
         void queryClient.invalidateQueries({ queryKey: getStoreAppsQueryKey() });
       },
       onError: failure => {
-        setRefusal(ErrorMessage.of(failure));
+        setRefusal(ErrorMessage.describe(failure));
         ActionToast.failure("Configuration rejected", failure);
       },
     },

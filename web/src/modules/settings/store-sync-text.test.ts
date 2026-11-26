@@ -10,26 +10,26 @@ const update: StoreSync = {
   error: null,
 };
 
-describe("StoreSyncText.of", () => {
+describe("StoreSyncText.describe", () => {
   it("says a sync runs", () => {
-    expect(StoreSyncText.of(update)).toBe("Updating the store…");
-    expect(StoreSyncText.of({ ...update, operation: "install" })).toBe("Installing the store…");
+    expect(StoreSyncText.describe(update)).toBe("Updating the store…");
+    expect(StoreSyncText.describe({ ...update, operation: "install" })).toBe("Installing the store…");
   });
 
   it("says when a sync ended well", () => {
-    const ended = StoreSyncText.of({ ...update, state: "succeeded", finishedAt: "2026-11-26T10:00:05.000Z" });
+    const ended = StoreSyncText.describe({ ...update, state: "succeeded", finishedAt: "2026-11-26T10:00:05.000Z" });
 
     expect(ended).toMatch(/^The store was updated on Nov 26, 2026, \d{1,2}:\d{2}\s[AP]M\.$/);
   });
 
   it("says why a sync failed", () => {
-    const failed = {
+    const failed: StoreSync = {
       ...update,
       state: "failed",
-      error: "The store could not be pulled. See the server's log.",
-    } as const;
+      error: { code: "store.pull_failed", message: "the store could not be pulled. See the server's log." },
+    };
 
-    expect(StoreSyncText.of(failed)).toBe(
+    expect(StoreSyncText.describe(failed)).toBe(
       "The update of the store failed: The store could not be pulled. See the server's log.",
     );
   });

@@ -1,4 +1,5 @@
 import type { StoreSync } from "#libs/api";
+import { ErrorMessage } from "#modules/common/error-message.ts";
 
 /** What the store's card says of its last sync. */
 export class StoreSyncText {
@@ -9,7 +10,7 @@ export class StoreSyncText {
   private static readonly Time = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
 
   /** The sentence of `sync`: running, ended well, or failed with its reason. */
-  static of(sync: StoreSync): string {
+  static describe(sync: StoreSync): string {
     const noun = sync.operation === "install" ? "installation" : "update";
 
     if (sync.state === "running") {
@@ -17,7 +18,9 @@ export class StoreSyncText {
     }
 
     if (sync.state === "failed") {
-      return `The ${noun} of the store failed: ${sync.error ?? "see the server's log."}`;
+      const reason = sync.error ? ErrorMessage.describeDetail(sync.error) : "See the server's log.";
+
+      return `The ${noun} of the store failed: ${reason}`;
     }
 
     const ended = sync.finishedAt ? ` on ${StoreSyncText.Time.format(new Date(sync.finishedAt))}` : "";

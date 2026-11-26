@@ -9,6 +9,7 @@ import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
+import { EnvChangeSet } from "#modules/settings/env-change-set.ts";
 
 /** A secret for a variable, of the shape of `openssl rand -hex 32`. */
 class Secrets {
@@ -36,7 +37,7 @@ export function EnvSettingsCard() {
       </CardHeader>
       {error && (
         <CardContent>
-          <p className="text-sm text-destructive">{ErrorMessage.of(error)}</p>
+          <p className="text-sm text-destructive">{ErrorMessage.describe(error)}</p>
         </CardContent>
       )}
       {/* Keyed by the read: a save, which gives the file as written, starts the form again from it. */}
@@ -177,7 +178,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
           pending={save.isPending}
           pendingLabel="Saving…"
           icon={<SaveIcon data-icon="inline-start" />}
-          onClick={() => save.mutate({ data: { updates: values, remove: removed } })}
+          onClick={() => save.mutate({ data: EnvChangeSet.create(variables, values, removed) })}
         >
           Save
         </PendingButton>

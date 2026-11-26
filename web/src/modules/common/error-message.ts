@@ -1,16 +1,17 @@
-import { ApiError } from "#libs/api";
+import { ApiError, type ErrorDetail } from "#libs/api";
 
 /**
- * What the page says of a failed call. The server's errors each have a stable code and its params beside their
- * English message, the problem's detail, so that a catalog can word them in another language later; quoll does not
- * write the code yet (quoll#140), and the page shows the detail. This is the one place that will read the code.
+ * What the page says of an error of the server's. Each has a stable code and its params beside its English message,
+ * so that a catalog can word them in another language later: this is the one place that will key the words by the
+ * code. A body that holds an error, as the sync's, carries it whole, an `ErrorDetail`; a problem carries only its
+ * message, its detail, until quoll writes the code (quoll#140).
  */
 export class ErrorMessage {
   /** What the page says when the server could not be reached, or answered nothing it reads. */
   static readonly Unreachable = "Could not reach the server. Try again.";
 
   /** The message of `error`, as a sentence: the server's detail, or why the call got no answer. */
-  static of(error: unknown): string {
+  static describe(error: unknown): string {
     const detail = error instanceof ApiError ? error.problem?.detail : undefined;
 
     if (detail === undefined) {
@@ -18,6 +19,11 @@ export class ErrorMessage {
     }
 
     return ErrorMessage.sentence(detail);
+  }
+
+  /** The message of `detail`, an error a body carries, as a sentence. */
+  static describeDetail(detail: ErrorDetail): string {
+    return ErrorMessage.sentence(detail.message);
   }
 
   /** `text` with a capital first letter and a final period, as a detail is written neither. */
