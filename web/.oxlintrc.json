@@ -13,8 +13,6 @@
     "typescript/no-unnecessary-type-assertion": "error",
     "typescript/prefer-promise-reject-errors": "error",
     "typescript/switch-exhaustiveness-check": "error",
-    // Off until #195: it reads a static member passed by reference, as `apps.map(ComposeOutput.waiting)`, as a method
-    // that loses its `this`. #195 turns those classes into module functions, and turns the rule back on.
-    "typescript/unbound-method": "off"
+    "typescript/unbound-method": "error"
   }
 }

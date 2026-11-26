@@ -12,7 +12,7 @@ gives the why, the options weighed and the measures.
 
 **The code is moving to it.** The ADR lands in four PRs: #195 (no class made only of statics, `createPage`,
 `Session`), #186 (file routes), the data layer and the two stream hooks, then the words in `messages.ts`. Until they
-merge, some names below do not exist yet (`Region`, `createPage`, `useEventFeed`, `formErrorsOf`...).
+merge, some names below do not exist yet (`Region`, `useEventFeed`, `formErrorsOf`...).
 
 - Write new code in this shape with the pieces that exist.
 - Do not port code an issue is not about: AGENTS.md's scope rule holds.
@@ -192,12 +192,12 @@ export const Route = createFileRoute("/_app/apps")({
 `app/page.ts` creates, once, what the page is built on. `main.tsx` and the tests' `renderAt` both call it:
 
 ```ts
-export function createPage(history?: RouterHistory) {
+export function createPage({ history, preferences = Preferences.fromCookies(document.cookie) }: PageOptions = {}) {
   const queryClient = createQueryClient(() => session.signedOut(router));
   const session = new Session(queryClient);
   const router = createPageRouter({ queryClient, session }, history);
 
-  return { queryClient, router };
+  return { queryClient, session, router, preferences };
 }
 ```
 
@@ -205,8 +205,9 @@ export function createPage(history?: RouterHistory) {
 - `Session` (`modules/auth/api/session.ts`) takes the client in its constructor and has `require()`, which redirects,
   and `signedOut(router)`. A test builds it with `new`, with no module mock.
 - `Preferences` (`#libs/preferences`) holds the user's preferences, writes their cookies on `set` and notifies its
-  subscribers. `createPage` creates it from `document.cookie` and hands it down through a context. `usePreferences()`
-  reads it with `useSyncExternalStore`. A test passes its own instance.
+  subscribers. `createPage` creates it from `document.cookie`, and `AppProviders` hands it down through a context.
+  `usePreferences()` (`common/hooks/use-preferences.ts`) reads it with `useSyncExternalStore`. A test passes its own
+  instance, or the cookies it sets.
 
 ## `Events`: two hooks, on one transport
 
@@ -373,7 +374,13 @@ export const appsMessages = {
   function's name carries its context.
 - What has state or dependencies is a class, created with `new`, with its dependencies as constructor arguments. Its
   one instance is created in `createPage` (`Session`, `Preferences`).
+- A helper of one hook that needs the hook's values is a closure of the hook. One that several of its effects call is
+  a module function beside it, taking what it needs (`changeNotifications(queryClient, change)`), not a closure the
+  effects would list, which `exhaustive-deps` asks to wrap in a `useCallback`.
+- `static` stays only for a real factory or constant of a class with instances: `Preferences.fromCookies`.
 - `ApiError extends Error` and test doubles with instances are classes as before.
+- ESLint's `no-restricted-syntax` flags a class made only of statics, and `no-restricted-imports` what a module's root
+  `.ts` may not import (ADR rules 1 and 4).
 
 ## Lists
 

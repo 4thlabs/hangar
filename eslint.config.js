@@ -39,6 +39,46 @@ const pageRules = {
   "prefer-const": "error",
 };
 
+/**
+ * ADR 0002, rule 1: no class made only of static members. What has no state is module functions and consts; what has
+ * state or dependencies is a class created with `new`. A class that extends another, as `ApiError extends Error`, is
+ * left alone.
+ */
+const staticOnlyClass = {
+  selector: "ClassDeclaration[superClass=null] > ClassBody:not(:has(> [static=false]))",
+  message:
+    "A class made only of static members: write module functions and consts, or a class with instances (ADR 0002, decision 7).",
+};
+
+/**
+ * ADR 0002, rule 4: a module's root `.ts` is its domain, pure and tested without rendering. It imports no React, no
+ * TanStack, none of orval's hooks, fetchers, keys or factories, and only types from a module's `api/`, `hooks/`,
+ * `components/` or `ui/`. The specifiers are `#modules/...`, which a gitignore-style `group` would read as a comment:
+ * they are written as `regex`.
+ */
+const rootModuleImports = [
+  "error",
+  {
+    patterns: [
+      {
+        regex: "^react(-dom)?(/.*)?$",
+        message: "A module's root .ts renders nothing: no React (ADR 0002, decision 1).",
+      },
+      { regex: "^@tanstack/", message: "A module's root .ts is pure: no TanStack (ADR 0002, decision 1)." },
+      {
+        regex: "^#libs/api$",
+        importNamePattern: "^(use|get|prefetch|create)",
+        message: "A module's root .ts takes only the types and enums of #libs/api (ADR 0002, decision 1).",
+      },
+      {
+        regex: "^#modules/[^/]+/(api|hooks|components|ui)/",
+        allowTypeImports: true,
+        message: "A module's root .ts takes only types from api/, hooks/, components/ and ui/ (ADR 0002, decision 1).",
+      },
+    ],
+  },
+];
+
 export default [
   // `web/src` is the Rust server's page, which follows the same rules, and its own in the last block.
   {
@@ -68,6 +108,11 @@ export default [
   {
     files: ["web/src/**/*.{ts,tsx}"],
     plugins: { "react-hooks": reactHooks },
-    rules: pageRules,
+    rules: { ...pageRules, "no-restricted-syntax": ["error", staticOnlyClass] },
+  },
+  {
+    files: ["web/src/modules/*/*.ts"],
+    ignores: ["web/src/modules/*/*.test.ts"],
+    rules: { "no-restricted-imports": rootModuleImports },
   },
 ];
