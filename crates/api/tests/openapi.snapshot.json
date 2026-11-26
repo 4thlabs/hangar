@@ -254,6 +254,109 @@
         ],
         "type": "object"
       },
+      "BackrestHealth": {
+        "description": "How the last backup of a repository went: only a success is healthy, as on Backrest's own dashboard.",
+        "oneOf": [
+          {
+            "const": "never_run",
+            "description": "It has not run yet.",
+            "type": "string"
+          },
+          {
+            "const": "healthy",
+            "description": "It succeeded.",
+            "type": "string"
+          },
+          {
+            "const": "failed",
+            "description": "It did not.",
+            "type": "string"
+          }
+        ]
+      },
+      "BackrestRepository": {
+        "description": "A repository of Backrest's, and its last backup.",
+        "properties": {
+          "bytesAdded": {
+            "description": "The bytes its backups added in the last 30 days.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "health": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BackrestHealth"
+              }
+            ],
+            "description": "Whether its last backup succeeded."
+          },
+          "id": {
+            "description": "Its id.",
+            "type": "string"
+          },
+          "lastRunAt": {
+            "description": "When its last backup ran, in RFC 3339.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nextBackupAt": {
+            "description": "When its next backup runs, in RFC 3339, when one is planned.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "protectedBytes": {
+            "description": "The bytes it protects.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "description": "How its last backup ended, as `SUCCESS` or `ERROR`; `None` before its first.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "successes": {
+            "description": "How many backups succeeded in the last 30 days.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "health",
+          "lastRunAt",
+          "successes",
+          "bytesAdded",
+          "protectedBytes",
+          "nextBackupAt"
+        ],
+        "type": "object"
+      },
+      "BackrestSummary": {
+        "description": "Backrest's repositories, and how their backups went.",
+        "properties": {
+          "repositories": {
+            "description": "Its repositories, in Backrest's order.",
+            "items": {
+              "$ref": "#/components/schemas/BackrestRepository"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "repositories"
+        ],
+        "type": "object"
+      },
       "ComposeAction": {
         "description": "A compose command the Apps pages run: `up -d` with its options, `restart` or `down`.",
         "oneOf": [
@@ -3693,6 +3796,23 @@
               },
               "type": {
                 "const": "arcane-general-stats",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "data"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`backrest-summary`.",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/BackrestSummary"
+              },
+              "type": {
+                "const": "backrest-summary",
                 "type": "string"
               }
             },

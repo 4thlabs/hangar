@@ -96,6 +96,47 @@ pub struct ArcaneActionItem {
     pub count: u64,
 }
 
+/// Backrest's repositories, and how their backups went.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct BackrestSummary {
+    /// Its repositories, in Backrest's order.
+    pub repositories: Vec<BackrestRepository>,
+}
+
+/// A repository of Backrest's, and its last backup.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BackrestRepository {
+    /// Its id.
+    pub id: String,
+    /// How its last backup ended, as `SUCCESS` or `ERROR`; `None` before its first.
+    pub status: Option<String>,
+    /// Whether its last backup succeeded.
+    pub health: BackrestHealth,
+    /// When its last backup ran, in RFC 3339.
+    pub last_run_at: Option<String>,
+    /// How many backups succeeded in the last 30 days.
+    pub successes: u64,
+    /// The bytes its backups added in the last 30 days.
+    pub bytes_added: u64,
+    /// The bytes it protects.
+    pub protected_bytes: u64,
+    /// When its next backup runs, in RFC 3339, when one is planned.
+    pub next_backup_at: Option<String>,
+}
+
+/// How the last backup of a repository went: only a success is healthy, as on Backrest's own dashboard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum BackrestHealth {
+    /// It has not run yet.
+    NeverRun,
+    /// It succeeded.
+    Healthy,
+    /// It did not.
+    Failed,
+}
+
 /// Frigate's latest events, and how its detection runs.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -156,6 +197,8 @@ pub struct GluetunVpnStatus {
 pub enum WidgetData {
     /// `arcane-general-stats`.
     ArcaneGeneralStats(ArcaneGeneralStats),
+    /// `backrest-summary`.
+    BackrestSummary(BackrestSummary),
     /// `frigate-events`.
     FrigateEvents(FrigateEvents),
     /// `gluetun-vpn-status`.
