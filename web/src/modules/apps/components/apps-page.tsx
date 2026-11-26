@@ -91,7 +91,7 @@ function NoApps({ isInstalled }: { isInstalled: boolean }) {
  * server says the daemon changed them, and their usage live.
  */
 export function AppsPage() {
-  const search = useSearch({ from: "/app/apps" });
+  const search = useSearch({ from: "/_app/apps" });
   const navigate = useNavigate({ from: "/apps" });
   const { data, error, isPending, refetch, isRefetching } = useDockerProjects();
   const projects = data ?? [];

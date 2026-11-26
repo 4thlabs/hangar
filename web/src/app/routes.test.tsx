@@ -31,6 +31,25 @@ describe("the shell", () => {
     expect(current.map(link => link.textContent)).toContain("Apps");
   });
 
+  it("shows a path outside every section as no page, in the app's frame", async () => {
+    serve();
+    renderAt("/nowhere");
+
+    expect(await screen.findByRole("heading", { name: "Page not found" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "User menu of Ana Lima" })).toBeDefined();
+  });
+
+  it("shows a section not moved to this server yet as a pending page, its section lit", async () => {
+    serve();
+    renderAt("/cluster");
+
+    expect(await screen.findByRole("heading", { name: "Not here yet" })).toBeDefined();
+
+    const current = screen.getAllByRole("link", { current: "page" });
+
+    expect(current.map(link => link.textContent)).toContain("Cluster");
+  });
+
   it("writes the cookies of the default preferences at its load, for a browser that has none", async () => {
     serve();
     renderAt("/");
@@ -74,6 +93,15 @@ describe("signing in", () => {
     serve({ "GET /api/auth/session": unauthorized });
 
     const router = renderAt("/apps");
+
+    expect(await screen.findByRole("heading", { name: "Sign in to Hangar" })).toBeDefined();
+    expect(router.state.location.pathname).toBe("/login");
+  });
+
+  it("sends a path that is no page to /login, without a session", async () => {
+    serve({ "GET /api/auth/session": unauthorized });
+
+    const router = renderAt("/nowhere");
 
     expect(await screen.findByRole("heading", { name: "Sign in to Hangar" })).toBeDefined();
     expect(router.state.location.pathname).toBe("/login");

@@ -11,7 +11,7 @@ const editedFileQuery = { staleTime: Infinity, refetchOnMount: "always", refetch
 
 /** `/store/$id/edit`: every file of a store app, its `compose.yml` open first. */
 export function EditAppPage() {
-  const { id } = useParams({ from: "/app/store/$id/edit" });
+  const { id } = useParams({ from: "/_app/store_/$id/edit" });
   const queryClient = useQueryClient();
   // Shown from this mount's reads alone: a sync or an install may have changed the files since a page read them.
   const opened = useEditorFiles(id, { query: editedFileQuery });

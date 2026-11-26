@@ -1,7 +1,7 @@
 import type { RouterHistory } from "@tanstack/react-router";
 import { createQueryClient } from "#libs/api";
 import { Preferences } from "#libs/preferences";
-import { createPageRouter } from "#app/routes.tsx";
+import { createPageRouter } from "#app/router.ts";
 import { Session } from "#modules/auth/api/session.ts";
 
 /** What a page is built with instead of the browser's: a test's history in memory, its own preferences. */

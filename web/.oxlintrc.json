@@ -3,7 +3,7 @@
   // oxlint's default plugins. Its React rules stay off: ESLint runs React's own plugin, and a rule is in one tool.
   "categories": { "correctness": "error" },
   "options": { "typeAware": true, "denyWarnings": true },
-  "ignorePatterns": ["src/libs/api/generated.ts", "src/modules/common/ui/**"],
+  "ignorePatterns": ["src/libs/api/generated.ts", "src/app/routeTree.gen.ts", "src/modules/common/ui/**"],
   "rules": {
     "no-unused-vars": "error",
     "typescript/await-thenable": "error",
