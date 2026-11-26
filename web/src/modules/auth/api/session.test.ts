@@ -67,3 +67,29 @@ describe("Session.signedOut", () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 });
+
+describe("Session.forgetFailure", () => {
+  it("forgets a read that failed, so that the session is asked for again", async () => {
+    const client = queryClient();
+    const session = new Session(client);
+
+    answerSession(() => Response.json({ type: "about:blank", title: "Error", status: 500 }, { status: 500 }));
+    await expect(session.require()).rejects.toMatchObject({ status: 500 });
+    session.forgetFailure();
+
+    expect(client.getQueryState(getAuthSessionQueryKey())).toBeUndefined();
+
+    answerSession(() => Response.json({ name: "Ana", email: "ana@example.com" }));
+
+    await expect(session.require()).resolves.toEqual({ name: "Ana", email: "ana@example.com" });
+  });
+
+  it("keeps a session that was read", () => {
+    const client = queryClient();
+
+    client.setQueryData(getAuthSessionQueryKey(), { name: "Ana", email: "ana@example.com" });
+    new Session(client).forgetFailure();
+
+    expect(client.getQueryData(getAuthSessionQueryKey())).toEqual({ name: "Ana", email: "ana@example.com" });
+  });
+});

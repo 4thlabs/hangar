@@ -182,7 +182,10 @@ export const Route = createFileRoute("/_app/apps")({
 - A component reads its route by id: `useSearch({ from: "/_app/apps" })`, `useParams({ from: "/_app/apps_/$project" })`.
 - `src/app/routeTree.gen.ts` is generated and gitignored. `src/app/router.ts` has `createPageRouter` and the
   `Register` declaration.
-- The build fails when the entry, with the chunks it imports, passes `entryBudgetKb` in `vite.config.ts`. A change
+- `_app.tsx` has an `errorComponent`, `AppErrorPage`, in the frame: a session the server could not read, or a page
+  that failed with no `errorComponent` of its own. Its retry calls `session.forgetFailure()`, then `router.invalidate()`.
+- The build fails when what a signed-in page loads before its own code passes `firstLoadBudgetKb` in
+  `vite.config.ts`: the entry, the component of `_app` (the frame), the chunks they import, and their CSS. A change
   that passes it loads what it added from a route's component, or raises the budget and says why.
 - The router has `defaultPreload: "intent"` and `defaultPreloadStaleTime: 0`: Query alone decides freshness.
 - A loader only calls `ensureQueryData` with its module's options.

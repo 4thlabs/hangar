@@ -7,6 +7,7 @@ import { LoginPage } from "#modules/auth/components/login-page.tsx";
  */
 type LoginSearch = { error?: string };
 
+/** `/login`, the sign-in page, outside the app's frame. */
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>): LoginSearch =>
     typeof search.error === "string" ? { error: search.error } : {},

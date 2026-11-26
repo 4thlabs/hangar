@@ -1,10 +1,11 @@
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ana, coded, renderAt, serve, unauthorized } from "#app/mock/page.tsx";
+import { ana, coded, problem, renderAt, serve, unauthorized } from "#app/mock/page.tsx";
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   document.cookie = "theme=; max-age=0; path=/";
   document.cookie = "theme_palette=; max-age=0; path=/";
@@ -105,6 +106,27 @@ describe("signing in", () => {
 
     expect(await screen.findByRole("heading", { name: "Sign in to Hangar" })).toBeDefined();
     expect(router.state.location.pathname).toBe("/login");
+  });
+
+  it("says in the app's frame why the session could not be read, and reads it again on Try again", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    let down = true;
+
+    serve({ "GET /api/auth/session": () => (down ? problem(500, "the database is locked") : Response.json(ana)) });
+    renderAt("/apps");
+    // The query's three retries, a second, two and four apart.
+    await vi.advanceTimersByTimeAsync(8_000);
+
+    expect(await screen.findByRole("heading", { name: "Could not open this page" })).toBeDefined();
+    expect(screen.getByText("The database is locked.")).toBeDefined();
+    expect(screen.getAllByRole("navigation", { name: "Main navigation" })).not.toHaveLength(0);
+
+    down = false;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByRole("button", { name: "User menu of Ana Lima" })).toBeDefined();
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Could not open this page" })).toBeNull());
   });
 
   it("sends a signed-in page to /login once a call of its own is answered 401", async () => {
