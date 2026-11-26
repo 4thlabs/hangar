@@ -21,7 +21,7 @@ describe("the shell", () => {
 
   it("shows a path that is no page in the app's frame, its section lit", async () => {
     serve();
-    renderAt("/apps/alpha");
+    renderAt("/apps/alpha/nowhere");
 
     expect(await screen.findByRole("heading", { name: "Page not found" })).toBeDefined();
 

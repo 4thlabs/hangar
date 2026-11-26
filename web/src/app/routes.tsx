@@ -1,5 +1,8 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, createRoute, createRouter, type RouterHistory } from "@tanstack/react-router";
+import { AppsSearchParams } from "#modules/apps/apps-search.ts";
+import { AppDetailPage } from "#modules/apps/components/app-detail-page.tsx";
+import { AppsPage } from "#modules/apps/components/apps-page.tsx";
 import { LoginPage } from "#modules/auth/components/login-page.tsx";
 import { SessionGuard } from "#modules/auth/session-guard.ts";
 import type { SignInRefusal } from "#modules/auth/sign-in-messages.ts";
@@ -46,7 +49,19 @@ export class Routes {
 
   static readonly dashboard = createRoute({ getParentRoute: () => Routes.app, path: "/", component: PendingPage });
 
-  static readonly apps = createRoute({ getParentRoute: () => Routes.app, path: "/apps", component: PendingPage });
+  static readonly apps = createRoute({
+    getParentRoute: () => Routes.app,
+    path: "/apps",
+    component: AppsPage,
+    validateSearch: AppsSearchParams.validate,
+    staticData: { searchable: true },
+  });
+
+  static readonly appDetail = createRoute({
+    getParentRoute: () => Routes.app,
+    path: "/apps/$project",
+    component: AppDetailPage,
+  });
 
   static readonly cluster = createRoute({ getParentRoute: () => Routes.app, path: "/cluster", component: PendingPage });
 
@@ -77,6 +92,7 @@ export class Routes {
     Routes.app.addChildren([
       Routes.dashboard,
       Routes.apps,
+      Routes.appDetail,
       Routes.cluster,
       Routes.store,
       Routes.newApp,
