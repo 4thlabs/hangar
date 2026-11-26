@@ -5,8 +5,8 @@ use hangar_api::{
     AppCounts, AppFilter, ErrorCode, NewAppTemplate, StoreApp, StoreApps, StoreServer, StoreStatus,
     StoreSync,
 };
-use hangar_core::ComposeCommand;
-use quoll::{Response, Result};
+use hangar_core::{ComposeCommand, StoreError};
+use quoll::{Error, Response, Result};
 
 use super::StoreState;
 use super::command_log::CommandLog;
@@ -32,24 +32,29 @@ services:
             .store
             .apps()
             .await
-            .map_err(|error| Failure::logged(ErrorCode::AppsUnreadable, &error))?;
+            .map_err(|error| Failure::store(ErrorCode::AppsUnreadable, &error))?;
 
         Ok(apps.into_iter().map(Self::view).collect())
     }
 
-    /// The app `id` of the store, or a 404.
-    async fn app(&self, id: &str) -> Result<StoreApp> {
-        let app = self.apps().await?.into_iter().find(|app| app.id == id);
+    /// The app `id` of the store, if the store carries it.
+    async fn find(&self, id: &str) -> Result<Option<StoreApp>> {
+        Ok(self.apps().await?.into_iter().find(|app| app.id == id))
+    }
 
-        app.ok_or_else(|| {
-            tracing::warn!(app = ?id, "an unknown app was asked for");
-            ErrorCode::UnknownApp { app: id.to_owned() }.into()
-        })
+    /// The 404 of an app the store does not carry.
+    fn unknown(id: &str) -> Error {
+        tracing::warn!(app = ?id, "an unknown app was asked for");
+
+        ErrorCode::UnknownApp { app: id.to_owned() }.into()
     }
 
     /// Installs the app `id`, unless it is already: links it, then seeds the variables its files reference.
     async fn install(&self, id: &str) -> Result<StoreApp> {
-        let app = self.app(id).await?;
+        let _change = self.change().await?;
+        let Some(app) = self.find(id).await? else {
+            return Err(Self::unknown(id));
+        };
 
         if app.installed {
             return Ok(app);
@@ -62,26 +67,39 @@ services:
         self.store
             .install_app(&app.id)
             .await
-            .map_err(|error| Failure::logged(failed(), &error))?;
+            .map_err(|error| Failure::store(failed(), &error))?;
 
-        let installed = self.app(&app.id).await?;
-
-        if !installed.installed {
-            return Err(Failure::logged(failed(), &Unconfirmed));
+        match self.find(&app.id).await? {
+            Some(installed) if installed.installed => Ok(installed),
+            _ => Err(Failure::logged(failed(), &Unconfirmed)),
         }
-
-        Ok(installed)
     }
 
     /// Uninstalls the app `id`, unless it is not installed: `docker compose down` first, as once its link is gone its
     /// compose files are out of reach, and what runs an orphan Hangar can no longer manage; then its link.
+    ///
+    /// An app installed that the store no longer reads, its folder gone, its `compose.yml` or `hangar.yml` broken, goes
+    /// by its link alone, as the core's `uninstall_app` does.
     async fn uninstall(&self, id: &str) -> Result<StoreApp> {
-        let app = self.app(id).await?;
+        let _change = self.change().await?;
+        let app = match self.store.apps().await {
+            Ok(apps) => apps.into_iter().find(|app| app.id == id).map(Self::view),
+            Err(error @ StoreError::Config { .. }) => {
+                tracing::warn!(app = ?id, error = %Failure::chain(&error), "uninstalling by the link alone");
+                None
+            }
+            Err(error) => return Err(Failure::logged(ErrorCode::AppsUnreadable, &error)),
+        };
 
-        if !app.installed {
-            return Ok(app);
+        match app {
+            Some(app) if !app.installed => Ok(app),
+            Some(app) => self.take_down(app).await,
+            None => self.unlink(id).await,
         }
+    }
 
+    /// Uninstalls `app`, which the store reads: its link is removed once compose has taken it down, or kept.
+    async fn take_down(&self, app: StoreApp) -> Result<StoreApp> {
         let failed = || ErrorCode::UninstallFailed {
             app: app.name.clone(),
         };
@@ -96,13 +114,48 @@ services:
             .await
             .map_err(|error| Failure::logged(failed(), &error))?;
 
-        let uninstalled = self.app(&app.id).await?;
+        match self.find(&app.id).await? {
+            Some(uninstalled) if !uninstalled.installed => Ok(uninstalled),
+            _ => Err(Failure::logged(failed(), &Unconfirmed)),
+        }
+    }
 
-        if uninstalled.installed {
-            return Err(Failure::logged(failed(), &Unconfirmed));
+    /// Uninstalls `id`, which the store no longer reads, by its link: `docker compose down` as far as compose can read
+    /// what is left of it, then the link removed all the same, as nothing else would ever remove it. A 404 without one.
+    async fn unlink(&self, id: &str) -> Result<StoreApp> {
+        let failed = || ErrorCode::UninstallFailed { app: id.to_owned() };
+        let is_linked = match self.store.is_linked(id).await {
+            Ok(is_linked) => is_linked,
+            Err(StoreError::InvalidAppId { .. }) => false,
+            Err(error) => return Err(Failure::logged(failed(), &error)),
+        };
+
+        if !is_linked {
+            return Err(Self::unknown(id));
         }
 
-        Ok(uninstalled)
+        let down = CommandLog::lines("docker compose down", id);
+
+        if let Err(error) = self.compose.run(id, ComposeCommand::Down, down).await {
+            tracing::warn!(
+                app = %id,
+                error = %Failure::chain(&error),
+                "an app the store no longer reads could not be taken down: its link is removed all the same"
+            );
+        }
+
+        self.store
+            .uninstall_app(id)
+            .await
+            .map_err(|error| Failure::logged(failed(), &error))?;
+
+        Ok(StoreApp {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            icon: None,
+            installed: false,
+            swarm_ready: false,
+        })
     }
 
     /// The listing of `all` that `filters` keeps, all of them for none, and how many each filter keeps.

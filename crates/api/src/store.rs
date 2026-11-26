@@ -4,6 +4,8 @@ use quoll::Accepted;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::ErrorDetail;
+
 /// The store as the settings show it: where it comes from, whether it is cloned, and its last sync.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct StoreStatus {
@@ -27,8 +29,9 @@ pub struct StoreSync {
     pub started_at: String,
     /// When it ended, in RFC 3339; `None` while it runs.
     pub finished_at: Option<String>,
-    /// Why it failed, in English, without git's output, which the server's log holds; `None` unless it failed.
-    pub error: Option<String>,
+    /// Why it failed, as a code and its params beside its English message, without git's output, which the server's
+    /// log holds; `None` unless it failed.
+    pub error: Option<ErrorDetail>,
 }
 
 /// What a sync does.

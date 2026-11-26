@@ -106,11 +106,15 @@ impl GlobalEnv {
     }
 
     /// Merges `updates` into what is on disk now, so that a variable added meanwhile survives, then drops the
-    /// variables of `remove`, the only way one is ever lost. The file is copied aside first, then replaced whole.
+    /// variables of `remove`, the only way one is ever lost. The file is copied aside first, then replaced whole;
+    /// a write that changes nothing leaves it, and makes no copy.
+    ///
+    /// A variable the file holds already may be set or removed whatever its name, as one written by hand that compose
+    /// does not take, `OLD-KEY` say: only a new one must have a name compose accepts.
     ///
     /// # Errors
     ///
-    /// Returns [`StoreError::InvalidVariable`] for a name of `updates` that compose does not accept,
+    /// Returns [`StoreError::InvalidVariable`] for a new name of `updates` that compose does not accept,
     /// [`StoreError::UnwritableValue`] for a value no quoting writes back the same, and [`StoreError::Io`] when the
     /// file cannot be read, copied aside or written. Nothing is written then; nor when the copy fails: the file holds
     /// secrets kept nowhere else.
@@ -119,10 +123,6 @@ impl GlobalEnv {
         updates: BTreeMap<String, String>,
         remove: &[&str],
     ) -> Result<BTreeMap<String, String>, StoreError> {
-        if let Some(key) = updates.keys().find(|key| !Self::is_variable_name(key)) {
-            return Err(StoreError::InvalidVariable { key: key.clone() });
-        }
-
         let _turn = self.lock.lock().await;
 
         self.update(updates, remove).await
@@ -134,12 +134,25 @@ impl GlobalEnv {
         updates: BTreeMap<String, String>,
         remove: &[&str],
     ) -> Result<BTreeMap<String, String>, StoreError> {
-        let mut variables = self.read().await?;
+        let current = self.read().await?;
+        let new_name = updates
+            .keys()
+            .find(|key| !current.contains_key(*key) && !Self::is_variable_name(key));
+
+        if let Some(key) = new_name {
+            return Err(StoreError::InvalidVariable { key: key.clone() });
+        }
+
+        let mut variables = current.clone();
 
         variables.extend(updates);
 
         for key in remove {
             variables.remove(*key);
+        }
+
+        if variables == current {
+            return Ok(variables);
         }
 
         let now = jiff::Timestamp::now();
@@ -811,6 +824,57 @@ mod tests {
         }
 
         assert!(!fixture.env.file().exists());
+    }
+
+    #[tokio::test]
+    async fn sets_or_removes_a_variable_of_the_file_whatever_its_name() {
+        let fixture = Fixture::new();
+
+        std::fs::write(fixture.env.file(), "OLD-KEY=1\na.b=2\nGOOD=3\n").expect("written by hand");
+
+        let written = fixture
+            .env
+            .write(variables([("OLD-KEY", "one")]), &["a.b"])
+            .await
+            .expect("the names are the file's");
+
+        assert_eq!(written, variables([("GOOD", "3"), ("OLD-KEY", "one")]));
+        assert_eq!(fixture.env.read().await.expect("the file reads"), written);
+
+        let error = fixture
+            .env
+            .write(variables([("NEW-KEY", "x")]), &[])
+            .await
+            .expect_err("a new name compose does not take is refused");
+
+        assert!(matches!(error, StoreError::InvalidVariable { key } if key == "NEW-KEY"));
+    }
+
+    #[tokio::test]
+    async fn writes_nothing_and_copies_nothing_aside_when_nothing_changes() {
+        let fixture = Fixture::new();
+
+        std::fs::write(fixture.env.file(), "DOMAIN=example.com\n").expect("written by hand");
+
+        for (updates, remove) in [
+            (variables([]), vec![]),
+            (variables([("DOMAIN", "example.com")]), vec!["MISSING"]),
+        ] {
+            let written = fixture
+                .env
+                .write(updates, &remove)
+                .await
+                .expect("nothing to write");
+
+            assert_eq!(written, variables([("DOMAIN", "example.com")]));
+        }
+
+        assert_eq!(
+            std::fs::read_to_string(fixture.env.file()).expect("the file reads"),
+            "DOMAIN=example.com\n",
+            "the file is as it was written"
+        );
+        assert!(backups(fixture.data_dir.root()).is_empty());
     }
 
     #[tokio::test]

@@ -291,6 +291,27 @@ impl<R: CommandRunner> Store<R> {
         Ok(())
     }
 
+    /// Whether the app `id` has its link in `app-installed/`, dangling or not: an app installed, whether the store
+    /// still carries it, and its `compose.yml` parses, or not.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::InvalidAppId`] when `id` is not an app id, and [`StoreError::Io`] when its place cannot
+    /// be inspected.
+    pub async fn is_linked(&self, id: &str) -> Result<bool, StoreError> {
+        if !AppId::regex().is_match(id) {
+            return Err(StoreError::InvalidAppId { id: id.to_owned() });
+        }
+
+        let destination = self.data_dir.installed().join(id);
+
+        match tokio::fs::symlink_metadata(&destination).await {
+            Ok(metadata) => Ok(metadata.is_symlink()),
+            Err(error) if Disk::is_missing(&error) => Ok(false),
+            Err(error) => Err(StoreError::io("inspect", destination, error)),
+        }
+    }
+
     /// Uninstalls the app `id`: removes its link from `app-installed/`, leaving its folder in the store. Its stack is
     /// the caller's to take down first: once the link is gone, compose no longer reaches its files, and what runs is
     /// an orphan Hangar cannot manage.
@@ -488,6 +509,7 @@ mod tests {
         assert_send(store.apps());
         assert_send(store.install_app("jellyfin"));
         assert_send(store.uninstall_app("jellyfin"));
+        assert_send(store.is_linked("jellyfin"));
         assert_send(store.save_config("categories: []\n"));
         assert_send(store.env().ensure());
         assert_send(store.env().write(BTreeMap::new(), &[]));

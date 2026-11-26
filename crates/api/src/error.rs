@@ -1,9 +1,10 @@
 //! The errors the page may show, each a stable code with its params beside its English message, so that a catalog can
 //! word them in another language later without the server changing.
 //!
-//! The code is not on the wire yet: quoll writes a problem's status and detail alone
-//! ([quoll#140](https://github.com/4thlabs/quoll/issues/140)). Until it writes more, the page shows the detail, which
-//! is [`ErrorCode::message`].
+//! A problem does not carry the code yet: quoll writes its status and detail alone
+//! ([quoll#140](https://github.com/4thlabs/quoll/issues/140)), and until it writes more the page shows the detail,
+//! which is [`ErrorCode::message`]. A body that holds an error, as the sync of the store's, carries it whole, an
+//! [`ErrorDetail`].
 
 use std::fmt;
 
@@ -119,6 +120,56 @@ pub enum ErrorCode {
     /// `.env.global` could not be copied aside or written.
     #[serde(rename = "env.save_failed")]
     EnvSaveFailed,
+
+    /// A save that both sets and removes a variable.
+    #[serde(rename = "env.updated_and_removed")]
+    UpdatedAndRemoved {
+        /// The variable.
+        name: String,
+    },
+
+    /// A sync of the store runs, which a change of the store waits for the end of.
+    #[serde(rename = "store.sync_running")]
+    SyncRunning,
+
+    /// The sync of the store stopped short: the server failed it, and its log says how.
+    #[serde(rename = "store.sync_crashed")]
+    SyncCrashed,
+}
+
+/// An error as a body carries it, where a problem does not: its code, its params, and its English message, which the
+/// page shows until a catalog words the code.
+///
+/// ```
+/// use hangar_api::{ErrorCode, ErrorDetail};
+///
+/// let detail = ErrorDetail::from(ErrorCode::UnknownApp { app: "alpha".to_owned() });
+///
+/// assert_eq!(
+///     serde_json::to_value(&detail).expect("JSON"),
+///     serde_json::json!({
+///         "code": "store.unknown_app",
+///         "params": { "app": "alpha" },
+///         "message": "the store has no app alpha",
+///     })
+/// );
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ErrorDetail {
+    /// The code and its params.
+    #[serde(flatten)]
+    pub code: ErrorCode,
+    /// The code's English message.
+    pub message: String,
+}
+
+impl From<ErrorCode> for ErrorDetail {
+    fn from(code: ErrorCode) -> Self {
+        Self {
+            message: code.message(),
+            code,
+        }
+    }
 }
 
 impl ErrorCode {
@@ -144,6 +195,9 @@ impl ErrorCode {
             Self::UnwritableValue { .. } => "env.unwritable_value",
             Self::EnvUnreadable => "env.unreadable",
             Self::EnvSaveFailed => "env.save_failed",
+            Self::UpdatedAndRemoved { .. } => "env.updated_and_removed",
+            Self::SyncRunning => "store.sync_running",
+            Self::SyncCrashed => "store.sync_crashed",
         }
     }
 
@@ -151,12 +205,13 @@ impl ErrorCode {
     pub fn status(&self) -> StatusCode {
         match self {
             Self::UnknownApp { .. } => StatusCode::NOT_FOUND,
-            Self::StoreNotInstalled => StatusCode::CONFLICT,
+            Self::StoreNotInstalled | Self::SyncRunning => StatusCode::CONFLICT,
             Self::ConfigSyntax { .. }
             | Self::ConfigInvalid { .. }
             | Self::InvalidVariableName { .. }
             | Self::LineBreak { .. }
-            | Self::UnwritableValue { .. } => StatusCode::BAD_REQUEST,
+            | Self::UnwritableValue { .. }
+            | Self::UpdatedAndRemoved { .. } => StatusCode::BAD_REQUEST,
             Self::AppsUnreadable
             | Self::InstallFailed { .. }
             | Self::UninstallFailed { .. }
@@ -165,7 +220,8 @@ impl ErrorCode {
             | Self::ConfigUnreadable
             | Self::ConfigSaveFailed
             | Self::EnvUnreadable
-            | Self::EnvSaveFailed => StatusCode::INTERNAL_SERVER_ERROR,
+            | Self::EnvSaveFailed
+            | Self::SyncCrashed => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -199,6 +255,11 @@ impl ErrorCode {
             }
             Self::EnvUnreadable => Self::hinted(".env.global could not be read"),
             Self::EnvSaveFailed => Self::hinted(".env.global could not be saved"),
+            Self::UpdatedAndRemoved { name } => format!("{name} is both set and removed"),
+            Self::SyncRunning => {
+                "the store is being synced: try again once its sync has ended".to_owned()
+            }
+            Self::SyncCrashed => Self::hinted("the sync of the store stopped short"),
         }
     }
 
@@ -252,6 +313,9 @@ mod tests {
             ErrorCode::UnwritableValue { name: name() },
             ErrorCode::EnvUnreadable,
             ErrorCode::EnvSaveFailed,
+            ErrorCode::UpdatedAndRemoved { name: name() },
+            ErrorCode::SyncRunning,
+            ErrorCode::SyncCrashed,
         ]
     }
 
@@ -264,6 +328,21 @@ mod tests {
             assert_eq!(
                 serde_json::from_value::<ErrorCode>(json).expect("read back"),
                 code
+            );
+        }
+    }
+
+    #[test]
+    fn writes_a_detail_as_its_code_its_params_and_its_message_and_reads_it_back() {
+        for code in every_code() {
+            let detail = super::ErrorDetail::from(code.clone());
+            let json = serde_json::to_value(&detail).expect("JSON");
+
+            assert_eq!(json["code"], code.code(), "{code:?}");
+            assert_eq!(json["message"], code.message(), "{code:?}");
+            assert_eq!(
+                serde_json::from_value::<super::ErrorDetail>(json).expect("read back"),
+                detail
             );
         }
     }

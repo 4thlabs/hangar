@@ -4,7 +4,7 @@
 use std::error::Error as StdError;
 
 use hangar_api::ErrorCode;
-use hangar_core::ConfigError;
+use hangar_core::{ConfigError, StoreError};
 use quoll::Error;
 
 /// A failure that the server logs whole, and answers with a code of its own.
@@ -31,6 +31,15 @@ impl Failure {
         tracing::error!(code = code.code(), error = %Self::chain(error), "{}", code.message());
 
         code.into()
+    }
+
+    /// The answer of a store's `error`: for an invalid `hangar.yml`, its field at fault, which is the user's to fix and
+    /// not logged; for any other, `failed`, once `error` is logged whole.
+    pub(crate) fn store(failed: ErrorCode, error: &StoreError) -> Error {
+        match error {
+            StoreError::Config { source, .. } => Self::config(source).into(),
+            other => Self::logged(failed, other),
+        }
     }
 
     /// The code of a `hangar.yml` that does not parse: the user's to fix, with the field at fault.

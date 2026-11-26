@@ -1,38 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { cn } from "cn";
-import { SearchIcon } from "lucide-react";
-import { NavbarSearch } from "#modules/common/components/searchbar.tsx";
 import { useCurrentPath } from "#modules/common/hooks/use-current-path.ts";
 import { Navigations } from "#modules/common/navigations.ts";
-import { Button } from "#modules/common/ui/button.tsx";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "#modules/common/ui/sheet.tsx";
-
-/** The magnifier and its sheet, which stand in for the search field until it fits at `md`. */
-export function MobileSearch() {
-  return (
-    <Sheet>
-      <SheetTrigger render={<Button variant="ghost" size="icon" className="md:hidden" aria-label="Open search" />}>
-        <SearchIcon />
-      </SheetTrigger>
-      <SheetContent side="top">
-        <SheetHeader>
-          <SheetTitle>Search</SheetTitle>
-          <SheetDescription>Search content in Hangar.</SheetDescription>
-        </SheetHeader>
-        <div className="px-4 pb-4">
-          <NavbarSearch id="navbar-search-mobile" autoFocus />
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-}
 
 /**
  * Phone tab bar. A second tree is fine here: stateless links only.

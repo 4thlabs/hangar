@@ -368,6 +368,74 @@ async fn an_app_compose_does_not_take_down_stays_installed() {
 }
 
 #[tokio::test]
+async fn uninstalls_an_app_the_store_no_longer_carries_by_its_link() {
+    let fixture = Fixture::new();
+    let server = fixture.serve(None).await;
+
+    fs::remove_dir_all(fixture.data.join("app-store/store/alpha")).expect("removed upstream");
+
+    let (status, alpha) = server.post("/api/store/apps/alpha/uninstall").await;
+
+    assert_eq!(status, StatusCode::OK, "{alpha}");
+    assert_eq!(alpha["installed"], false);
+    assert!(!fixture.installed("alpha"), "the dangling link is gone");
+    assert!(
+        fixture.docker_calls().is_empty(),
+        "compose has no file left to read"
+    );
+}
+
+#[tokio::test]
+async fn uninstalls_an_app_whose_compose_file_no_longer_parses_even_when_compose_fails() {
+    let fixture = Fixture::new();
+    let server = fixture.serve(Some("alpha")).await;
+
+    fs::write(
+        fixture.data.join("app-store/store/alpha/compose.yml"),
+        "services: [\n",
+    )
+    .expect("broken");
+
+    let (status, _) = server.post("/api/store/apps/alpha/uninstall").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !fixture.installed("alpha"),
+        "the link is removed all the same"
+    );
+    assert!(
+        fixture.docker_calls()[0].ends_with(" down"),
+        "compose was asked to take it down first"
+    );
+}
+
+#[tokio::test]
+async fn an_invalid_hangar_yml_names_its_field_on_the_store_and_the_link_still_uninstalls() {
+    let fixture = Fixture::new();
+
+    fixture.write_config("categories:\n  - { name: Apps, stacks: [alpha] }\n");
+
+    let server = fixture.serve(None).await;
+    let (status, problem) = server.get("/api/store/apps").await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        problem["detail"]
+            .as_str()
+            .expect("a detail")
+            .starts_with("invalid hangar.yml: categories[0].color: "),
+        "{problem}"
+    );
+
+    let (install, _) = server.post("/api/store/apps/beta/install").await;
+    let (uninstall, _) = server.post("/api/store/apps/alpha/uninstall").await;
+
+    assert_eq!(install, StatusCode::BAD_REQUEST);
+    assert_eq!(uninstall, StatusCode::OK);
+    assert!(!fixture.installed("alpha"));
+}
+
+#[tokio::test]
 async fn reads_and_saves_hangar_yml_and_links_what_it_lists() {
     let fixture = Fixture::new();
     let server = fixture.serve(None).await;
@@ -504,12 +572,12 @@ async fn refuses_a_variable_compose_would_not_read_back_and_writes_nothing() {
             "invalid variable name: 1BAD",
         ),
         (
-            json!({ "updates": {}, "remove": ["BAD NAME"] }),
-            "invalid variable name: BAD NAME",
-        ),
-        (
             json!({ "updates": { "INJECTED": "a\nB=c" } }),
             "the value of INJECTED cannot contain a line break",
+        ),
+        (
+            json!({ "updates": { "BOTH": "x" }, "remove": ["BOTH"] }),
+            "BOTH is both set and removed",
         ),
     ] {
         let (status, problem) = server.put("/api/env", &changes).await;
@@ -522,6 +590,49 @@ async fn refuses_a_variable_compose_would_not_read_back_and_writes_nothing() {
         !fixture.data.join(".env.global").exists(),
         "nothing was written"
     );
+}
+
+#[tokio::test]
+async fn sets_and_removes_a_variable_the_file_holds_whatever_its_name() {
+    let fixture = Fixture::new();
+    let server = fixture.serve(None).await;
+
+    fs::write(fixture.data.join(".env.global"), "OLD-KEY=1\na.b=2\n").expect("written by hand");
+
+    let (status, saved) = server
+        .put(
+            "/api/env",
+            &json!({ "updates": { "OLD-KEY": "one" }, "remove": ["a.b"] }),
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    assert_eq!(saved["variables"], json!({ "OLD-KEY": "one" }));
+}
+
+#[tokio::test]
+async fn a_save_that_changes_nothing_writes_nothing_and_copies_nothing_aside() {
+    let fixture = Fixture::new();
+    let server = fixture.serve(None).await;
+    let env = fixture.data.join(".env.global");
+
+    fs::write(&env, "KEPT=1\n").expect("written by hand");
+
+    let (status, _) = server
+        .put(
+            "/api/env",
+            &json!({ "updates": { "KEPT": "1" }, "remove": ["GONE"] }),
+        )
+        .await;
+    let backups = fs::read_dir(&fixture.data)
+        .expect("listed")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().ends_with(".bak"))
+        .count();
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(fs::read_to_string(&env).expect("read"), "KEPT=1\n");
+    assert_eq!(backups, 0);
 }
 
 #[tokio::test]

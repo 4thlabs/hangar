@@ -143,6 +143,390 @@
         ],
         "type": "object"
       },
+      "ErrorDetail": {
+        "description": "An error as a body carries it, where a problem does not: its code, its params, and its English message, which the\npage shows until a catalog words the code.\n\n```\nuse hangar_api::{ErrorCode, ErrorDetail};\n\nlet detail = ErrorDetail::from(ErrorCode::UnknownApp { app: \"alpha\".to_owned() });\n\nassert_eq!(\n    serde_json::to_value(&detail).expect(\"JSON\"),\n    serde_json::json!({\n        \"code\": \"store.unknown_app\",\n        \"params\": { \"app\": \"alpha\" },\n        \"message\": \"the store has no app alpha\",\n    })\n);\n```",
+        "oneOf": [
+          {
+            "description": "The store carries no app of this id.",
+            "properties": {
+              "code": {
+                "const": "store.unknown_app",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The id asked for.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The store's apps could not be listed.",
+            "properties": {
+              "code": {
+                "const": "store.apps_unreadable",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "An app could not be installed.",
+            "properties": {
+              "code": {
+                "const": "store.install_failed",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app's display name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "An app could not be uninstalled: `docker compose down` failed, or its link could not be removed.",
+            "properties": {
+              "code": {
+                "const": "store.uninstall_failed",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app's display name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The store's clone failed.",
+            "properties": {
+              "code": {
+                "const": "store.clone_failed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The store's pull failed: git could not reach it, or a change of the clone, to `hangar.yml` say, is in the way.",
+            "properties": {
+              "code": {
+                "const": "store.pull_failed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The store is not cloned yet, which this needs.",
+            "properties": {
+              "code": {
+                "const": "store.not_installed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`hangar.yml` is not YAML, holds no document, or several.",
+            "properties": {
+              "code": {
+                "const": "config.syntax",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "reason": {
+                    "description": "What the YAML parser says, in English.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`hangar.yml` does not follow its rules.",
+            "properties": {
+              "code": {
+                "const": "config.invalid",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "field": {
+                    "description": "The path of the field at fault, as `categories[0].color`; `.` for the whole file.",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "description": "What is wrong with it, in English.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "field",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`hangar.yml` could not be read.",
+            "properties": {
+              "code": {
+                "const": "config.unreadable",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`hangar.yml` could not be written.",
+            "properties": {
+              "code": {
+                "const": "config.save_failed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A name compose does not take as a variable's.",
+            "properties": {
+              "code": {
+                "const": "env.invalid_name",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "name": {
+                    "description": "The name.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A value with a line break, which would add a variable to the file.",
+            "properties": {
+              "code": {
+                "const": "env.line_break",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "name": {
+                    "description": "The variable.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A value that no quoting writes so that it reads back the same.",
+            "properties": {
+              "code": {
+                "const": "env.unwritable_value",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "name": {
+                    "description": "The variable.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`.env.global` could not be read.",
+            "properties": {
+              "code": {
+                "const": "env.unreadable",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`.env.global` could not be copied aside or written.",
+            "properties": {
+              "code": {
+                "const": "env.save_failed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A save that both sets and removes a variable.",
+            "properties": {
+              "code": {
+                "const": "env.updated_and_removed",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "name": {
+                    "description": "The variable.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A sync of the store runs, which a change of the store waits for the end of.",
+            "properties": {
+              "code": {
+                "const": "store.sync_running",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The sync of the store stopped short: the server failed it, and its log says how.",
+            "properties": {
+              "code": {
+                "const": "store.sync_crashed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          }
+        ],
+        "properties": {
+          "message": {
+            "description": "The code's English message.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "type": "object"
+      },
       "GlobalVariables": {
         "description": "The variables of `.env.global`, by name. Their values are secrets as often as not: the answer is never cached.",
         "properties": {
@@ -342,11 +726,15 @@
         "description": "A clone or a pull of the store, which runs apart from the request that starts it, one at a time.",
         "properties": {
           "error": {
-            "description": "Why it failed, in English, without git's output, which the server's log holds; `None` unless it failed.",
-            "type": [
-              "string",
-              "null"
-            ]
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorDetail"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it failed, as a code and its params beside its English message, without git's output, which the server's\nlog holds; `None` unless it failed."
           },
           "finishedAt": {
             "description": "When it ended, in RFC 3339; `None` while it runs.",

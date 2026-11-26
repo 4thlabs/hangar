@@ -513,6 +513,15 @@ async fn replaces_a_dangling_link_on_install_and_removes_one_on_uninstall() {
         Some(fixture.in_store("alpha-app"))
     );
 
+    assert!(
+        fixture
+            .store
+            .is_linked("removed-app")
+            .await
+            .expect("inspected"),
+        "a dangling link is an app installed"
+    );
+
     fixture
         .store
         .uninstall_app("removed-app")
@@ -520,6 +529,17 @@ async fn replaces_a_dangling_link_on_install_and_removes_one_on_uninstall() {
         .expect("a dangling link uninstalls");
 
     assert_eq!(fixture.link("removed-app"), None);
+    assert!(
+        !fixture
+            .store
+            .is_linked("removed-app")
+            .await
+            .expect("inspected")
+    );
+    assert!(matches!(
+        fixture.store.is_linked("../app-store").await,
+        Err(StoreError::InvalidAppId { .. })
+    ));
 }
 
 #[tokio::test]
