@@ -5,7 +5,7 @@ use std::pin::pin;
 use futures::StreamExt;
 use hangar_core::{
     AppStatus, BatchEvent, Command, CommandRunner, Compose, ComposeBatch, ComposeCommand,
-    OnFailure, Output, Runtime, Store,
+    OnFailure, Output, RunError, Runtime, Store,
 };
 use tokio::io::AsyncWriteExt;
 
@@ -45,12 +45,20 @@ impl Hangar {
         Ok(store.install(Output::Inherit).await?)
     }
 
+    /// Runs a compose command on the apps of its target, as [`Hangar::run_compose`] says, and says when docker has no
+    /// compose.
+    pub(crate) async fn compose(&self, request: ComposeRequest) -> Result<(), Failure> {
+        let outcome = self.run_compose(request).await;
+
+        self.explain(outcome).await
+    }
+
     /// Runs a compose command on the apps of its target.
     ///
     /// A command passed through, on one app, inherits the terminal, as compose run by hand: its colours, its TTY, its
     /// stdin and its Ctrl-C, for `logs -f`, `exec` or an `up` that attaches. Any other runs as one batch that stops at
     /// the first failure, as the Node CLI does, its output printed as it comes.
-    pub(crate) async fn compose(&self, request: ComposeRequest) -> Result<(), Failure> {
+    async fn run_compose(&self, request: ComposeRequest) -> Result<(), Failure> {
         let data_dir = self.environment.data_dir()?;
         // Only `hangar.yml` is read: the URL serves an install alone.
         let config = Store::new(String::new(), data_dir.clone(), self.runtime.clone())
@@ -79,8 +87,29 @@ impl Hangar {
     /// `store ls [args...]`: `docker compose ls`, on the terminal.
     pub(crate) async fn list(&self, args: &[String]) -> Result<(), Failure> {
         let list = Command::new("docker").args(["compose", "ls"]).args(args);
+        let outcome = self.runtime.run(&list, Output::Inherit).await;
 
-        Ok(self.runtime.run(&list, Output::Inherit).await?)
+        self.explain(outcome.map_err(Failure::from)).await
+    }
+
+    /// The outcome of a compose command, its failure said as a missing compose when docker exited with an error and
+    /// has no `compose` command: docker's own complaint is lost in a batch's output. Docker is asked only once it
+    /// failed, so that a command that succeeds runs nothing more.
+    async fn explain(&self, outcome: Result<(), Failure>) -> Result<(), Failure> {
+        let Err(failure) = outcome else {
+            return Ok(());
+        };
+
+        if !failure.has_exited_with_error() {
+            return Err(failure);
+        }
+
+        let version = Command::new("docker").args(["compose", "version"]);
+
+        match self.runtime.capture(&version).await {
+            Err(RunError::Failed { .. }) => Err(Failure::NoCompose(Box::new(failure))),
+            _ => Err(failure),
+        }
     }
 
     /// Prints the batch's output on stdout as compose prints it, stdout and stderr together, the lines of the apps
