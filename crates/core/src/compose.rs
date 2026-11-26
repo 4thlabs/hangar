@@ -79,7 +79,8 @@ impl<R: CommandRunner> Compose<R> {
     ///
     /// # Errors
     ///
-    /// Returns [`ComposeError::InvalidProject`] when compose cannot take `app` as a project name,
+    /// Returns [`ComposeError::OptionBeforeCommand`] for a command passed as its arguments that does not start with its
+    /// name, [`ComposeError::InvalidProject`] when compose cannot take `app` as a project name,
     /// [`ComposeError::NotInstalled`] when it is not installed, neither running anything, and
     /// [`ComposeError::Failed`] when compose fails.
     pub async fn run(
@@ -88,6 +89,8 @@ impl<R: CommandRunner> Compose<R> {
         command: ComposeCommand,
         output: Output,
     ) -> Result<(), ComposeError> {
+        Self::check(&command)?;
+
         let file = self.installed_file(app).await?;
         // `-p` pins the project to the app: compose would derive it from the file's top-level `name`, a display
         // label ("Home Assistant"), and its containers would no longer match the installed app.
@@ -148,6 +151,18 @@ impl<R: CommandRunner> Compose<R> {
             })
     }
 
+    /// Refuses a command whose first word is an option rather than its name, which would override the project or the
+    /// file Hangar pins.
+    fn check(command: &ComposeCommand) -> Result<(), ComposeError> {
+        let Some(option) = command.leading_option() else {
+            return Ok(());
+        };
+
+        Err(ComposeError::OptionBeforeCommand {
+            option: option.to_owned(),
+        })
+    }
+
     /// The `compose.yml` of the installed app `app`.
     async fn installed_file(&self, app: &str) -> Result<PathBuf, ComposeError> {
         if !ProjectName::is_valid(app) {
@@ -200,7 +215,8 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
     ///
     /// # Errors
     ///
-    /// Returns [`ComposeError::EmptyBatch`] when `apps` is empty, [`ComposeError::AttachedBatch`] for an `up` that is
+    /// Returns [`ComposeError::OptionBeforeCommand`] as [`run`](Self::run) does, [`ComposeError::EmptyBatch`] when
+    /// `apps` is empty, [`ComposeError::AttachedBatch`] for an `up` that is
     /// not detached on several apps, and the errors of [`run`](Self::run) that come before compose runs, for the first
     /// app that has one.
     ///
@@ -214,6 +230,8 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
         config: &Config,
         on_failure: OnFailure,
     ) -> Result<ComposeBatch, ComposeError> {
+        Self::check(&command)?;
+
         let apps = Self::ordered(&command, apps, config)?;
 
         if command.is_attached() && apps.len() > 1 {
@@ -788,6 +806,31 @@ categories:
 
         assert!(matches!(missing, ComposeError::NotInstalled { ref app } if app == "missing-app"));
         assert!(matches!(empty, ComposeError::EmptyBatch));
+        assert!(runner.fake.runs().is_empty());
+    }
+
+    #[tokio::test]
+    async fn refuses_an_option_before_the_command_that_would_override_the_project() {
+        let (_dir, data_dir) = installed(&["alpha-app", "beta-app"]);
+        let runner = Gated::open();
+        let compose = Compose::new(data_dir, runner.clone());
+        let down = ComposeCommand::Args(["-p", "beta-app", "down"].map(str::to_owned).to_vec());
+        let alone = compose
+            .run("alpha-app", down.clone(), Output::Inherit)
+            .await
+            .expect_err("-p comes first");
+        let batch = compose
+            .batch(down, &["alpha-app", "beta-app"], &config(), OnFailure::Stop)
+            .await
+            .expect_err("-p comes first");
+
+        assert_eq!(
+            alone.to_string(),
+            "-p comes before the compose command: put it after the command's name"
+        );
+        assert!(
+            matches!(batch, ComposeError::OptionBeforeCommand { ref option } if option == "-p")
+        );
         assert!(runner.fake.runs().is_empty());
     }
 

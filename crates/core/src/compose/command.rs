@@ -25,12 +25,16 @@ pub enum ComposeCommand {
     Restart,
     /// `pull`: pulls the app's images.
     Pull,
-    /// Any command, as its arguments after the project and its file, the command's name first, passed to compose as
-    /// they are: `logs -f`, `exec web sh`, `down --volumes`, as the CLI passes them through.
+    /// Any command, as its arguments after the project and its file, passed to compose as they are: `logs -f`,
+    /// `exec web sh`, `down --volumes`, as the CLI passes them through. None at all runs `docker compose` alone, which
+    /// prints its help.
     ///
-    /// Its name gives the order of a batch, as the Node CLI's `CommandOrder`: `up`, `start` and `restart` forwards,
-    /// `down` and `stop` in reverse, any other on every app at once. An `up` that is not detached, with neither `-d`
-    /// nor `--detach`, attaches to its app and does not end: a batch takes it on one app alone.
+    /// The first word is the command's name, and the project and the file stay the app's: a word before the name
+    /// that starts with `-`, as `-p traefik down`, is refused, as compose would take it for one of its own options.
+    ///
+    /// The name gives the order of a batch, as the Node CLI's `CommandOrder`: `up`, `start` and `restart` forwards,
+    /// `down` and `stop` in reverse, any other on every app at once. An `up` that is not
+    /// [detached](Self::is_attached) attaches to its app and does not end: a batch takes it on one app alone.
     Args(Vec<String>),
 }
 
@@ -88,23 +92,88 @@ impl ComposeCommand {
         }
     }
 
-    /// Whether the command attaches to its app and runs until it is stopped: an `up` with neither `-d` nor
-    /// `--detach`, as the Node CLI tells it.
-    pub(crate) fn is_attached(&self) -> bool {
+    /// Whether the command attaches to its app and runs until it is stopped: an [`Args`](Self::Args) `up` that
+    /// nothing detaches, neither `-d`, `--detach` nor `--wait`, as a flag, with a true value or in a group of short
+    /// flags, as `-dV`. The typed [`Up`](Self::Up) is always detached.
+    ///
+    /// ```
+    /// use hangar_core::ComposeCommand;
+    ///
+    /// let up = |line: &[&str]| ComposeCommand::Args(line.iter().map(|word| word.to_string()).collect());
+    ///
+    /// assert!(up(&["up", "--build"]).is_attached());
+    /// assert!(!up(&["up", "--build", "--wait"]).is_attached());
+    /// ```
+    pub fn is_attached(&self) -> bool {
         let Self::Args(args) = self else {
             return false;
         };
-        let is_detached = args.iter().any(|arg| arg == "-d" || arg == "--detach");
+        let is_detached = args.iter().any(|arg| Self::detaches(arg));
 
         args.first().is_some_and(|name| name == "up") && !is_detached
     }
+
+    /// The word starting with `-` that an [`Args`](Self::Args) holds before its command's name, which compose would
+    /// take for one of its own options, as `-p` or `-f`.
+    pub(crate) fn leading_option(&self) -> Option<&str> {
+        let Self::Args(args) = self else {
+            return None;
+        };
+
+        args.first()
+            .map(String::as_str)
+            .filter(|word| word.starts_with('-'))
+    }
+
+    /// Whether `arg` detaches an `up`: `--detach` or `--wait`, which detaches too, alone or with a true value, as
+    /// `pflag` reads a boolean, or a group of short flags holding `d`, as `-d` or `-dV`.
+    fn detaches(arg: &str) -> bool {
+        if let Some(long) = arg.strip_prefix("--") {
+            let (name, value) = match long.split_once('=') {
+                Some((name, value)) => (name, Some(value)),
+                None => (long, None),
+            };
+
+            return matches!(name, "detach" | "wait") && value.is_none_or(Self::is_true);
+        }
+
+        arg.strip_prefix('-').is_some_and(|group| {
+            group.contains('d') && group.chars().all(|flag| flag.is_ascii_alphabetic())
+        })
+    }
+
+    /// Whether `pflag` reads `value` as true.
+    fn is_true(value: &str) -> bool {
+        matches!(value, "1" | "t" | "T" | "true" | "TRUE" | "True")
+    }
+
+    /// `word` as a shell reads it back: as it is when it holds only characters no shell treats apart, else in single
+    /// quotes, a `'` in it closed, escaped and opened again.
+    fn shell_word(word: &str) -> String {
+        let is_plain = !word.is_empty()
+            && word.chars().all(|character| {
+                character.is_ascii_alphanumeric() || "-_./:=@%+,".contains(character)
+            });
+
+        if is_plain {
+            return word.to_owned();
+        }
+
+        format!("'{}'", word.replace('\'', r"'\''"))
+    }
 }
 
-/// The command line, `docker compose up -d`, without the project and its files: what the output of a batch heads
-/// each app with, and its errors.
+/// The command line, `docker compose up -d`, without the project and its files, each word quoted for a shell where it
+/// needs to be: what the output of a batch heads each app with, and its errors.
 impl fmt::Display for ComposeCommand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "docker compose {}", self.args().join(" "))
+        f.write_str("docker compose")?;
+
+        for word in self.args() {
+            write!(f, " {}", Self::shell_word(word))?;
+        }
+
+        Ok(())
     }
 }
 
@@ -163,11 +232,55 @@ mod tests {
 
     #[test]
     fn tells_an_up_that_attaches_from_one_that_detaches() {
-        assert!(args(&["up"]).is_attached());
-        assert!(args(&["up", "--build", "web"]).is_attached());
-        assert!(!args(&["up", "--build", "-d"]).is_attached());
-        assert!(!args(&["up", "--detach"]).is_attached());
+        for line in [
+            &["up"][..],
+            &["up", "--build", "web"],
+            &["up", "--detach=false"],
+            &["up", "--wait=0"],
+            &["up", "-V"],
+            &["up", "--dry-run"],
+        ] {
+            assert!(args(line).is_attached(), "{line:?}");
+        }
+
+        for line in [
+            &["up", "--build", "-d"][..],
+            &["up", "--detach"],
+            &["up", "--detach=true"],
+            &["up", "--wait"],
+            &["up", "--wait=1"],
+            &["up", "-dV"],
+            &["up", "-Vd"],
+        ] {
+            assert!(!args(line).is_attached(), "{line:?}");
+        }
+
         assert!(!args(&["logs", "-f"]).is_attached());
         assert!(!ComposeCommand::Up(UpOptions::default()).is_attached());
+    }
+
+    #[test]
+    fn finds_an_option_before_the_command_s_name() {
+        assert_eq!(
+            args(&["-p", "traefik", "down"]).leading_option(),
+            Some("-p")
+        );
+        assert_eq!(
+            args(&["--profile", "web", "up"]).leading_option(),
+            Some("--profile")
+        );
+        assert_eq!(args(&["down", "-v"]).leading_option(), None);
+        assert_eq!(args(&[]).leading_option(), None);
+    }
+
+    #[test]
+    fn quotes_the_words_of_its_command_line_that_a_shell_would_split_or_read_otherwise() {
+        let logs = args(&["logs", "--since", "2 hours", "it's", "$HOME", ""]);
+
+        assert_eq!(
+            logs.to_string(),
+            r#"docker compose logs --since '2 hours' 'it'\''s' '$HOME' ''"#
+        );
+        assert_eq!(args(&[]).to_string(), "docker compose");
     }
 }

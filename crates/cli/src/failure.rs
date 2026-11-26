@@ -25,9 +25,9 @@ pub(crate) enum Failure {
     #[error("could not start")]
     Startup(#[source] io::Error),
 
-    /// No command follows the target.
-    #[error("name a compose command after the target, as up or logs -f")]
-    NoCommand,
+    /// `store` was given no target, which clap does not let happen.
+    #[error("name a target: an app, a category, or pull")]
+    NoTarget,
 
     /// The store failed.
     #[error(transparent)]
@@ -153,7 +153,7 @@ mod tests {
             "docker compose down failed on jellyfin, exit 17"
         );
         assert_eq!(git.exit_code(), 128);
-        assert_eq!(Failure::NoCommand.exit_code(), 1);
+        assert_eq!(Failure::NoTarget.exit_code(), 1);
     }
 
     #[test]
