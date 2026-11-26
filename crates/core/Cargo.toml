@@ -33,7 +33,7 @@ nix = { workspace = true, features = ["signal"] }
 
 [dev-dependencies]
 # The statuses a fake answer of the daemon has.
-http = "1"
+http.workspace = true
 # The data directory of a test.
 tempfile.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "test-util", "time"] }

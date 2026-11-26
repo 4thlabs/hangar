@@ -1,13 +1,11 @@
 //! `hangar-server`: Hangar's server. It reads its settings from the environment, stops at once when one is missing or
-//! bad, and serves its API and its page on port 3010 until Ctrl-C or `SIGTERM`.
+//! bad, and serves its API and its page where `HOST` and `PORT` say until Ctrl-C or `SIGTERM`.
 
+use std::error::Error;
 use std::process::ExitCode;
 
 use hangar_core::Environment;
 use hangar_server::{App, Settings};
-
-/// Where the server listens: the port of the Waku version, which the image publishes.
-const ADDRESS: &str = "0.0.0.0:3010";
 
 fn main() -> ExitCode {
     tracing_subscriber::fmt().with_target(false).init();
@@ -23,6 +21,11 @@ fn main() -> ExitCode {
         Ok(settings) => settings,
         Err(error) => {
             tracing::error!("{error}");
+
+            for setting in error.errors() {
+                tracing::error!("{}", with_sources(setting));
+            }
+
             return ExitCode::FAILURE;
         }
     };
@@ -39,25 +42,41 @@ fn main() -> ExitCode {
 
 /// Serves until told to stop.
 async fn serve(settings: &Settings) -> ExitCode {
+    let address = settings.address;
+
     match &settings.page {
         Some(page) => tracing::info!(
-            "serving the page of {} and the API on {ADDRESS}",
+            "serving the page of {} and the API on {address}",
             page.display()
         ),
         None => tracing::info!(
-            "serving the API on {ADDRESS}, without a page: HANGAR_PAGE_DIR is not set"
+            "serving the API on {address}, without a page: HANGAR_PAGE_DIR is not set"
         ),
     }
 
     let served = hangar_server::server(settings)
-        .serve(ADDRESS, hangar_server::router(App))
+        .serve(address, hangar_server::router(App))
         .await;
 
     match served {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            tracing::error!("could not serve on {ADDRESS}: {error}");
+            tracing::error!("could not serve on {address}: {error}");
             ExitCode::FAILURE
         }
     }
+}
+
+/// `error` and its causes, each after a `: `.
+fn with_sources(error: &dyn Error) -> String {
+    let mut message = error.to_string();
+    let mut source = error.source();
+
+    while let Some(cause) = source {
+        message.push_str(": ");
+        message.push_str(&cause.to_string());
+        source = cause.source();
+    }
+
+    message
 }
