@@ -56,7 +56,12 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
     of a string or of a template with no expression;
   - #207's loose files, `no-restricted-syntax` on `modules/*.{ts,tsx}` and `modules/*/*.{ts,tsx}`: no file directly
     under `modules/`, and none directly under a module but `messages.ts` and `messages.test.ts`;
-  - rules 2 and 3, the orval hooks and the `api/` imports, come with the data layer.
+  - rule 2, `no-restricted-imports` on `modules/`, `routes/` and the wiring at `src/`: no name of `#libs/api` that
+    starts with `use` and a capital, orval's hooks, so that a component calls `useQuery` and `useMutation` on its
+    module's `api/` options; and no `..` segment in `routes/` and the wiring either;
+  - rule 3, `no-restricted-imports` on a module's `api/` (`modules/*/api/**`, tests excepted): no React and no package
+    of React's, nothing of a module's `hooks/`, `components/` or `ui/`; and `no-restricted-syntax` refuses an
+    `import()` of those folders.
 
 ## Language
 
@@ -161,7 +166,6 @@ Clarity beats cleverness and brevity.
 - The domain's `helpers/` are tested directly, without rendering. A page's tests sit beside its route file
   (`routes/_app/apps.test.tsx`), which the route generator ignores (`routeFileIgnorePattern` in `tsr.config.json`).
 - The API is answered at the network, by orval's MSW handlers, as the ADR's decision 13 says: a call no handler
-  answers fails the test. Until the data layer brings them, tests use `mock/page.tsx`'s `serve`, which is not
-  extended.
+  answers fails the test. Until they come, tests use `mock/page.tsx`'s `serve`, which is not extended.
 - The clock is the fake timers' (`vi.useFakeTimers({ now })`), not a prop added for the test.
 - A fixed bug gets the test that fails without its fix.
