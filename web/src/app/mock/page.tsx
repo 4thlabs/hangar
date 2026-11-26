@@ -54,7 +54,9 @@ export class FakeEventSource {
 
   /** The last source of `url` the page holds open. */
   static of(url: string): FakeEventSource | undefined {
-    return FakeEventSource.sources.findLast(source => source.url === url && source.readyState !== FakeEventSource.CLOSED);
+    return FakeEventSource.sources.findLast(
+      source => source.url === url && source.readyState !== FakeEventSource.CLOSED,
+    );
   }
 
   addEventListener() {}

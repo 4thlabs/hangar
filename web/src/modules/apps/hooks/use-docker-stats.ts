@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { type ContainerMetrics, getDockerStatsUrl, ServerEvents, type StatsFrame } from "#libs/api";
+import { getDockerStatsUrl, ServerEvents, type ContainerMetrics, type StatsFrame } from "#libs/api";
 
 /** The metrics of the running containers, by full container id. */
 export type ContainerStats = StatsFrame["containers"];
