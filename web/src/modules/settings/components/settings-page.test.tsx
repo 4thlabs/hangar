@@ -93,6 +93,24 @@ describe("/settings#env", () => {
 });
 
 describe("/settings#config", () => {
+  it("takes no typing while a save runs", async () => {
+    let answer: (response: Response) => void = () => {};
+
+    serve({
+      "GET /api/config": () => Response.json({ source: "categories: []\n" }),
+      "PUT /api/config": () => new Promise<Response>(resolve => (answer = resolve)),
+    });
+
+    renderAt("/settings#config");
+
+    await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("categories: []"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(document.querySelector(".cm-editor")?.closest("[inert]")).not.toBeNull());
+    answer(new Response(null, { status: 204 }));
+    await waitFor(() => expect(document.querySelector(".cm-editor")?.closest("[inert]")).toBeNull());
+  });
+
   it("shows why hangar.yml was refused under the editor", async () => {
     serve({
       "GET /api/config": () => Response.json({ source: "categories: []\n" }),

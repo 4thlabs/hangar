@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import { Field, FieldLabel } from "#modules/common/ui/field.tsx";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "#modules/common/ui/input-group.tsx";
 
-/** Delay before a keystroke becomes the page's `?q=`. */
-const DEBOUNCE_MS = 250;
+/** How the field waits for the typing to pause before it writes `?q=`. */
+class SearchDebounce {
+  /** The pause, in milliseconds. */
+  static readonly Delay = 250;
+}
 
 /**
  * The search field of the navbar, which drives the `?q=` of a page whose route says it is `searchable` in its
@@ -29,14 +32,17 @@ export function NavbarSearch({ id }: { id: string }) {
 
   const navigate = useNavigate();
   const [value, setValue] = useState(page.query);
-  // The `?q=` last seen, and the last one this field sent: a new `?q=` that is not the field's came from elsewhere.
+  // The `?q=` last seen, and the one this field sent until it shows: a new `?q=` that is not it came from elsewhere.
   const [seen, setSeen] = useState(page.query);
   const [sent, setSent] = useState<string | null>(null);
 
   if (page.query !== seen) {
     setSeen(page.query);
 
-    if (page.query !== sent) {
+    if (page.query === sent) {
+      // The field's own, seen once: a link or a step back to the same `?q=` later is followed.
+      setSent(null);
+    } else {
       setValue(page.query);
     }
   }
@@ -53,7 +59,7 @@ export function NavbarSearch({ id }: { id: string }) {
         search: (previous: Record<string, unknown>) => ({ ...previous, q: value || undefined }),
         replace: true,
       } as never);
-    }, DEBOUNCE_MS);
+    }, SearchDebounce.Delay);
 
     return () => clearTimeout(timer);
   }, [value, page.query, page.searchable, navigate]);
