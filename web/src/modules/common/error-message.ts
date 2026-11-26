@@ -80,6 +80,8 @@ export class ErrorMessage {
     "compose.unchecked": ["command"],
     "compose.failed": ["app", "command"],
     "compose.unknown_batch": ["batch"],
+    "jobs.unknown_run": ["run"],
+    "jobs.ended": ["run"],
     "auth.cross_origin": ["origin"],
   };
 
@@ -138,6 +140,9 @@ export class ErrorMessage {
     "compose.unchecked": ({ command }) => ErrorMessage.hinted(`The batch of ${command} could not be checked.`),
     "compose.failed": ({ app, command }) => ErrorMessage.hinted(`${command} failed on ${app}.`),
     "compose.unknown_batch": () => "This compose command ended too long ago: its output is no longer kept.",
+    "jobs.unknown_run": () => "This run of a job is no longer kept: read the jobs again.",
+    "jobs.ended": () => "This run of a job has ended already.",
+    "jobs.crashed": () => ErrorMessage.hinted("The job stopped short."),
     "auth.invalid_credentials": () => "Invalid email or password.",
     "auth.too_many_sign_ins": (_, retryAfter) => ErrorMessage.tooManySignIns(retryAfter),
     "auth.session_expired": () => "Your session is no longer valid, or has expired: sign in again.",

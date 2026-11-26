@@ -1,13 +1,15 @@
 import type { ProjectStatus, ProjectSummary } from "#libs/api";
-import { AppsSearchParams, type AppSortColumn, type AppsSort } from "#modules/apps/apps-search.ts";
+import { AppsSearchParams, type AppSortColumn, type AppsSort, type AppUpdate } from "#modules/apps/apps-search.ts";
 import { NameSearch } from "#modules/common/search.ts";
 import { TableSort } from "#modules/common/table-sort.ts";
 
-/** What narrows the apps' table: the query, the statuses and the categories ticked, and the order. */
+/** What narrows the apps' table: the query, the statuses, the categories and the sides of the update filter ticked, and
+ * the order. */
 export type ProjectQuery = {
   q: string;
   statuses: readonly ProjectStatus[];
   categories: readonly string[];
+  updates: readonly AppUpdate[];
   sort: AppsSort;
 };
 
@@ -25,11 +27,14 @@ export class ProjectFilter {
   };
 
   /**
-   * The apps of the categories and statuses ticked, none ticked keeping all of them, then those whose name matches
-   * the query, by relevance; in the order of a column when one is asked for. An app in no category of `hangar.yml`
-   * shows only with no category ticked.
+   * The apps of the categories, statuses and sides of the update filter ticked, none ticked keeping all of them, then
+   * those whose name matches the query, by relevance; in the order of a column when one is asked for. An app in no
+   * category of `hangar.yml` shows only with no category ticked.
    */
-  static apply(projects: readonly ProjectSummary[], { q, statuses, categories, sort }: ProjectQuery): ProjectSummary[] {
+  static apply(
+    projects: readonly ProjectSummary[],
+    { q, statuses, categories, updates, sort }: ProjectQuery,
+  ): ProjectSummary[] {
     const classified =
       categories.length === 0
         ? projects
@@ -38,9 +43,17 @@ export class ProjectFilter {
     const matching =
       statuses.length === 0 ? classified : classified.filter(project => statuses.includes(project.status));
 
-    const found = NameSearch.apply(q, matching);
+    const updating =
+      updates.length === 0 ? matching : matching.filter(project => updates.includes(ProjectFilter.update(project)));
+
+    const found = NameSearch.apply(q, updating);
 
     return sort ? TableSort.apply(found, sort, ProjectFilter.SortValue[sort.column]) : found;
+  }
+
+  /** The side of the update filter `project` falls on: one no check has answered for yet counts as up to date. */
+  static update(project: ProjectSummary): AppUpdate {
+    return project.updateAvailable ? "available" : "current";
   }
 
   /** How many of `projects` give each value of `key`, for the counts of a filter menu. */

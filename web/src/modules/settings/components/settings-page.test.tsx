@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { StoreStatus, StoreSync } from "#libs/api";
-import { problem, renderAt, serve } from "#app/mock/page.tsx";
+import type { JobRun, StoreStatus, StoreSync } from "#libs/api";
+import { coded, problem, renderAt, serve } from "#app/mock/page.tsx";
 
 const running: StoreSync = {
   operation: "update",
@@ -144,5 +144,86 @@ describe("/settings#config", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findAllByText("Invalid hangar.yml: categories[0].color: required.")).toHaveLength(2);
+  });
+});
+
+describe("/settings#jobs", () => {
+  const check: JobRun = {
+    id: 1,
+    job: "image_check",
+    queue: "default",
+    state: "failed",
+    createdAt: "2026-11-26T12:17:00.000Z",
+    startedAt: "2026-11-26T12:17:00.000Z",
+    endedAt: "2026-11-26T12:17:01.000Z",
+    error: { code: "docker.unavailable", message: "the Docker daemon could not be read. See the server's log." },
+  };
+
+  const update: JobRun = {
+    ...check,
+    id: 2,
+    job: "auto_update",
+    state: "running",
+    endedAt: null,
+    error: null,
+  };
+
+  it("lists the runs, the newest first, and says why one failed", async () => {
+    serve({ "GET /api/jobs": () => Response.json([update, check]) });
+    renderAt("/settings#jobs");
+
+    expect(await screen.findByText("Update of the apps")).toBeDefined();
+    expect(screen.getByText("Image check")).toBeDefined();
+    expect(screen.getByText("Failed")).toBeDefined();
+    expect(screen.getByText("The Docker daemon could not be read. See the server's log.")).toBeDefined();
+    // A run that ended cannot be canceled.
+    expect(screen.queryByRole("button", { name: "Cancel the image check" })).toBeNull();
+  });
+
+  it("runs a job again and cancels a run, then reads the runs again", async () => {
+    let runs = [update, check];
+    const asked: string[] = [];
+
+    serve({
+      "GET /api/jobs": () => Response.json(runs),
+      "POST /api/jobs/1/run": () => {
+        asked.push("run 1");
+        runs = [{ ...check, id: 3, state: "waiting", startedAt: null, endedAt: null, error: null }, ...runs];
+
+        return Response.json(runs[0]);
+      },
+      "POST /api/jobs/2/cancel": () => {
+        asked.push("cancel 2");
+        runs = runs.map(run => (run.id === 2 ? { ...run, state: "canceled" } : run));
+
+        return Response.json(runs.find(run => run.id === 2));
+      },
+    });
+
+    renderAt("/settings#jobs");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Run the image check again" }));
+
+    expect(await screen.findByText("Image check waits its turn.")).toBeDefined();
+    expect(await screen.findByText("Waiting")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel the update of the apps" }));
+
+    expect(await screen.findByText("Update of the apps stops.")).toBeDefined();
+    expect(await screen.findByText("Canceled")).toBeDefined();
+    expect(asked).toEqual(["run 1", "cancel 2"]);
+  });
+
+  it("says why a cancel was refused", async () => {
+    serve({
+      "GET /api/jobs": () => Response.json([update]),
+      "POST /api/jobs/2/cancel": () => coded(409, "jobs.ended", "the run 2 of a job has ended already", { run: 2 }),
+    });
+
+    renderAt("/settings#jobs");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel the update of the apps" }));
+
+    expect(await screen.findByText("This run of a job has ended already.")).toBeDefined();
   });
 });

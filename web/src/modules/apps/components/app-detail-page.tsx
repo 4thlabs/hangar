@@ -82,6 +82,7 @@ function AppHeader({ detail: { summary } }: { detail: ProjectDetail }) {
         {summary.icon && <img src={summary.icon} alt="" className="size-7 object-contain" />}
         <h1 className="text-2xl font-semibold">{summary.name}</h1>
         <Badge variant={ProjectStatusView.variant(summary.status)}>{ProjectStatusView.Labels[summary.status]}</Badge>
+        {summary.updateAvailable && <Badge variant="outline">Update available</Badge>}
       </div>
       <p className="text-sm text-muted-foreground">
         {services} · {summary.runningCount}/{summary.containerIds.length} containers running
@@ -110,8 +111,8 @@ function AppNotFound({ project }: { project: string }) {
 
 /**
  * `/apps/:project`: an installed app as Docker runs it, its services and containers, read again when the server says
- * the daemon changed them, their usage live, and its compose commands. Its backups come with #177, the update badge
- * with the image check of #176, and the link to its editor with #172.
+ * the daemon changed them, their usage live, its compose commands, and the badge of an update the last image check
+ * found. Its backups come with #177, and the link to its editor with #172.
  */
 export function AppDetailPage() {
   const { project } = useParams({ from: "/app/apps/$project" });

@@ -5,10 +5,11 @@ describe("SettingsTab.parse", () => {
   it("opens the tab the hash names, with or without its #", () => {
     expect(SettingsTab.parse("#env")).toBe("env");
     expect(SettingsTab.parse("config")).toBe("config");
+    expect(SettingsTab.parse("#jobs")).toBe("jobs");
   });
 
   it("opens the first tab for a hash that names none", () => {
     expect(SettingsTab.parse("")).toBe("store");
-    expect(SettingsTab.parse("#jobs")).toBe("store");
+    expect(SettingsTab.parse("#hangar")).toBe("store");
   });
 });

@@ -15,6 +15,7 @@ function project(name: string, status: ProjectStatus, category?: string): Projec
     runningCount: status === "stopped" ? 0 : 1,
     unhealthyCount: status === "unhealthy" ? 1 : 0,
     containerIds: [`${name}-1`],
+    updateAvailable: false,
   };
 }
 
@@ -109,6 +110,26 @@ describe("/apps", () => {
     await screen.findByText("miniflux");
 
     expect(rows()).toEqual(["miniflux"]);
+  });
+
+  it("badges the apps the last image check found an update for, and keeps them by the update filter", async () => {
+    const outdated = [...projects.slice(0, 2), { ...project("frigate", "unhealthy"), updateAvailable: true }];
+
+    serve({ "GET /api/docker/apps": () => Response.json(outdated) });
+    renderAt("/apps?update=available");
+
+    await screen.findByText("frigate");
+
+    expect(rows()).toEqual(["frigateUpdate"]);
+
+    cleanup();
+    serve({ "GET /api/docker/apps": () => Response.json(outdated) });
+    renderAt("/apps?update=current");
+
+    await screen.findByText("jellyfin");
+
+    expect(rows()).toEqual(["jellyfin", "miniflux"]);
+    expect(within(screen.getByRole("table")).queryByText("Update")).toBeNull();
   });
 
   it("orders the apps by a column header, then the other way", async () => {
@@ -228,6 +249,16 @@ describe("/apps/:project", () => {
     expect(screen.getByText("Healthy")).toBeDefined();
     expect(screen.getByText("0.0.0.0:8080 → 80/tcp")).toBeDefined();
     expect(screen.getByText("1 service · 1/1 containers running")).toBeDefined();
+    expect(screen.queryByText("Update available")).toBeNull();
+  });
+
+  it("badges an app the last image check found an update for", async () => {
+    const outdated = { ...alpha, summary: { ...alpha.summary, updateAvailable: true } };
+
+    serve({ "GET /api/docker/apps/alpha": () => Response.json(outdated) });
+    renderAt("/apps/alpha");
+
+    expect(await screen.findByText("Update available")).toBeDefined();
   });
 
   it("shows the host's memory once for containers with no limit of their own", async () => {

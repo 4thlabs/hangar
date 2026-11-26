@@ -26,8 +26,28 @@ describe("NotificationText.describe", () => {
     });
   });
 
+  it("words the image check and the update of the apps, as the Waku version does", () => {
+    expect(NotificationText.describe({ key: "updatesAvailable", params: { count: 1 } })).toEqual({
+      title: "Updates available",
+      description: "1 app has a newer image in the registry.",
+    });
+
+    expect(NotificationText.describe({ key: "autoUpdate", params: { updated: 2, failed: "" } })).toEqual({
+      title: "Automatic update",
+      description: "2 apps were updated.",
+    });
+
+    expect(NotificationText.describe({ key: "autoUpdate", params: { updated: 1, failed: "alpha, gamma" } })).toEqual({
+      title: "Automatic update",
+      description: "1 app was updated. Failed for: alpha, gamma.",
+    });
+  });
+
   it("says a key it does not know, from a newer server, as a plain notification", () => {
-    const newer = { key: "updatesAvailable", params: { count: 2 } } as unknown as NotificationMessage;
+    const newer = {
+      key: "backupFailed",
+      params: { app: "alpha", error: "disk full" },
+    } as unknown as NotificationMessage;
 
     expect(NotificationText.describe(newer)).toEqual({ title: "Notification" });
   });
