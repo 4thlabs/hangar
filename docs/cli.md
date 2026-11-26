@@ -14,7 +14,7 @@ node bin/cli.js --help
 ```
 
 The Node CLI is not shipped in the container image. A Rust binary, `hangar`, takes the same `store`
-commands, and is: in the image, and released as a static binary for the host. See
+commands. It ships in the image, and each release attaches it as a static binary for the host. See
 [the Rust binary](#the-rust-binary). The Node CLI stays until the switch to the Rust server.
 
 ## Commands
@@ -160,8 +160,9 @@ cargo run -p hangar-cli -- store Media stop
 Where it differs from the Node CLI:
 
 - It has no `swarm` command yet.
-- It says when `docker` or `git` is not installed, and, once a compose command failed, when docker
-  has no `compose`, where the Node CLI prints the system's error, or docker's.
+- It says when `docker` or `git` is not installed, where the Node CLI prints the system's error, and,
+  once a command whose output it prints failed, when docker has no `compose`, as docker says it
+  among that output. A command given the terminal, and `store ls`, leave it to docker.
 - Every stack is checked before any runs: a listed stack that is not installed fails the command
   before the others run, where the Node CLI runs those before it.
 - On a category, a stack listed in several categories runs at its first place in `hangar.yml`.
@@ -210,8 +211,9 @@ terminal, runs it with `docker exec hangar hangar …`.
 
 A `docker exec` adds its start-up time to every command: typed often, the binary runs better on
 the host itself. Each release attaches it, static, with its checksum: `hangar-x86_64-unknown-linux-musl`,
-and `hangar-aarch64-unknown-linux-musl` for an ARM host. It needs two things on the host; check
-both:
+and `hangar-aarch64-unknown-linux-musl` for an ARM host. It links no library, whatever the host's
+libc: `file` reads it as "static-pie linked", a static binary that keeps its address randomized,
+and `hangar --version` prints the release's version. It needs two things on the host; check both:
 
 ```bash
 docker compose version   # the Compose Manager plugin provides it on Unraid
