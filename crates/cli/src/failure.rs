@@ -54,7 +54,7 @@ pub(crate) enum Failure {
 
     /// Docker failed a compose command, and has no `compose` command: its plugin is not installed.
     #[error("docker compose is not installed")]
-    NoCompose(Box<Failure>),
+    NoCompose(#[source] Box<Failure>),
 }
 
 impl Failure {
@@ -88,8 +88,9 @@ impl Failure {
     /// which app failed and the code alone, as its stderr went with a batch's output, or on the terminal it inherited,
     /// already; any other cause, as a `docker` that does not start, is said in full, as it was printed nowhere.
     fn message(&self) -> String {
+        // Its cause is said in its own words, which keep a compose failure to its app and its code.
         if let Self::NoCompose(failure) = self {
-            return format!("{}: {self}", failure.message());
+            return format!("{self}: {}", failure.message());
         }
 
         let compose = match self {
@@ -252,9 +253,13 @@ mod tests {
 
         assert_eq!(
             no_compose.message(),
-            "docker compose restart failed on jellyfin, exit 1: docker compose is not installed"
+            "docker compose is not installed: docker compose restart failed on jellyfin, exit 1"
         );
         assert_eq!(no_compose.exit_code(), 1);
+        assert!(
+            no_compose.has_exited_with_error(),
+            "the chain goes on to its cause"
+        );
         assert!(!Failure::Run(spawn_error(io::ErrorKind::NotFound)).has_exited_with_error());
     }
 
