@@ -100,7 +100,7 @@ export default [
       "src/app/pages.gen.ts",
       "web/src/modules/common/ui/**",
       "web/src/libs/api/generated.ts",
-      "web/src/app/routeTree.gen.ts",
+      "web/src/routeTree.gen.ts",
     ],
   },
   {

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StoreApp, StoreApps } from "#libs/api";
-import { problem, renderAt, serve } from "#app/mock/page.tsx";
+import { problem, renderAt, serve } from "#mock/page.tsx";
 
 /** An app of the store. */
 function app(id: string, name: string, installed: boolean): StoreApp {

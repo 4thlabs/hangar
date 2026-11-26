@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { createRouter, type RouterHistory } from "@tanstack/react-router";
-import { routeTree } from "#app/routeTree.gen.ts";
 import type { Session } from "#modules/auth/api/session.ts";
+import { routeTree } from "#routeTree.gen.ts";
 
 /** What every route reads: the page's query client, and the session it keeps. */
 export type RouterContext = { queryClient: QueryClient; session: Session };

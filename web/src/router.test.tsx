@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ana, coded, problem, renderAt, serve, unauthorized } from "#app/mock/page.tsx";
+import { ana, coded, problem, renderAt, serve, unauthorized } from "#mock/page.tsx";
 
 afterEach(() => {
   cleanup();

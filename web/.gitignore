@@ -3,6 +3,6 @@
 /dist
 /node_modules
 # Written by TanStack Router from src/routes/, by `tsr generate` or the Vite plugin.
-/src/app/routeTree.gen.ts
+/src/routeTree.gen.ts
 # The router generator's scratch files.
 /.tanstack

@@ -15,7 +15,7 @@ web/src/modules/common/ui
 web/openapi.json
 web/src/libs/api/generated.ts
 # TanStack Router's tree of web/src/routes/
-web/src/app/routeTree.gen.ts
+web/src/routeTree.gen.ts
 # The contract's document as it prints it, which its test compares
 crates/api/tests/openapi.snapshot.json
 src/libs/db/schemas/auth-schema.ts

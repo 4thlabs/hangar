@@ -2,7 +2,7 @@ import { focusManager } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Notification, NotificationMessage, RecentNotifications } from "#libs/api";
-import { FakeEventSource, problem, renderAt, serve, type Answers } from "#app/mock/page.tsx";
+import { FakeEventSource, problem, renderAt, serve, type Answers } from "#mock/page.tsx";
 
 /** A notification of the store, `id`, neither seen nor read unless `marks` says so. */
 function notification(id: number, message: NotificationMessage, marks: Partial<Notification> = {}): Notification {

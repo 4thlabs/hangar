@@ -1,5 +1,5 @@
 import { createRootRouteWithContext } from "@tanstack/react-router";
-import type { RouterContext } from "#app/router.ts";
+import type { RouterContext } from "#router.ts";
 
 /**
  * The root of every route, which hands them the router's context. It renders its child alone: the app's frame is

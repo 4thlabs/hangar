@@ -1,8 +1,8 @@
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { render } from "@testing-library/react";
 import { vi } from "vitest";
-import { createPage } from "#app/page.ts";
-import { AppProviders } from "#modules/common/components/app-providers.tsx";
+import { AppProviders } from "#app-providers.tsx";
+import { createPage } from "#page.ts";
 
 /** The signed-in user of the pages under test. */
 export const ana = { name: "Ana Lima", email: "ana@example.com" };

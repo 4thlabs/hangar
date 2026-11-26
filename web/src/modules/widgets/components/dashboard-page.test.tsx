@@ -2,7 +2,7 @@ import { focusManager } from "@tanstack/react-query";
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getWidgetsDataQueryKey, type DockerOverview, type WidgetData, type WidgetPlacement } from "#libs/api";
-import { coded, FakeEventSource, renderAt, serve } from "#app/mock/page.tsx";
+import { coded, FakeEventSource, renderAt, serve } from "#mock/page.tsx";
 
 const placements: WidgetPlacement[] = [
   { key: "clock-1", type: "clock", column: 1, link: null },
