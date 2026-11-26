@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import type { GluetunVpnStatus } from "#libs/api";
-import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { WidgetCard, WidgetContent, WidgetHeader } from "../widget.tsx";
 
 /** Whether gluetun's tunnel is up, and where it comes out. No link: gluetun has no web page. */

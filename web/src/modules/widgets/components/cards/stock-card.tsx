@@ -1,6 +1,6 @@
 import type { Stock, StockPrices } from "#libs/api";
-import { widgetLook } from "#modules/widgets/widget-appearance.ts";
-import { formatCount, formatInteger } from "#modules/widgets/widget-format.ts";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 import { WidgetSparkline } from "../widget-sparkline.tsx";
 import { WidgetCard, WidgetContent, WidgetHeader, WidgetMetadata, WidgetMetric, WidgetMetricGrid } from "../widget.tsx";
 

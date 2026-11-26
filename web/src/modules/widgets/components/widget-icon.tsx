@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import type { WidgetIcon } from "#modules/widgets/widget-appearance.ts";
+import type { WidgetIcon } from "#modules/widgets/helpers/widget-appearance.ts";
 
 /** A widget's icon, its dark variant on a dark theme when it has one. Decorative: the title names it. */
 export function WidgetIconImage({ icon }: { icon: WidgetIcon }) {

@@ -1,6 +1,6 @@
 import type { ArcaneGeneralStats, ArcaneVersion } from "#libs/api";
-import { widgetLook } from "#modules/widgets/widget-appearance.ts";
-import { formatCount, formatInteger } from "#modules/widgets/widget-format.ts";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 import { WidgetCard, WidgetContent, WidgetFooter, WidgetHeader, WidgetMetadata } from "../widget.tsx";
 import { HostMetrics } from "./host-metrics.tsx";
 

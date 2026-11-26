@@ -1,6 +1,6 @@
 import type { GithubReleases } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { WidgetCard, WidgetContent, WidgetHeader, WidgetList, WidgetListItem, WidgetTime } from "../widget.tsx";
 
 /** The latest release of each repository, newest first. */

@@ -1,8 +1,8 @@
 import type { FrigateEvents } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { widgetLook } from "#modules/widgets/widget-appearance.ts";
-import { formatCount } from "#modules/widgets/widget-format.ts";
-import { widgetImageUrl } from "#modules/widgets/widget-image.ts";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { formatCount } from "#modules/widgets/helpers/widget-format.ts";
+import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
 import {
   WidgetCard,
   WidgetContent,
