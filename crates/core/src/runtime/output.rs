@@ -10,13 +10,15 @@ use tokio_util::sync::CancellationToken;
 /// Where a run sends its stdout and stderr. A captured run keeps stdout alone instead, through
 /// [`CommandRunner::capture`](crate::CommandRunner::capture).
 ///
-/// A streamed output goes to a bounded channel, which a compose batch shares between its runs and an HTTP stream
-/// reads. A full channel pauses the run until the reader catches up, so that a slow reader holds the child back
-/// rather than growing memory with the whole output, even after the child exited: a reader that stops reading without
-/// dropping its receiver holds the run until it is cancelled. A reader that has gone away loses the rest, and the
-/// command goes on without it.
+/// A streamed output goes to a bounded channel, which a reader takes it from, as an HTTP stream. A full channel pauses
+/// the run until the reader catches up, so that a slow reader holds the child back rather than growing memory with
+/// the whole output, even after the child exited: a reader that stops reading without dropping its receiver holds the
+/// run until it is cancelled. A reader that has gone away loses the rest, and the command goes on without it.
 ///
-/// The run sets no bound of its own on a stalled reader: the server of the HTTP stream does. quoll's `serve` and
+/// A compose batch is no such reader: it gives each of its runs a channel of its own and drains it into the batch's
+/// log as it comes, which no listener holds back, as [`ComposeBatch`](crate::ComposeBatch) says.
+///
+/// The run sets no bound of its own on a stalled reader: the server of an HTTP stream does. quoll's `serve` and
 /// `serve_on` cut a connection whose socket takes no write for 60 s, once the kernel's buffers are full, and drop
 /// its stream with the receiver it holds: a client that stops reading without closing its connection is then a
 /// reader that has gone away. A router served with `axum::serve` has no such bound, and its stalled client holds the

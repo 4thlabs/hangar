@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use futures::StreamExt;
 use hangar_core::{
     BatchEvent, Command, CommandRunner, Compose, ComposeCommand, ComposeContainer, ComposeError,
-    Config, ContainerState, DataDir, Docker, Output, Runtime, UpOptions,
+    Config, ContainerState, DataDir, Docker, OnFailure, Output, Runtime, UpOptions,
 };
 use tempfile::TempDir;
 
@@ -152,7 +152,7 @@ async fn checks_a_file_then_brings_a_project_up_in_a_batch_and_down() {
 
     let up = ComposeCommand::Up(UpOptions::default());
     let batch = compose
-        .batch(up, &[app], &Config::default())
+        .batch(up, &[app], &Config::default(), OnFailure::CarryOn)
         .await
         .expect("the app is installed");
     let report = batch.finished().await;
@@ -168,8 +168,12 @@ async fn checks_a_file_then_brings_a_project_up_in_a_batch_and_down() {
     // Listened to once over, the batch still has its output, from its start.
     let events: Vec<BatchEvent> = batch.output().collect().await;
 
-    assert!(matches!(events.first(), Some(BatchEvent::Started { app: started }) if started == app));
-    assert!(matches!(events.last(), Some(BatchEvent::Finished(outcome)) if outcome.result.is_ok()));
+    assert!(
+        matches!(events.first(), Some(BatchEvent::Started { app: started }) if started.as_ref() == app)
+    );
+    assert!(
+        matches!(events.last(), Some(BatchEvent::Finished(outcome)) if outcome.status.is_success())
+    );
 
     compose
         .run(app, ComposeCommand::Down, Output::Inherit)

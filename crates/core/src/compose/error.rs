@@ -47,12 +47,23 @@ pub enum ComposeError {
         source: RunError,
     },
 
-    /// `docker compose config` rejects the file, or could not check it.
+    /// `docker compose config` rejects the file: it exited with a non-zero code.
     #[error("docker compose rejects {}", file.display())]
     Invalid {
         /// The file.
         file: PathBuf,
-        /// The failed run, with compose's complaint in its stderr.
+        /// The failed run, a [`RunError::Failed`] with compose's complaint in its stderr.
+        #[source]
+        source: RunError,
+    },
+
+    /// `docker compose config` could not check the file: docker did not start, or the run was cancelled, killed or
+    /// interrupted. The file may be valid.
+    #[error("could not check {}", file.display())]
+    Unchecked {
+        /// The file.
+        file: PathBuf,
+        /// Why the run did not check it.
         #[source]
         source: RunError,
     },
