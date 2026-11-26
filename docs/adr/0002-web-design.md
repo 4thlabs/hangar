@@ -311,6 +311,10 @@ The lint selector `ClassDeclaration[superClass=null] > ClassBody:not(:has(> [sta
 - `NotificationCache.change(queryClient, ...)` is used by one hook only, which has the client. It becomes a closure
   of that hook, not a class. The corollary to write in AGENTS.md: a helper that one hook uses, and that needs what the
   hook has, is a closure of the hook.
+  - _Amended by #195 on 2026-11-26:_ unless several of the hook's effects call it. It is then a module function
+    beside the hook, taking what it needs, as `changeNotifications(queryClient, change)`: as a closure it would be a
+    dependency of each effect, which `exhaustive-deps` asks to wrap in a `useCallback`, and the coding rules leave
+    memoization to the React compiler.
 - The jotai store stays created in `AppProviders`, as it is. Rule 16 of the addendum removes it.
 
 ## Decision 8: the references, and what is taken
@@ -541,7 +545,8 @@ Accepted by the maintainer on 2026-11-26, as recommended:
 - `Region` (Suspense, CatchBoundary, QueryErrorResetBoundary) per card and widget, with `useSuspenseQuery`, and stale data kept on a failed refetch
 - `messages.ts` per module, English only, partly reversing 2026-11-24
 - `createPage` in `app/page.ts` as the one place the `QueryClient`, the `Session` and the router are created
-- The closure corollary: a helper of one hook that needs the hook's values is a closure, not a class
+- The closure corollary: a helper of one hook that needs the hook's values is a closure, not a class (amended by #195
+  on 2026-11-26: a module function beside the hook when several of its effects call it)
 - The lint rules in core ESLint, not typescript-eslint or a boundaries plugin, while on TypeScript 7
 - The order: #195, then #186, then the data layer, then the catalogs; #178 merged before #195
 
