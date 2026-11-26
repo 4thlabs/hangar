@@ -10,7 +10,7 @@ use hangar_core::{Docker, Runtime};
 
 use crate::Settings;
 use crate::auth::{Auth, AuthBodyLimit, OriginCheck};
-use crate::docker::DockerState;
+use crate::docker::{DockerChanges, DockerState};
 use crate::store::StoreState;
 use crate::trailing_slash::TrailingSlash;
 
@@ -32,10 +32,12 @@ impl App {
     /// The state of a server of `settings` on the daemon of `docker`, its commands run by `runtime`: with the variables
     /// it sets, as a `PATH` that finds another `docker`, or the cancellation that stops them.
     pub fn with_runtime(settings: &Settings, runtime: Runtime, docker: Docker) -> Self {
+        let docker_changes = DockerChanges::new();
+
         Self {
             auth: Arc::new(Auth::new(settings)),
-            store: StoreState::new(settings, runtime.clone()),
-            docker: DockerState::new(settings, runtime, docker),
+            store: StoreState::new(settings, runtime.clone(), docker_changes.clone()),
+            docker: DockerState::new(settings, runtime, docker, docker_changes),
         }
     }
 

@@ -232,6 +232,9 @@ pub struct VolumeCounts {
 pub struct DockerOverview {
     /// The daemon's version.
     pub version: String,
+    /// The memory of the host, in bytes: what a container with no limit of its own may take, and the limit its stats
+    /// report.
+    pub memory: u64,
     /// Its containers.
     pub containers: ContainerCounts,
     /// Its images.
@@ -244,7 +247,8 @@ pub struct DockerOverview {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DockerChange {
-    /// The containers of the apps: the projects and each project's detail.
+    /// The apps: their containers, or which of them are installed, and how `hangar.yml` files them. The projects and each
+    /// project's detail.
     Containers,
     /// The usage of the whole host.
     Overview,

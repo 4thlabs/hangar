@@ -365,7 +365,7 @@
         "oneOf": [
           {
             "const": "containers",
-            "description": "The containers of the apps: the projects and each project's detail.",
+            "description": "The apps: their containers, or which of them are installed, and how `hangar.yml` files them. The projects and each\nproject's detail.",
             "type": "string"
           },
           {
@@ -394,6 +394,12 @@
             ],
             "description": "Its images."
           },
+          "memory": {
+            "description": "The memory of the host, in bytes: what a container with no limit of its own may take, and the limit its stats\nreport.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "version": {
             "description": "The daemon's version.",
             "type": "string"
@@ -409,6 +415,7 @@
         },
         "required": [
           "version",
+          "memory",
           "containers",
           "images",
           "volumes"

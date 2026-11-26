@@ -30,7 +30,12 @@ impl ConfigServer for App {
         let _change = self.store.change().await?;
 
         match self.store.store.save_config(&config.source).await {
-            Ok(_) => Ok(Response::new(())),
+            Ok(_) => {
+                // It links the apps it lists, and files them in other categories.
+                self.store.installed_changed();
+
+                Ok(Response::new(()))
+            }
             // The user's to fix: the field at fault, as the editor shows it under the file.
             Err(StoreError::Config { source, .. }) => Err(Failure::config(&source).into()),
             Err(StoreError::NotInstalled) => Err(ErrorCode::StoreNotInstalled.into()),

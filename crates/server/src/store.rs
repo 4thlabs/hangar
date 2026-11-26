@@ -11,11 +11,12 @@ mod sync;
 
 use std::sync::Arc;
 
-use hangar_api::{ErrorCode, StoreSync};
+use hangar_api::{DockerChange, ErrorCode, StoreSync};
 use hangar_core::{Compose, Runtime, Store};
 use tokio::sync::{Mutex, watch};
 
 use crate::Settings;
+use crate::docker::DockerChanges;
 use crate::notifications::Notifier;
 use gate::{Change, ChangeGate};
 
@@ -33,11 +34,18 @@ pub(crate) struct StoreState {
     /// or not, is then what no other sync is changing.
     starting: Mutex<()>,
     notifier: Notifier,
+    /// Told when what is installed may have changed, for the Docker pages, which list the installed apps.
+    docker_changes: DockerChanges,
 }
 
 impl StoreState {
-    /// The store of the server's settings, its commands, `git` and `docker compose`, run by `runtime`.
-    pub(crate) fn new(settings: &Settings, runtime: Runtime) -> Arc<Self> {
+    /// The store of the server's settings, its commands, `git` and `docker compose`, run by `runtime`; what it installs
+    /// or uninstalls is told to the Docker pages through `docker_changes`.
+    pub(crate) fn new(
+        settings: &Settings,
+        runtime: Runtime,
+        docker_changes: DockerChanges,
+    ) -> Arc<Self> {
         Arc::new(Self {
             store: Store::new(
                 settings.store_url.clone(),
@@ -49,6 +57,7 @@ impl StoreState {
             gate: ChangeGate::default(),
             starting: Mutex::new(()),
             notifier: Notifier::default(),
+            docker_changes,
         })
     }
 
@@ -64,5 +73,10 @@ impl StoreState {
             .enter()
             .await
             .ok_or_else(|| ErrorCode::SyncRunning.into())
+    }
+
+    /// Tells the Docker pages that the installed apps may have changed: they read them again.
+    pub(crate) fn installed_changed(&self) {
+        self.docker_changes.send(DockerChange::Containers);
     }
 }

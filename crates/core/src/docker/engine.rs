@@ -192,6 +192,8 @@ pub(crate) struct SystemInfo {
     pub(crate) containers: u64,
     pub(crate) containers_running: u64,
     pub(crate) containers_stopped: u64,
+    /// The memory of the host, in bytes.
+    pub(crate) mem_total: u64,
 }
 
 /// What `GET /system/df` says of the disk the images and volumes take.

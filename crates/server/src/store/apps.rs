@@ -222,11 +222,21 @@ impl StoreServer for App {
     }
 
     async fn install(&self, _: &SignedIn, id: String) -> Result<Response<StoreApp>> {
-        Ok(Response::new(self.store.install(&id).await?))
+        let installed = self.store.install(&id).await;
+
+        // A failure may have linked it all the same.
+        self.store.installed_changed();
+
+        Ok(Response::new(installed?))
     }
 
     async fn uninstall(&self, _: &SignedIn, id: String) -> Result<Response<StoreApp>> {
-        Ok(Response::new(self.store.uninstall(&id).await?))
+        let uninstalled = self.store.uninstall(&id).await;
+
+        // A failure may have taken it down, or unlinked it, all the same.
+        self.store.installed_changed();
+
+        Ok(Response::new(uninstalled?))
     }
 
     async fn new_app(&self, _: &SignedIn) -> Result<Response<NewAppTemplate>> {

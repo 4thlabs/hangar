@@ -148,6 +148,8 @@ impl StoreState {
                 }
             });
         });
+        // A sync links the apps `hangar.yml` lists, even one that failed past its clone or pull.
+        self.installed_changed();
         self.notifier.notify(Notification {
             level,
             message,
@@ -247,7 +249,7 @@ mod tests {
             })
             .expect("the settings are valid");
 
-            StoreState::new(&settings, runtime)
+            StoreState::new(&settings, runtime, crate::docker::DockerChanges::new())
         }
     }
 

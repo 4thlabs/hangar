@@ -1,6 +1,7 @@
 //! Docker, read through a cache that the daemon's events keep fresh: the containers of the compose projects, which
 //! the projects and each project's detail are made of, and the usage of the whole host. A page follows what changed,
-//! once the cache holds it, and reads it again. The logs and the stats are streams of the daemon's, never kept.
+//! once the cache holds it, or once the store installed or uninstalled an app, and reads it again. The logs and the
+//! stats are streams of the daemon's, never kept.
 
 mod cache;
 mod routes;
@@ -27,8 +28,7 @@ pub(crate) struct DockerState {
     store: Store<Runtime>,
     containers: Arc<Cached<ComposeContainers>>,
     overview: Arc<Cached<DockerOverview>>,
-    /// What changed in the cache, for the pages that follow it.
-    changes: broadcast::Sender<DockerChange>,
+    changes: DockerChanges,
     /// Set while the events of the containers wait out their batch.
     containers_batch: AtomicBool,
     /// Set while the events of the overview wait out their batch.
@@ -57,12 +57,14 @@ impl DockerState {
     /// How long the events of the overview gather: its reload is slow, and its batch takes a whole `compose up`.
     const OVERVIEW_BATCH: Duration = Duration::from_secs(2);
 
-    /// How many changes a page that reads slowly may fall behind before it reads everything again.
-    const CHANGES: usize = 16;
-
-    /// The state of `docker`, the store of the server's settings telling what is installed.
-    pub(crate) fn new(settings: &Settings, runtime: Runtime, docker: Docker) -> Arc<Self> {
-        let (changes, _) = broadcast::channel(Self::CHANGES);
+    /// The state of `docker`, the store of the server's settings telling what is installed, and what changes sent to
+    /// the pages that follow them.
+    pub(crate) fn new(
+        settings: &Settings,
+        runtime: Runtime,
+        docker: Docker,
+        changes: DockerChanges,
+    ) -> Arc<Self> {
         let containers = {
             let docker = docker.clone();
 
@@ -110,15 +112,12 @@ impl DockerState {
 
     /// What tells the pages that follow the changes that `change` happened.
     fn notifier(
-        changes: &broadcast::Sender<DockerChange>,
+        changes: &DockerChanges,
         change: DockerChange,
     ) -> impl Fn() + Send + Sync + 'static {
         let changes = changes.clone();
 
-        // An error says no page follows the changes, which is no failure.
-        move || {
-            let _ = changes.send(change);
-        }
+        move || changes.send(change)
     }
 
     /// The containers of every compose project, as kept.
@@ -193,5 +192,29 @@ impl DockerState {
     /// The changes from now on.
     pub(crate) fn subscribe(&self) -> broadcast::Receiver<DockerChange> {
         self.changes.subscribe()
+    }
+}
+
+/// What changed of what the Docker routes give, for the pages that follow it: sent by the cache, and by the store when
+/// what is installed changed. Its clones send to the same pages.
+#[derive(Debug, Clone)]
+pub(crate) struct DockerChanges(broadcast::Sender<DockerChange>);
+
+impl DockerChanges {
+    /// How many changes a page that reads slowly may fall behind before it reads everything again.
+    const BACKLOG: usize = 16;
+
+    pub(crate) fn new() -> Self {
+        Self(broadcast::channel(Self::BACKLOG).0)
+    }
+
+    /// Tells the pages that follow the changes that `change` happened.
+    pub(crate) fn send(&self, change: DockerChange) {
+        // An error says no page follows the changes, which is no failure.
+        let _ = self.0.send(change);
+    }
+
+    fn subscribe(&self) -> broadcast::Receiver<DockerChange> {
+        self.0.subscribe()
     }
 }
