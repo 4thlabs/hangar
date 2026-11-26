@@ -142,8 +142,8 @@ uninstall is refused with a 409, rather than race it; those changes otherwise ta
 server logs them. The page shows why a sync failed, its code and its English message, never git's output, which the log
 holds.
 
-**Settings → Configuration** saves `hangar.yml` once it is valid, and links the apps and shared files it lists; an
-invalid file is refused with the field at fault, and not written. **Settings → Environment** saves `.env.global` merged
+**Settings → Configuration** saves `hangar.yml` once it is valid, its users included, and links the apps and shared
+files it lists; an invalid file is refused with the field at fault, and not written. **Settings → Environment** saves `.env.global` merged
 into the file as it is on disk, after its copy aside, `.env.global.<time>.bak`: the page sends only what changed since
 it read the file, so a variable added, changed or removed by hand meanwhile stays as the file has it, and only the ones
 removed on the page are lost. A save that changes nothing writes nothing, and makes no copy. A new variable needs a name

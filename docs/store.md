@@ -301,4 +301,7 @@ provider where anyone can claim an email cannot sign in as them.
 The file is read again at each request: a user added can sign in at once, and one removed, or whose
 `passwordHash` or `oidcSubject` changed, is signed out at their next request. The users are read
 apart from the rest of the file: a mistake among them never stops the CLI, compose or the editor,
-but while it is there the server signs nobody in, and its log says which field is at fault.
+but while it is there the server signs nobody in, and its log says which field is at fault. The
+Rust server's **Settings → Configuration** checks them too, and refuses to save a file with a user
+wrong, naming the field: saved from the page, the file would sign out everyone, the one who would
+fix it included.

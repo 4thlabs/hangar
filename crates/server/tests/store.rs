@@ -502,6 +502,41 @@ async fn an_invalid_hangar_yml_is_a_400_that_names_its_field_and_is_not_written(
 }
 
 #[tokio::test]
+async fn a_hangar_yml_whose_users_would_sign_nobody_in_is_refused_and_not_written() {
+    let fixture = Fixture::new();
+    let server = fixture.serve(None).await;
+    let before = fs::read_to_string(fixture.config_file()).expect("read");
+
+    for (users, field) in [
+        (
+            "users:\n  - { name: Ana, email: not-an-email }\n",
+            "users[0].email",
+        ),
+        (
+            "users:\n  - { name: Ana, email: ana@example.com }\n  - { name: Bo, email: ANA@example.com }\n",
+            "users[1].email",
+        ),
+    ] {
+        let source = format!("categories: []\n{users}");
+        let (status, problem) = server
+            .put("/api/config", &json!({ "source": source }))
+            .await;
+        let detail = problem["detail"].as_str().expect("a detail");
+
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{problem}");
+        assert!(
+            detail.starts_with(&format!("invalid hangar.yml: {field}: ")),
+            "{detail}"
+        );
+    }
+
+    assert_eq!(
+        fs::read_to_string(fixture.config_file()).expect("read"),
+        before
+    );
+}
+
+#[tokio::test]
 async fn hangar_yml_is_not_saved_before_the_store_is_cloned() {
     let fixture = Fixture::new();
 
