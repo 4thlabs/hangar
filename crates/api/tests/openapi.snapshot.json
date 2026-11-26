@@ -2756,6 +2756,50 @@
         ],
         "type": "object"
       },
+      "GithubRelease": {
+        "description": "A release of a GitHub repository.",
+        "properties": {
+          "publishedAt": {
+            "description": "When it was published, in RFC 3339.",
+            "type": "string"
+          },
+          "repository": {
+            "description": "The repository, `owner/repo`, as `hangar.yml` names it.",
+            "type": "string"
+          },
+          "tag": {
+            "description": "The release's tag, as `v1.2.3`.",
+            "type": "string"
+          },
+          "url": {
+            "description": "The release's page.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository",
+          "tag",
+          "url",
+          "publishedAt"
+        ],
+        "type": "object"
+      },
+      "GithubReleases": {
+        "description": "The latest release of each repository of the widget.",
+        "properties": {
+          "releases": {
+            "description": "The releases, newest first: a repository with none, renamed, or private is left out.",
+            "items": {
+              "$ref": "#/components/schemas/GithubRelease"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "releases"
+        ],
+        "type": "object"
+      },
       "GlobalVariables": {
         "description": "The variables of `.env.global`, by name. Their values are secrets as often as not: the answer is never cached.",
         "properties": {
@@ -4443,6 +4487,23 @@
               },
               "type": {
                 "const": "tcg-collector-cards",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "data"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`github-releases`.",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/GithubReleases"
+              },
+              "type": {
+                "const": "github-releases",
                 "type": "string"
               }
             },

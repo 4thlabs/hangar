@@ -386,6 +386,27 @@ pub struct TcgDailyPrices {
     pub low: Option<f64>,
 }
 
+/// The latest release of each repository of the widget.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct GithubReleases {
+    /// The releases, newest first: a repository with none, renamed, or private is left out.
+    pub releases: Vec<GithubRelease>,
+}
+
+/// A release of a GitHub repository.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubRelease {
+    /// The repository, `owner/repo`, as `hangar.yml` names it.
+    pub repository: String,
+    /// The release's tag, as `v1.2.3`.
+    pub tag: String,
+    /// The release's page.
+    pub url: String,
+    /// When it was published, in RFC 3339.
+    pub published_at: String,
+}
+
 /// What a widget loaded from its service, by its `type`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", content = "data", rename_all = "kebab-case")]
@@ -409,6 +430,8 @@ pub enum WidgetData {
     JellyfinLatest(JellyfinLatest),
     /// `tcg-collector-cards`.
     TcgCollectorCards(TcgCollectorCards),
+    /// `github-releases`.
+    GithubReleases(GithubReleases),
 }
 
 quoll::group! {

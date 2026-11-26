@@ -8,6 +8,7 @@ mod cache;
 mod error;
 mod forgejo;
 mod frigate;
+mod github;
 mod gluetun;
 mod jellyfin;
 mod miniflux;
@@ -29,6 +30,7 @@ use crate::Settings;
 use crate::failure::Failure;
 use cache::{Kept, Policy};
 use error::LoadError;
+use github::Github;
 use placement::Placement;
 use service::Service;
 
@@ -42,6 +44,7 @@ pub(crate) struct WidgetsState {
     http: ClientWithMiddleware,
     /// What each placement loaded, by its key.
     loads: Arc<Kept<WidgetData>>,
+    github: Github,
 }
 
 impl WidgetsState {
@@ -86,6 +89,7 @@ impl WidgetsState {
             domain: settings.domain.clone(),
             http,
             loads: Kept::new("widget"),
+            github: Github::new(settings),
         })
     }
 
@@ -155,6 +159,7 @@ impl WidgetsState {
             store: Arc::clone(&self.store),
             domain: self.domain.clone(),
             http: self.http.clone(),
+            github: self.github.clone(),
         }
     }
 
@@ -179,6 +184,7 @@ struct Loader {
     store: Arc<Store<Runtime>>,
     domain: String,
     http: ClientWithMiddleware,
+    github: Github,
 }
 
 impl Loader {
@@ -248,6 +254,11 @@ impl Loader {
                     .await
                     .map(WidgetData::TcgCollectorCards)
             }
+            WidgetKind::GithubReleases { repositories, .. } => self
+                .github
+                .latest_releases(&self.http, repositories)
+                .await
+                .map(WidgetData::GithubReleases),
             other => Err(LoadError::refused(format!(
                 "the {} widget loads nothing",
                 other.name()

@@ -6,6 +6,7 @@ mod backrest;
 mod beszel;
 mod forgejo;
 mod frigate;
+mod github;
 mod gluetun;
 mod jellyfin;
 mod miniflux;
@@ -78,11 +79,16 @@ impl Fixture {
 
     /// The server, served on port 0, with Ana signed in.
     async fn serve(&self) -> Server {
-        self.serve_with(|_| ()).await
+        self.serve_with(&[], |_| ()).await
     }
 
-    /// The server of the settings `change` makes, served on port 0, with Ana signed in.
-    async fn serve_with(&self, change: impl FnOnce(&mut Settings)) -> Server {
+    /// The server of the settings that `variables` add to the environment and that `change` makes, served on port 0,
+    /// with Ana signed in.
+    async fn serve_with(
+        &self,
+        variables: &[(&str, &str)],
+        change: impl FnOnce(&mut Settings),
+    ) -> Server {
         let data = self.data.to_str().expect("UTF-8").to_owned();
         let mut settings = Settings::read(|name| match name {
             "HANGAR_DATA_DIR" => Some(data.clone()),
@@ -90,7 +96,10 @@ impl Fixture {
             "DOMAIN" => Some("example.com".to_owned()),
             "HANGAR_URL" => Some(URL.to_owned()),
             "HANGAR_SECRET" => Some("0123456789abcdef0123456789abcdef".to_owned()),
-            _ => None,
+            other => variables
+                .iter()
+                .find(|(variable, _)| *variable == other)
+                .map(|(_, value)| (*value).to_owned()),
         })
         .expect("the settings are valid");
 

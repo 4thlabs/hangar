@@ -48,6 +48,12 @@ pub struct Settings {
     pub github_token: Option<Secret>,
     /// The key the Finnhub widget calls Finnhub with, from `FINNHUB_API_KEY`.
     pub finnhub_api_key: Option<Secret>,
+    /// Where the GitHub releases widget calls GitHub's API: `https://api.github.com`, which no variable changes, as a
+    /// test may to a fake of its own.
+    pub github_api_url: String,
+    /// Where the Finnhub widget calls Finnhub's API: `https://finnhub.io`, which no variable changes, as a test may to
+    /// a fake of its own.
+    pub finnhub_api_url: String,
     /// The host the terminal signs in to over SSH, from `HANGAR_SSH_HOST`.
     pub ssh_host: Option<String>,
     /// The user the terminal signs in as, from `HANGAR_SSH_USER`.
@@ -87,6 +93,11 @@ impl Settings {
     const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
     /// The port the server listens on without `PORT`: the Waku version's, which the image publishes.
     const DEFAULT_PORT: u16 = 3010;
+
+    /// Where GitHub's API is.
+    const GITHUB_API_URL: &str = "https://api.github.com";
+    /// Where Finnhub's API is.
+    const FINNHUB_API_URL: &str = "https://finnhub.io";
 
     /// The file a page's directory must hold, which the server answers for `/`.
     const PAGE_INDEX: &str = "index.html";
@@ -140,6 +151,8 @@ impl Settings {
                 domain,
                 github_token: variable(Self::GITHUB_TOKEN).map(Secret),
                 finnhub_api_key: variable(Self::FINNHUB_API_KEY).map(Secret),
+                github_api_url: Self::GITHUB_API_URL.to_owned(),
+                finnhub_api_url: Self::FINNHUB_API_URL.to_owned(),
                 ssh_host: variable(Self::SSH_HOST),
                 ssh_user: variable(Self::SSH_USER),
                 ssh_port,
