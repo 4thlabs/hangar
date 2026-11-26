@@ -57,6 +57,13 @@ export function useLogEvents(url: string) {
         }
 
         pending.push(event.line);
+
+        // A hidden tab runs no frame, while the log goes on: what waits for one is bounded too, cut once in a while
+        // rather than at each line.
+        if (pending.length >= 2 * LogLines.Max) {
+          pending = pending.slice(-LogLines.Max);
+        }
+
         frame ??= requestAnimationFrame(flush);
       },
       onEnd: failure => {
