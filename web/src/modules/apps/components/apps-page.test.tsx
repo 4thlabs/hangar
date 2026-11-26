@@ -148,6 +148,53 @@ describe("/apps", () => {
     expect(fetch.mock.calls.filter(([url]) => url === "/api/docker/apps")).toHaveLength(2);
   });
 
+  it("follows the changes again after a wait once they are lost, says so meanwhile, and reads the apps again", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const fetch = serve({ "GET /api/docker/apps": () => Response.json(projects) });
+    const reads = () => fetch.mock.calls.filter(([url]) => url === "/api/docker/apps").length;
+
+    renderAt("/apps");
+    await screen.findByText("jellyfin");
+
+    const lost = await source("/api/docker/changes");
+
+    act(() => lost.open());
+
+    expect(reads()).toBe(1);
+
+    act(() => lost.fail());
+
+    const notice = "Reconnecting to the server: what this page shows may be out of date.";
+
+    expect(await screen.findByText(notice)).toBeDefined();
+
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+
+    const back = await source("/api/docker/changes");
+
+    expect(back).not.toBe(lost);
+
+    act(() => back.open());
+
+    await waitFor(() => expect(reads()).toBe(2));
+    expect(screen.queryByText(notice)).toBeNull();
+  });
+
+  it("clears the live usage while its stream is lost", async () => {
+    serve({ "GET /api/docker/apps": () => Response.json(projects) });
+    renderAt("/apps");
+
+    const stats = await source("/api/docker/stats");
+
+    act(() => stats.send({ containers: { "jellyfin-1": { cpuPercent: 12.5, memoryUsage: null, memoryLimit: null } } }));
+    expect(await screen.findByText("12.5%")).toBeDefined();
+
+    act(() => stats.fail());
+
+    await waitFor(() => expect(screen.queryByText("12.5%")).toBeNull());
+  });
+
   it("totals the live usage of the containers of the installed apps alone", async () => {
     serve({ "GET /api/docker/apps": () => Response.json(projects) });
     renderAt("/apps");
@@ -172,6 +219,43 @@ describe("/apps/:project", () => {
     expect(screen.getByText("Healthy")).toBeDefined();
     expect(screen.getByText("0.0.0.0:8080 → 80/tcp")).toBeDefined();
     expect(screen.getByText("1 service · 1/1 containers running")).toBeDefined();
+  });
+
+  it("shows the host's memory once for containers with no limit of their own", async () => {
+    const host = 16 * 1024 ** 3;
+
+    serve({
+      "GET /api/docker/apps/alpha": () => Response.json(alpha),
+      "GET /api/docker/overview": () => Response.json({ version: "29.0.1", memory: host }),
+    });
+
+    renderAt("/apps/alpha");
+
+    const stats = await source("/api/docker/stats");
+
+    act(() => stats.send({ containers: { [alphaId]: { memoryUsage: 1_024, memoryLimit: host } } }));
+
+    expect(await screen.findByText("16 GiB on the host")).toBeDefined();
+  });
+
+  it("shows only why a read again failed, not the app as it was", async () => {
+    let isInstalled = true;
+
+    serve({
+      "GET /api/docker/apps/alpha": () =>
+        isInstalled ? Response.json(alpha) : problem(404, "no app alpha is installed"),
+    });
+
+    renderAt("/apps/alpha");
+    await screen.findByRole("heading", { name: "alpha" });
+
+    const changes = await source("/api/docker/changes");
+
+    isInstalled = false;
+    act(() => changes.send("containers"));
+
+    expect(await screen.findByText("App not found")).toBeDefined();
+    expect(screen.queryByRole("heading", { name: "alpha" })).toBeNull();
   });
 
   it("says an app that is not installed is not found", async () => {
