@@ -3,7 +3,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronDownIcon, LogOutIcon } from "lucide-react";
 import { useState } from "react";
 import { useAuthLogout, useAuthSession } from "#libs/api";
-import { UserAvatar } from "#modules/common/components/user-avatar.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   DropdownMenu,
@@ -15,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "#modules/common/ui/dropdown-menu.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
+import { UserAvatar } from "#routes/-shell/user-avatar.tsx";
 
 /** The signed-in user, and signing out. Its user settings and its language come with the issue of `/user/settings`. */
 export function UserMenu() {
