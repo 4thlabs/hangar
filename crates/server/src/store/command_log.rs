@@ -3,8 +3,11 @@
 use hangar_core::Output;
 use tokio::sync::mpsc;
 
-/// An output whose lines the server logs, at `DEBUG`: a failed run keeps its stderr's last lines in its error, which
-/// is logged whole, so the lines of a run that succeeds are only for whoever asks for them.
+use crate::failure::Failure;
+
+/// An output whose lines the server logs, at `DEBUG`, the credentials of a URL taken out: a failed run keeps its
+/// stderr's last lines in its error, which is logged whole, so the lines of a run that succeeds are only for whoever
+/// asks for them.
 #[derive(Debug)]
 pub(crate) struct CommandLog;
 
@@ -20,8 +23,9 @@ impl CommandLog {
         tokio::spawn(async move {
             while let Some(line) = receiver.recv().await {
                 let line = String::from_utf8_lossy(&line);
+                let line = Failure::redacted(line.trim_end());
 
-                tracing::debug!(command, subject = %subject, line = %line.trim_end(), "output");
+                tracing::debug!(command, subject = %subject, line = %line, "output");
             }
         });
 
