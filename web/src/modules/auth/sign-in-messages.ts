@@ -1,10 +1,14 @@
 import { ApiError } from "#libs/api";
+import { ErrorMessage } from "#modules/common/error-message.ts";
 
 /** Why a sign-in through the provider ended back on `/login`, as the server's `error` says it. */
 export type SignInRefusal = "unavailable" | "expired" | "denied" | "not-a-user";
 
 /** What the sign-in page says when a sign-in fails. */
 export class SignInMessages {
+  /** What a sign-in by password that failed with no error of the server's says. */
+  private static readonly Failed = "Unable to sign in. Please try again.";
+
   static readonly Refusals: Record<SignInRefusal, string> = {
     unavailable: "The identity provider cannot be reached. Try again, or sign in with your password.",
     expired: "The sign-in expired, or was started in another tab. Try again.",
@@ -21,25 +25,12 @@ export class SignInMessages {
     return error as SignInRefusal;
   }
 
-  /** What failed in a sign-in by password. */
+  /** What failed in a sign-in by password: the words of the server's error, a wrong password or too many attempts. */
   static ofPassword(error: unknown): string {
-    if (!(error instanceof ApiError)) {
-      return "Unable to sign in. Please try again.";
+    if (!(error instanceof ApiError) || !error.detail) {
+      return SignInMessages.Failed;
     }
 
-    if (error.status === 401) {
-      return "Invalid email or password.";
-    }
-
-    if (error.status === 429) {
-      return SignInMessages.sentence(error.message);
-    }
-
-    return "Unable to sign in. Please try again.";
-  }
-
-  /** `detail`, a problem's, written as a sentence. */
-  private static sentence(detail: string): string {
-    return `${detail.charAt(0).toUpperCase()}${detail.slice(1)}.`;
+    return ErrorMessage.describe(error);
   }
 }

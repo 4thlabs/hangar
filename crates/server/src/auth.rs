@@ -14,9 +14,8 @@ mod users;
 
 use std::time::{Duration, Instant, SystemTime};
 
-use hangar_api::{CookieCredential, Credentials};
+use hangar_api::{CookieCredential, Credentials, ErrorCode};
 use hangar_core::{PasswordHash, Runtime, Store, User};
-use http::StatusCode;
 use quoll::Error;
 use tokio::sync::Semaphore;
 
@@ -143,20 +142,14 @@ impl Auth {
     /// The session the cookie of `credential` holds, for a user `hangar.yml` still lists with the same credentials.
     pub(crate) async fn signed_in(&self, credential: &CookieCredential) -> quoll::Result<SignedIn> {
         let Some(session) = Session::open(&self.cookies, credential, SystemTime::now()) else {
-            return Err(Error::unauthorized(
-                "the session is not valid or has expired: sign in again",
-            ));
+            return Err(ErrorCode::SessionExpired.into());
         };
         let Some(user) = self.users.find(&session.email).await else {
-            return Err(Error::unauthorized(
-                "the session's user is no longer in hangar.yml",
-            ));
+            return Err(ErrorCode::UserRemoved.into());
         };
 
         if !session.has_credentials_of(&user) {
-            return Err(Error::unauthorized(
-                "the user's credentials have changed: sign in again",
-            ));
+            return Err(ErrorCode::CredentialsChanged.into());
         }
 
         Ok(SignedIn { user, session })
@@ -198,17 +191,12 @@ impl Auth {
 
     /// The 401 of a wrong email or password.
     fn invalid_credentials() -> Error {
-        Error::unauthorized("invalid email or password")
+        ErrorCode::InvalidCredentials.into()
     }
 
-    /// The 429 of an email whose sign-ins are refused for `wait`.
+    /// The 429 of an email whose sign-ins are refused for `wait`, which its `Retry-After` says.
     fn too_many_failures(wait: Duration) -> Error {
-        let minutes = wait.as_secs().div_ceil(60).max(1);
-
-        Error::new(
-            StatusCode::TOO_MANY_REQUESTS,
-            format!("too many failed sign-ins for this email: try again in {minutes} min"),
-        )
+        Error::from(ErrorCode::TooManySignIns).retry_after(wait)
     }
 }
 

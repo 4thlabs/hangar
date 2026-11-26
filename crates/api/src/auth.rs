@@ -10,6 +10,8 @@ use quoll::{Error, Scheme};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::ErrorCode;
+
 /// A cookie of the server's as a request carries it, by both its names: `__Host-…` when the page is served over
 /// HTTPS, and the bare name over plain HTTP, where a browser keeps neither a `Secure` cookie nor the prefix. The
 /// server reads the one of its own scheme, and takes the other for no cookie.
@@ -34,7 +36,7 @@ impl CookieCredential {
         for header in request.headers.get_all(COOKIE) {
             let header = header
                 .to_str()
-                .map_err(|_| Error::unauthorized("the Cookie header is not text"))?;
+                .map_err(|_| Error::from(ErrorCode::UnreadableCookie))?;
 
             for pair in header.split(';') {
                 let Some((name, value)) = pair.trim().split_once('=') else {

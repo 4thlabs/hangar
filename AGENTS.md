@@ -148,18 +148,22 @@ builds text for the user alone: what it says to the page is a code and its param
   one exception is Docker's complaint about a compose file the editor saves (`editor.compose_rejected`): it is about
   the operator's own file, and the only way to say what to fix in it, so it goes as a param, the app's files named by
   their paths in its folder, a URL's credentials taken out, and the values of `.env.global` and of the server's
-  environment too, which an interpolation error echoes. A notification is already a key and its params, rendered where it is read. Logs, and the messages the core's errors
-  carry, stay English text.
-- **Wire.** A body that holds an error, as a store sync's, carries it whole, a `hangar_api::ErrorDetail`:
-  `{ code, params, message }`. A problem cannot yet: quoll writes its status and detail alone, and the code and its
-  params go on the wire with [quoll#140](https://github.com/4thlabs/quoll/issues/140). Until then a problem's detail
-  is the code's English message, and nothing else carries its code: no code in the detail, no header of Hangar's own,
-  no body written by hand.
-- **Web.** The page says why a call failed through `ErrorMessage.describe(error)`, and words an `ErrorDetail` through
-  `ErrorMessage.describeDetail(detail)` (`web/src/modules/common/error-message.ts`): the one place that will key the
-  words by the code for a catalog. Until quoll#140 a problem shows its detail. The page's own words stay in its
-  components, in English.
-- The errors of signing in (#170) get their codes with the move to quoll#140.
+  environment too, which an interpolation error echoes. A notification is already a key and its params, rendered
+  where it is read. Logs, and the messages the core's errors carry, stay English text.
+- **Wire.** A problem carries the code as its `type`, `/problems/<code>` relative to the server
+  (`/problems/store.unknown_app`), its params as extension members (`"app": "alpha"`), and the code's English message
+  as its detail, all written by `From<ErrorCode> for quoll::Error`; a param is named as RFC 9457 names a member, three
+  characters at least and none of its own. A wait goes in its header, `Retry-After` on a 429, never in the words. A
+  body that holds an error, as a store sync's, carries it whole, a `hangar_api::ErrorDetail`:
+  `{ code, params, message }`. `ErrorCode::read(&error)` gives a client of the contract back the code of a problem.
+  No code in the detail, no header of Hangar's own, no body written by hand.
+- **Web.** `ApiError.detail` reads a problem's code and params into the `ErrorDetail` a body carries. The page says
+  why a call failed through `ErrorMessage.describe(error)`, and words an `ErrorDetail` through
+  `ErrorMessage.describeDetail(detail)` (`web/src/modules/common/error-message.ts`): the one place that keys the words
+  by the code, typed by the codes of the contract, so that a code without words is a type error, and that a catalog
+  will word in another language. A code the page does not know, from a server newer than it, shows the server's
+  message; a problem of no code, one quoll answers itself, its detail. The page's own words stay in its components,
+  in English.
 
 What CI's `rust` job runs, warnings as errors:
 

@@ -2,9 +2,10 @@
 //! version: a page of another site cannot have a browser send it.
 
 use axum::extract::{Request, State};
-use axum::http::{HeaderMap, Method, StatusCode, header};
+use axum::http::{HeaderMap, Method, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use hangar_api::ErrorCode;
 use url::{Origin, Url};
 
 /// Refuses a request whose method is not `GET`, `HEAD` or `OPTIONS` when a browser says it comes from another origin
@@ -30,14 +31,9 @@ impl OriginCheck {
     /// The middleware: a 403 problem, or the request passed on.
     pub(crate) async fn check(State(check): State<Self>, request: Request, next: Next) -> Response {
         if check.is_cross_origin(request.method(), request.headers()) {
-            return quoll::Error::new(
-                StatusCode::FORBIDDEN,
-                format!(
-                    "the request comes from another origin than {}",
-                    check.origin.ascii_serialization()
-                ),
-            )
-            .into_response();
+            let origin = check.origin.ascii_serialization();
+
+            return quoll::Error::from(ErrorCode::CrossOrigin { origin }).into_response();
         }
 
         next.run(request).await

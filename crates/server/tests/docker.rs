@@ -20,7 +20,9 @@ use axum::routing::get;
 use cookie::Cookie;
 use futures::{Stream, StreamExt, stream};
 use hangar_api::Docker as _;
-use hangar_api::{Api, ApiClient, ContainerHealth, DockerChange, LogEvent, ProjectStatus, Session};
+use hangar_api::{
+    Api, ApiClient, ContainerHealth, DockerChange, ErrorCode, LogEvent, ProjectStatus, Session,
+};
 use hangar_core::{Docker, PasswordHash};
 use hangar_server::{App, Settings};
 use http::StatusCode;
@@ -424,10 +426,23 @@ async fn answers_404_with_its_code_for_an_app_not_installed() {
     let (_, docker_host, _events) = FakeDaemon::serve().await;
     let (server, _) = fixture.serve(docker(&docker_host)).await;
 
-    let (status, problem) = server.get("/api/docker/apps/beta").await;
+    let error = server
+        .api()
+        .docker()
+        .project("beta")
+        .await
+        .expect_err("beta is not installed");
+    let problem = error.detail().expect("a problem");
 
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(problem["detail"], "no app beta is installed");
+    assert_eq!(error.status(), Some(StatusCode::NOT_FOUND));
+    assert_eq!(problem.kind(), "/problems/docker.unknown_project");
+    assert_eq!(problem.detail(), Some("no app beta is installed"));
+    assert_eq!(
+        ErrorCode::read(&error),
+        Some(ErrorCode::UnknownProject {
+            project: "beta".to_owned()
+        })
+    );
 }
 
 #[tokio::test]
@@ -521,8 +536,15 @@ async fn answers_404_for_the_log_of_a_container_of_another_app() {
 
         assert_eq!(status, StatusCode::NOT_FOUND, "{container}");
         assert_eq!(
-            problem["detail"],
-            format!("the app alpha has no container {container}")
+            problem,
+            json!({
+                "type": "/problems/docker.unknown_container",
+                "title": "Not Found",
+                "status": 404,
+                "detail": format!("the app alpha has no container {container}"),
+                "project": "alpha",
+                "container": container,
+            })
         );
     }
 }

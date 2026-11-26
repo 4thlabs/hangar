@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ana, renderAt, serve, unauthorized } from "#app/mock/page.tsx";
+import { ana, coded, renderAt, serve, unauthorized } from "#app/mock/page.tsx";
 
 afterEach(() => {
   cleanup();
@@ -87,7 +87,11 @@ describe("signing in", () => {
   });
 
   it("says a wrong password is one", async () => {
-    serve({ "GET /api/auth/session": unauthorized, "POST /api/auth/login": unauthorized });
+    serve({
+      "GET /api/auth/session": unauthorized,
+      "POST /api/auth/login": () => coded(401, "auth.invalid_credentials", "invalid email or password"),
+    });
+
     renderAt("/login");
 
     fireEvent.change(await screen.findByLabelText("Email"), { target: { value: "ana@example.com" } });
