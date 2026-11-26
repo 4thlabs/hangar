@@ -3,10 +3,10 @@
 - **Status:** Accepted on 2026-11-26: option A, with the [decisions](#decisions) below and the
   [addendum's](#decisions-of-the-addendum)
 - **Date:** 2026-11-26
-- **Amended:** by #207 on 2026-11-26, [decisions 1](#decision-1-layers-and-what-each-may-import) and
-  [6](#decision-6-files): TanStack Router's own layout (a route file is its page, the shell a layout route, the wiring
-  at `src/`), and modules that import only `common` and `libs`. What this record says of a module's root `.ts` applies
-  to its `helpers/`.
+- **Amended:** by #207 on 2026-11-26, [decisions 1](#decision-1-layers-and-what-each-may-import), [6](#decision-6-files)
+  and [10](#decision-10-the-migration)'s rule 4: TanStack Router's own layout (a route file is its page, the shell a
+  layout route, the wiring at `src/`), and modules that import only `common` and `libs`. What this record says of a
+  module's root `.ts` applies to its `helpers/`.
 - **Deciders:** Thomas
 - **Study:** read-only, on `origin/main` at `d4eeec5` (#176 merged since, at `e37fd06`), and the web changes of
   `4thlabs/issue-176` and `4thlabs/issue-178`. The rewrite of two modules was made in a scratch worktree. Its patch
@@ -293,13 +293,15 @@ Amended by #207 on 2026-11-26: TanStack Router's layout, and modules kept apart,
   `autoCodeSplitting` still loads its component with the page. What only a page uses and composes from several
   modules goes in `routes/-<page>/`, which the generator ignores as it does any name starting with `-`.
 - **The shell** is `_app.tsx`, the layout route around every page but `/login`, with its pieces in `routes/-shell/`:
-  `app-layout`, `navbar`, `navbar-mobile`, `searchbar`, `user-menu`, `app-error-page` and the `navigations` they list.
+  `app-layout`, `navbar`, `navbar-mobile`, `searchbar`, `user-menu`, `user-avatar`, `app-error-page`, the
+  `navigations` they list and `use-current-path`, which only the shell uses.
   The not-found and pending pages sit beside the routes that show them, as `routes/_app/-not-found-page.tsx`.
 - **The wiring** is at `src/`, with no `app/` folder: `main.tsx`, `page.ts` (`createPage`), `router.ts`
   (`createPageRouter`), `app-providers.tsx` and `theme-effects.tsx`, `routeTree.gen.ts`, and `mock/page.tsx`, the
   tests' page.
 - **In a module:** `api/`, `hooks/`, `components/`, `helpers/` for the domain `.ts`, and `messages.ts`, the one file
-  at its root: lint refuses any other file directly under a module. Tests sit next to their code
+  at its root, beside its test: lint refuses any other file directly under a module, and any file directly under
+  `modules/`. Tests sit next to their code
   (`helpers/apps-view.test.ts`, `helpers/store-sync.test.ts`).
 - **`libs/` against `modules/`.** `libs/` holds what has no React and no page domain: the API transport, formats,
   preferences. `modules/common/` holds what two modules or more share: `ui/`, and the generic hooks and components
@@ -528,15 +530,19 @@ specifier, which core `no-restricted-imports` reads as a regex, with `importName
 (checked on probes). The rules:
 
 1. `no-restricted-syntax` with the selector of decision 7, on `web/src`. It flags 46 classes before the change.
-2. `no-restricted-imports`, on `modules/` and `app/`: no `use*` from `#libs/api`, and no `../` import, so that the
-   regexes see every import. Flat config does not merge a rule's options across blocks, so each block repeats the
+2. `no-restricted-imports`, on `modules/`, `routes/` and the wiring at `src/` (`app/` until #207): no `use*` from
+   `#libs/api`, and no `../` import, so that the regexes see every import. The pages in `routes/` import orval's hooks
+   until the data layer, as `useDockerProjects` in `routes/_app/apps.tsx`. #207 already refuses a `..` segment in
+   `modules/`. Flat config does not merge a rule's options across blocks, so each block repeats the
    shared pattern.
 3. On `modules/*/api/`: no React, no `hooks/` or `components/`.
 4. On `modules/*/helpers/` and `modules/*/messages.ts` (tests excepted): no React, no `@tanstack/`, no
    `use|get|prefetch|create*` from `#libs/api`, and only types from `api/`, `hooks/`, `components/` or `ui/`. Amended
    by #207 on 2026-11-26: it was on `modules/*/*.ts`, a module's root, where lint now refuses any file but
-   `messages.ts`. #207 adds the isolation of decision 1: on `modules/<a>/`, no `#...` import but `#libs/`,
-   `#modules/common/` and `#modules/<a>/` (`#mock/` too in a test), and no `../`.
+   `messages.ts` and its test, as it refuses any file directly under `modules/`. #207 adds the isolation of decision
+   1: on `modules/<a>/`, no `#...` import but `#libs/`, `#modules/common/` and `#modules/<a>/` (`#mock/` too in a
+   test), and no `..` segment anywhere in a specifier, in an `import` or an `import()` of a string or a template with
+   no expression.
 
 One trap: `.gitignore`-style patterns in `no-restricted-imports` treat a leading `#` as a comment, so `#modules/...`
 must be written with `regex`, not `group`.

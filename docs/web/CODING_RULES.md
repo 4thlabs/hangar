@@ -51,10 +51,11 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
     `no-restricted-syntax`, on the same files, refuses an `import()` of those folders;
   - #207's isolation, `no-restricted-imports` on each `modules/<a>/`, its blocks written from the folders of
     `web/src/modules`: no `#...` import but `#libs/`, `#modules/common/` and `#modules/<a>/` (`#mock/` too in a test),
-    so no other module, no `#routes/` and none of the wiring, and no `../`, so that every import names its module;
-    `no-restricted-syntax` does the same for `import()`;
-  - #207's loose files, `no-restricted-syntax` on `modules/*/*.{ts,tsx}`: no file directly under a module but
-    `messages.ts`;
+    so no other module, no `#routes/` and none of the wiring, and no `..` segment anywhere (`../`, `./../`,
+    `#modules/a/../b/`), so that every import names its module; `no-restricted-syntax` does the same for `import()`,
+    of a string or of a template with no expression;
+  - #207's loose files, `no-restricted-syntax` on `modules/*.{ts,tsx}` and `modules/*/*.{ts,tsx}`: no file directly
+    under `modules/`, and none directly under a module but `messages.ts` and `messages.test.ts`;
   - rules 2 and 3, the orval hooks and the `api/` imports, come with the data layer.
 
 ## Language
