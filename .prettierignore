@@ -16,6 +16,8 @@ web/openapi.json
 web/src/libs/api/generated.ts
 # TanStack Router's tree of web/src/routes/
 web/src/routeTree.gen.ts
+# Where it was until #207, which a checkout built before it keeps: drop this line after #181.
+web/src/app/routeTree.gen.ts
 # The contract's document as it prints it, which its test compares
 crates/api/tests/openapi.snapshot.json
 src/libs/db/schemas/auth-schema.ts
