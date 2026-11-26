@@ -172,8 +172,7 @@ pub struct ContainerMetrics {
     pub block_write: Option<u64>,
 }
 
-/// The resource usage of the running containers of every compose project on the host, those of apps Hangar did not
-/// install among them: a page keeps the ids its apps list.
+/// The resource usage of the running containers of the installed apps: a page keeps the ids of those it shows.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct StatsFrame {
     /// The metrics of each running container, by full container id.
@@ -269,7 +268,7 @@ quoll::group! {
         GET "/docker/apps/{project}/containers/{container}/logs"
             => logs(project: &str, container: &str) -> Events<LogEvent>;
 
-        /// The resource usage of the running containers of every compose project, a frame every second. Each stream
+        /// The resource usage of the running containers of the installed apps, a frame every second. Each stream
         /// measures its CPU shares from its own samples: the first frame has none. It does not end; a daemon that fails
         /// ends it with a problem.
         GET "/docker/stats" => stats() -> Events<StatsFrame>;

@@ -53,7 +53,6 @@ function AppsTotals({ projects }: { projects: readonly ProjectSummary[] }) {
         value={sum(project => project.containerIds.length - project.runningCount)}
         icon={SquareIcon}
       />
-      {/* The stats cover every compose project of the host: the ids keep those of Hangar's apps. */}
       <LiveTotals containerIds={projects.flatMap(project => project.containerIds)} />
     </div>
   );
