@@ -8,6 +8,7 @@ mod cache;
 mod error;
 mod frigate;
 mod gluetun;
+mod jellyfin;
 mod miniflux;
 mod placement;
 mod routes;
@@ -224,6 +225,13 @@ impl Loader {
                     .await
                     .map(WidgetData::MinifluxEntries)
             }
+            WidgetKind::JellyfinLatest { user, .. } => {
+                let service = self.service(&kind).await?;
+
+                jellyfin::load(&self.http, &service, user)
+                    .await
+                    .map(WidgetData::JellyfinLatest)
+            }
             other => Err(LoadError::refused(format!(
                 "the {} widget loads nothing",
                 other.name()
@@ -237,6 +245,9 @@ impl Loader {
         match kind {
             WidgetKind::FrigateEvents { .. } => {
                 frigate::thumbnail(&self.http, &self.service(kind).await?, id).await
+            }
+            WidgetKind::JellyfinLatest { .. } => {
+                jellyfin::poster(&self.http, &self.service(kind).await?, id).await
             }
             _ => Ok(None),
         }

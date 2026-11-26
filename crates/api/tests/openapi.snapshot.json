@@ -2720,6 +2720,101 @@
         ],
         "type": "object"
       },
+      "JellyfinCounts": {
+        "description": "What a Jellyfin server holds, in every library.",
+        "properties": {
+          "episodes": {
+            "description": "Their episodes.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "movies": {
+            "description": "Its movies.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "series": {
+            "description": "Its series.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "songs": {
+            "description": "Its songs.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "movies",
+          "series",
+          "episodes",
+          "songs"
+        ],
+        "type": "object"
+      },
+      "JellyfinItem": {
+        "description": "An item of Jellyfin's, as its poster shows it.",
+        "properties": {
+          "id": {
+            "description": "The item its poster opens: the series, for an episode.",
+            "type": "string"
+          },
+          "imageId": {
+            "description": "The item whose poster it shows, relayed by `GET /widgets/{key}/image/{id}`; `None` when it has none.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subtitle": {
+            "description": "The artist of an album, or the year of another item.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "description": "Its title, or its series'.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "imageId",
+          "title",
+          "subtitle"
+        ],
+        "type": "object"
+      },
+      "JellyfinLatest": {
+        "description": "The library of a Jellyfin server, and what was added to it last.",
+        "properties": {
+          "counts": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/JellyfinCounts"
+              }
+            ],
+            "description": "What the whole server holds."
+          },
+          "items": {
+            "description": "The latest items the user of the widget may see, newest first: an episode as its series.",
+            "items": {
+              "$ref": "#/components/schemas/JellyfinItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "counts",
+          "items"
+        ],
+        "type": "object"
+      },
       "Job": {
         "description": "A job the server runs.",
         "oneOf": [
@@ -4033,6 +4128,23 @@
               },
               "type": {
                 "const": "miniflux-entries",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "data"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`jellyfin-latest`.",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/JellyfinLatest"
+              },
+              "type": {
+                "const": "jellyfin-latest",
                 "type": "string"
               }
             },
