@@ -31,6 +31,17 @@ quoll::api! {
         /// as for the containers.
         GET "/events?filters={filters}" => events(filters: &str) -> JsonLines<Event>;
     }
+
+    /// The usage of the whole host, apart from the events, which a test fakes alone.
+    pub(crate) group Usage {
+        GET "/info" => info() -> SystemInfo;
+        /// The daemon's slowest call: it sizes every image, container and volume.
+        GET "/system/df" => disk_usage() -> DiskUsage;
+    }
+
+    pub(crate) group Images {
+        GET "/images/json" => list() -> Vec<ImageSummary>;
+    }
 }
 
 /// A field that Docker may send as `null` where it means empty, as the `Attributes` of an event or the `Labels` of
@@ -65,6 +76,9 @@ pub(crate) struct ContainerSummary {
     #[serde(deserialize_with = "null_as_default")]
     pub(crate) names: Vec<String>,
     pub(crate) image: String,
+    /// The id of the image it was created from, `sha256:...`, which a pull of its reference does not change.
+    #[serde(rename = "ImageID")]
+    pub(crate) image_id: String,
     /// `running`, `exited`...
     pub(crate) state: String,
     /// What `docker ps` shows, with the healthcheck at its end: `Up 5 minutes (unhealthy)`.
@@ -170,6 +184,59 @@ pub(crate) struct BlkioEntry {
     pub(crate) value: u64,
 }
 
+/// What `GET /info` says of the daemon and its containers.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase", default)]
+pub(crate) struct SystemInfo {
+    pub(crate) server_version: String,
+    pub(crate) containers: u64,
+    pub(crate) containers_running: u64,
+    pub(crate) containers_stopped: u64,
+}
+
+/// What `GET /system/df` says of the disk the images and volumes take.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase", default)]
+pub(crate) struct DiskUsage {
+    /// The size of every layer, each once however many images share it.
+    pub(crate) layers_size: u64,
+    #[serde(deserialize_with = "null_as_default")]
+    pub(crate) images: Vec<ImageUsage>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub(crate) volumes: Vec<VolumeUsage>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase", default)]
+pub(crate) struct ImageUsage {
+    /// How many containers use it; `-1` when the daemon did not count them.
+    pub(crate) containers: i64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase", default)]
+pub(crate) struct VolumeUsage {
+    pub(crate) usage_data: Option<VolumeUsageData>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase", default)]
+pub(crate) struct VolumeUsageData {
+    /// How many containers mount it; `-1` when the daemon did not count them.
+    pub(crate) ref_count: i64,
+}
+
+/// An image as `GET /images/json` lists it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase", default)]
+pub(crate) struct ImageSummary {
+    /// `sha256:...`, as a container's `ImageID`.
+    pub(crate) id: String,
+    /// `name@sha256:...`, one per registry it was pulled from or pushed to; none for an image built here.
+    #[serde(deserialize_with = "null_as_default")]
+    pub(crate) repo_digests: Vec<String>,
+}
+
 /// An event of `GET /events`: the kind of what it happened to, and that thing's attributes.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default)]
@@ -212,5 +279,24 @@ mod tests {
 
         assert_eq!(summary.id, "abc");
         assert!(summary.labels.is_empty() && summary.ports.is_empty() && summary.names.is_empty());
+    }
+
+    #[test]
+    fn reads_a_disk_usage_whose_images_and_volumes_are_null_as_none() {
+        let usage: DiskUsage =
+            serde_json::from_str(r#"{"LayersSize":42,"Images":null,"Volumes":null}"#)
+                .expect("a disk usage");
+
+        assert_eq!(usage.layers_size, 42);
+        assert!(usage.images.is_empty() && usage.volumes.is_empty());
+    }
+
+    #[test]
+    fn reads_an_image_with_no_digest_as_one_with_none() {
+        let image: ImageSummary = serde_json::from_str(r#"{"Id":"sha256:abc","RepoDigests":null}"#)
+            .expect("a list entry");
+
+        assert_eq!(image.id, "sha256:abc");
+        assert!(image.repo_digests.is_empty());
     }
 }

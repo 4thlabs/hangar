@@ -17,8 +17,9 @@ pub use compose::{
 };
 pub use docker::{
     ComposeContainer, ComposeContainers, ComposeProjectDetail, ComposeProjectSummary,
-    ComposeService, ContainerDetails, ContainerMetrics, ContainerState, DaemonError, Docker,
-    DockerChange, DockerError, Health, ProjectStatus, PublishedPort, StatsFrame,
+    ComposeService, ContainerCounts, ContainerDetails, ContainerMetrics, ContainerState,
+    DaemonError, Docker, DockerChange, DockerError, DockerOverview, Health, ImageCounts,
+    ImageDigests, ProjectStatus, PublishedPort, RunningImage, StatsFrame, VolumeCounts,
 };
 pub use environment::Environment;
 pub use password::{PasswordError, PasswordHash};

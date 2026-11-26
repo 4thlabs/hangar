@@ -1,5 +1,5 @@
-//! Docker, through its Engine API: the containers of each compose project, their logs and stats, and the daemon's
-//! events.
+//! Docker, through its Engine API: the containers of each compose project, their logs and stats, the images they run,
+//! the usage of the whole host, and the daemon's events.
 //!
 //! [`Docker`] is the client. Each of its reads is fresh, never cached: caching them belongs to the server, which
 //! follows [`Docker::events`] to know when a read went stale.
@@ -25,7 +25,9 @@ mod error;
 mod events;
 mod frames;
 mod host;
+mod images;
 mod logs;
+mod overview;
 mod stats;
 
 pub use compose::{
@@ -34,6 +36,8 @@ pub use compose::{
 pub use container::{ComposeContainer, ContainerDetails, ContainerState, Health, PublishedPort};
 pub use error::{DaemonError, DockerError};
 pub use events::DockerChange;
+pub use images::{ImageDigests, RunningImage};
+pub use overview::{ContainerCounts, DockerOverview, ImageCounts, VolumeCounts};
 pub use stats::{ContainerMetrics, StatsFrame};
 
 use engine::EngineClient;
@@ -67,6 +71,19 @@ impl Docker {
     /// - [`DockerError::Daemon`] when the HTTP client cannot be built, as when the system's TLS settings do not load.
     pub fn connect() -> Result<Self, DockerError> {
         let engine = Host::from_env()?.client()?;
+
+        Ok(Self { engine })
+    }
+
+    /// A client of the daemon `docker_host` names, written as `DOCKER_HOST` is, `unix:///path` or `tcp://host:port`,
+    /// whatever the environment says: as a test's daemon on port 0. It connects as [`Docker::connect`] does.
+    ///
+    /// # Errors
+    ///
+    /// [`DockerError::UnsupportedHost`] when `docker_host` names neither a Unix socket nor a TCP address;
+    /// [`DockerError::Daemon`] when the HTTP client cannot be built.
+    pub fn with_host(docker_host: &str) -> Result<Self, DockerError> {
+        let engine = Host::parse(Some(docker_host))?.client()?;
 
         Ok(Self { engine })
     }
