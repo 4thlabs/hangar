@@ -6,6 +6,10 @@ import type { SignInRefusal } from "#modules/auth/sign-in-messages.ts";
 import { AppLayout } from "#modules/common/components/app-layout.tsx";
 import { NotFoundPage } from "#modules/common/components/not-found-page.tsx";
 import { PendingPage } from "#modules/common/components/pending-page.tsx";
+import { SettingsPage } from "#modules/settings/components/settings-page.tsx";
+import { NewAppPage } from "#modules/store/components/new-app-page.tsx";
+import { StorePage } from "#modules/store/components/store-page.tsx";
+import { StoreSearchParams } from "#modules/store/store-search.ts";
 
 /** What every route reads: the page's query client, which keeps the session. */
 type RouterContext = { queryClient: QueryClient };
@@ -15,8 +19,8 @@ type LoginSearch = { error?: SignInRefusal | string };
 
 /**
  * The page's routes, the paths of the Waku version's `pages/`. The frame of `(app)/_layout.tsx` is `app`, a route
- * with no path of its own, which needs a session as the Waku version's does; `/login` stands outside it. Each section
- * is a pending page until the issue of its area moves it here.
+ * with no path of its own, which needs a session as the Waku version's does; `/login` stands outside it. A section not
+ * moved here yet is a pending page until the issue of its area moves it.
  */
 export class Routes {
   static readonly root = createRootRouteWithContext<RouterContext>()();
@@ -45,17 +49,32 @@ export class Routes {
 
   static readonly cluster = createRoute({ getParentRoute: () => Routes.app, path: "/cluster", component: PendingPage });
 
-  static readonly store = createRoute({ getParentRoute: () => Routes.app, path: "/store", component: PendingPage });
+  static readonly store = createRoute({
+    getParentRoute: () => Routes.app,
+    path: "/store",
+    component: StorePage,
+    validateSearch: StoreSearchParams.validate,
+    staticData: { searchable: true },
+  });
+
+  static readonly newApp = createRoute({ getParentRoute: () => Routes.app, path: "/store/new", component: NewAppPage });
 
   static readonly settings = createRoute({
     getParentRoute: () => Routes.app,
     path: "/settings",
-    component: PendingPage,
+    component: SettingsPage,
   });
 
   static readonly tree = Routes.root.addChildren([
     Routes.login,
-    Routes.app.addChildren([Routes.dashboard, Routes.apps, Routes.cluster, Routes.store, Routes.settings]),
+    Routes.app.addChildren([
+      Routes.dashboard,
+      Routes.apps,
+      Routes.cluster,
+      Routes.store,
+      Routes.newApp,
+      Routes.settings,
+    ]),
   ]);
 
   /**
@@ -77,5 +96,11 @@ export class Routes {
 declare module "@tanstack/react-router" {
   interface Register {
     router: ReturnType<typeof Routes.createRouter>;
+  }
+
+  /** What a route says of itself to the frame around it. */
+  interface StaticDataRouteOption {
+    /** Whether the page reads a `?q=`, which the navbar's search field then drives. */
+    searchable?: boolean;
   }
 }

@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { SettingsIcon } from "lucide-react";
+import { MobileSearch } from "#modules/common/components/navbar-mobile.tsx";
+import { NavbarSearch } from "#modules/common/components/searchbar.tsx";
 import { UserMenu } from "#modules/common/components/user-menu.tsx";
 import { useCurrentPath } from "#modules/common/hooks/use-current-path.ts";
 import { Navigations } from "#modules/common/navigations.ts";
@@ -83,8 +85,8 @@ function SettingsButton() {
 }
 
 /**
- * The bar at the top of every page. Its search, spotlight, terminal and notifications come with the issues of their
- * areas, in the places the Waku version gives them.
+ * The bar at the top of every page, with the search field of the pages that have one. Its spotlight, terminal and
+ * notifications come with the issues of their areas, in the places the Waku version gives them.
  */
 export function AppNavbar() {
   return (
@@ -95,8 +97,15 @@ export function AppNavbar() {
       */}
       <div className="relative grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 sm:grid-cols-[minmax(max-content,1fr)_minmax(0,32rem)_minmax(max-content,1fr)] sm:gap-4 sm:px-4">
         <div className="col-start-1 flex h-full items-center justify-start gap-2">
+          <MobileSearch />
           <Brand />
           <DesktopNavigation />
+        </div>
+
+        {/* Columns are placed, not implied: the search is absent below `md`, and without this
+            the right-hand cluster would slide into the column it left empty. */}
+        <div className="hidden md:col-start-2 md:block">
+          <NavbarSearch id="navbar-search-desktop" />
         </div>
 
         <div className="col-start-3 flex items-center justify-end gap-2">

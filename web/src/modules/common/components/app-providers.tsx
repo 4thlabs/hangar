@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import type { UserPreferences } from "#libs/preferences";
 import { colorModeAtom, themePaletteAtom } from "#modules/common/atoms/theme.ts";
 import { ThemeEffects } from "#modules/common/components/theme-effects.tsx";
+import { Toaster } from "#modules/common/ui/toast.tsx";
 
 type AppProvidersProps = {
   children: ReactNode;
@@ -28,6 +29,7 @@ export function AppProviders({ children, queryClient, preferences }: AppProvider
       <Provider store={store}>
         <ThemeEffects />
         {children}
+        <Toaster />
       </Provider>
     </QueryClientProvider>
   );
