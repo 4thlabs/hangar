@@ -2,10 +2,14 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#modules/common/ui/tabs.tsx";
 import { ConfigSettingsCard } from "#modules/settings/components/config-settings-card.tsx";
 import { EnvSettingsCard } from "#modules/settings/components/env-settings-card.tsx";
+import { JobsSettingsCard } from "#modules/settings/components/jobs-settings-card.tsx";
 import { StoreSettingsCard } from "#modules/settings/components/store-settings-card.tsx";
 import { SettingsTab, type SettingsTabId } from "#modules/settings/settings-tab.ts";
 
-/** `/settings`: the store, `.env.global` and `hangar.yml`, a tab each, the URL's hash saying which one is open. */
+/**
+ * `/settings`: the store, `.env.global`, `hangar.yml` and the server's jobs, a tab each, the URL's hash saying which one
+ * is open.
+ */
 export function SettingsPage() {
   const hash = useLocation({ select: location => location.hash });
   const navigate = useNavigate();
@@ -37,6 +41,9 @@ export function SettingsPage() {
         </TabsContent>
         <TabsContent value="config">
           <ConfigSettingsCard />
+        </TabsContent>
+        <TabsContent value="jobs">
+          <JobsSettingsCard />
         </TabsContent>
       </Tabs>
     </main>

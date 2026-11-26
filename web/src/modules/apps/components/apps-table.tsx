@@ -18,8 +18,8 @@ type AppsTableProps = {
 };
 
 /**
- * The installed apps, a row each, which leads to its page, and a checkbox that selects it. The update badge comes with
- * the image check of #176.
+ * The installed apps, a row each, which leads to its page, and a checkbox that selects it; an app the last image check
+ * found an update for has its badge.
  */
 export function AppsTable({ projects, sort, onSort, selection, onSelectionChange }: AppsTableProps) {
   const isAllSelected = projects.length > 0 && projects.every(project => selection.has(project.name));
@@ -61,11 +61,12 @@ export function AppsTable({ projects, sort, onSort, selection, onSelectionChange
               />
             </TableCell>
             <TableCell className="font-medium">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {project.icon && <img src={project.icon} alt="" className="size-5 object-contain" />}
                 <Link to="/apps/$project" params={{ project: project.name }} className="hover:underline">
                   {project.name}
                 </Link>
+                {project.updateAvailable && <Badge variant="outline">Update</Badge>}
               </div>
             </TableCell>
             <TableCell>

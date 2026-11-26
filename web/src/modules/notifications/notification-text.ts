@@ -52,6 +52,14 @@ export class NotificationText {
         description: `The Docker Compose command failed for ${project}. See the server's log.`,
       };
     },
+    updatesAvailable: ({ params: { count } }) => ({
+      title: "Updates available",
+      description: `${count} ${count === 1 ? "app has" : "apps have"} a newer image in the registry.`,
+    }),
+    autoUpdate: ({ params: { updated, failed } }) => ({
+      title: "Automatic update",
+      description: `${updated} ${updated === 1 ? "app was" : "apps were"} updated.${failed ? ` Failed for: ${failed}.` : ""}`,
+    }),
   };
 
   /** What `message` says. */

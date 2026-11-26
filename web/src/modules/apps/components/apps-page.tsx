@@ -95,6 +95,7 @@ export function AppsPage() {
     q: search.q ?? "",
     statuses: AppsSearchParams.statuses(search.status),
     categories: AppsSearchParams.categories(search.category),
+    updates: AppsSearchParams.updates(search.update),
     sort,
   });
 
