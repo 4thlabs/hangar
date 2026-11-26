@@ -163,9 +163,9 @@ impl AuthServer for App {
             }
         };
         let Some(user) = self.auth.referenced(&identity).await else {
+            // The subject alone, which finds the person at the provider: their email is a third party's data.
             tracing::warn!(
                 subject = ?identity.subject,
-                email = identity.verified_email.as_deref().unwrap_or("none verified"),
                 "the OpenID Connect provider signed in someone hangar.yml does not reference"
             );
 
