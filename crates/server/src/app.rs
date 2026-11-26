@@ -6,21 +6,32 @@ use axum::middleware;
 use hangar_api::{Api, ApiServices};
 use quoll::server;
 
+use hangar_core::Runtime;
+
 use crate::Settings;
 use crate::auth::{Auth, AuthBodyLimit, OriginCheck};
+use crate::store::StoreState;
 use crate::trailing_slash::TrailingSlash;
 
 /// The state the routes run on, which each group of the contract is implemented for; its clones share it.
 #[derive(Debug, Clone)]
 pub struct App {
     pub(crate) auth: Arc<Auth>,
+    pub(crate) store: Arc<StoreState>,
 }
 
 impl App {
-    /// The state of a server of `settings`.
+    /// The state of a server of `settings`, its commands, `git` and `docker compose`, run as children of this process.
     pub fn new(settings: &Settings) -> Self {
+        Self::with_runtime(settings, Runtime::new())
+    }
+
+    /// The state of a server of `settings`, its commands run by `runtime`: with the variables it sets, as a `PATH`
+    /// that finds another `docker`, or the cancellation that stops them.
+    pub fn with_runtime(settings: &Settings, runtime: Runtime) -> Self {
         Self {
             auth: Arc::new(Auth::new(settings)),
+            store: StoreState::new(settings, runtime),
         }
     }
 
@@ -34,7 +45,10 @@ impl App {
 pub fn router(app: App) -> axum::Router {
     Api::router(ApiServices {
         health: app.clone(),
-        auth: app,
+        auth: app.clone(),
+        store: app.clone(),
+        config: app.clone(),
+        env: app,
     })
 }
 

@@ -1,0 +1,231 @@
+//! The routes of the group `Store`: the store's state and its sync, its apps with their filters and counts, installing
+//! and uninstalling one, and the template of a new app.
+
+use hangar_api::{
+    AppCounts, AppFilter, ErrorCode, NewAppTemplate, StoreApp, StoreApps, StoreServer, StoreStatus,
+    StoreSync,
+};
+use hangar_core::ComposeCommand;
+use quoll::{Response, Result};
+
+use super::StoreState;
+use super::command_log::CommandLog;
+use crate::App;
+use crate::auth::SignedIn;
+use crate::failure::Failure;
+
+impl StoreState {
+    /// What a new app starts from: what Hangar needs to list it, a name, an icon, a service with its container.
+    const NEW_APP: &str = "name: My app
+x-hangar:
+  icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/docker.webp
+services:
+  my-app:
+    image: nginx:latest
+    container_name: my-app
+    restart: unless-stopped
+";
+
+    /// Every app of the store.
+    async fn apps(&self) -> Result<Vec<StoreApp>> {
+        let apps = self
+            .store
+            .apps()
+            .await
+            .map_err(|error| Failure::logged(ErrorCode::AppsUnreadable, &error))?;
+
+        Ok(apps.into_iter().map(Self::view).collect())
+    }
+
+    /// The app `id` of the store, or a 404.
+    async fn app(&self, id: &str) -> Result<StoreApp> {
+        let app = self.apps().await?.into_iter().find(|app| app.id == id);
+
+        app.ok_or_else(|| {
+            tracing::warn!(app = ?id, "an unknown app was asked for");
+            ErrorCode::UnknownApp { app: id.to_owned() }.into()
+        })
+    }
+
+    /// Installs the app `id`, unless it is already: links it, then seeds the variables its files reference.
+    async fn install(&self, id: &str) -> Result<StoreApp> {
+        let app = self.app(id).await?;
+
+        if app.installed {
+            return Ok(app);
+        }
+
+        let failed = || ErrorCode::InstallFailed {
+            app: app.name.clone(),
+        };
+
+        self.store
+            .install_app(&app.id)
+            .await
+            .map_err(|error| Failure::logged(failed(), &error))?;
+
+        let installed = self.app(&app.id).await?;
+
+        if !installed.installed {
+            return Err(Failure::logged(failed(), &Unconfirmed));
+        }
+
+        Ok(installed)
+    }
+
+    /// Uninstalls the app `id`, unless it is not installed: `docker compose down` first, as once its link is gone its
+    /// compose files are out of reach, and what runs an orphan Hangar can no longer manage; then its link.
+    async fn uninstall(&self, id: &str) -> Result<StoreApp> {
+        let app = self.app(id).await?;
+
+        if !app.installed {
+            return Ok(app);
+        }
+
+        let failed = || ErrorCode::UninstallFailed {
+            app: app.name.clone(),
+        };
+        let down = CommandLog::lines("docker compose down", app.id.clone());
+
+        self.compose
+            .run(&app.id, ComposeCommand::Down, down)
+            .await
+            .map_err(|error| Failure::logged(failed(), &error))?;
+        self.store
+            .uninstall_app(&app.id)
+            .await
+            .map_err(|error| Failure::logged(failed(), &error))?;
+
+        let uninstalled = self.app(&app.id).await?;
+
+        if uninstalled.installed {
+            return Err(Failure::logged(failed(), &Unconfirmed));
+        }
+
+        Ok(uninstalled)
+    }
+
+    /// The listing of `all` that `filters` keeps, all of them for none, and how many each filter keeps.
+    fn listing(all: Vec<StoreApp>, filters: &[AppFilter]) -> StoreApps {
+        let installed = all.iter().filter(|app| app.installed).count();
+        let counts = AppCounts {
+            installed,
+            available: all.len() - installed,
+        };
+        let apps = all
+            .into_iter()
+            .filter(|app| filters.is_empty() || filters.contains(&Self::filter(app)))
+            .collect();
+
+        StoreApps { apps, counts }
+    }
+
+    /// The filter `app` falls under.
+    fn filter(app: &StoreApp) -> AppFilter {
+        if app.installed {
+            AppFilter::Installed
+        } else {
+            AppFilter::Available
+        }
+    }
+
+    /// `app` as the page shows it.
+    fn view(app: hangar_core::StoreApp) -> StoreApp {
+        StoreApp {
+            id: app.id,
+            name: app.name,
+            icon: app.icon,
+            installed: app.installed,
+            swarm_ready: app.swarm_ready,
+        }
+    }
+}
+
+/// An install or an uninstall that ran, after which the app is not as it should be: another process, the Waku version
+/// say, changed it meanwhile.
+#[derive(Debug, thiserror::Error)]
+#[error("the app is not as the change left it")]
+struct Unconfirmed;
+
+impl StoreServer for App {
+    async fn status(&self, _: &SignedIn) -> Result<Response<StoreStatus>> {
+        let store = &self.store;
+
+        Ok(Response::new(StoreStatus {
+            url: store.store.url().to_owned(),
+            installed: store.store.is_installed().await,
+            sync: store.last_sync(),
+        }))
+    }
+
+    async fn sync(&self, _: &SignedIn) -> Result<Response<StoreSync>> {
+        Ok(Response::new(self.store.start_sync().await))
+    }
+
+    async fn apps(&self, _: &SignedIn, filter: Vec<AppFilter>) -> Result<Response<StoreApps>> {
+        let all = self.store.apps().await?;
+
+        Ok(Response::new(StoreState::listing(all, &filter)))
+    }
+
+    async fn install(&self, _: &SignedIn, id: String) -> Result<Response<StoreApp>> {
+        Ok(Response::new(self.store.install(&id).await?))
+    }
+
+    async fn uninstall(&self, _: &SignedIn, id: String) -> Result<Response<StoreApp>> {
+        Ok(Response::new(self.store.uninstall(&id).await?))
+    }
+
+    async fn new_app(&self, _: &SignedIn) -> Result<Response<NewAppTemplate>> {
+        Ok(Response::new(NewAppTemplate {
+            compose: StoreState::NEW_APP.to_owned(),
+        }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hangar_api::{AppFilter, StoreApp};
+
+    use super::StoreState;
+
+    fn app(id: &str, installed: bool) -> StoreApp {
+        StoreApp {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            icon: None,
+            installed,
+            swarm_ready: false,
+        }
+    }
+
+    fn ids(filters: &[AppFilter]) -> Vec<String> {
+        let all = vec![app("alpha", true), app("beta", false), app("gamma", false)];
+
+        StoreState::listing(all, filters)
+            .apps
+            .into_iter()
+            .map(|app| app.id)
+            .collect()
+    }
+
+    #[test]
+    fn keeps_the_apps_of_the_filters_or_all_of_them_for_none() {
+        assert_eq!(ids(&[]), ["alpha", "beta", "gamma"]);
+        assert_eq!(ids(&[AppFilter::Installed]), ["alpha"]);
+        assert_eq!(ids(&[AppFilter::Available]), ["beta", "gamma"]);
+        assert_eq!(
+            ids(&[AppFilter::Installed, AppFilter::Available]),
+            ["alpha", "beta", "gamma"]
+        );
+    }
+
+    #[test]
+    fn counts_every_app_whatever_the_filters() {
+        let all = vec![app("alpha", true), app("beta", false), app("gamma", false)];
+        let listing = StoreState::listing(all, &[AppFilter::Installed]);
+
+        assert_eq!(listing.counts.installed, 1);
+        assert_eq!(listing.counts.available, 2);
+    }
+}

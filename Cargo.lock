@@ -1140,6 +1140,7 @@ dependencies = [
  "hangar-api",
  "hangar-core",
  "http",
+ "jiff 0.2.46",
  "openidconnect",
  "percent-encoding",
  "quoll",

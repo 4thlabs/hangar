@@ -51,6 +51,56 @@
       }
     },
     "schemas": {
+      "AppCounts": {
+        "description": "How many of the store's apps each filter keeps.",
+        "properties": {
+          "available": {
+            "description": "The apps not installed.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "installed": {
+            "description": "The apps installed.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "installed",
+          "available"
+        ],
+        "type": "object"
+      },
+      "AppFilter": {
+        "description": "Which of the store's apps a listing keeps.",
+        "oneOf": [
+          {
+            "const": "installed",
+            "description": "The apps linked into `app-installed/`.",
+            "type": "string"
+          },
+          {
+            "const": "available",
+            "description": "The apps that are not.",
+            "type": "string"
+          }
+        ]
+      },
+      "ConfigSource": {
+        "description": "`hangar.yml` as it is written.",
+        "properties": {
+          "source": {
+            "description": "The file, empty when the store ships none.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
       "Credentials": {
         "description": "The email and the password of a user of `hangar.yml`.",
         "properties": {
@@ -66,6 +116,59 @@
         "required": [
           "email",
           "password"
+        ],
+        "type": "object"
+      },
+      "EnvChanges": {
+        "description": "What a save changes in `.env.global`: the variables it sets, and the ones it removes, the only way one is lost.",
+        "properties": {
+          "remove": {
+            "default": [],
+            "description": "The variables to remove.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updates": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The variables to set, by name: added, or their value replaced.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "updates"
+        ],
+        "type": "object"
+      },
+      "GlobalVariables": {
+        "description": "The variables of `.env.global`, by name. Their values are secrets as often as not: the answer is never cached.",
+        "properties": {
+          "variables": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Each variable's value, sorted by name.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "variables"
+        ],
+        "type": "object"
+      },
+      "NewAppTemplate": {
+        "description": "What a new app starts from: its `compose.yml`.",
+        "properties": {
+          "compose": {
+            "description": "The `compose.yml`: a name, an icon, and a service with its container, what Hangar needs to list the app.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "compose"
         ],
         "type": "object"
       },
@@ -143,6 +246,179 @@
           "oidc"
         ],
         "type": "object"
+      },
+      "StoreApp": {
+        "description": "An app of the store, installed or not.",
+        "properties": {
+          "icon": {
+            "description": "The URL of its icon, `x-hangar.icon`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "Its id: its folder under `store/`, and its compose project.",
+            "type": "string"
+          },
+          "installed": {
+            "description": "Whether it is installed.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Its display name: `x-hangar.name`, else the compose file's `name`, else its id capitalized.",
+            "type": "string"
+          },
+          "swarmReady": {
+            "description": "Whether it ships a `compose.swarm.yml` with content, and can then be deployed in the swarm.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "icon",
+          "installed",
+          "swarmReady"
+        ],
+        "type": "object"
+      },
+      "StoreApps": {
+        "description": "The apps a listing keeps, and how many apps each filter would keep.",
+        "properties": {
+          "apps": {
+            "description": "The apps the filters keep, by id.",
+            "items": {
+              "$ref": "#/components/schemas/StoreApp"
+            },
+            "type": "array"
+          },
+          "counts": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AppCounts"
+              }
+            ],
+            "description": "How many of all the store's apps each filter keeps, whatever the filters asked."
+          }
+        },
+        "required": [
+          "apps",
+          "counts"
+        ],
+        "type": "object"
+      },
+      "StoreStatus": {
+        "description": "The store as the settings show it: where it comes from, whether it is cloned, and its last sync.",
+        "properties": {
+          "installed": {
+            "description": "Whether the store's repository is cloned in the data directory.",
+            "type": "boolean"
+          },
+          "sync": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoreSync"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last sync since the server started, running or ended; `None` before the first."
+          },
+          "url": {
+            "description": "The git URL of the store, `HANGAR_STORE_URL`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "installed",
+          "sync"
+        ],
+        "type": "object"
+      },
+      "StoreSync": {
+        "description": "A clone or a pull of the store, which runs apart from the request that starts it, one at a time.",
+        "properties": {
+          "error": {
+            "description": "Why it failed, in English, without git's output, which the server's log holds; `None` unless it failed.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finishedAt": {
+            "description": "When it ended, in RFC 3339; `None` while it runs.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operation": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SyncOperation"
+              }
+            ],
+            "description": "A clone, for a store not cloned yet, or a pull with `--ff-only`."
+          },
+          "startedAt": {
+            "description": "When it started, in RFC 3339.",
+            "type": "string"
+          },
+          "state": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SyncState"
+              }
+            ],
+            "description": "Where it is."
+          }
+        },
+        "required": [
+          "operation",
+          "state",
+          "startedAt",
+          "finishedAt",
+          "error"
+        ],
+        "type": "object"
+      },
+      "SyncOperation": {
+        "description": "What a sync does.",
+        "oneOf": [
+          {
+            "const": "install",
+            "description": "Clones the store, which is not there yet.",
+            "type": "string"
+          },
+          {
+            "const": "update",
+            "description": "Pulls the store, with `--ff-only`.",
+            "type": "string"
+          }
+        ]
+      },
+      "SyncState": {
+        "description": "Where a sync is.",
+        "oneOf": [
+          {
+            "const": "running",
+            "description": "It runs.",
+            "type": "string"
+          },
+          {
+            "const": "succeeded",
+            "description": "It ended well: the apps `hangar.yml` lists are linked, and `.env.global` seeded.",
+            "type": "string"
+          },
+          {
+            "const": "failed",
+            "description": "It failed: its `error` says why.",
+            "type": "string"
+          }
+        ]
       }
     },
     "securitySchemes": {
@@ -355,6 +631,155 @@
         ]
       }
     },
+    "/api/config": {
+      "get": {
+        "operationId": "config_read",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigSource"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The file as it is written.",
+        "tags": [
+          "Config"
+        ]
+      },
+      "put": {
+        "operationId": "config_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigSource"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Checks the file, then writes it as it is and links the apps and shared files it lists. A file that is not valid is a 400 that names the field at fault, and is not written; a store not cloned yet is a 409.",
+        "tags": [
+          "Config"
+        ]
+      }
+    },
+    "/api/env": {
+      "get": {
+        "operationId": "env_read",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalVariables"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The variables on disk; none before the file exists.",
+        "tags": [
+          "Env"
+        ]
+      },
+      "put": {
+        "operationId": "env_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvChanges"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalVariables"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Merges the changes into the file as it is on disk now, so that a variable added by hand meanwhile is kept, after a copy of it aside, `.env.global.<time>.bak`; and answers the variables written. A name compose does not take, or a value with a line break, is a 400, and nothing is written.",
+        "tags": [
+          "Env"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "health_check",
@@ -378,6 +803,242 @@
           "Health"
         ]
       }
+    },
+    "/api/store": {
+      "get": {
+        "operationId": "store_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The store's URL, whether it is cloned, and its last sync.",
+        "tags": [
+          "Store"
+        ]
+      }
+    },
+    "/api/store/apps": {
+      "get": {
+        "operationId": "store_apps",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/AppFilter"
+              },
+              "type": "array"
+            },
+            "style": "form"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreApps"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The store's apps, by id, those of the filters given, or all of them, and how many each filter keeps.",
+        "tags": [
+          "Store"
+        ]
+      }
+    },
+    "/api/store/apps/{id}/install": {
+      "post": {
+        "operationId": "store_install",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreApp"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Installs an app: links it into `app-installed/`, then seeds the variables its files reference. An app installed already is left as it is. A 404 for an app the store does not carry.",
+        "tags": [
+          "Store"
+        ]
+      }
+    },
+    "/api/store/apps/{id}/uninstall": {
+      "post": {
+        "operationId": "store_uninstall",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreApp"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Uninstalls an app: `docker compose down` first, then its link removed; its volumes and its folder in the store are kept. An app not installed is left as it is. A 404 for an app the store does not carry.",
+        "tags": [
+          "Store"
+        ]
+      }
+    },
+    "/api/store/new-app": {
+      "get": {
+        "operationId": "store_new_app",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewAppTemplate"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The `compose.yml` a new app starts from.",
+        "tags": [
+          "Store"
+        ]
+      }
+    },
+    "/api/store/sync": {
+      "post": {
+        "operationId": "store_sync",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreSync"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Clones the store, or pulls it once cloned, then links the apps `hangar.yml` lists and seeds `.env.global`, apart from the request: the sync running, which `GET /store` reads again, and notified once it ends. While one runs, the answer is that one, and no other starts.",
+        "tags": [
+          "Store"
+        ]
+      }
     }
   },
   "tags": [
@@ -388,6 +1049,18 @@
     {
       "description": "Signing in and out. Every other route but the health route takes a `Session`, or answers 401.",
       "name": "Auth"
+    },
+    {
+      "description": "The store and its apps.",
+      "name": "Store"
+    },
+    {
+      "description": "The store's configuration, `config/hangar.yml`.",
+      "name": "Config"
+    },
+    {
+      "description": "The global environment, `.env.global`, which every compose call reads.",
+      "name": "Env"
     }
   ]
 }
