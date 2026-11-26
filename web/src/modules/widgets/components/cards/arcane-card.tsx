@@ -1,7 +1,13 @@
 import type { ArcaneGeneralStats, ArcaneVersion } from "#libs/api";
+import {
+  WidgetCard,
+  WidgetContent,
+  WidgetFooter,
+  WidgetHeader,
+  WidgetMetadata,
+} from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
-import { WidgetCard, WidgetContent, WidgetFooter, WidgetHeader, WidgetMetadata } from "../widget.tsx";
 import { HostMetrics } from "./host-metrics.tsx";
 
 /** The color of an item that needs attention, by how pressing it is. */

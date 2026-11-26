@@ -1,10 +1,17 @@
 import type { TcgCollectorCards, TcgDailyPrices, TcgFollowedCard } from "#libs/api";
 import { Badge } from "#modules/common/ui/badge.tsx";
+import { WidgetSparkline } from "#modules/widgets/components/widget-sparkline.tsx";
+import {
+  WidgetCard,
+  WidgetContent,
+  WidgetHeader,
+  WidgetList,
+  WidgetListItem,
+  WidgetMetadata,
+} from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { formatCount } from "#modules/widgets/helpers/widget-format.ts";
 import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
-import { WidgetSparkline } from "../widget-sparkline.tsx";
-import { WidgetCard, WidgetContent, WidgetHeader, WidgetList, WidgetListItem, WidgetMetadata } from "../widget.tsx";
 
 // How the card writes prices and days.
 

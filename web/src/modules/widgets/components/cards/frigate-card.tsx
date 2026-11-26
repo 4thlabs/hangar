@@ -1,8 +1,5 @@
 import type { FrigateEvents } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { formatCount } from "#modules/widgets/helpers/widget-format.ts";
-import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
 import {
   WidgetCard,
   WidgetContent,
@@ -11,7 +8,10 @@ import {
   WidgetListItem,
   WidgetMetadata,
   WidgetTime,
-} from "../widget.tsx";
+} from "#modules/widgets/components/widget.tsx";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { formatCount } from "#modules/widgets/helpers/widget-format.ts";
+import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
 
 /** How the card names a camera: `frigate_front_door` is `front door`. */
 function cameraName(camera: string) {

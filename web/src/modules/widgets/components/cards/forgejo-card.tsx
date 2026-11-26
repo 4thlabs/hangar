@@ -1,8 +1,6 @@
 import { cn } from "cn";
 import type { ForgejoCi } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 import {
   WidgetCard,
   WidgetContent,
@@ -12,7 +10,9 @@ import {
   WidgetListItem,
   WidgetMetadata,
   WidgetTime,
-} from "../widget.tsx";
+} from "#modules/widgets/components/widget.tsx";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 
 type ForgejoCardProps = {
   ci: ForgejoCi;

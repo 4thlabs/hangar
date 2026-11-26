@@ -2,10 +2,16 @@ import { Link } from "@tanstack/react-router";
 import { useDockerOverview, useDockerProjects } from "#libs/api";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { useDockerChanges } from "#modules/common/hooks/use-docker-changes.ts";
+import { WidgetError, WidgetSkeleton } from "#modules/widgets/components/widget-states.tsx";
+import {
+  WidgetCard,
+  WidgetContent,
+  WidgetFooter,
+  WidgetHeader,
+  WidgetMetadata,
+} from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { formatCount } from "#modules/widgets/helpers/widget-format.ts";
-import { WidgetError, WidgetSkeleton } from "../widget-states.tsx";
-import { WidgetCard, WidgetContent, WidgetFooter, WidgetHeader, WidgetMetadata } from "../widget.tsx";
 import { HostMetrics } from "./host-metrics.tsx";
 
 /**

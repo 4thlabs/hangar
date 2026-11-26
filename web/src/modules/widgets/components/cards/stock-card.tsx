@@ -1,8 +1,15 @@
 import type { Stock, StockPrices } from "#libs/api";
+import { WidgetSparkline } from "#modules/widgets/components/widget-sparkline.tsx";
+import {
+  WidgetCard,
+  WidgetContent,
+  WidgetHeader,
+  WidgetMetadata,
+  WidgetMetric,
+  WidgetMetricGrid,
+} from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
-import { WidgetSparkline } from "../widget-sparkline.tsx";
-import { WidgetCard, WidgetContent, WidgetHeader, WidgetMetadata, WidgetMetric, WidgetMetricGrid } from "../widget.tsx";
 
 // How the card writes prices and their changes.
 

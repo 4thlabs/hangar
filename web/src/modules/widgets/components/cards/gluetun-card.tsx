@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import type { GluetunVpnStatus } from "#libs/api";
+import { WidgetCard, WidgetContent, WidgetHeader } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { WidgetCard, WidgetContent, WidgetHeader } from "../widget.tsx";
 
 /** Whether gluetun's tunnel is up, and where it comes out. No link: gluetun has no web page. */
 export function GluetunCard({ status: { publicIp, city, country } }: { status: GluetunVpnStatus }) {

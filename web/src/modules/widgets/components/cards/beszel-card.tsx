@@ -2,9 +2,16 @@ import { cn } from "cn";
 import type { BeszelServerStats } from "#libs/api";
 import { compactRelativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
+import {
+  WidgetCard,
+  WidgetContent,
+  WidgetHeader,
+  WidgetList,
+  WidgetListItem,
+  WidgetMetadata,
+} from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
-import { WidgetCard, WidgetContent, WidgetHeader, WidgetList, WidgetListItem, WidgetMetadata } from "../widget.tsx";
 
 /** The usage past which a bar is the thing on the card to look at. */
 const hotUsage = 85;

@@ -2,8 +2,6 @@ import { cn } from "cn";
 import type { BackrestHealth, BackrestSummary } from "#libs/api";
 import { compactRelativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { formatBytes, formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 import {
   WidgetCard,
   WidgetContent,
@@ -12,7 +10,9 @@ import {
   WidgetListItem,
   WidgetMetadata,
   WidgetTime,
-} from "../widget.tsx";
+} from "#modules/widgets/components/widget.tsx";
+import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { formatBytes, formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 
 /** The dot of a repository: muted for one that has not run, which is neither healthy nor failed. */
 const healthDotClasses: Readonly<Record<BackrestHealth, string>> = {
