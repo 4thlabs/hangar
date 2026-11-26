@@ -39,7 +39,11 @@ describe("/settings#store", () => {
 
     status = {
       ...status,
-      sync: { ...running, state: "failed", error: "The store could not be pulled. See the server's log." },
+      sync: {
+        ...running,
+        state: "failed",
+        error: { code: "store.pull_failed", message: "the store could not be pulled. See the server's log." },
+      },
     };
 
     // The card reads the store again each second while the sync runs.
@@ -62,11 +66,11 @@ describe("/settings#env", () => {
     expect(value.type).toBe("text");
   });
 
-  it("saves the values changed and the variables removed, and says why a save is refused", async () => {
+  it("saves only what changed since the read, and says why a save is refused", async () => {
     const saved: unknown[] = [];
 
     serve({
-      "GET /api/env": () => Response.json({ variables: { KEPT: "1", OLD: "2" } }),
+      "GET /api/env": () => Response.json({ variables: { KEPT: "1", SAME: "2", OLD: "3" } }),
       "PUT /api/env": body => {
         saved.push(body);
 
@@ -78,10 +82,13 @@ describe("/settings#env", () => {
 
     fireEvent.change(await screen.findByLabelText("KEPT"), { target: { value: "one" } });
     fireEvent.click(screen.getByRole("button", { name: "Remove OLD" }));
+    fireEvent.change(screen.getByLabelText("Name of a new variable"), { target: { value: "new_key" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("Invalid variable name: 1BAD.")).toBeDefined();
-    expect(saved).toEqual([{ updates: { KEPT: "one" }, remove: ["OLD"] }]);
+    // SAME, as it was read, is not sent: a change made to the file since the read stays.
+    expect(saved).toEqual([{ updates: { KEPT: "one", NEW_KEY: "" }, remove: ["OLD"] }]);
   });
 });
 

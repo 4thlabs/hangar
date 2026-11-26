@@ -68,12 +68,12 @@ export function StoreSettingsCard() {
             <FieldLabel htmlFor="store-url">Store URL</FieldLabel>
             <Input id="store-url" value={status?.url ?? ""} readOnly aria-describedby="store-status" />
             <FieldDescription id="store-status">
-              {error && ErrorMessage.of(error)}
+              {error && ErrorMessage.describe(error)}
               {status && (status.installed ? "The store is installed locally." : "The store is not installed yet.")}
               {status?.sync && (
                 <>
                   <br />
-                  <span role="status">{StoreSyncText.of(status.sync)}</span>
+                  <span role="status">{StoreSyncText.describe(status.sync)}</span>
                 </>
               )}
             </FieldDescription>

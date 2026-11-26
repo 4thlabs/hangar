@@ -29,7 +29,7 @@ export function StorePage() {
           </Link>
         </div>
       </div>
-      {error && <p className="text-sm text-destructive">{ErrorMessage.of(error)}</p>}
+      {error && <p className="text-sm text-destructive">{ErrorMessage.describe(error)}</p>}
       {apps.length > 0 && (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3">
           {apps.map(app => (

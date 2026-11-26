@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { SettingsIcon } from "lucide-react";
-import { MobileSearch } from "#modules/common/components/navbar-mobile.tsx";
+import { cn } from "cn";
+import { SearchIcon, SettingsIcon } from "lucide-react";
+import { useState } from "react";
 import { NavbarSearch } from "#modules/common/components/searchbar.tsx";
 import { UserMenu } from "#modules/common/components/user-menu.tsx";
 import { useCurrentPath } from "#modules/common/hooks/use-current-path.ts";
@@ -89,6 +90,19 @@ function SettingsButton() {
  * notifications come with the issues of their areas, in the places the Waku version gives them.
  */
 export function AppNavbar() {
+  // Below `md`, the field drops under the bar once the magnifier opens it; from `md` it sits in the bar.
+  const [isSearchOpen, setSearchOpen] = useState(false);
+  const searchFieldId = "navbar-search-field";
+
+  const toggleSearch = () => {
+    setSearchOpen(!isSearchOpen);
+
+    if (!isSearchOpen) {
+      // Once shown, on the next frame: a field still hidden takes no focus.
+      requestAnimationFrame(() => document.getElementById(searchFieldId)?.focus());
+    }
+  };
+
   return (
     <header className="shrink-0 border-b border-sidebar-border bg-sidebar text-sidebar-foreground [--background:var(--sidebar)] [--foreground:var(--sidebar-foreground)] [--input:var(--sidebar-border)] [--muted:var(--sidebar-accent)] [--ring:var(--sidebar-ring)] [--secondary:var(--sidebar-accent)] [--secondary-foreground:var(--sidebar-accent-foreground)]">
       {/*
@@ -97,15 +111,36 @@ export function AppNavbar() {
       */}
       <div className="relative grid h-14 grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 sm:grid-cols-[minmax(max-content,1fr)_minmax(0,32rem)_minmax(max-content,1fr)] sm:gap-4 sm:px-4">
         <div className="col-start-1 flex h-full items-center justify-start gap-2">
-          <MobileSearch />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            aria-label={isSearchOpen ? "Close search" : "Open search"}
+            aria-expanded={isSearchOpen}
+            aria-controls="navbar-search"
+            onClick={toggleSearch}
+          >
+            <SearchIcon />
+          </Button>
           <Brand />
           <DesktopNavigation />
         </div>
 
-        {/* Columns are placed, not implied: the search is absent below `md`, and without this
-            the right-hand cluster would slide into the column it left empty. */}
-        <div className="hidden md:col-start-2 md:block">
-          <NavbarSearch id="navbar-search-desktop" />
+        {/* One field at every width, placed rather than implied: below `md` it is out of the grid, under the bar
+            once opened, and the right-hand cluster keeps its column. */}
+        <div
+          id="navbar-search"
+          className={cn(
+            "md:static md:col-start-2 md:block md:border-0 md:bg-transparent md:p-0",
+            isSearchOpen ? "absolute inset-x-0 top-full z-40 border-b border-sidebar-border bg-sidebar p-2" : "hidden",
+          )}
+          onKeyDown={event => {
+            if (event.key === "Escape") {
+              setSearchOpen(false);
+            }
+          }}
+        >
+          <NavbarSearch id={searchFieldId} />
         </div>
 
         <div className="col-start-3 flex items-center justify-end gap-2">

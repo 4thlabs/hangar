@@ -38,7 +38,7 @@ describe("/store", () => {
     expect(await screen.findByText("Miniflux")).toBeDefined();
     expect(screen.queryByText("Frigate")).toBeNull();
     expect(fetch.mock.calls.map(([url]) => url)).toContain("/api/store/apps?filter=available");
-    expect((screen.getByLabelText("Search", { selector: "#navbar-search-desktop" }) as HTMLInputElement).value).toBe(
+    expect((screen.getByLabelText("Search", { selector: "#navbar-search-field" }) as HTMLInputElement).value).toBe(
       "mini",
     );
   });
@@ -48,7 +48,7 @@ describe("/store", () => {
     renderAt("/store");
 
     await screen.findByText("Frigate");
-    fireEvent.change(screen.getByLabelText("Search", { selector: "#navbar-search-desktop" }), {
+    fireEvent.change(screen.getByLabelText("Search", { selector: "#navbar-search-field" }), {
       target: { value: "frig" },
     });
 
@@ -92,6 +92,13 @@ describe("/store", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Uninstall" }));
 
     expect(await screen.findByText("The uninstallation of Jellyfin failed. See the server's log.")).toBeDefined();
+  });
+
+  it("says which field of hangar.yml is at fault when the store cannot be listed", async () => {
+    serve({ "GET /api/store/apps": () => problem(400, "invalid hangar.yml: categories[0].color: required") });
+    renderAt("/store");
+
+    expect(await screen.findByText("Invalid hangar.yml: categories[0].color: required.")).toBeDefined();
   });
 
   it("says the store has no apps, or none of the search", async () => {

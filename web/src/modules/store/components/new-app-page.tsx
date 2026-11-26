@@ -13,7 +13,7 @@ export function NewAppPage() {
     <main>
       <title>New app | Hangar</title>
       <h1 className="text-2xl font-semibold">New app</h1>
-      {error && <p className="text-sm text-destructive">{ErrorMessage.of(error)}</p>}
+      {error && <p className="text-sm text-destructive">{ErrorMessage.describe(error)}</p>}
       {template && <NewAppEditor source={template.compose} />}
     </main>
   );

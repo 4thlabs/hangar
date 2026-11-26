@@ -10,6 +10,6 @@ export class ActionToast {
 
   /** A change that failed: `title`, and why, as the server says it. */
   static failure(title: string, error: unknown) {
-    toast.add({ title, description: ErrorMessage.of(error), type: "error" });
+    toast.add({ title, description: ErrorMessage.describe(error), type: "error" });
   }
 }
