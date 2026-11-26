@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "#libs/api";
-import { SignInMessages } from "./sign-in-messages.ts";
+import { describeSignInFailure, isSignInRefusal } from "./sign-in-messages.ts";
 
-describe("SignInMessages", () => {
+describe("the sign-in's messages", () => {
   it("reads the refusals the server names, and no other", () => {
-    expect(SignInMessages.refusal("expired")).toBe("expired");
-    expect(SignInMessages.refusal("toString")).toBeUndefined();
-    expect(SignInMessages.refusal(undefined)).toBeUndefined();
+    expect(isSignInRefusal("expired")).toBe(true);
+    expect(isSignInRefusal("toString")).toBe(false);
+    expect(isSignInRefusal(undefined)).toBe(false);
   });
 
   it("says what failed in a sign-in by password", () => {
@@ -26,13 +26,11 @@ describe("SignInMessages", () => {
       900,
     );
 
-    expect(SignInMessages.ofPassword(invalid)).toBe("Invalid email or password.");
-    expect(SignInMessages.ofPassword(tooMany)).toBe(
-      "Too many failed sign-ins for this email: try again in 15 minutes.",
-    );
+    expect(describeSignInFailure(invalid)).toBe("Invalid email or password.");
+    expect(describeSignInFailure(tooMany)).toBe("Too many failed sign-ins for this email: try again in 15 minutes.");
 
-    expect(SignInMessages.ofPassword(new ApiError(401))).toBe("Invalid email or password.");
-    expect(SignInMessages.ofPassword(new ApiError(413))).toBe("Unable to sign in. Please try again.");
-    expect(SignInMessages.ofPassword(new TypeError("Failed to fetch"))).toBe("Unable to sign in. Please try again.");
+    expect(describeSignInFailure(new ApiError(401))).toBe("Invalid email or password.");
+    expect(describeSignInFailure(new ApiError(413))).toBe("Unable to sign in. Please try again.");
+    expect(describeSignInFailure(new TypeError("Failed to fetch"))).toBe("Unable to sign in. Please try again.");
   });
 });

@@ -1,0 +1,27 @@
+import type { RouterHistory } from "@tanstack/react-router";
+import { createQueryClient } from "#libs/api";
+import { Preferences } from "#libs/preferences";
+import { createPageRouter } from "#app/routes.tsx";
+import { Session } from "#modules/auth/api/session.ts";
+
+/** What a page is built with instead of the browser's: a test's history in memory, its own preferences. */
+type PageOptions = {
+  /** The history the router reads and writes, the browser's unless given. */
+  history?: RouterHistory;
+  /** The user's preferences, from `document.cookie` unless given. */
+  preferences?: Preferences;
+};
+
+/**
+ * Creates, once, what the page is built on: its query client, its session, its router and its preferences. `main.tsx`
+ * calls it, and so do the tests, through `renderAt`.
+ */
+export function createPage({ history, preferences = Preferences.fromCookies(document.cookie) }: PageOptions = {}) {
+  // A 401 of any call sends the page to /login: the session expired, or its user left hangar.yml. The callback runs
+  // only once the page is up, when `session` and `router` exist.
+  const queryClient = createQueryClient(() => session.signedOut(router));
+  const session = new Session(queryClient);
+  const router = createPageRouter({ queryClient, session }, history);
+
+  return { queryClient, session, router, preferences };
+}

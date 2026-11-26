@@ -6,10 +6,7 @@ import "@fontsource-variable/nunito";
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createQueryClient } from "#libs/api";
-import { Preferences } from "#libs/preferences";
-import { Routes } from "#app/routes.tsx";
-import { SessionGuard } from "#modules/auth/session-guard.ts";
+import { createPage } from "#app/page.ts";
 import { AppProviders } from "#modules/common/components/app-providers.tsx";
 
 const root = document.getElementById("root");
@@ -18,13 +15,11 @@ if (!root) {
   throw new Error("index.html has no #root to render the page in");
 }
 
-// A 401 of any call sends the page to /login: the session expired, or its user left hangar.yml.
-const queryClient = createQueryClient(() => SessionGuard.signedOut(router, queryClient));
-const router = Routes.createRouter(queryClient);
+const { queryClient, router, preferences } = createPage();
 
 createRoot(root).render(
   <StrictMode>
-    <AppProviders queryClient={queryClient} preferences={Preferences.fromCookies(document.cookie)}>
+    <AppProviders queryClient={queryClient} preferences={preferences}>
       <RouterProvider router={router} />
     </AppProviders>
   </StrictMode>,
