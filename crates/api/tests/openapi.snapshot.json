@@ -694,6 +694,32 @@
             "type": "object"
           },
           {
+            "description": "A path of an app's file that leads, through a symlink, to a hidden entry of its folder.",
+            "properties": {
+              "code": {
+                "const": "editor.hidden_file",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
             "description": "A path of an app's file through a symlink to nothing, which a write would create wherever it points.",
             "properties": {
               "code": {

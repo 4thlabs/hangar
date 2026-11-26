@@ -140,10 +140,12 @@ editor, `/store/<app>/edit`, on its `compose.yml`: its files in a tree, 5 folder
 hidden file, symlink, binary, or file over 1 MiB; a draft per file opened, and why a save was refused under the editor.
 A file is written once checked: `compose.yml` by `docker compose config`, and by `docker stack config` beside a
 `compose.swarm.yml` with content, `compose.swarm.yml` by `docker stack config` merged over it, with `.env.global` in its
-environment, a `.yml`, `.yaml` or `.env` file by a read of its syntax. The compose files are written beside, as
+environment, unless it is blank, which takes the app off the swarm, a `.yml`, `.yaml` or `.env` file by a read of its syntax. The compose files are written beside, as
 `.compose.<pid>-<n>.pending.yml`, then renamed in place once checked; the others are rewritten in place, so that a
 container that bind-mounts one sees the change. A path is refused with a 400 when it leaves the app's folder: `..`, a
-segment that starts with a dot, an absolute path, a symlink that leads out of it or to nothing. compose's complaint is
+segment that starts with a dot, an absolute path, a symlink that leads out of it, to nothing, or to a hidden file. A
+file is checked by its own extension, not by that of a link to it, and its copy is written whole before it is copied
+over the file, so that a full disk leaves the file as it was. compose's complaint is
 shown as it says it, the app's files by their paths in its folder: it is about the operator's own file, and the only way
 to say what to fix in it. A save, a new file or a new app takes its turn among the store's changes, and is refused with
 a 409 while a sync runs. Edits land in the clone, as a saved `hangar.yml` does.

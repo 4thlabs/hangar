@@ -173,6 +173,13 @@ pub enum ErrorCode {
         path: String,
     },
 
+    /// A path of an app's file that leads, through a symlink, to a hidden entry of its folder.
+    #[serde(rename = "editor.hidden_file")]
+    HiddenFile {
+        /// The path in the app's folder.
+        path: String,
+    },
+
     /// A path of an app's file through a symlink to nothing, which a write would create wherever it points.
     #[serde(rename = "editor.broken_symlink")]
     BrokenSymlink {
@@ -354,6 +361,7 @@ impl ErrorCode {
             Self::ThroughFile { .. } => "editor.through_file",
             Self::OutsideApp { .. } => "editor.outside_app",
             Self::BrokenSymlink { .. } => "editor.broken_symlink",
+            Self::HiddenFile { .. } => "editor.hidden_file",
             Self::NoSuchFile { .. } => "editor.no_such_file",
             Self::NotAFile { .. } => "editor.not_a_file",
             Self::TooLarge { .. } => "editor.too_large",
@@ -391,6 +399,7 @@ impl ErrorCode {
             | Self::ThroughFile { .. }
             | Self::OutsideApp { .. }
             | Self::BrokenSymlink { .. }
+            | Self::HiddenFile { .. }
             | Self::NotAFile { .. }
             | Self::TooLarge { .. }
             | Self::BinaryFile { .. }
@@ -458,6 +467,7 @@ impl ErrorCode {
             Self::ThroughFile { path } => format!("{path} goes through a file, not a folder"),
             Self::OutsideApp { app, path } => format!("{path} leads outside the app {app}"),
             Self::BrokenSymlink { path } => format!("{path} is a broken symlink"),
+            Self::HiddenFile { path } => format!("{path} leads to a hidden file"),
             Self::NoSuchFile { app, path } => format!("the app {app} has no file {path}"),
             Self::NotAFile { path } => format!("{path} is not a file"),
             Self::TooLarge { path, size } => {
@@ -550,6 +560,9 @@ mod tests {
             },
             ErrorCode::OutsideApp {
                 app: app(),
+                path: "path".to_owned(),
+            },
+            ErrorCode::HiddenFile {
                 path: "path".to_owned(),
             },
             ErrorCode::BrokenSymlink {

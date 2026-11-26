@@ -141,6 +141,14 @@ pub enum StoreError {
         path: String,
     },
 
+    /// A path of an app's file that leads, through a symlink, to a hidden entry of its folder, which the path alone
+    /// could not name.
+    #[error("{path} leads to a hidden file")]
+    HiddenFile {
+        /// The path in the app's folder.
+        path: String,
+    },
+
     /// A path of an app's file that goes through a symlink to nothing: writing through it would create its target,
     /// wherever it points.
     #[error("{path} is a broken symlink")]

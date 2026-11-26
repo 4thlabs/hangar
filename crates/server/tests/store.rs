@@ -990,3 +990,58 @@ async fn creates_an_app_once_compose_accepts_it_and_nothing_otherwise() {
         "a refused app leaves no folder"
     );
 }
+
+#[tokio::test]
+async fn opens_an_app_whose_compose_yml_does_not_parse_so_that_it_can_be_fixed() {
+    let fixture = Fixture::new();
+    let compose = fixture.data.join("app-store/store/alpha/compose.yml");
+
+    fs::write(&compose, "services: [\n").expect("written");
+
+    let server = fixture.serve(None).await;
+    let (status, opened) = server.get("/api/store/apps/alpha/files").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        opened["app"],
+        json!({ "id": "alpha", "name": "alpha", "icon": null, "installed": true, "swarmReady": false })
+    );
+    assert_eq!(opened["files"], json!(["compose.yml"]));
+
+    let file = "/api/store/apps/alpha/file?path=compose.yml";
+    let (status, _) = server.get(file).await;
+    let (saved, _) = server
+        .put(
+            file,
+            &json!({ "source": "x-hangar:\n  name: Alpha\nservices: {}\n" }),
+        )
+        .await;
+    let (_, fixed) = server.get("/api/store/apps/alpha/files").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(saved, StatusCode::OK);
+    assert_eq!(fixed["app"]["name"], "Alpha");
+}
+
+#[tokio::test]
+async fn answers_an_app_created_that_the_store_cannot_list_by_its_id() {
+    let fixture = Fixture::new();
+    let server = fixture.serve(None).await;
+
+    // The fake compose takes it, the store's YAML does not.
+    let (status, created) = server
+        .post_json(
+            "/api/store/apps",
+            &json!({ "id": "delta", "compose": "services: [\n" }),
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(created["name"], "delta");
+    assert!(
+        fixture
+            .data
+            .join("app-store/store/delta/compose.yml")
+            .exists()
+    );
+}
