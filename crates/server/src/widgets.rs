@@ -2,6 +2,7 @@
 //! of its own, kept per placement, and the images they show, relayed from their service.
 
 mod arcane;
+mod backrest;
 mod cache;
 mod error;
 mod frigate;
@@ -185,6 +186,13 @@ impl Loader {
                 arcane::load(&self.http, &service)
                     .await
                     .map(WidgetData::ArcaneGeneralStats)
+            }
+            WidgetKind::BackrestSummary { .. } => {
+                let service = self.service(&kind).await?;
+
+                backrest::load(&self.http, &service)
+                    .await
+                    .map(WidgetData::BackrestSummary)
             }
             WidgetKind::FrigateEvents { .. } => {
                 let service = self.service(&kind).await?;

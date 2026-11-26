@@ -2,6 +2,7 @@
 //! fake services served on port 0 too, whose answers each test writes.
 
 mod arcane;
+mod backrest;
 mod frigate;
 mod gluetun;
 
