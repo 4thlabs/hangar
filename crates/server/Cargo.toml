@@ -20,11 +20,11 @@ quoll = { workspace = true, features = ["server"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["fs", "macros", "rt-multi-thread"] }
 tracing.workspace = true
-tracing-subscriber = "0.3"
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
 hangar-api = { workspace = true, features = ["client"] }
-http = "1"
+http.workspace = true
 reqwest = { version = "0.13", default-features = false }
 tempfile.workspace = true
 

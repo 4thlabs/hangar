@@ -2,6 +2,7 @@
 //! `src/libs/env/env.ts`: a value that is missing or bad stops the server with a message that names its variable.
 
 use std::fmt;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 
 use hangar_core::{DataDir, Environment, StoreError};
@@ -21,11 +22,15 @@ use hangar_core::{DataDir, Environment, StoreError};
 /// let settings = Settings::read(|name| variables.get(name).map(|value| value.to_string()))?;
 ///
 /// assert_eq!(settings.domain, "example.com");
+/// assert_eq!(settings.address.to_string(), "0.0.0.0:3010");
 /// assert!(settings.github_token.is_none());
 /// # Ok::<(), hangar_server::SettingsError>(())
 /// ```
 #[derive(Debug, Clone)]
 pub struct Settings {
+    /// Where the server listens, from `HOST`, an IP address, and `PORT`, as the image sets them: `0.0.0.0:3010`
+    /// unless they say otherwise.
+    pub address: SocketAddr,
     /// The data directory, from `HANGAR_DATA_DIR`.
     pub data_dir: DataDir,
     /// The git URL of the store, from `HANGAR_STORE_URL`.
@@ -48,6 +53,10 @@ pub struct Settings {
 }
 
 impl Settings {
+    /// The variable of the address the server listens on.
+    pub const HOST: &str = "HOST";
+    /// The variable of the port the server listens on.
+    pub const PORT: &str = "PORT";
     /// The variable of the store's URL.
     pub const STORE_URL: &str = Environment::STORE_URL;
     /// The variable of the domain.
@@ -64,6 +73,11 @@ impl Settings {
     pub const SSH_PORT: &str = "HANGAR_SSH_PORT";
     /// The variable of the page's directory.
     pub const PAGE_DIR: &str = "HANGAR_PAGE_DIR";
+
+    /// The address the server listens on without `HOST`: every interface, as in the image.
+    const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+    /// The port the server listens on without `PORT`: the Waku version's, which the image publishes.
+    const DEFAULT_PORT: u16 = 3010;
 
     /// The file a page's directory must hold, which the server answers for `/`.
     const PAGE_INDEX: &str = "index.html";
@@ -82,20 +96,31 @@ impl Settings {
     /// # Errors
     ///
     /// Returns a [`SettingsError`] that lists every variable missing or bad: `HANGAR_DATA_DIR`, `HANGAR_STORE_URL` or
-    /// `DOMAIN` not set, a data directory that is no usable path, a port that is not 1 to 65535, or a page's directory
-    /// with no `index.html`.
+    /// `DOMAIN` not set, a `HOST` that is no IP address, a data directory that is no usable path, a port that is not 1
+    /// to 65535, or a page's directory with no `index.html`.
     pub fn read(variable: impl Fn(&str) -> Option<String>) -> Result<Self, SettingsError> {
         let variable = |name: &str| variable(name).filter(|value| !value.is_empty());
 
         // Each read on its own, so that the error names every variable at fault, not the first alone.
+        let host = Self::host(variable(Self::HOST));
+        let port = Self::port(Self::PORT, variable(Self::PORT));
         let data_dir = Self::data_dir(variable(DataDir::VARIABLE));
         let store_url = Self::required(Self::STORE_URL, variable(Self::STORE_URL));
         let domain = Self::required(Self::DOMAIN, variable(Self::DOMAIN));
         let ssh_port = Self::port(Self::SSH_PORT, variable(Self::SSH_PORT));
         let page = Self::page(variable(Self::PAGE_DIR));
 
-        match (data_dir, store_url, domain, ssh_port, page) {
-            (Ok(data_dir), Ok(store_url), Ok(domain), Ok(ssh_port), Ok(page)) => Ok(Self {
+        match (host, port, data_dir, store_url, domain, ssh_port, page) {
+            (
+                Ok(host),
+                Ok(port),
+                Ok(data_dir),
+                Ok(store_url),
+                Ok(domain),
+                Ok(ssh_port),
+                Ok(page),
+            ) => Ok(Self {
+                address: SocketAddr::new(host, port.unwrap_or(Self::DEFAULT_PORT)),
                 data_dir,
                 store_url,
                 domain,
@@ -106,8 +131,10 @@ impl Settings {
                 ssh_port,
                 page,
             }),
-            (data_dir, store_url, domain, ssh_port, page) => {
+            (host, port, data_dir, store_url, domain, ssh_port, page) => {
                 let errors = [
+                    host.err(),
+                    port.err(),
                     data_dir.err(),
                     store_url.err(),
                     domain.err(),
@@ -125,6 +152,18 @@ impl Settings {
     /// The value of a variable that must be set.
     fn required(name: &'static str, value: Option<String>) -> Result<String, SettingError> {
         value.ok_or(SettingError::NotSet { variable: name })
+    }
+
+    /// The IP address `HOST` names, or every interface.
+    fn host(value: Option<String>) -> Result<IpAddr, SettingError> {
+        let Some(value) = value else {
+            return Ok(Self::DEFAULT_HOST);
+        };
+
+        value.parse().map_err(|_| SettingError::NotAnAddress {
+            variable: Self::HOST,
+            value,
+        })
     }
 
     /// The data directory that `HANGAR_DATA_DIR` names, made absolute as the core does.
@@ -196,8 +235,17 @@ pub enum SettingError {
         variable: &'static str,
     },
 
+    /// A variable that is no IP address, as `HOST=localhost`.
+    #[error("{variable} must be an IP address, not {value:?}")]
+    NotAnAddress {
+        /// The variable.
+        variable: &'static str,
+        /// Its value.
+        value: String,
+    },
+
     /// `HANGAR_DATA_DIR` names no usable path.
-    #[error("HANGAR_DATA_DIR is not a usable path: {source}")]
+    #[error("HANGAR_DATA_DIR is not a usable path")]
     DataDir {
         /// Why the core refuses it.
         source: StoreError,
@@ -220,7 +268,21 @@ pub enum SettingError {
     },
 }
 
-/// The environment the server cannot start with: every variable missing or bad, each named.
+impl SettingError {
+    /// The variable at fault.
+    pub fn variable(&self) -> &'static str {
+        match self {
+            Self::NotSet { variable }
+            | Self::NotAnAddress { variable, .. }
+            | Self::NotAPort { variable, .. } => variable,
+            Self::DataDir { .. } => DataDir::VARIABLE,
+            Self::NoPage { .. } => Settings::PAGE_DIR,
+        }
+    }
+}
+
+/// The environment the server cannot start with: every variable missing or bad. It names them, and its
+/// [`errors`](Self::errors) say what is wrong with each; its `source()` is the first of them.
 #[derive(Debug)]
 pub struct SettingsError {
     errors: Vec<SettingError>,
@@ -239,17 +301,23 @@ impl fmt::Display for SettingsError {
 
         for (at, error) in self.errors.iter().enumerate() {
             if at > 0 {
-                f.write_str("; ")?;
+                f.write_str(", ")?;
             }
 
-            write!(f, "{error}")?;
+            f.write_str(error.variable())?;
         }
 
         Ok(())
     }
 }
 
-impl std::error::Error for SettingsError {}
+impl std::error::Error for SettingsError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.errors
+            .first()
+            .map(|error| error as &(dyn std::error::Error + 'static))
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -298,7 +366,19 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "invalid environment: HANGAR_DATA_DIR is not set; HANGAR_STORE_URL is not set; DOMAIN is not set"
+            "invalid environment: HANGAR_DATA_DIR, HANGAR_STORE_URL, DOMAIN"
+        );
+        assert_eq!(
+            error
+                .errors()
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            [
+                "HANGAR_DATA_DIR is not set",
+                "HANGAR_STORE_URL is not set",
+                "DOMAIN is not set"
+            ]
         );
     }
 
@@ -347,8 +427,8 @@ mod tests {
             .expect_err("the page has no index.html");
 
         assert_eq!(
-            error.to_string(),
-            format!("invalid environment: HANGAR_PAGE_DIR holds no index.html: {path}")
+            error.errors()[0].to_string(),
+            format!("HANGAR_PAGE_DIR holds no index.html: {path}")
         );
 
         std::fs::write(dir.path().join("index.html"), "<!doctype html>").expect("written");
@@ -357,6 +437,38 @@ mod tests {
             read(&with_required(&[("HANGAR_PAGE_DIR", path)])).expect("the page is there");
 
         assert_eq!(settings.page.as_deref(), Some(dir.path()));
+    }
+
+    #[test]
+    fn listens_where_host_and_port_say_or_as_the_image_does() {
+        let default = read(&REQUIRED).expect("the settings are valid");
+        let local = read(&with_required(&[("HOST", "127.0.0.1"), ("PORT", "3011")]))
+            .expect("the settings are valid");
+        let v6 = read(&with_required(&[("HOST", "::1")])).expect("the settings are valid");
+
+        assert_eq!(default.address.to_string(), "0.0.0.0:3010");
+        assert_eq!(local.address.to_string(), "127.0.0.1:3011");
+        assert_eq!(v6.address.to_string(), "[::1]:3010");
+    }
+
+    #[test]
+    fn refuses_a_host_that_is_no_ip_address_and_a_bad_port_together() {
+        let error = read(&with_required(&[("HOST", "localhost"), ("PORT", "http")]))
+            .expect_err("both are refused");
+
+        assert_eq!(error.to_string(), "invalid environment: HOST, PORT");
+        assert_eq!(
+            error.errors()[0].to_string(),
+            "HOST must be an IP address, not \"localhost\""
+        );
+    }
+
+    #[test]
+    fn gives_the_first_error_as_its_source() {
+        let error = read(&[]).expect_err("nothing required is set");
+        let source = std::error::Error::source(&error).expect("a source");
+
+        assert_eq!(source.to_string(), "HANGAR_DATA_DIR is not set");
     }
 
     #[test]

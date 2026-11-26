@@ -10,7 +10,7 @@ export default defineConfig({
   server: {
     proxy: {
       // The server's `url` in the workspace's Cargo.toml, `[[workspace.metadata.quoll.server]]`: the two change together.
-      "/api": "http://127.0.0.1:3010",
+      "/api": "http://127.0.0.1:3011",
     },
   },
 });

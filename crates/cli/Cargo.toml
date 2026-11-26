@@ -18,7 +18,7 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["io-std", "io-util", "macros", "rt", "signal"] }
 tracing.workspace = true
 # The core's logs, on stderr.
-tracing-subscriber = "0.3"
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
