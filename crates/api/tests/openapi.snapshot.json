@@ -2371,6 +2371,29 @@
         ],
         "type": "object"
       },
+      "GluetunVpnStatus": {
+        "description": "Where gluetun's tunnel exits: an empty address when it is down, an empty city or country when gluetun could not\nplace it.",
+        "properties": {
+          "city": {
+            "description": "The city.",
+            "type": "string"
+          },
+          "country": {
+            "description": "The country.",
+            "type": "string"
+          },
+          "publicIp": {
+            "description": "The public address.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "publicIp",
+          "city",
+          "country"
+        ],
+        "type": "object"
+      },
       "ImageCounts": {
         "description": "How many images the host has, and the disk they take.",
         "properties": {
@@ -3565,6 +3588,23 @@
               },
               "type": {
                 "const": "frigate-events",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "data"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`gluetun-vpn-status`.",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/GluetunVpnStatus"
+              },
+              "type": {
+                "const": "gluetun-vpn-status",
                 "type": "string"
               }
             },

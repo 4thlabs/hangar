@@ -4,6 +4,7 @@
 mod cache;
 mod error;
 mod frigate;
+mod gluetun;
 mod placement;
 mod routes;
 mod service;
@@ -183,6 +184,13 @@ impl Loader {
                 frigate::load(&self.http, &service)
                     .await
                     .map(WidgetData::FrigateEvents)
+            }
+            WidgetKind::GluetunVpnStatus { .. } => {
+                let service = self.service(&kind).await?;
+
+                gluetun::load(&self.http, &service)
+                    .await
+                    .map(WidgetData::GluetunVpnStatus)
             }
             other => Err(LoadError::refused(format!(
                 "the {} widget loads nothing",

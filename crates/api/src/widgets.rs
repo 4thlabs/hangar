@@ -93,6 +93,19 @@ pub struct FrigateEvent {
     pub start_time: String,
 }
 
+/// Where gluetun's tunnel exits: an empty address when it is down, an empty city or country when gluetun could not
+/// place it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GluetunVpnStatus {
+    /// The public address.
+    pub public_ip: String,
+    /// The city.
+    pub city: String,
+    /// The country.
+    pub country: String,
+}
+
 /// What a widget loaded from its service, by its `type`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", content = "data", rename_all = "kebab-case")]
@@ -100,6 +113,8 @@ pub struct FrigateEvent {
 pub enum WidgetData {
     /// `frigate-events`.
     FrigateEvents(FrigateEvents),
+    /// `gluetun-vpn-status`.
+    GluetunVpnStatus(GluetunVpnStatus),
 }
 
 quoll::group! {
