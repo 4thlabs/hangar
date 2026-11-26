@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en" data-theme="claude" data-color-mode="system">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hangar</title>
+    <meta name="description" content="Hangar — your self-hosted apps." />
+    <link rel="icon" type="image/png" href="/images/favicon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- iOS only reads the manifest icons since 17.4; before that this tag is all it looks at. -->
+    <link rel="apple-touch-icon" href="/images/icon.png" />
+    <!-- Set to the mode picked once the page runs, by ThemeEffects. -->
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2e3440" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eceff4" />
+    <!--
+      The cookies of Theme and Locale (src/libs/preferences), applied before the first paint, which the page's module
+      runs after: without it a dark page would flash light. The page checks them again, and sets them right, at once.
+    -->
+    <script>
+      (() => {
+        const cookies = Object.fromEntries(document.cookie.split("; ").map(pair => pair.split("=")));
+        const root = document.documentElement;
+        const mode = cookies.theme ?? "system";
+        const dark = mode === "dark" || (mode === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+
+        if (/^[a-z]+$/.test(cookies.theme_palette ?? "")) root.dataset.theme = cookies.theme_palette;
+        if (/^[a-z]+$/.test(cookies.locale ?? "")) root.lang = cookies.locale;
+        root.dataset.colorMode = mode;
+        root.classList.toggle("dark", dark);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

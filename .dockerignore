@@ -14,5 +14,7 @@ dist
 .DS_Store
 plans
 PLAN.md
+# The Rust server's page, not in the image until the switch: a page-only commit leaves the Waku build cached.
+web
 # The Rust workspace's build output: the `cli` stage builds the binary from crates/ alone.
 target

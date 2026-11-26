@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 /**
  * Tests run against the values below, never the developer's `.env`: `src/libs/env`
@@ -7,6 +7,8 @@ import { defineConfig } from "vitest/config";
  */
 export default defineConfig({
   test: {
+    // `web/` is the Rust server's page, which runs its own tests.
+    exclude: [...configDefaults.exclude, "web/**", "target/**"],
     env: {
       HANGAR_DATA_DIR: "./.data",
       HANGAR_DB_HOST: ":memory:",

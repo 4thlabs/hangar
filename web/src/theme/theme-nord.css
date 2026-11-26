@@ -1,0 +1,123 @@
+[data-theme="nord"] {
+  /* Base nord palette */
+  --nord-0: #2e3440;
+  --nord-1: #3b4252;
+  --nord-2: #434c5e;
+  --nord-3: #4c566a;
+
+  /* Snow Storm palette */
+  --nord-4: #d8dee9;
+  --nord-5: #e5e9f0;
+  --nord-6: #eceff4;
+
+  /* Frost palette */
+  --nord-7: #8fbcbb;
+  --nord-8: #88c0d0;
+  --nord-9: #81a1c1;
+  --nord-10: #5e81ac;
+
+  /* Aurora palette */
+  --nord-11: #bf616a;
+  --nord-12: #d08770;
+  --nord-13: #ebcb8b;
+  --nord-14: #a3be8c;
+  --nord-15: #b48ead;
+
+  /* Typography and shape */
+  color-scheme: light;
+  --font-sans: "JetBrains Mono Variable", monospace;
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.0625rem;
+  --text-2xl: 1.4375rem;
+  --radius: 0.225rem;
+
+  /* Snow Storm surfaces on Polar Night text */
+  --background: var(--nord-6);
+  --foreground: var(--nord-0);
+  --card: var(--nord-5);
+  --card-foreground: var(--nord-0);
+  --popover: var(--nord-4);
+  --popover-foreground: var(--nord-0);
+  --muted: var(--nord-5);
+  --muted-foreground: var(--nord-3);
+  --border: var(--nord-4);
+  --input: var(--nord-4);
+
+  /* Frost actions and focus states */
+  --primary: var(--nord-8);
+  --primary-foreground: var(--nord-0);
+  --secondary: var(--nord-4);
+  --secondary-foreground: var(--nord-0);
+  --accent: var(--nord-7);
+  --accent-foreground: var(--nord-0);
+  --ring: var(--nord-8);
+
+  /* Aurora feedback and data visualization */
+  --destructive: var(--nord-11);
+  --destructive-foreground: var(--nord-6);
+  --chart-1: var(--nord-8);
+  --chart-2: var(--nord-9);
+  --chart-3: var(--nord-14);
+  --chart-4: var(--nord-13);
+  --chart-5: var(--nord-15);
+
+  /* Navigation */
+  --sidebar: var(--nord-5);
+  --sidebar-foreground: var(--nord-0);
+  --sidebar-primary: var(--nord-8);
+  --sidebar-primary-foreground: var(--nord-0);
+  --sidebar-accent: var(--nord-4);
+  --sidebar-accent-foreground: var(--nord-0);
+  --sidebar-border: var(--nord-4);
+  --sidebar-ring: var(--nord-8);
+}
+
+[data-theme="nord"] body {
+  font-size: var(--text-base);
+}
+
+.dark[data-theme="nord"] {
+  color-scheme: dark;
+
+  /* Polar Night surfaces with Snow Storm text */
+  --background: var(--nord-0);
+  --foreground: var(--nord-6);
+  --card: var(--nord-1);
+  --card-foreground: var(--nord-6);
+  --popover: var(--nord-1);
+  --popover-foreground: var(--nord-6);
+  --muted: var(--nord-1);
+  --muted-foreground: oklch(from var(--nord-5) calc(l - 0.15) c h);
+  --border: var(--nord-2);
+  --input: var(--nord-2);
+
+  /* Frost actions and Polar Night interaction states */
+  --primary: var(--nord-8);
+  --primary-foreground: var(--nord-0);
+  --secondary: var(--nord-2);
+  --secondary-foreground: var(--nord-6);
+  --accent: var(--nord-2);
+  --accent-foreground: var(--nord-6);
+  --ring: var(--nord-8);
+
+  /* Aurora feedback and data visualization */
+  --destructive: var(--nord-11);
+  --destructive-foreground: var(--nord-6);
+  --chart-1: var(--nord-8);
+  --chart-2: var(--nord-9);
+  --chart-3: var(--nord-14);
+  --chart-4: var(--nord-13);
+  --chart-5: var(--nord-15);
+
+  /* Navigation */
+  --sidebar: var(--nord-0);
+  --sidebar-foreground: var(--nord-6);
+  --sidebar-primary: var(--nord-8);
+  --sidebar-primary-foreground: var(--nord-0);
+  --sidebar-accent: var(--nord-2);
+  --sidebar-accent-foreground: var(--nord-6);
+  --sidebar-border: var(--nord-3);
+  --sidebar-ring: var(--nord-8);
+}

@@ -8,8 +8,14 @@ package-lock.json
 # Vendored agent skill docs
 .agents
 
-# Generated: shadcn components, drizzle schema and migrations, waku route types
+# Generated: shadcn components, drizzle schema and migrations, waku route types, the Rust server's OpenAPI document
+# and orval's client of it
 src/modules/common/ui
+web/src/modules/common/ui
+web/openapi.json
+web/src/libs/api/generated.ts
+# The contract's document as it prints it, which its test compares
+crates/api/tests/openapi.snapshot.json
 src/libs/db/schemas/auth-schema.ts
 src/drizzle
 src/app/pages.gen.ts
