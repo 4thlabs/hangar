@@ -1,0 +1,23 @@
+[package]
+name = "hangar-api"
+description = "The contract of Hangar's server, in quoll: its routes and the types they carry, for the server, its clients and the page"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# The server turns on `server`, a client and the tests `client`; the document needs neither.
+[features]
+server = ["quoll/server"]
+client = ["quoll/client"]
+
+[dependencies]
+quoll.workspace = true
+schemars = "1"
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

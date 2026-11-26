@@ -11,11 +11,11 @@ futures.workspace = true
 # The timestamps of `.env.global`'s header and of its `.bak` copies.
 jiff = { version = "0.2", default-features = false, features = ["std"] }
 # The client side alone: the core depends on no web framework.
-quoll = { git = "https://github.com/4thlabs/quoll", tag = "v0.10.0", features = ["client"] }
+quoll = { workspace = true, features = ["client"] }
 # The patterns of the Waku version's rules, `.env.global`'s parser and the `${VARIABLES}` of the stacks, as written there.
 regex = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde.workspace = true
+serde_json.workspace = true
 # `hangar.yml` and the compose files of the store, as the Waku version reads them with js-yaml.
 serde_norway = "0.9"
 # The path of the field at fault in a `hangar.yml` that does not parse.
