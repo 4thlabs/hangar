@@ -43,8 +43,10 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
 - The ADR's own rules come with the PRs that make the code pass them (decision 10), in ESLint's core rules:
   - rule 1, `no-restricted-syntax`, on `web/src`: no class made only of static members;
   - rule 4, `no-restricted-imports`, on a module's root `.ts` (`modules/*/*.ts`, tests excepted): no React, no
-    `@tanstack/`, no `use`, `get`, `prefetch` or `create` function of `#libs/api`, and only types from `api/`,
-    `hooks/`, `components/` or `ui/`;
+    `lucide-react`, no `@tanstack/`, from `#libs/api` only the names that start with a capital (its types, enums and
+    `ApiError`: orval's hooks, fetchers and keys and the transport's functions start with a lowercase letter), and only
+    types from `api/`, `hooks/`, `components/` or `ui/`, by `#modules/...` or `./`; and `no-restricted-syntax`, on the
+    same files, refuses an `import()` of those folders;
   - rules 2 and 3, the orval hooks and the `api/` imports, come with the data layer.
 
 ## Language

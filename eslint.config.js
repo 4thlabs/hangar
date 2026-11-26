@@ -52,9 +52,10 @@ const staticOnlyClass = {
 
 /**
  * ADR 0002, rule 4: a module's root `.ts` is its domain, pure and tested without rendering. It imports no React, no
- * TanStack, none of orval's hooks, fetchers, keys or factories, and only types from a module's `api/`, `hooks/`,
- * `components/` or `ui/`. The specifiers are `#modules/...`, which a gitignore-style `group` would read as a comment:
- * they are written as `regex`.
+ * icons, no TanStack, only the types, enums and classes of `#libs/api` (its names that start with a capital: orval's
+ * hooks, fetchers and keys, and the transport's functions, start with a lowercase letter), and only types from a
+ * module's `api/`, `hooks/`, `components/` or `ui/`, by `#modules/...` or a relative path. The specifiers are
+ * `#modules/...`, which a gitignore-style `group` would read as a comment: they are written as `regex`.
  */
 const rootModuleImports = [
   "error",
@@ -64,20 +65,27 @@ const rootModuleImports = [
         regex: "^react(-dom)?(/.*)?$",
         message: "A module's root .ts renders nothing: no React (ADR 0002, decision 1).",
       },
+      { regex: "^lucide-react$", message: "A module's root .ts renders nothing: no icons (ADR 0002, decision 1)." },
       { regex: "^@tanstack/", message: "A module's root .ts is pure: no TanStack (ADR 0002, decision 1)." },
       {
         regex: "^#libs/api$",
-        importNamePattern: "^(use|get|prefetch|create)",
+        allowImportNamePattern: "^[A-Z]",
         message: "A module's root .ts takes only the types and enums of #libs/api (ADR 0002, decision 1).",
       },
       {
-        regex: "^#modules/[^/]+/(api|hooks|components|ui)/",
+        regex: "^(#modules/[^/]+|\\.)/(api|hooks|components|ui)/",
         allowTypeImports: true,
         message: "A module's root .ts takes only types from api/, hooks/, components/ and ui/ (ADR 0002, decision 1).",
       },
     ],
   },
 ];
+
+/** Rule 4 for `import()`, which `no-restricted-imports` does not read: no module's `api/`, `hooks/` or `components/`. */
+const rootModuleDynamicImport = {
+  selector: "ImportExpression[source.value=/^(#modules\\/[^\\/]+|\\.)\\/(api|hooks|components|ui)\\//]",
+  message: "A module's root .ts loads nothing of api/, hooks/, components/ or ui/ (ADR 0002, decision 1).",
+};
 
 export default [
   // `web/src` is the Rust server's page, which follows the same rules, and its own in the last block.
@@ -113,6 +121,10 @@ export default [
   {
     files: ["web/src/modules/*/*.ts"],
     ignores: ["web/src/modules/*/*.test.ts"],
-    rules: { "no-restricted-imports": rootModuleImports },
+    // Flat config does not merge a rule's options across blocks: rule 1's selector is given again beside rule 4's.
+    rules: {
+      "no-restricted-imports": rootModuleImports,
+      "no-restricted-syntax": ["error", staticOnlyClass, rootModuleDynamicImport],
+    },
   },
 ];
