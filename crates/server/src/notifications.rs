@@ -2,9 +2,10 @@
 //! user, as there are no roles, the last 100 kept in a JSON file of the data directory, and pushed to the pages that
 //! follow it as they are filed, in process.
 //!
-//! A notification says what it says as a key and its params, which the page words. A page shows a new one as a toast
-//! once, which marks it seen for every page, and its list counts it unread until a user reads the list, which marks
-//! every one read.
+//! A notification says what it says as a key and its params, which the page words. Each page open shows a new one as a
+//! toast, which marks it seen, so that a page opened after does not; its list counts it unread until a user reads the
+//! list, which marks every one read, for everyone. Its id grows within an epoch, drawn anew each time the ids start
+//! again from 1, as when the file was lost: a page that holds ids of another epoch is given every notification kept.
 
 mod file;
 mod list;
@@ -13,7 +14,7 @@ mod routes;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use futures::{Stream, StreamExt, stream};
-use hangar_api::{NotificationLevel, NotificationMessage};
+use hangar_api::{NotificationEvent, NotificationLevel, NotificationMessage, RecentNotifications};
 use hangar_core::DataDir;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{broadcast, watch};
@@ -58,9 +59,9 @@ impl Notifier {
     const BACKLOG: usize = 64;
 
     /// The notifications of `data_dir`, read from its file once, as the server starts.
-    pub(crate) fn load(data_dir: &DataDir) -> Self {
+    pub(crate) async fn load(data_dir: &DataDir) -> Self {
         let file = NotificationFile::new(data_dir);
-        let list = file.read();
+        let list = file.read().await;
 
         Self(Arc::new(Shared {
             saved: watch::Sender::new(list.version()),
@@ -93,23 +94,37 @@ impl Notifier {
         self.save();
     }
 
-    /// The newest notifications a page reads at first, the newest first.
-    pub(crate) fn newest(&self) -> Vec<hangar_api::Notification> {
-        self.lock().newest(Self::PAGE)
+    /// The newest notifications a page reads at first, the newest first, and the epoch of their ids.
+    pub(crate) fn recent(&self) -> RecentNotifications {
+        let list = self.lock();
+
+        RecentNotifications {
+            epoch: list.epoch().to_owned(),
+            notifications: list.newest(Self::PAGE),
+        }
     }
 
-    /// The notifications filed from now on, and first, given `since`, those kept of a greater id, the oldest first.
-    /// A page that falls too far behind gets those it missed from the list.
+    /// The epoch of the ids, then the notifications filed from now on, and first, given `since`, those kept of a
+    /// greater id, the oldest first; given an `epoch` that is not the list's, `since` counts in another, and every
+    /// one kept comes first. A page that falls too far behind gets those it missed from the list.
     pub(crate) fn follow(
         &self,
         since: Option<u64>,
-    ) -> impl Stream<Item = hangar_api::Notification> + Send + 'static {
+        epoch: Option<&str>,
+    ) -> impl Stream<Item = NotificationEvent> + Send + 'static {
         // Subscribed under the lock, which filing takes too: none is filed between the backlog and the subscription.
-        let (backlog, filed) = {
+        let (opened, since, backlog, filed) = {
             let list = self.lock();
+            let since = match epoch {
+                Some(epoch) if epoch != list.epoch() => Some(0),
+                _ => since,
+            };
             let backlog = since.map(|id| list.after(id)).unwrap_or_default();
+            let opened = NotificationEvent::Opened {
+                epoch: list.epoch().to_owned(),
+            };
 
-            (backlog, self.0.filed.subscribe())
+            (opened, since, backlog, self.0.filed.subscribe())
         };
         let last = backlog
             .last()
@@ -130,7 +145,11 @@ impl Notifier {
         )
         .flat_map(stream::iter);
 
-        stream::iter(backlog).chain(live)
+        stream::once(async { opened }).chain(
+            stream::iter(backlog)
+                .chain(live)
+                .map(|notification| NotificationEvent::Filed { notification }),
+        )
     }
 
     /// Marks the notifications of `ids` as shown, and saves the list if one was not yet.
@@ -145,6 +164,12 @@ impl Notifier {
         if self.lock().mark_read() {
             self.save();
         }
+    }
+
+    /// Saves what is not saved yet, once the saves running have ended: as the server stops, so that a change made just
+    /// before is in the file. A failure is logged.
+    pub(crate) async fn flush(&self) {
+        Arc::clone(&self.0).save().await;
     }
 
     /// Saves the list, apart from the caller.
@@ -212,14 +237,14 @@ impl Shared {
 
 #[cfg(test)]
 mod tests {
-    use futures::StreamExt;
-    use hangar_api::{NotificationLevel, NotificationMessage};
+    use futures::{Stream, StreamExt};
+    use hangar_api::{NotificationEvent, NotificationLevel, NotificationMessage};
     use hangar_core::DataDir;
 
     use super::{Notification, Notifier};
 
-    fn notifier(dir: &tempfile::TempDir) -> Notifier {
-        Notifier::load(&DataDir::new(dir.path()).expect("a data directory"))
+    async fn notifier(dir: &tempfile::TempDir) -> Notifier {
+        Notifier::load(&DataDir::new(dir.path()).expect("a data directory")).await
     }
 
     fn updated() -> Notification {
@@ -231,17 +256,35 @@ mod tests {
         }
     }
 
-    fn ids(notifications: &[hangar_api::Notification]) -> Vec<u64> {
-        notifications
-            .iter()
-            .map(|notification| notification.id)
-            .collect()
+    /// The epoch the stream opens with.
+    async fn opened(events: &mut (impl Stream<Item = NotificationEvent> + Unpin)) -> String {
+        match events.next().await {
+            Some(NotificationEvent::Opened { epoch }) => epoch,
+            other => panic!("the stream opens with its epoch, not {other:?}"),
+        }
+    }
+
+    /// The ids of the next `count` notifications of the stream.
+    async fn filed(
+        events: &mut (impl Stream<Item = NotificationEvent> + Unpin),
+        count: usize,
+    ) -> Vec<u64> {
+        let mut ids = Vec::new();
+
+        while ids.len() < count {
+            match events.next().await {
+                Some(NotificationEvent::Filed { notification }) => ids.push(notification.id),
+                other => panic!("a notification, not {other:?}"),
+            }
+        }
+
+        ids
     }
 
     #[tokio::test]
     async fn a_notification_is_saved_and_read_back_by_the_next_server() {
         let dir = tempfile::tempdir().expect("a temporary directory");
-        let notifier = notifier(&dir);
+        let notifier = notifier(&dir).await;
 
         notifier.notify(updated());
         notifier.notify(updated());
@@ -249,11 +292,12 @@ mod tests {
         notifier.mark_read();
         notifier.saved().await;
 
-        let next = self::notifier(&dir);
+        let next = self::notifier(&dir).await;
 
-        assert_eq!(next.newest(), notifier.newest());
+        assert_eq!(next.recent(), notifier.recent());
         assert_eq!(
-            next.newest()
+            next.recent()
+                .notifications
                 .iter()
                 .map(|notification| (notification.id, notification.seen, notification.read))
                 .collect::<Vec<_>>(),
@@ -262,51 +306,92 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_change_made_just_before_the_stop_is_in_the_file_once_flushed() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let notifier = notifier(&dir).await;
+
+        notifier.notify(updated());
+        notifier.mark_read();
+        notifier.flush().await;
+
+        assert_eq!(self::notifier(&dir).await.recent(), notifier.recent());
+    }
+
+    #[tokio::test]
     async fn follows_from_since_then_each_one_filed_once() {
         let dir = tempfile::tempdir().expect("a temporary directory");
-        let notifier = notifier(&dir);
+        let notifier = notifier(&dir).await;
 
         for _ in 0..3 {
             notifier.notify(updated());
         }
 
-        let mut followed = Box::pin(notifier.follow(Some(1)));
-        let mut from_now = Box::pin(notifier.follow(None));
+        let epoch = notifier.recent().epoch;
+        let mut followed = Box::pin(notifier.follow(Some(1), Some(&epoch)));
+        let mut from_now = Box::pin(notifier.follow(None, None));
 
         notifier.notify(updated());
 
-        let mut ids = Vec::new();
+        assert_eq!(opened(&mut followed).await, epoch);
+        assert_eq!(filed(&mut followed, 3).await, [2, 3, 4]);
+        assert_eq!(opened(&mut from_now).await, epoch);
+        assert_eq!(filed(&mut from_now, 1).await, [4]);
+    }
 
-        for _ in 0..3 {
-            ids.push(followed.next().await.expect("a notification").id);
+    #[tokio::test]
+    async fn a_page_of_ids_of_another_epoch_is_given_every_one_kept_after_the_file_was_lost() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let before = notifier(&dir).await;
+
+        for _ in 0..50 {
+            before.notify(updated());
         }
 
-        assert_eq!(ids, [2, 3, 4]);
+        before.flush().await;
+
+        let page = before.recent();
+
+        // The file lost, as one put aside or never saved before a restart: the ids start again from 1.
+        std::fs::remove_file(dir.path().join("app-data/hangar/notifications.json"))
+            .expect("removed");
+
+        let after = notifier(&dir).await;
+
+        after.notify(updated());
+
+        let mut events = Box::pin(after.follow(Some(50), Some(&page.epoch)));
+
+        assert_ne!(opened(&mut events).await, page.epoch);
         assert_eq!(
-            from_now.next().await.map(|notification| notification.id),
-            Some(4)
+            filed(&mut events, 1).await,
+            [1],
+            "the one filed before it opened"
         );
+
+        after.notify(updated());
+
+        assert_eq!(filed(&mut events, 1).await, [2], "and each new one");
     }
 
     #[tokio::test]
     async fn a_page_that_falls_behind_gets_those_it_missed_from_the_list() {
         let dir = tempfile::tempdir().expect("a temporary directory");
-        let notifier = notifier(&dir);
-        let mut followed = Box::pin(notifier.follow(None));
+        let notifier = notifier(&dir).await;
+        let mut followed = Box::pin(notifier.follow(None, None));
 
         for _ in 0..Notifier::BACKLOG + 10 {
             notifier.notify(updated());
         }
 
-        let mut received = Vec::new();
-
-        while received.len() < Notifier::BACKLOG + 10 {
-            received.push(followed.next().await.expect("a notification"));
-        }
-
         let expected: Vec<u64> =
             (1..=u64::try_from(Notifier::BACKLOG + 10).expect("small")).collect();
 
-        assert_eq!(ids(&received), expected, "every one, once, in order");
+        opened(&mut followed).await;
+
+        assert_eq!(
+            filed(&mut followed, Notifier::BACKLOG + 10).await,
+            expected,
+            "every one, once, in order"
+        );
     }
 }

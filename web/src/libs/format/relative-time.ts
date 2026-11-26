@@ -14,17 +14,32 @@ export class RelativeTime {
 
   private static readonly Format = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
-  /** A millisecond timestamp as a phrase: "2 minutes ago". */
+  /** What a moment that is no time, as a date that did not parse, says. */
+  static readonly Unknown = "at an unknown time";
+
+  /** A millisecond timestamp as a phrase: "2 minutes ago"; {@link RelativeTime.Unknown} for one that is no time. */
   static format(timestamp: number, now: number = Date.now()) {
     const seconds = (timestamp - now) / 1_000;
-    const { unit, divisor } = RelativeTime.unit(Math.abs(seconds));
+    const rung = RelativeTime.unit(Math.abs(seconds));
 
-    return RelativeTime.Format.format(Math.round(seconds / divisor), unit);
+    if (rung === undefined) {
+      return RelativeTime.Unknown;
+    }
+
+    return RelativeTime.Format.format(Math.round(seconds / rung.divisor), rung.unit);
   }
 
-  /** The rung of {@link RelativeTime.Units} a span of seconds is written in, and what to divide it by. */
+  /**
+   * The rung of {@link RelativeTime.Units} a span of seconds is written in, and what to divide it by; none for a span
+   * that is no number.
+   */
   private static unit(absoluteSeconds: number) {
     const index = RelativeTime.Units.findIndex(([threshold]) => absoluteSeconds < threshold);
+
+    if (!Number.isFinite(absoluteSeconds) || index < 0) {
+      return undefined;
+    }
+
     const [, unit] = RelativeTime.Units[index]!;
 
     return { unit, divisor: index === 0 ? 1 : RelativeTime.Units[index - 1]![0] };

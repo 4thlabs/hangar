@@ -295,7 +295,7 @@ async fn serve_at(root: &Path, provider: &Provider, page_url: &str) -> String {
     })
     .expect("the settings are valid");
     let router = hangar_server::server(&settings)
-        .into_router(hangar_server::router(App::new(&settings, docker())));
+        .into_router(hangar_server::router(App::new(&settings, docker()).await));
 
     quoll::test::spawn(router).await
 }

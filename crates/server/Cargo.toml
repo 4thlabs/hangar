@@ -19,10 +19,12 @@ base64 = "0.22"
 cookie = { version = "0.18", features = ["key-expansion", "private", "signed"] }
 # The loads of the Docker cache, shared by the readers that wait for one, and the streams of the Docker routes.
 futures.workspace = true
+# The epoch of the notifications' ids, drawn at random each time they start again from 1.
+getrandom = "0.4"
 hangar-api = { workspace = true, features = ["server"] }
 hangar-core.workspace = true
 http.workspace = true
-# The times of a store sync, in RFC 3339, as the core writes those of `.env.global`.
+# The times of a store sync, and of the notifications, in RFC 3339, as the core writes those of `.env.global`.
 jiff = { version = "0.2", default-features = false, features = ["std"] }
 # The sign-in through an OpenID Connect provider. Its default features pull reqwest 0.12: the server gives it a client
 # on reqwest 0.13, quoll's.

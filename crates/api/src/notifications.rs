@@ -58,12 +58,40 @@ pub struct Notification {
     pub message: NotificationMessage,
     /// The page it leads to, as `/settings`; `None` for none.
     pub href: Option<String>,
-    /// Whether a page has shown it already, as a toast: no page shows it again so.
+    /// Whether a page has shown it already, as a toast: a page opened after does not show it again so. The pages open
+    /// when it is filed each show it.
     pub seen: bool,
     /// Whether a user has read it, in the list: it no longer counts as unread.
     pub read: bool,
     /// When it was filed, in RFC 3339.
     pub created_at: String,
+}
+
+/// The newest notifications, and the epoch of their ids.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RecentNotifications {
+    /// What the ids count in: a random id, new each time they start again from 1, as when the server's file was lost.
+    /// A page that holds ids of another epoch holds none of this one's.
+    pub epoch: String,
+    /// The newest 30, the newest first.
+    pub notifications: Vec<Notification>,
+}
+
+/// An event of the notifications' stream.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum NotificationEvent {
+    /// The first event: the epoch of the ids that follow. A page that holds those of another drops them, as the stream
+    /// then gives every notification kept.
+    Opened {
+        /// The epoch of the server's ids.
+        epoch: String,
+    },
+    /// A notification, filed before the stream opened, of an id past its `since`, or since.
+    Filed {
+        /// The notification.
+        notification: Notification,
+    },
 }
 
 /// The notifications a page has shown, as toasts.
@@ -77,13 +105,16 @@ quoll::group! {
     /// The notifications, one list for every user: the server keeps the last 100.
     #[auth(crate::Session)]
     pub group Notifications {
-        /// The newest 30, the newest first.
-        GET "/notifications" => list() -> Vec<Notification>;
+        /// The newest 30, the newest first, and the epoch of their ids.
+        GET "/notifications" => list() -> RecentNotifications;
 
-        /// The notifications filed from now on, as they are, and first, given `since`, those of a greater id the
-        /// server still keeps, the oldest first: a page follows the stream from the newest it holds, so that what was
-        /// filed between its read of the list and the stream's opening is in it. It does not end.
-        GET "/notifications/events?since={since}" => events(since: Option<u64>) -> Events<Notification>;
+        /// The epoch of the ids, then the notifications filed from now on, as they are, and first, given `since`, those
+        /// of a greater id the server still keeps, the oldest first: a page follows the stream from the newest it
+        /// holds, so that what was filed between its read of the list and the stream's opening is in it. Given an
+        /// `epoch` that is not the server's, `since` counts in another and every notification kept comes first. It
+        /// does not end.
+        GET "/notifications/events?since={since}&epoch={epoch}"
+            => events(since: Option<u64>, epoch: Option<&str>) -> Events<NotificationEvent>;
 
         /// Marks notifications as shown, so that no page shows them again as toasts.
         POST "/notifications/seen" => seen(notifications: &SeenNotifications);

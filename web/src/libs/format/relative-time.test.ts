@@ -17,4 +17,9 @@ describe("RelativeTime.format", () => {
     expect(at(0)).toBe("now");
     expect(at(-86_400_000)).toBe("yesterday");
   });
+
+  it("says a moment that is no time, as a date that did not parse, as unknown", () => {
+    expect(RelativeTime.format(Date.parse("not a date"), NOW)).toBe("at an unknown time");
+    expect(RelativeTime.format(Number.POSITIVE_INFINITY, NOW)).toBe("at an unknown time");
+  });
 });

@@ -27,7 +27,7 @@ fn settings(page: Option<&Path>) -> Settings {
 /// Serves the server of `settings` on port 0, and gives its URL.
 async fn serve(settings: &Settings) -> String {
     let router = hangar_server::server(settings)
-        .into_router(hangar_server::router(App::new(settings, docker())));
+        .into_router(hangar_server::router(App::new(settings, docker()).await));
 
     quoll::test::spawn(router).await
 }

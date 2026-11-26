@@ -242,7 +242,7 @@ mod tests {
         }
 
         /// The store of the data directory, cloned from `url`, its commands run by `runtime`.
-        fn state(&self, url: &str, runtime: Runtime) -> std::sync::Arc<StoreState> {
+        async fn state(&self, url: &str, runtime: Runtime) -> std::sync::Arc<StoreState> {
             let data = self.data().to_str().expect("UTF-8").to_owned();
             let url = url.to_owned();
             let settings = Settings::read(|name| match name {
@@ -259,7 +259,7 @@ mod tests {
                 &settings,
                 runtime,
                 crate::docker::DockerChanges::new(),
-                Notifier::load(&settings.data_dir),
+                Notifier::load(&settings.data_dir).await,
             )
         }
     }
@@ -267,7 +267,9 @@ mod tests {
     #[tokio::test]
     async fn clones_the_store_then_pulls_it_each_notified() {
         let fixture = Fixture::new();
-        let state = fixture.state(fixture.remote.to_str().expect("UTF-8"), Runtime::new());
+        let state = fixture
+            .state(fixture.remote.to_str().expect("UTF-8"), Runtime::new())
+            .await;
 
         let started = state.start_sync().await;
 
@@ -297,7 +299,8 @@ mod tests {
         assert_eq!(
             state
                 .notifier
-                .newest()
+                .recent()
+                .notifications
                 .into_iter()
                 .map(|filed| (filed.level, filed.message, filed.href))
                 .collect::<Vec<_>>(),
@@ -320,7 +323,9 @@ mod tests {
     async fn a_failed_clone_is_kept_and_notified_without_git_s_output() {
         let fixture = Fixture::new();
         let missing = fixture.dir.path().join("secret-token@nowhere.git");
-        let state = fixture.state(missing.to_str().expect("UTF-8"), Runtime::new());
+        let state = fixture
+            .state(missing.to_str().expect("UTF-8"), Runtime::new())
+            .await;
 
         state.start_sync().await;
 
@@ -335,7 +340,7 @@ mod tests {
             })
         );
         assert_eq!(
-            state.notifier.newest()[0].message,
+            state.notifier.recent().notifications[0].message,
             NotificationMessage::StoreInstallFailed
         );
     }
@@ -366,7 +371,9 @@ mod tests {
 
         let path = std::env::var("PATH").unwrap_or_default();
         let runtime = Runtime::new().envs([("PATH", format!("{}:{path}", bin.display()))]);
-        let state = fixture.state("https://example.com/store.git", runtime);
+        let state = fixture
+            .state("https://example.com/store.git", runtime)
+            .await;
 
         let first = state.start_sync().await;
         let second = state.start_sync().await;
@@ -386,7 +393,11 @@ mod tests {
             1,
             "git ran once"
         );
-        assert_eq!(state.notifier.newest().len(), 1, "one notification");
+        assert_eq!(
+            state.notifier.recent().notifications.len(),
+            1,
+            "one notification"
+        );
     }
 
     /// A sync whose work panics, as a store whose code has a bug would.
@@ -397,7 +408,9 @@ mod tests {
     #[tokio::test]
     async fn a_sync_that_panics_fails_and_another_can_start() {
         let fixture = Fixture::new();
-        let state = fixture.state(fixture.remote.to_str().expect("UTF-8"), Runtime::new());
+        let state = fixture
+            .state(fixture.remote.to_str().expect("UTF-8"), Runtime::new())
+            .await;
 
         state.start_sync_with(panicking()).await;
 
@@ -409,7 +422,7 @@ mod tests {
             Some(ErrorCode::SyncCrashed)
         );
         assert_eq!(
-            state.notifier.newest()[0].message,
+            state.notifier.recent().notifications[0].message,
             NotificationMessage::StoreInstallFailed
         );
 
@@ -427,7 +440,9 @@ mod tests {
     #[tokio::test]
     async fn a_change_of_the_store_is_refused_while_a_sync_runs() {
         let fixture = Fixture::new();
-        let state = fixture.state(fixture.remote.to_str().expect("UTF-8"), Runtime::new());
+        let state = fixture
+            .state(fixture.remote.to_str().expect("UTF-8"), Runtime::new())
+            .await;
         let (release, released) = tokio::sync::oneshot::channel::<()>();
 
         state

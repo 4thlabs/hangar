@@ -1,5 +1,5 @@
 //! The notifications' routes, served on port 0 and called with a session by the client of the contract: a notification
-//! filed by a store sync that fails, pushed to the stream, listed, marked, and given again to a stream from before it.
+//! filed by a store sync that fails, pushed to the stream, listed, marked, and given again to a page of another epoch.
 
 #![cfg(unix)]
 
@@ -10,7 +10,8 @@ use std::time::Duration;
 use cookie::Cookie;
 use futures::{Stream, StreamExt};
 use hangar_api::{
-    Api, ApiClient, Notification, NotificationLevel, NotificationMessage, SeenNotifications,
+    Api, ApiClient, Notification, NotificationEvent, NotificationLevel, NotificationMessage,
+    SeenNotifications,
 };
 use hangar_api::{Notifications as _, Store as _};
 use hangar_core::PasswordHash;
@@ -51,8 +52,8 @@ impl Fixture {
         Self { _dir: dir, data }
     }
 
-    /// A server of the data directory, served on port 0, and Ana signed in.
-    async fn serve(&self) -> Server {
+    /// A server of the data directory, served on port 0, its state, and Ana signed in.
+    async fn serve(&self) -> (Server, App) {
         let data = self.data.to_str().expect("UTF-8").to_owned();
         let settings = Settings::read(|name| match name {
             "HANGAR_DATA_DIR" => Some(data.clone()),
@@ -64,8 +65,9 @@ impl Fixture {
         })
         .expect("the settings are valid");
         let docker = hangar_core::Docker::with_host("tcp://127.0.0.1:9").expect("a client");
-        let app = App::new(&settings, docker);
-        let router = hangar_server::server(&settings).into_router(hangar_server::router(app));
+        let app = App::new(&settings, docker).await;
+        let router =
+            hangar_server::server(&settings).into_router(hangar_server::router(app.clone()));
         let url = quoll::test::spawn(router).await;
         let login = reqwest::Client::new()
             .post(format!("{url}/api/auth/login"))
@@ -82,10 +84,12 @@ impl Fixture {
             .expect("text");
         let cookie = Cookie::parse(set_cookie).expect("a cookie");
 
-        Server {
+        let server = Server {
             url,
             cookie: format!("{}={}", cookie.name(), cookie.value()),
-        }
+        };
+
+        (server, app)
     }
 }
 
@@ -131,7 +135,7 @@ fn marks(notifications: &[Notification]) -> Vec<(u64, bool, bool)> {
 #[tokio::test]
 async fn the_notifications_routes_take_a_session() {
     let fixture = Fixture::new();
-    let server = fixture.serve().await;
+    let (server, _) = fixture.serve().await;
 
     for path in ["/api/notifications", "/api/notifications/events"] {
         let response = reqwest::get(format!("{}{path}", server.url))
@@ -145,36 +149,82 @@ async fn the_notifications_routes_take_a_session() {
 #[tokio::test]
 async fn a_sync_s_end_is_pushed_listed_marked_and_given_again_from_a_since() -> quoll::Result<()> {
     let fixture = Fixture::new();
-    let server = fixture.serve().await;
+    let (server, _) = fixture.serve().await;
     let api = server.api();
+    let recent = api.notifications().list().await?;
 
-    assert_eq!(api.notifications().list().await?, []);
+    assert_eq!(recent.notifications, []);
 
-    let mut events = api.notifications().events(None).await?;
+    let mut events = api
+        .notifications()
+        .events(Some(0), Some(&recent.epoch))
+        .await?;
+
+    assert_eq!(
+        next("the epoch", &mut events).await?,
+        NotificationEvent::Opened {
+            epoch: recent.epoch.clone()
+        }
+    );
 
     api.store().sync().await?;
 
-    let failed = next("the sync's end", &mut events).await?;
+    let NotificationEvent::Filed {
+        notification: failed,
+    } = next("the sync's end", &mut events).await?
+    else {
+        panic!("a notification after the epoch");
+    };
 
     assert_eq!(failed.id, 1);
     assert_eq!(failed.level, NotificationLevel::Error);
     assert_eq!(failed.message, NotificationMessage::StoreUpdateFailed);
     assert_eq!(failed.href.as_deref(), Some("/settings"));
-    assert_eq!(api.notifications().list().await?, [failed]);
+    assert_eq!(api.notifications().list().await?.notifications, [failed]);
 
     api.notifications()
         .seen(&SeenNotifications { ids: vec![1] })
         .await?;
     api.notifications().read().await?;
 
-    assert_eq!(marks(&api.notifications().list().await?), [(1, true, true)]);
-
-    let mut from_before = api.notifications().events(Some(0)).await?;
-
     assert_eq!(
-        next("the one filed before", &mut from_before).await?.id,
-        1,
+        marks(&api.notifications().list().await?.notifications),
+        [(1, true, true)]
+    );
+
+    // A page of another epoch, as one open across a lost file, is given every one kept, whatever its `since`.
+    let mut from_another = api
+        .notifications()
+        .events(Some(50), Some("another"))
+        .await?;
+
+    next("the epoch", &mut from_another).await?;
+
+    assert!(
+        matches!(
+            next("the one filed before", &mut from_another).await?,
+            NotificationEvent::Filed { notification } if notification.id == 1
+        ),
         "a page that comes back gets what it missed"
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_notification_filed_just_before_the_stop_is_in_the_file() -> quoll::Result<()> {
+    let fixture = Fixture::new();
+    let (server, app) = fixture.serve().await;
+    let api = server.api();
+    let mut events = api.notifications().events(None, None).await?;
+
+    next("the epoch", &mut events).await?;
+    api.store().sync().await?;
+    next("the sync's end", &mut events).await?;
+    app.stop().await;
+
+    let file = fs::read_to_string(fixture.data.join("app-data/hangar/notifications.json"))
+        .expect("the notifications are saved");
+
+    assert!(file.contains("storeUpdateFailed"), "{file}");
     Ok(())
 }

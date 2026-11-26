@@ -279,7 +279,7 @@ impl Fixture {
             _ => None,
         })
         .expect("the settings are valid");
-        let app = App::new(&settings, docker);
+        let app = App::new(&settings, docker).await;
         let router =
             hangar_server::server(&settings).into_router(hangar_server::router(app.clone()));
         let url = quoll::test::spawn(router).await;

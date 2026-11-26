@@ -27,16 +27,16 @@ pub struct App {
 impl App {
     /// The state of a server of `settings` on the daemon of `docker`, its commands, `git` and `docker compose`, run as
     /// children of this process.
-    pub fn new(settings: &Settings, docker: Docker) -> Self {
-        Self::with_runtime(settings, Runtime::new(), docker)
+    pub async fn new(settings: &Settings, docker: Docker) -> Self {
+        Self::with_runtime(settings, Runtime::new(), docker).await
     }
 
     /// The state of a server of `settings` on the daemon of `docker`, its commands run by `runtime`: with the variables
     /// it sets, as a `PATH` that finds another `docker`, or the cancellation that stops them. The notifications are read
     /// from their file of the data directory.
-    pub fn with_runtime(settings: &Settings, runtime: Runtime, docker: Docker) -> Self {
+    pub async fn with_runtime(settings: &Settings, runtime: Runtime, docker: Docker) -> Self {
         let docker_changes = DockerChanges::new();
-        let notifier = Notifier::load(&settings.data_dir);
+        let notifier = Notifier::load(&settings.data_dir).await;
 
         Self {
             auth: Arc::new(Auth::new(settings)),
@@ -56,6 +56,12 @@ impl App {
     pub async fn start(&self) {
         self.docker.follow();
         self.auth.start().await;
+    }
+
+    /// Ends the state once the server has stopped serving: what was changed of the notifications and is not saved yet
+    /// is saved, the saves running waited for.
+    pub async fn stop(&self) {
+        self.notifier.flush().await;
     }
 }
 

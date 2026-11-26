@@ -1137,6 +1137,7 @@ dependencies = [
  "cookie",
  "ed25519-dalek",
  "futures",
+ "getrandom 0.4.3",
  "hangar-api",
  "hangar-core",
  "http",

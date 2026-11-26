@@ -137,7 +137,7 @@ impl Fixture {
             ("HANGAR_TEST_LOG", self.log.display().to_string()),
             ("HANGAR_TEST_FAIL", fail.unwrap_or("none").to_owned()),
         ]);
-        let app = App::with_runtime(&settings, runtime, docker());
+        let app = App::with_runtime(&settings, runtime, docker()).await;
         let router = hangar_server::server(&settings).into_router(hangar_server::router(app));
         let url = quoll::test::spawn(router).await;
         let login = reqwest::Client::new()
