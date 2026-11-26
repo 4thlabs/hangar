@@ -1,69 +1,68 @@
 import type { Job, JobRun, JobState } from "#libs/api";
 import { describeErrorDetail } from "#modules/common/error-message.ts";
 
-/** What the jobs' card says of the server's jobs and their runs. */
-export class JobText {
-  /** How often the card reads the runs again while one waits or runs, in milliseconds. */
-  static readonly PollMs = 1000;
+// What the jobs' card says of the server's jobs and their runs.
 
-  /**
-   * How often the card reads the runs again while none waits or runs, in milliseconds: a run a cron asks for, or
-   * another page, shows within it.
-   */
-  static readonly IdlePollMs = 30_000;
+/** How often the card reads the runs again while one waits or runs, in milliseconds. */
+export const jobsPollMs = 1000;
 
-  /** How long the card waits before it reads `runs` again, in milliseconds. */
-  static pollMs(runs: readonly JobRun[]): number {
-    return runs.some(JobText.isActive) ? JobText.PollMs : JobText.IdlePollMs;
-  }
+/**
+ * How often the card reads the runs again while none waits or runs, in milliseconds: a run a cron asks for, or
+ * another page, shows within it.
+ */
+export const jobsIdlePollMs = 30_000;
 
-  /** The name of each job. */
-  static readonly Names: Readonly<Record<Job, string>> = {
-    image_check: "Image check",
-    auto_update: "Update of the apps",
-  };
+/** How long the card waits before it reads `runs` again, in milliseconds. */
+export function jobsPollDelay(runs: readonly JobRun[]): number {
+  return runs.some(isRunActive) ? jobsPollMs : jobsIdlePollMs;
+}
 
-  /** The label of each state. */
-  static readonly States: Readonly<Record<JobState, string>> = {
-    waiting: "Waiting",
-    running: "Running",
-    completed: "Completed",
-    failed: "Failed",
-    canceled: "Canceled",
-  };
+/** The name of each job. */
+export const jobNames: Readonly<Record<Job, string>> = {
+  image_check: "Image check",
+  auto_update: "Update of the apps",
+};
 
-  /** A time of a run, in English. */
-  private static readonly Time = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "medium" });
+/** The label of each state. */
+export const jobStateLabels: Readonly<Record<JobState, string>> = {
+  waiting: "Waiting",
+  running: "Running",
+  completed: "Completed",
+  failed: "Failed",
+  canceled: "Canceled",
+};
 
-  /** The name of `job`; the one the server gives for a job this page does not know, from a newer server. */
-  static name(job: string): string {
-    return Object.hasOwn(JobText.Names, job) ? JobText.Names[job as Job] : job;
-  }
+/** A time of a run, in English. */
+const runTimeFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "medium" });
 
-  /** The label of `state`; the one the server gives for a state this page does not know. */
-  static state(state: string): string {
-    return Object.hasOwn(JobText.States, state) ? JobText.States[state as JobState] : state;
-  }
+/** The name of `job`; the one the server gives for a job this page does not know, from a newer server. */
+export function jobName(job: string): string {
+  return Object.hasOwn(jobNames, job) ? jobNames[job as Job] : job;
+}
 
-  /** Whether `run` still waits or runs, which a cancel stops. */
-  static isActive(run: JobRun): boolean {
-    return run.state === "waiting" || run.state === "running";
-  }
+/** The label of `state`; the one the server gives for a state this page does not know. */
+export function jobStateLabel(state: string): string {
+  return Object.hasOwn(jobStateLabels, state) ? jobStateLabels[state as JobState] : state;
+}
 
-  /** `time`, a time of the server in RFC 3339, in English; a dash for none. */
-  static time(time: string | null): string {
-    return time === null ? "—" : JobText.Time.format(new Date(time));
-  }
+/** Whether `run` still waits or runs, which a cancel stops. */
+export function isRunActive(run: JobRun): boolean {
+  return run.state === "waiting" || run.state === "running";
+}
 
-  /** Why `run` failed, as the server says it; nothing for a run that did not. */
-  static failure(run: JobRun): string | undefined {
-    return run.error ? describeErrorDetail(run.error) : undefined;
-  }
+/** `time`, a time of the server in RFC 3339, in English; a dash for none. */
+export function formatRunTime(time: string | null): string {
+  return time === null ? "—" : runTimeFormat.format(new Date(time));
+}
 
-  /** What the toast of a job asked for again says: its run waits its turn, or already runs. */
-  static askedAgain(asked: JobRun): string {
-    const name = JobText.name(asked.job);
+/** Why `run` failed, as the server says it; nothing for a run that did not. */
+export function runFailure(run: JobRun): string | undefined {
+  return run.error ? describeErrorDetail(run.error) : undefined;
+}
 
-    return asked.state === "running" ? `${name} runs.` : `${name} waits its turn.`;
-  }
+/** What the toast of a job asked for again says: its run waits its turn, or already runs. */
+export function askedAgain(asked: JobRun): string {
+  const name = jobName(asked.job);
+
+  return asked.state === "running" ? `${name} runs.` : `${name} waits its turn.`;
 }
