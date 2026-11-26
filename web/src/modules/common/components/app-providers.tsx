@@ -1,20 +1,19 @@
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { createStore, Provider } from "jotai";
 import { useState, type ReactNode } from "react";
-import { QueryClients } from "#libs/api";
 import type { UserPreferences } from "#libs/preferences";
 import { colorModeAtom, themePaletteAtom } from "#modules/common/atoms/theme.ts";
 import { ThemeEffects } from "#modules/common/components/theme-effects.tsx";
 
 type AppProvidersProps = {
   children: ReactNode;
+  /** The page's query client, which the router reads too. */
+  queryClient: QueryClient;
   /** What the cookies said when the page loaded. */
   preferences: UserPreferences;
 };
 
-export function AppProviders({ children, preferences }: AppProvidersProps) {
-  const [queryClient] = useState(() => QueryClients.create());
-
+export function AppProviders({ children, queryClient, preferences }: AppProvidersProps) {
   const [store] = useState(() => {
     const initialStore = createStore();
 
