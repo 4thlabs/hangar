@@ -2,8 +2,8 @@ import { cn } from "cn";
 import type { BackrestHealth, BackrestSummary } from "#libs/api";
 import { compactRelativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
-import { Units } from "#modules/widgets/widget-format.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { formatCount, formatInteger, formatSize } from "#modules/widgets/widget-format.ts";
 import {
   WidgetCard,
   WidgetContent,
@@ -15,13 +15,11 @@ import {
 } from "../widget.tsx";
 
 /** The dot of a repository: muted for one that has not run, which is neither healthy nor failed. */
-class HealthDot {
-  static readonly ClassNames: Readonly<Record<BackrestHealth, string>> = {
-    never_run: "bg-muted-foreground",
-    healthy: "bg-primary",
-    failed: "bg-destructive",
-  };
-}
+const healthDotClasses: Readonly<Record<BackrestHealth, string>> = {
+  never_run: "bg-muted-foreground",
+  healthy: "bg-primary",
+  failed: "bg-destructive",
+};
 
 type BackrestCardProps = {
   summary: BackrestSummary;
@@ -31,7 +29,7 @@ type BackrestCardProps = {
 /** Each repository of Backrest's, and how its last backup went. */
 export function BackrestCard({ summary: { repositories }, link }: BackrestCardProps) {
   const now = useNow();
-  const look = WidgetAppearance.get("backrest-summary");
+  const look = widgetLook("backrest-summary");
   const protectedBytes = repositories.reduce((total, repository) => total + repository.protectedBytes, 0);
 
   return (
@@ -42,8 +40,8 @@ export function BackrestCard({ summary: { repositories }, link }: BackrestCardPr
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{Units.count(repositories.length, "repo", "repos")}</span>
-            <span>{Units.bytes(protectedBytes)} protected</span>
+            <span>{formatCount(repositories.length, "repo", "repos")}</span>
+            <span>{formatSize(protectedBytes)} protected</span>
           </WidgetMetadata>
         }
       />
@@ -58,7 +56,7 @@ export function BackrestCard({ summary: { repositories }, link }: BackrestCardPr
                 // Decorative: the status word below says the same.
                 <span
                   aria-hidden="true"
-                  className={cn("mt-1.5 size-2 shrink-0 rounded-full", HealthDot.ClassNames[repository.health])}
+                  className={cn("mt-1.5 size-2 shrink-0 rounded-full", healthDotClasses[repository.health])}
                 />
               }
               trailing={
@@ -73,9 +71,9 @@ export function BackrestCard({ summary: { repositories }, link }: BackrestCardPr
                   <span className={repository.health === "failed" ? "text-destructive" : undefined}>
                     {repository.status ?? "No backup yet"}
                   </span>
-                  <span>{Units.integer(repository.successes)} ok / 30d</span>
-                  <span>{Units.bytes(repository.bytesAdded)} added</span>
-                  <span>{Units.bytes(repository.protectedBytes)} protected</span>
+                  <span>{formatInteger(repository.successes)} ok / 30d</span>
+                  <span>{formatSize(repository.bytesAdded)} added</span>
+                  <span>{formatSize(repository.protectedBytes)} protected</span>
                   {repository.nextBackupAt && (
                     <span>next {compactRelativeTime(Date.parse(repository.nextBackupAt), now)}</span>
                   )}

@@ -1,4 +1,4 @@
-import { Sparkline } from "#modules/widgets/sparkline.ts";
+import { sparklinePolylines } from "#modules/widgets/sparkline.ts";
 
 type WidgetSparklineProps = {
   /** The series, oldest first; a null is a gap in the curve. */
@@ -11,7 +11,7 @@ type WidgetSparklineProps = {
 export function WidgetSparkline({ prices, label }: WidgetSparklineProps) {
   // The viewBox, stretched to its frame: only the proportions of the curve matter.
   const box = { width: 100, height: 24 };
-  const polylines = Sparkline.polylines(prices, box);
+  const polylines = sparklinePolylines(prices, box);
 
   if (polylines.length === 0) {
     return null;

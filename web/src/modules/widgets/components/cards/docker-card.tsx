@@ -2,8 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { useDockerOverview, useDockerProjects } from "#libs/api";
 import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { describeError } from "#modules/common/error-message.ts";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
-import { Units } from "#modules/widgets/widget-format.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { formatCount } from "#modules/widgets/widget-format.ts";
 import { WidgetError, WidgetSkeleton } from "../widget-states.tsx";
 import { WidgetCard, WidgetContent, WidgetFooter, WidgetHeader, WidgetMetadata } from "../widget.tsx";
 import { HostMetrics } from "./host-metrics.tsx";
@@ -14,7 +14,7 @@ import { HostMetrics } from "./host-metrics.tsx";
  * change. The card never asks a registry itself.
  */
 export function DockerCard() {
-  const look = WidgetAppearance.get("docker-general-stats");
+  const look = widgetLook("docker-general-stats");
   const { data: overview, error } = useDockerOverview();
   const { data: projects } = useDockerProjects();
 
@@ -41,7 +41,7 @@ export function DockerCard() {
         description={
           <WidgetMetadata>
             <span>Docker {overview.version}</span>
-            <span>{Units.count(overview.containers.total, "container", "containers")}</span>
+            <span>{formatCount(overview.containers.total, "container", "containers")}</span>
           </WidgetMetadata>
         }
       />

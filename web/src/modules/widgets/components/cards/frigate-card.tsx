@@ -1,8 +1,8 @@
 import type { FrigateEvents } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
-import { Units } from "#modules/widgets/widget-format.ts";
-import { WidgetImage } from "#modules/widgets/widget-image.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { formatCount } from "#modules/widgets/widget-format.ts";
+import { widgetImageUrl } from "#modules/widgets/widget-image.ts";
 import {
   WidgetCard,
   WidgetContent,
@@ -14,10 +14,8 @@ import {
 } from "../widget.tsx";
 
 /** How the card names a camera: `frigate_front_door` is `front door`. */
-class CameraName {
-  static format(camera: string) {
-    return camera.replace(/^frigate_/, "").replaceAll("_", " ");
-  }
+function cameraName(camera: string) {
+  return camera.replace(/^frigate_/, "").replaceAll("_", " ");
 }
 
 type FrigateCardProps = {
@@ -34,7 +32,7 @@ export function FrigateCard({
   link,
 }: FrigateCardProps) {
   const now = useNow();
-  const look = WidgetAppearance.get("frigate-events");
+  const look = widgetLook("frigate-events");
 
   return (
     <WidgetCard className={look.className}>
@@ -44,7 +42,7 @@ export function FrigateCard({
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{Units.count(cameraCount, "camera", "cameras")}</span>
+            <span>{formatCount(cameraCount, "camera", "cameras")}</span>
             <span>{detectionFps.toFixed(1)} det/s</span>
             {detectors.map(detector => (
               <span key={detector.name} aria-label={`${detector.name} detector inference time`}>
@@ -62,7 +60,7 @@ export function FrigateCard({
               key={event.id}
               media={
                 <img
-                  src={WidgetImage.url(placementKey, event.id)}
+                  src={widgetImageUrl(placementKey, event.id)}
                   alt=""
                   loading="lazy"
                   className="aspect-video w-16 shrink-0 rounded-sm object-cover"
@@ -86,7 +84,7 @@ export function FrigateCard({
                   {event.subLabel && ` · ${event.subLabel}`}
                 </p>
               )}
-              <p className="truncate text-xs text-muted-foreground">{CameraName.format(event.camera)}</p>
+              <p className="truncate text-xs text-muted-foreground">{cameraName(event.camera)}</p>
             </WidgetListItem>
           ))}
         </WidgetList>

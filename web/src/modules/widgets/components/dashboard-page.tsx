@@ -3,7 +3,7 @@ import { useWidgetsPlacements, type WidgetPlacement } from "#libs/api";
 import { describeError } from "#modules/common/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
 import { ArcaneCard } from "./cards/arcane-card.tsx";
 import { BackrestCard } from "./cards/backrest-card.tsx";
 import { BeszelCard } from "./cards/beszel-card.tsx";
@@ -21,16 +21,14 @@ import { LoadedWidget } from "./loaded-widget.tsx";
 import { WidgetBoundary } from "./widget-boundary.tsx";
 
 /** The three columns of the dashboard, each placed in one grid, as wide screens make room for them. */
-class DashboardColumns {
-  static readonly Numbers = [1, 2, 3] as const;
+const columnNumbers = [1, 2, 3] as const;
 
-  // min-w-0: a wide row would otherwise set the column's least width, and the page would scroll sideways.
-  static readonly ClassNames: Readonly<Record<(typeof DashboardColumns.Numbers)[number], string>> = {
-    1: "flex min-w-0 flex-col gap-4 md:col-start-1",
-    2: "flex min-w-0 flex-col gap-4 md:col-start-2",
-    3: "flex min-w-0 flex-col gap-4 md:col-start-2 xl:col-start-3",
-  };
-}
+// min-w-0: a wide row would otherwise set the column's least width, and the page would scroll sideways.
+const columnClassNames: Readonly<Record<(typeof columnNumbers)[number], string>> = {
+  1: "flex min-w-0 flex-col gap-4 md:col-start-1",
+  2: "flex min-w-0 flex-col gap-4 md:col-start-2",
+  3: "flex min-w-0 flex-col gap-4 md:col-start-2 xl:col-start-3",
+};
 
 /** The card of one placement, by its type. */
 function PlacedWidget({ placement }: { placement: WidgetPlacement }) {
@@ -145,7 +143,7 @@ export function DashboardPage() {
   return (
     <main className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[1fr_3fr_1fr]">
       {title}
-      {DashboardColumns.Numbers.map(column => {
+      {columnNumbers.map(column => {
         const inColumn = placements.filter(placement => placement.column === column);
 
         if (inColumn.length === 0) {
@@ -153,9 +151,9 @@ export function DashboardPage() {
         }
 
         return (
-          <div key={column} className={DashboardColumns.ClassNames[column]}>
+          <div key={column} className={columnClassNames[column]}>
             {inColumn.map(placement => (
-              <WidgetBoundary key={placement.key} look={WidgetAppearance.get(placement.type)}>
+              <WidgetBoundary key={placement.key} look={widgetLook(placement.type)}>
                 <PlacedWidget placement={placement} />
               </WidgetBoundary>
             ))}

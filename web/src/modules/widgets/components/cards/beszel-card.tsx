@@ -2,21 +2,19 @@ import { cn } from "cn";
 import type { BeszelServerStats } from "#libs/api";
 import { compactRelativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
-import { Units } from "#modules/widgets/widget-format.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { formatCount, formatInteger } from "#modules/widgets/widget-format.ts";
 import { WidgetCard, WidgetContent, WidgetHeader, WidgetList, WidgetListItem, WidgetMetadata } from "../widget.tsx";
 
 /** The usage past which a bar is the thing on the card to look at. */
-class Usage {
-  static readonly Hot = 85;
+const hotUsage = 85;
 
-  /** The temperature past which a sensor is. */
-  static readonly HotSensor = 80;
-}
+/** The temperature past which a sensor is. */
+const hotTemperature = 80;
 
 /** One reading as a labelled bar. */
 function Gauge({ label, value }: { label: string; value: number }) {
-  const isHot = value >= Usage.Hot;
+  const isHot = value >= hotUsage;
 
   return (
     <div className="min-w-0 flex-1">
@@ -42,7 +40,7 @@ type BeszelCardProps = {
 /** The systems a Beszel hub monitors, with their CPU, memory and disk. */
 export function BeszelCard({ stats: { systems }, link }: BeszelCardProps) {
   const now = useNow();
-  const look = WidgetAppearance.get("beszel-server-stats");
+  const look = widgetLook("beszel-server-stats");
   const down = systems.filter(system => !system.up).length;
 
   return (
@@ -53,8 +51,8 @@ export function BeszelCard({ stats: { systems }, link }: BeszelCardProps) {
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{Units.count(systems.length, "server", "servers")}</span>
-            {down > 0 && <span className="text-destructive">{Units.integer(down)} down</span>}
+            <span>{formatCount(systems.length, "server", "servers")}</span>
+            {down > 0 && <span className="text-destructive">{formatInteger(down)} down</span>}
           </WidgetMetadata>
         }
       />
@@ -76,7 +74,7 @@ export function BeszelCard({ stats: { systems }, link }: BeszelCardProps) {
                       <span>{compactRelativeTime(now - system.uptime * 1_000, now)} up</span>
                     )}
                     {system.temperature !== null && (
-                      <span className={system.temperature >= Usage.HotSensor ? "text-destructive" : undefined}>
+                      <span className={system.temperature >= hotTemperature ? "text-destructive" : undefined}>
                         {Math.round(system.temperature)}°C
                       </span>
                     )}

@@ -1,8 +1,8 @@
 import type { JellyfinLatest } from "#libs/api";
 import { ScrollArea } from "#modules/common/ui/scroll-area.tsx";
-import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
-import { Units } from "#modules/widgets/widget-format.ts";
-import { WidgetImage } from "#modules/widgets/widget-image.ts";
+import { widgetLook } from "#modules/widgets/widget-appearance.ts";
+import { formatInteger } from "#modules/widgets/widget-format.ts";
+import { widgetImageUrl } from "#modules/widgets/widget-image.ts";
 import { WidgetCard, WidgetContent, WidgetEmptyState, WidgetHeader, WidgetMetadata } from "../widget.tsx";
 
 type JellyfinCardProps = {
@@ -14,7 +14,7 @@ type JellyfinCardProps = {
 
 /** What Jellyfin holds, and a row of the posters of what was added last. */
 export function JellyfinCard({ latest: { counts, items }, placementKey, link }: JellyfinCardProps) {
-  const look = WidgetAppearance.get("jellyfin-latest");
+  const look = widgetLook("jellyfin-latest");
 
   return (
     <WidgetCard className={look.className}>
@@ -25,10 +25,10 @@ export function JellyfinCard({ latest: { counts, items }, placementKey, link }: 
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{Units.integer(counts.movies)} movies</span>
-            <span>{Units.integer(counts.series)} shows</span>
-            <span>{Units.integer(counts.episodes)} episodes</span>
-            <span>{Units.integer(counts.songs)} songs</span>
+            <span>{formatInteger(counts.movies)} movies</span>
+            <span>{formatInteger(counts.series)} shows</span>
+            <span>{formatInteger(counts.episodes)} episodes</span>
+            <span>{formatInteger(counts.songs)} songs</span>
           </WidgetMetadata>
         }
       />
@@ -49,7 +49,7 @@ export function JellyfinCard({ latest: { counts, items }, placementKey, link }: 
                     {/* An item with no artwork keeps the frame, as Jellyfin's own library does. */}
                     {item.imageId ? (
                       <img
-                        src={WidgetImage.url(placementKey, item.imageId)}
+                        src={widgetImageUrl(placementKey, item.imageId)}
                         alt=""
                         loading="lazy"
                         className="aspect-2/3 w-full rounded-sm bg-muted object-cover"
