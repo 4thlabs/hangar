@@ -9,8 +9,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 
 /** `hangar.yml`, edited as it is written, and checked by the server before it is saved. */
 export function ConfigSettingsCard() {
-  // Read once: a read again, when the window gets the focus back, would load the file over what is being typed.
-  const { data, dataUpdatedAt, error } = useConfigRead({ query: { staleTime: Infinity, refetchOnWindowFocus: false } });
+  // Read anew each time the tab opens, as a sync or an install may have changed the file since, and shown from that
+  // read alone; not when the window gets the focus back, which would load the file over what is being typed.
+  const { data, dataUpdatedAt, isFetchedAfterMount, error } = useConfigRead({
+    query: { staleTime: Infinity, refetchOnMount: "always", refetchOnWindowFocus: false },
+  });
 
   return (
     <Card className="w-full">
@@ -26,7 +29,7 @@ export function ConfigSettingsCard() {
           <p className="text-sm text-destructive">{ErrorMessage.describe(error)}</p>
         </CardContent>
       )}
-      {data && <ConfigEditor key={dataUpdatedAt} source={data.source} />}
+      {data && isFetchedAfterMount && <ConfigEditor key={dataUpdatedAt} source={data.source} />}
     </Card>
   );
 }

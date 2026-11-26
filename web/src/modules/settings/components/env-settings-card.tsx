@@ -23,8 +23,11 @@ class Secrets {
  * and new ones to add. A save merges into the file as it is on disk: a variable added by hand meanwhile is kept.
  */
 export function EnvSettingsCard() {
-  // Read once: a read again, when the window gets the focus back, would drop what is being typed.
-  const { data, dataUpdatedAt, error } = useEnvRead({ query: { staleTime: Infinity, refetchOnWindowFocus: false } });
+  // Read anew each time the tab opens, as a sync or an install may have changed the file since, and shown from that
+  // read alone; not when the window gets the focus back, which would load the file over what is being typed.
+  const { data, dataUpdatedAt, isFetchedAfterMount, error } = useEnvRead({
+    query: { staleTime: Infinity, refetchOnMount: "always", refetchOnWindowFocus: false },
+  });
 
   return (
     <Card className="w-full">
@@ -41,7 +44,7 @@ export function EnvSettingsCard() {
         </CardContent>
       )}
       {/* Keyed by the read: a save, which gives the file as written, starts the form again from it. */}
-      {data && <EnvForm key={dataUpdatedAt} variables={data.variables} />}
+      {data && isFetchedAfterMount && <EnvForm key={dataUpdatedAt} variables={data.variables} />}
     </Card>
   );
 }

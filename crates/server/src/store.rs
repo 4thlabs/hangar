@@ -5,16 +5,18 @@ mod apps;
 mod command_log;
 mod config;
 mod env;
+mod gate;
 mod sync;
 
 use std::sync::Arc;
 
 use hangar_api::{ErrorCode, StoreSync};
 use hangar_core::{Compose, Runtime, Store};
-use tokio::sync::{Mutex, MutexGuard, watch};
+use tokio::sync::{Mutex, watch};
 
 use crate::Settings;
 use crate::notifications::Notifier;
+use gate::{Change, ChangeGate};
 
 /// What the routes of the store, of `hangar.yml` and of `.env.global` run on. The sync outlives the request that
 /// starts it, so the state is shared: `App` holds it in an `Arc`.
@@ -24,9 +26,8 @@ pub(crate) struct StoreState {
     compose: Compose<Runtime>,
     /// The last sync since the server started, which the page reads again.
     sync: watch::Sender<Option<StoreSync>>,
-    /// Held by a sync for its whole run, and by each change of the store for its own: a save of `hangar.yml` during a
-    /// pull could fail the pull or be lost, an install racing the links of a sync could fail though it installed.
-    changes: Mutex<()>,
+    /// The changes of the store, one at a time, and none while a sync runs.
+    gate: ChangeGate,
     /// Held while a sync starts, from the check that none runs to the one started: what it reads of the store, cloned
     /// or not, is then what no other sync is changing.
     starting: Mutex<()>,
@@ -44,30 +45,23 @@ impl StoreState {
             ),
             compose: Compose::new(settings.data_dir.clone(), runtime),
             sync: watch::Sender::new(None),
-            changes: Mutex::new(()),
+            gate: ChangeGate::default(),
             starting: Mutex::new(()),
             notifier: Notifier::default(),
         })
     }
 
     /// The turn of a change of the store: `hangar.yml` saved, an app installed or uninstalled. The changes take
-    /// turns; while a sync runs, a change is refused rather than wait for the network.
+    /// turns; while a sync runs, a change is refused rather than wait for the network, and a sync waits for the
+    /// changes in before it.
     ///
     /// # Errors
     ///
     /// A 409, `store.sync_running`, while a sync runs.
-    pub(crate) async fn change(&self) -> quoll::Result<MutexGuard<'_, ()>> {
-        if self.is_syncing() {
-            return Err(ErrorCode::SyncRunning.into());
-        }
-
-        // A sync marks itself running before it takes the lock: a lock held while one runs is the sync's, and the
-        // change is refused rather than wait for it. Held by another change, it is soon free, and the lock is fair: a
-        // sync that starts meanwhile queues after this change.
-        match self.changes.try_lock() {
-            Ok(change) => Ok(change),
-            Err(_) if self.is_syncing() => Err(ErrorCode::SyncRunning.into()),
-            Err(_) => Ok(self.changes.lock().await),
-        }
+    pub(crate) async fn change(&self) -> quoll::Result<Change<'_>> {
+        self.gate
+            .enter()
+            .await
+            .ok_or_else(|| ErrorCode::SyncRunning.into())
     }
 }

@@ -42,11 +42,8 @@ impl StoreState {
         // the next start reads an update.
         let _starting = self.starting.lock().await;
 
-        if let Some(running) = self
-            .sync
-            .borrow()
-            .clone()
-            .filter(|sync| sync.state == SyncState::Running)
+        if self.gate.is_syncing()
+            && let Some(running) = self.last_sync()
         {
             return running;
         }
@@ -64,19 +61,13 @@ impl StoreState {
             error: None,
         };
 
-        self.sync.send_replace(Some(started.clone()));
-
+        // Marked and published together: no change gets in from now on, and the page reads it running.
+        self.gate.begin_sync(|| {
+            self.sync.send_replace(Some(started.clone()));
+        });
         tokio::spawn(Arc::clone(self).sync(operation, work));
 
         started
-    }
-
-    /// Whether a sync runs, which a change of the store does not wait for.
-    pub(crate) fn is_syncing(&self) -> bool {
-        self.sync
-            .borrow()
-            .as_ref()
-            .is_some_and(|sync| sync.state == SyncState::Running)
     }
 
     /// Resolves once no sync runs.
@@ -94,7 +85,7 @@ impl StoreState {
         ended.clone()
     }
 
-    /// Runs `work`, the sync `operation`, holding the store's changes back, then records its outcome and notifies it.
+    /// Runs `work`, the sync `operation`, once the changes in before it are done, then records its outcome and notifies it.
     ///
     /// In a task of its own, so that a panic in it ends the sync as a failure rather than leave it running until the
     /// server restarts, which no other sync could start before.
@@ -104,7 +95,7 @@ impl StoreState {
     {
         let state = Arc::clone(&self);
         let run = tokio::spawn(async move {
-            let _changes = state.changes.lock().await;
+            state.gate.changes_ended().await;
 
             work.await
         });
@@ -148,12 +139,14 @@ impl StoreState {
         };
         let finished_at = Self::now();
 
-        self.sync.send_modify(|latest| {
-            if let Some(sync) = latest {
-                sync.state = state;
-                sync.finished_at = Some(finished_at);
-                sync.error = error;
-            }
+        self.gate.end_sync(|| {
+            self.sync.send_modify(|latest| {
+                if let Some(sync) = latest {
+                    sync.state = state;
+                    sync.finished_at = Some(finished_at);
+                    sync.error = error;
+                }
+            });
         });
         self.notifier.notify(Notification {
             level,
