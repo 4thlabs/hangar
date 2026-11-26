@@ -40,9 +40,9 @@ http.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "test-util", "time"] }
 
-# waitid, to see a child exit without reaping it.
+# waitid, to see a child exit without reaping it, and mkfifo, a FIFO the editor refuses.
 [target.'cfg(unix)'.dev-dependencies]
-nix = { workspace = true, features = ["process", "signal"] }
+nix = { workspace = true, features = ["fs", "process", "signal"] }
 
 [lints]
 workspace = true

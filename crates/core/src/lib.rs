@@ -24,8 +24,9 @@ pub use environment::Environment;
 pub use password::{PasswordError, PasswordHash};
 pub use runtime::{Command, CommandRunner, Output, RunError, Runtime};
 pub use store::{
-    Backup, Category, Column, Config, ConfigError, DataDir, Dotenv, FollowedCard, GlobalEnv,
-    ServiceOptions, Store, StoreApp, StoreError, User, Widget, WidgetKind, YamlError,
+    AppFiles, Backup, Category, Column, Config, ConfigError, DataDir, Dotenv, FollowedCard,
+    GlobalEnv, SavedFile, ServiceOptions, Store, StoreApp, StoreError, User, Widget, WidgetKind,
+    YamlError,
 };
 pub use tokio_util::sync::CancellationToken;
 pub use version::VERSION;

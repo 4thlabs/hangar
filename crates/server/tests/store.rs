@@ -16,14 +16,19 @@ use serde_json::{Value, json};
 
 const URL: &str = "https://hangar.example.com";
 
-/// The fake `docker`: it logs its arguments, one call per line, and fails with code 1 on the project that
-/// `HANGAR_TEST_FAIL` names.
+/// The fake `docker`: it logs its arguments, one call per line, fails with code 1 on the project that
+/// `HANGAR_TEST_FAIL` names, and rejects with code 15 a file given with `-f` or `-c` that holds `hangar-test-reject`,
+/// naming it as compose does.
 const FAKE_DOCKER: &str = r#"#!/bin/sh
 echo "$*" >> "$HANGAR_TEST_LOG"
 project=""
 previous=""
 for arg in "$@"; do
   if [ "$previous" = "-p" ]; then project="$arg"; fi
+  if { [ "$previous" = "-f" ] || [ "$previous" = "-c" ]; } && grep -q hangar-test-reject "$arg" 2>/dev/null; then
+    echo "validating $arg: services.alpha additional property hangar-test-reject is not allowed" >&2
+    exit 15
+  fi
   previous="$arg"
 done
 if [ "$project" = "${HANGAR_TEST_FAIL:-none}" ]; then echo "$project: no such container" >&2; exit 1; fi
@@ -182,6 +187,17 @@ impl Server {
         Self::read(self.request(reqwest::Method::POST, path).send().await).await
     }
 
+    /// `POST path` with `body`, its status and JSON.
+    async fn post_json(&self, path: &str, body: &Value) -> (StatusCode, Value) {
+        Self::read(
+            self.request(reqwest::Method::POST, path)
+                .json(body)
+                .send()
+                .await,
+        )
+        .await
+    }
+
     /// `PUT path` with `body`, its status and JSON.
     async fn put(&self, path: &str, body: &Value) -> (StatusCode, Value) {
         Self::read(
@@ -222,7 +238,14 @@ async fn the_store_s_routes_take_a_session() {
     let fixture = Fixture::new();
     let server = fixture.serve(None).await;
 
-    for path in ["/api/store", "/api/store/apps", "/api/config", "/api/env"] {
+    for path in [
+        "/api/store",
+        "/api/store/apps",
+        "/api/config",
+        "/api/env",
+        "/api/store/apps/alpha/files",
+        "/api/store/apps/alpha/file?path=compose.yml",
+    ] {
         let response = reqwest::get(format!("{}{path}", server.url))
             .await
             .expect("the server answers");
@@ -704,4 +727,266 @@ async fn gives_the_template_of_a_new_app() {
     assert_eq!(status, StatusCode::OK);
     assert!(compose.contains("x-hangar:\n  icon: "), "{compose}");
     assert!(compose.contains("container_name: my-app"), "{compose}");
+}
+
+/// The detail of a problem.
+fn detail(problem: &Value) -> &str {
+    problem["detail"].as_str().expect("a detail")
+}
+
+#[tokio::test]
+async fn opens_an_app_on_its_files_and_reads_one() {
+    let fixture = Fixture::new();
+    let alpha = fixture.data.join("app-store/store/alpha");
+
+    fs::create_dir_all(alpha.join("config")).expect("created");
+    fs::write(alpha.join("config/settings.yml"), "a: 1\n").expect("written");
+    fs::write(alpha.join(".env"), "SECRET=1\n").expect("written");
+
+    let server = fixture.serve(None).await;
+    let (status, opened) = server.get("/api/store/apps/alpha/files").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(opened["app"]["name"], "Alpha");
+    assert_eq!(
+        opened["files"],
+        json!(["compose.yml", "config/settings.yml"])
+    );
+
+    let (status, file) = server
+        .get("/api/store/apps/alpha/file?path=config/settings.yml")
+        .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        file,
+        json!({ "path": "config/settings.yml", "source": "a: 1\n" })
+    );
+
+    for path in [
+        "/api/store/apps/delta/files",
+        "/api/store/apps/networks.yml/files",
+    ] {
+        let (status, problem) = server.get(path).await;
+
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
+        assert!(
+            detail(&problem).starts_with("the store has no app "),
+            "{problem}"
+        );
+    }
+
+    let (status, problem) = server
+        .get("/api/store/apps/alpha/file?path=missing.yml")
+        .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(detail(&problem), "the app alpha has no file missing.yml");
+}
+
+#[tokio::test]
+async fn refuses_a_path_out_of_the_app_s_folder_on_every_route_and_touches_nothing() {
+    let fixture = Fixture::new();
+    let alpha = fixture.data.join("app-store/store/alpha");
+
+    fs::write(fixture.dir.path().join("secret.txt"), "the secret\n").expect("written");
+    std::os::unix::fs::symlink(
+        fixture.dir.path().join("secret.txt"),
+        alpha.join("secret.txt"),
+    )
+    .expect("linked");
+
+    let server = fixture.serve(None).await;
+    let refusals = [
+        (
+            "../beta/compose.yml",
+            "invalid file path: ../beta/compose.yml",
+        ),
+        (
+            "%2E%2E/beta/compose.yml",
+            "invalid file path: ../beta/compose.yml",
+        ),
+        ("/etc/passwd", "invalid file path: /etc/passwd"),
+        (".env", "invalid file path: .env"),
+        ("secret.txt", "secret.txt leads outside the app alpha"),
+    ];
+
+    for (path, message) in refusals {
+        let file = format!("/api/store/apps/alpha/file?path={path}");
+        let (read, read_problem) = server.get(&file).await;
+        let (create, create_problem) = server.post(&file).await;
+        let (write, write_problem) = server.put(&file, &json!({ "source": "a: 2\n" })).await;
+
+        for (status, problem) in [
+            (read, read_problem),
+            (create, create_problem),
+            (write, write_problem),
+        ] {
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{path}");
+            assert_eq!(detail(&problem), message, "{path}");
+        }
+    }
+
+    assert_eq!(
+        fs::read_to_string(fixture.dir.path().join("secret.txt")).expect("reads"),
+        "the secret\n"
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.data.join("app-store/store/beta/compose.yml")).expect("reads"),
+        "services:\n  beta:\n    image: beta:${BETA_TAG}\n"
+    );
+    assert!(fixture.docker_calls().is_empty(), "docker never ran");
+}
+
+#[tokio::test]
+async fn saves_a_file_once_it_parses_and_leaves_one_that_does_not_as_it_was() {
+    let fixture = Fixture::new();
+    let server = fixture.serve(None).await;
+    let settings = fixture
+        .data
+        .join("app-store/store/alpha/config/settings.yml");
+    let file = "/api/store/apps/alpha/file?path=config/settings.yml";
+
+    let (status, saved) = server.put(file, &json!({ "source": "a: 1\n" })).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(saved, json!({ "composeChanged": false }));
+    assert_eq!(fs::read_to_string(&settings).expect("written"), "a: 1\n");
+
+    let (status, problem) = server.put(file, &json!({ "source": "a: [1\n" })).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        detail(&problem).starts_with("config/settings.yml is not valid: "),
+        "{problem}"
+    );
+    assert_eq!(fs::read_to_string(&settings).expect("kept"), "a: 1\n");
+}
+
+#[tokio::test]
+async fn saves_compose_yml_once_compose_accepts_it_and_shows_compose_s_complaint_otherwise() {
+    let fixture = Fixture::new();
+    let server = fixture.serve(None).await;
+    let compose = fixture.data.join("app-store/store/alpha/compose.yml");
+    let file = "/api/store/apps/alpha/file?path=compose.yml";
+    let accepted = "x-hangar:\n  name: Alpha 2\nservices:\n  alpha: {}\n";
+
+    let (status, saved) = server.put(file, &json!({ "source": accepted })).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(saved, json!({ "composeChanged": true }));
+    assert_eq!(fs::read_to_string(&compose).expect("written"), accepted);
+
+    let calls = fixture.docker_calls();
+
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert!(calls[0].starts_with("compose --env-file "), "{}", calls[0]);
+    assert!(calls[0].ends_with(".pending.yml config -q"), "{}", calls[0]);
+
+    let (status, problem) = server
+        .put(
+            file,
+            &json!({ "source": "services:\n  alpha:\n    hangar-test-reject: 1\n" }),
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        detail(&problem),
+        "docker rejects compose.yml:\nvalidating compose.yml: services.alpha additional property hangar-test-reject is not allowed"
+    );
+    assert_eq!(fs::read_to_string(&compose).expect("kept"), accepted);
+
+    let (_, opened) = server.get("/api/store/apps/alpha/files").await;
+
+    assert_eq!(opened["app"]["name"], "Alpha 2");
+    assert_eq!(opened["files"], json!(["compose.yml"]), "no copy left");
+}
+
+#[tokio::test]
+async fn creates_a_file_empty_and_refuses_one_where_anything_is() {
+    let fixture = Fixture::new();
+    let server = fixture.serve(None).await;
+    let file = "/api/store/apps/alpha/file?path=config/new.yml";
+
+    let (status, created) = server.post(file).await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(created, json!({ "path": "config/new.yml", "source": "" }));
+    assert_eq!(
+        fs::read_to_string(fixture.data.join("app-store/store/alpha/config/new.yml"))
+            .expect("created"),
+        ""
+    );
+
+    let (status, problem) = server.post(file).await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(detail(&problem), "config/new.yml already exists");
+}
+
+#[tokio::test]
+async fn creates_an_app_once_compose_accepts_it_and_nothing_otherwise() {
+    let fixture = Fixture::new();
+    let server = fixture.serve(None).await;
+    let apps = fixture.data.join("app-store/store");
+    let compose = "x-hangar:\n  name: Delta\nservices:\n  delta: {}\n";
+
+    let (status, delta) = server
+        .post_json(
+            "/api/store/apps",
+            &json!({ "id": "delta", "compose": compose }),
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        delta,
+        json!({ "id": "delta", "name": "Delta", "icon": null, "installed": false, "swarmReady": false })
+    );
+    assert_eq!(
+        fs::read_to_string(apps.join("delta/compose.yml")).expect("created"),
+        compose
+    );
+
+    let refusals = [
+        (
+            "delta",
+            compose,
+            StatusCode::CONFLICT,
+            "the app delta already exists",
+        ),
+        (
+            "Delta App",
+            compose,
+            StatusCode::BAD_REQUEST,
+            "Delta App is not an app id: lowercase letters, digits, `.`, `_` and `-`, starting with a letter or a digit",
+        ),
+        (
+            "networks.yml",
+            compose,
+            StatusCode::CONFLICT,
+            "the app networks.yml already exists",
+        ),
+        (
+            "epsilon",
+            "services:\n  epsilon:\n    hangar-test-reject: 1\n",
+            StatusCode::BAD_REQUEST,
+            "docker rejects compose.yml:\nvalidating compose.yml: services.alpha additional property hangar-test-reject is not allowed",
+        ),
+    ];
+
+    for (id, source, expected, message) in refusals {
+        let (status, problem) = server
+            .post_json("/api/store/apps", &json!({ "id": id, "compose": source }))
+            .await;
+
+        assert_eq!(status, expected, "{id}");
+        assert_eq!(detail(&problem), message, "{id}");
+    }
+
+    assert!(
+        !apps.join("epsilon").exists(),
+        "a refused app leaves no folder"
+    );
 }

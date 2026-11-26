@@ -38,12 +38,12 @@ services:
     }
 
     /// The app `id` of the store, if the store carries it.
-    async fn find(&self, id: &str) -> Result<Option<StoreApp>> {
+    pub(super) async fn find(&self, id: &str) -> Result<Option<StoreApp>> {
         Ok(self.apps().await?.into_iter().find(|app| app.id == id))
     }
 
     /// The 404 of an app the store does not carry.
-    fn unknown(id: &str) -> Error {
+    pub(super) fn unknown(id: &str) -> Error {
         tracing::warn!(app = ?id, "an unknown app was asked for");
 
         ErrorCode::UnknownApp { app: id.to_owned() }.into()

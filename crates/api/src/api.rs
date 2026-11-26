@@ -8,6 +8,7 @@ quoll::api! {
         crate::health::Health,
         crate::auth::Auth,
         crate::store::Store,
+        crate::editor::Editor,
         crate::config::Config,
         crate::env::Env,
     };

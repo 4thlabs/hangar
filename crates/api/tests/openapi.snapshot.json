@@ -73,6 +73,49 @@
         ],
         "type": "object"
       },
+      "AppFile": {
+        "description": "A file of an app, and its text.",
+        "properties": {
+          "path": {
+            "description": "Its path in the app's folder.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Its text.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "source"
+        ],
+        "type": "object"
+      },
+      "AppFileList": {
+        "description": "An app as the editor opens it: the app, and the files it may edit.",
+        "properties": {
+          "app": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StoreApp"
+              }
+            ],
+            "description": "The app."
+          },
+          "files": {
+            "description": "Its text files, by their paths in its folder, sorted: no hidden file, binary, symlink or file over 1 MiB, 5\nfolders deep and 500 files at most.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "app",
+          "files"
+        ],
+        "type": "object"
+      },
       "AppFilter": {
         "description": "Which of the store's apps a listing keeps.",
         "oneOf": [
@@ -514,6 +557,553 @@
               "code"
             ],
             "type": "object"
+          },
+          {
+            "description": "An app to create whose id the store has already: its folder, or anything in its place.",
+            "properties": {
+              "code": {
+                "const": "editor.app_exists",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The id.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "An id that cannot name an app.",
+            "properties": {
+              "code": {
+                "const": "editor.invalid_app_id",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The id asked for.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A path of an app's file that is not one: empty, absolute, with an empty segment or one that starts with a dot, as `..` or a hidden file.",
+            "properties": {
+              "code": {
+                "const": "editor.invalid_path",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path, as it was given.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A path of an app's file that goes through a file as if it were a folder.",
+            "properties": {
+              "code": {
+                "const": "editor.through_file",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A path of an app's file that leads out of its folder, through a symlink.",
+            "properties": {
+              "code": {
+                "const": "editor.outside_app",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  },
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app",
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A path of an app's file through a symlink to nothing, which a write would create wherever it points.",
+            "properties": {
+              "code": {
+                "const": "editor.broken_symlink",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder, up to the symlink.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "An app has no file at this path.",
+            "properties": {
+              "code": {
+                "const": "editor.no_such_file",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  },
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app",
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Something that is not a regular file sits at this path, as a folder.",
+            "properties": {
+              "code": {
+                "const": "editor.not_a_file",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A file too large for the editor, which sends it whole: over 1 MiB.",
+            "properties": {
+              "code": {
+                "const": "editor.too_large",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  },
+                  "size": {
+                    "description": "Its size, in bytes.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "path",
+                  "size"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A binary file, which the editor does not open.",
+            "properties": {
+              "code": {
+                "const": "editor.binary",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A file that is not UTF-8, which a save from the editor would corrupt.",
+            "properties": {
+              "code": {
+                "const": "editor.not_utf8",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A file to create where something is already, a hidden file included.",
+            "properties": {
+              "code": {
+                "const": "editor.file_exists",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A file found missing as it was saved, which something else created first: it is left as it is.",
+            "properties": {
+              "code": {
+                "const": "editor.file_appeared",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A YAML or `.env` file that does not parse, which is not written.",
+            "properties": {
+              "code": {
+                "const": "editor.invalid_file",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "description": "What the parser says, in English.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Docker rejects a compose file, by `docker compose config` or `docker stack config`: it is not written. The complaint is about the operator's own file, and is the only way to say what to fix in it.",
+            "properties": {
+              "code": {
+                "const": "editor.compose_rejected",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "complaint": {
+                    "description": "Docker's complaint, its last lines, the app's files named by their paths in its folder and the credentials of a URL taken out.",
+                    "type": "string"
+                  },
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "complaint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Docker could not check a compose file, as when it did not start: it is not written.",
+            "properties": {
+              "code": {
+                "const": "editor.unchecked",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "An app's files could not be listed.",
+            "properties": {
+              "code": {
+                "const": "editor.files_unreadable",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A file of an app could not be read.",
+            "properties": {
+              "code": {
+                "const": "editor.read_failed",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A file of an app could not be created or written.",
+            "properties": {
+              "code": {
+                "const": "editor.save_failed",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "path": {
+                    "description": "The path in the app's folder.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "An app could not be created.",
+            "properties": {
+              "code": {
+                "const": "editor.create_failed",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The id.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
           }
         ],
         "properties": {
@@ -524,6 +1114,19 @@
         },
         "required": [
           "message"
+        ],
+        "type": "object"
+      },
+      "FileSource": {
+        "description": "The text a file is saved with.",
+        "properties": {
+          "source": {
+            "description": "The file's new text.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
         ],
         "type": "object"
       },
@@ -540,6 +1143,24 @@
         },
         "required": [
           "variables"
+        ],
+        "type": "object"
+      },
+      "NewApp": {
+        "description": "A new app: its id, and its `compose.yml`.",
+        "properties": {
+          "compose": {
+            "description": "Its `compose.yml`.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Its id: its folder under `store/`, lowercase letters, digits, `.`, `_` and `-`, starting with a letter or a\ndigit.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "compose"
         ],
         "type": "object"
       },
@@ -585,6 +1206,19 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "SavedFile": {
+        "description": "What a save of a file did.",
+        "properties": {
+          "composeChanged": {
+            "description": "Whether it wrote one of the app's compose files, whatever path led to it: the app's name or icon may have\nchanged, and whether it can run in the swarm.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "composeChanged"
+        ],
         "type": "object"
       },
       "ServerHealth": {
@@ -1272,6 +1906,283 @@
         "tags": [
           "Store"
         ]
+      },
+      "post": {
+        "operationId": "editor_create_app",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewApp"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreApp"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Location": {
+                "description": "Where the created resource is read, when the server says.",
+                "schema": {
+                  "format": "uri-reference",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Creates an app from its `compose.yml`, once `docker compose config` accepts it; a file refused creates nothing. A 409 when its id is taken, or while a sync of the store runs.",
+        "tags": [
+          "Editor"
+        ]
+      }
+    },
+    "/api/store/apps/{id}/file": {
+      "get": {
+        "operationId": "editor_read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppFile"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "One file of the app. A 404 when it is not there; a 400 for a path that leaves the app's folder, or a file the editor does not open: not a regular file, over 1 MiB, binary, or not UTF-8.",
+        "tags": [
+          "Editor"
+        ]
+      },
+      "post": {
+        "operationId": "editor_create",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppFile"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Location": {
+                "description": "Where the created resource is read, when the server says.",
+                "schema": {
+                  "format": "uri-reference",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Creates the file empty, and its folders. A 409 when anything is there, a hidden file included.",
+        "tags": [
+          "Editor"
+        ]
+      },
+      "put": {
+        "operationId": "editor_write",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileSource"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedFile"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Writes the file, or creates it, once checked: `docker compose config` for `compose.yml`, `docker stack config` for `compose.swarm.yml` and for `compose.yml` beside one with content, a parse for a YAML or `.env` file. A file refused is a 400 that says why, Docker's complaint included, and is left as it was. A 409 while a sync of the store runs.",
+        "tags": [
+          "Editor"
+        ]
+      }
+    },
+    "/api/store/apps/{id}/files": {
+      "get": {
+        "operationId": "editor_files",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppFileList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The app, and the files the editor may open. A 404 for an app the store does not carry.",
+        "tags": [
+          "Editor"
+        ]
       }
     },
     "/api/store/apps/{id}/install": {
@@ -1441,6 +2352,10 @@
     {
       "description": "The store and its apps.",
       "name": "Store"
+    },
+    {
+      "description": "The app editor: an app's files, and a new app.",
+      "name": "Editor"
     },
     {
       "description": "The store's configuration, `config/hangar.yml`.",

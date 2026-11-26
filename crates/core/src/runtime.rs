@@ -38,3 +38,19 @@ pub trait CommandRunner: Send + Sync {
     /// Returns a [`RunError`] as [`run`](Self::run) does, and when stdout is not UTF-8.
     fn capture(&self, command: &Command) -> impl Future<Output = Result<String, RunError>> + Send;
 }
+
+/// A runner borrowed runs as the runner itself, so that what owns one can lend it, as the store lends its own to
+/// compose's checks of a file.
+impl<T: CommandRunner + ?Sized> CommandRunner for &T {
+    fn run(
+        &self,
+        command: &Command,
+        output: Output,
+    ) -> impl Future<Output = Result<(), RunError>> + Send {
+        (**self).run(command, output)
+    }
+
+    fn capture(&self, command: &Command) -> impl Future<Output = Result<String, RunError>> + Send {
+        (**self).capture(command)
+    }
+}

@@ -1,9 +1,10 @@
 //! The store of the data directory, on the core's [`Store`]: its apps, installed or uninstalled, its `hangar.yml`,
-//! `.env.global`, and the sync that clones or pulls it apart from the request.
+//! `.env.global`, the app editor, and the sync that clones or pulls it apart from the request.
 
 mod apps;
 mod command_log;
 mod config;
+mod editor;
 mod env;
 mod gate;
 mod sync;

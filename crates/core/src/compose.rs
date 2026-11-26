@@ -43,6 +43,7 @@ mod command;
 mod error;
 mod project;
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -135,20 +136,55 @@ impl<R: CommandRunner> Compose<R> {
             "-q",
         ]);
 
-        self.runner
-            .capture(&check)
-            .await
-            .map(drop)
-            .map_err(|source| match source {
-                RunError::Failed { .. } => ComposeError::Invalid {
-                    file: file.to_owned(),
-                    source,
-                },
-                _ => ComposeError::Unchecked {
-                    file: file.to_owned(),
-                    source,
-                },
-            })
+        Self::checked(self.runner.capture(&check).await.map(drop), file)
+    }
+
+    /// Checks `compose` and `swarm` merged with `docker stack config`, as Swarm reads an app that can run there: an
+    /// app's `compose.yml` and its `compose.swarm.yml`, one of them the new file of a save. `docker stack` reads no
+    /// `--env-file`: `variables`, those of `.env.global`, are set in its environment. It runs on any node, in a swarm
+    /// or not.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ComposeError::Invalid`], with Docker's complaint, when Docker rejects the files, and
+    /// [`ComposeError::Unchecked`] and [`ComposeError::NotUtf8`] as [`validate`](Self::validate) does; the file they
+    /// name is `swarm`.
+    pub async fn validate_stack(
+        &self,
+        compose: &Path,
+        swarm: &Path,
+        variables: &BTreeMap<String, String>,
+    ) -> Result<(), ComposeError> {
+        let (Some(compose_path), Some(swarm_path)) = (compose.to_str(), swarm.to_str()) else {
+            let path = if compose.to_str().is_none() {
+                compose
+            } else {
+                swarm
+            };
+
+            return Err(ComposeError::NotUtf8 {
+                path: path.to_owned(),
+            });
+        };
+        let check = Command::new("docker")
+            .args(["stack", "config", "-c", compose_path, "-c", swarm_path])
+            .envs(variables);
+
+        Self::checked(self.runner.capture(&check).await.map(drop), swarm)
+    }
+
+    /// The outcome of a check of `file`: a failure of the command is a refusal, any other a check that did not run.
+    fn checked(result: Result<(), RunError>, file: &Path) -> Result<(), ComposeError> {
+        result.map_err(|source| match source {
+            RunError::Failed { .. } => ComposeError::Invalid {
+                file: file.to_owned(),
+                source,
+            },
+            _ => ComposeError::Unchecked {
+                file: file.to_owned(),
+                source,
+            },
+        })
     }
 
     /// Refuses a command whose first word is an option rather than its name, which would override the project or the
@@ -376,6 +412,7 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::path::Path;
     use std::sync::Arc;
 
@@ -711,6 +748,44 @@ categories:
             error,
             ComposeError::Invalid { source: RunError::Failed { ref stderr, .. }, .. }
                 if stderr == "services must be a mapping"
+        ));
+    }
+
+    #[tokio::test]
+    async fn checks_a_stack_with_stack_config_and_the_global_variables_in_its_environment() {
+        let (_dir, data_dir) = installed(&[]);
+        let compose = Compose::new(data_dir, FakeRunner::new());
+        let compose_file = Path::new("/data/app-store/store/web/compose.yml");
+        let swarm_file = Path::new("/data/app-store/store/web/.compose.1-1.pending.yml");
+        let variables = BTreeMap::from([("WEB_TAG".to_owned(), "1.2".to_owned())]);
+
+        compose.runner.reply(Reply::Failure {
+            code: 1,
+            stderr: "depends_on must be a list\n".into(),
+        });
+
+        let error = compose
+            .validate_stack(compose_file, swarm_file, &variables)
+            .await
+            .expect_err("the reply fails");
+        let runs = compose.runner.runs();
+
+        assert_eq!(
+            runs[0].args,
+            [
+                "stack",
+                "config",
+                "-c",
+                "/data/app-store/store/web/compose.yml",
+                "-c",
+                "/data/app-store/store/web/.compose.1-1.pending.yml",
+            ]
+        );
+        assert_eq!(runs[0].env, variables);
+        assert!(matches!(
+            error,
+            ComposeError::Invalid { ref file, source: RunError::Failed { ref stderr, .. } }
+                if file == swarm_file && stderr == "depends_on must be a list"
         ));
     }
 

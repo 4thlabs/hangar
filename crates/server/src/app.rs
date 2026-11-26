@@ -47,6 +47,7 @@ pub fn router(app: App) -> axum::Router {
         health: app.clone(),
         auth: app.clone(),
         store: app.clone(),
+        editor: app.clone(),
         config: app.clone(),
         env: app,
     })
