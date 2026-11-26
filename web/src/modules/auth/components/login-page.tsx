@@ -78,7 +78,6 @@ export function LoginPage() {
                   type="password"
                   autoComplete="current-password"
                   minLength={8}
-                  maxLength={128}
                   required
                   disabled={login.isPending}
                 />

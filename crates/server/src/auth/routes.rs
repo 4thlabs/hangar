@@ -141,7 +141,8 @@ impl AuthServer for App {
         };
 
         if let Some(error) = &callback.error {
-            tracing::info!("the OpenID Connect provider refused the sign-in: {error}");
+            // A field, which the log escapes: the query is anyone's, and a line break in it would forge a log line.
+            tracing::info!(error = ?error, "the OpenID Connect provider refused the sign-in");
 
             return Ok(self.refused(Refusal::Denied));
         }
@@ -163,7 +164,7 @@ impl AuthServer for App {
         };
         let Some(user) = self.auth.referenced(&identity).await else {
             tracing::warn!(
-                subject = %identity.subject,
+                subject = ?identity.subject,
                 email = identity.verified_email.as_deref().unwrap_or("none verified"),
                 "the OpenID Connect provider signed in someone hangar.yml does not reference"
             );
