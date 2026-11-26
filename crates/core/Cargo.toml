@@ -7,6 +7,8 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+# The hashes of the users' passwords, argon2id in PHC strings, with their salts from the OS.
+argon2 = "0.6"
 futures.workspace = true
 # The timestamps of `.env.global`'s header and of its `.bak` copies.
 jiff = { version = "0.2", default-features = false, features = ["std"] }
