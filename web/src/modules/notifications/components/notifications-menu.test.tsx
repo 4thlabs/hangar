@@ -2,7 +2,7 @@ import { focusManager } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Notification, NotificationMessage, RecentNotifications } from "#libs/api";
-import { FakeEventSource, renderAt, serve, type Answers } from "#app/mock/page.tsx";
+import { FakeEventSource, problem, renderAt, serve, type Answers } from "#app/mock/page.tsx";
 
 /** A notification of the store, `id`, neither seen nor read unless `marks` says so. */
 function notification(id: number, message: NotificationMessage, marks: Partial<Notification> = {}): Notification {
@@ -104,6 +104,31 @@ describe("the notifications' bell", () => {
         expect.objectContaining({ method: "POST", keepalive: true }),
       ),
     );
+  });
+
+  it("reads the list again when marking it read fails, so that the bell says what the server holds", async () => {
+    let reads = 0;
+
+    serve({
+      ...answers(() => {
+        reads += 1;
+
+        return Response.json(recent);
+      }),
+      "POST /api/notifications/read": () => problem(503, "unavailable"),
+    });
+
+    renderAt("/apps");
+
+    const bell = await screen.findByRole("button", { name: "Notifications, 1 unread" });
+
+    fireEvent.click(bell);
+    await screen.findByText("Store: installation finished");
+    fireEvent.click(bell);
+
+    await waitFor(() => expect(reads).toBe(2));
+
+    expect(await screen.findByRole("button", { name: "Notifications, 1 unread" })).toBeDefined();
   });
 
   it("keeps what the stream brought over a read of the list that was in flight", async () => {
