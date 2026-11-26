@@ -256,6 +256,7 @@ mod tests {
                 runtime,
                 crate::docker::DockerChanges::new(),
                 Notifier::load(&settings.data_dir).await,
+                std::sync::Arc::default(),
             )
         }
     }

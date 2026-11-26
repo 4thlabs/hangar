@@ -1,13 +1,15 @@
 //! The core of Hangar, on no web framework, so that the `hangar` binary and the server both run on it. It holds its
 //! version, the environment both read their variables from, the runtime, which runs `docker`, `docker compose` and
 //! `git`, Docker, the store, with its configuration, its users and the global environment, the hashes of their
-//! passwords, and compose, which brings the installed apps up and down, one or a batch.
+//! passwords, compose, which brings the installed apps up and down, one or a batch, and the secrets a command's output
+//! may echo, taken out before it is shown.
 
 mod compose;
 mod docker;
 mod environment;
 mod password;
 mod runtime;
+mod secrets;
 mod store;
 mod version;
 
@@ -24,6 +26,7 @@ pub use docker::{
 pub use environment::Environment;
 pub use password::{PasswordError, PasswordHash};
 pub use runtime::{Command, CommandRunner, Output, RunError, Runtime};
+pub use secrets::Secrets;
 pub use store::{
     AppFiles, Backup, Category, Column, Config, ConfigError, DataDir, Dotenv, FollowedCard,
     GlobalEnv, SavedFile, ServiceOptions, Store, StoreApp, StoreError, User, Widget, WidgetKind,

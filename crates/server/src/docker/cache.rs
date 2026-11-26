@@ -175,12 +175,19 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
 
     /// Reloads the value as [`refresh`](Self::refresh) does, and resolves once a load that started after the call has
     /// ended, for a caller that changed what the daemon runs and is about to tell a page, which reads it again.
-    /// Readers keep the current value meanwhile; a value never asked for is left alone, and resolves at once.
+    /// Readers keep the current value meanwhile; a value never asked for is left alone, and resolves at once. So does
+    /// one whose last load failed while its wait runs: the daemon is not asked again before, and a caller that reloads
+    /// once per app would otherwise wait out a failure for each.
     pub(crate) async fn reload(self: &Arc<Self>) {
         let (running, is_queued) = {
             let mut state = self.lock();
+            let is_waiting = state
+                .failure
+                .as_ref()
+                .is_some_and(|failure| Instant::now() < failure.retry_at);
 
             match &state.loading {
+                None if is_waiting => return,
                 Some(loading) => {
                     let running = loading.clone();
 
@@ -655,6 +662,30 @@ mod tests {
         cached.reload().await;
 
         assert_eq!((source.loads(), value(&cached).await), (2, 2));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_reload_asks_a_failing_daemon_nothing_while_the_failure_s_wait_runs() {
+        let source = Source::new([Answer::Gives(1), Answer::Fails, Answer::Gives(2)], OPEN);
+        let cached = source.cached();
+
+        assert_eq!(value(&cached).await, 1);
+
+        cached.reload().await;
+        cached.reload().await;
+
+        assert_eq!(source.loads(), 2, "the second waits for the first's wait");
+
+        tokio::time::advance(Duration::from_secs(2)).await;
+
+        // The retry's task runs once the clock moved: it is awaited, never slept for.
+        while source.loads() < 3 {
+            tokio::task::yield_now().await;
+        }
+
+        cached.settled().await;
+
+        assert_eq!(value(&cached).await, 2);
     }
 
     #[tokio::test(start_paused = true)]

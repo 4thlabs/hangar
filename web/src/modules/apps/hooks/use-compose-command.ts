@@ -1,25 +1,45 @@
 import { useState } from "react";
-import type { ComposeAction, ComposeBatch } from "#libs/api";
+import { useComposeBatches, type ComposeAction, type ComposeBatch } from "#libs/api";
 import { ComposeActions, type UpFlag } from "#modules/apps/compose-actions.ts";
 import { useComposeStream } from "#modules/apps/hooks/use-compose-stream.ts";
 import { ToggledSet } from "#modules/common/toggled-set.ts";
 
-/** The batch the output panel shows: its command and its apps, in the order they run. */
+/** The batch the output panel shows: its command and its apps. */
 export type ShownBatch = { action: ComposeAction; apps: readonly string[] };
 
+/** How often the batches are read again while one runs, so that its end frees the buttons of its apps. */
+class BatchesPolling {
+  static readonly Interval = 5_000;
+}
+
 /**
- * The compose commands of the table and of an app's page, on `apps`: the confirmation, Up's options, and the output
- * of the batch the panel shows, one this page started or one the server ran already. No toast: the server notifies
- * each app's end, and the page reads the apps again as the daemon's changes come.
+ * The compose commands of the table and of an app's page, on `apps`: the confirmation, Up's options, the batches the
+ * server runs, whichever page started them, whose apps' buttons are disabled, and the output of the batch the panel
+ * shows, one this page started or one the server ran already. No toast: the server notifies each app's end, and the
+ * page reads the apps again as the daemon's changes come.
  */
 export function useComposeCommand(apps: readonly string[]) {
   const stream = useComposeStream();
   const [confirmation, setConfirmation] = useState<ComposeAction | null>(null);
   const [shown, setShown] = useState<ShownBatch | null>(null);
-
   // The options ticked in Up's menu, for this page visit only: never saved, and unticked once a run starts, so that a
   // forced recreate never carries over to the next Up.
   const [flags, setFlags] = useState<ReadonlySet<UpFlag>>(() => new Set());
+
+  const { data: batches } = useComposeBatches({
+    query: {
+      refetchInterval: query =>
+        query.state.data?.some(batch => batch.report === null) ? BatchesPolling.Interval : false,
+    },
+  });
+
+  const running = (batches ?? []).filter(batch => batch.report === null);
+  const isHeld = apps.some(app => running.some(batch => batch.apps.includes(app)));
+
+  // A selection emptied under the confirmation leaves it nothing to confirm.
+  if (confirmation !== null && apps.length === 0) {
+    setConfirmation(null);
+  }
 
   const isRunning = shown !== null && (stream.status === "connecting" || stream.status === "connected");
 
@@ -67,7 +87,9 @@ export function useComposeCommand(apps: readonly string[]) {
     close,
     shown,
     isRunning,
-    disabled: isRunning || apps.length === 0,
+    /** The batches the server runs, whichever page started them. */
+    running,
+    disabled: isRunning || isHeld || apps.length === 0,
     output: stream.output,
     status: stream.status,
     error: stream.error,

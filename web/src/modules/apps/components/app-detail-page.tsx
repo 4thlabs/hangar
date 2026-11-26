@@ -1,10 +1,12 @@
 import { Link, useParams } from "@tanstack/react-router";
 import { BoxIcon, CpuIcon, HardDriveIcon, MemoryStickIcon, NetworkIcon } from "lucide-react";
 import { ApiError, useDockerOverview, useDockerProject, type ProjectDetail } from "#libs/api";
+import { ComposeDialogs } from "#modules/apps/components/compose-operations.tsx";
 import { ProjectActions } from "#modules/apps/components/project-actions.tsx";
 import { ReconnectingNotice } from "#modules/apps/components/reconnecting-notice.tsx";
 import { ServiceCard } from "#modules/apps/components/service-card.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
+import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import { MemoryLimit } from "#modules/apps/memory-limit.ts";
@@ -113,7 +115,15 @@ function AppNotFound({ project }: { project: string }) {
  */
 export function AppDetailPage() {
   const { project } = useParams({ from: "/app/apps/$project" });
+
+  // Keyed: another app's page starts over, its commands' state and panel included.
+  return <AppDetail key={project} project={project} />;
+}
+
+/** The page of `project`, whose commands' dialogs and panel stay while a read again fails. */
+function AppDetail({ project }: { project: string }) {
   const { data, error, refetch, isPending, isRefetching } = useDockerProject(project);
+  const compose = useComposeCommand([project]);
   const isNotFound = error instanceof ApiError && error.status === 404;
   const { isReconnecting } = useDockerChanges();
 
@@ -138,11 +148,12 @@ export function AppDetailPage() {
       {data && !error && (
         <>
           <AppHeader detail={data} />
-          <ProjectActions project={data.summary.name} />
+          <ProjectActions compose={compose} project={project} />
           <AppLiveStats detail={data} />
         </>
       )}
       {isPending && <p className="text-sm text-muted-foreground">Reading Docker…</p>}
+      <ComposeDialogs compose={compose} subject={project} count={1} />
     </main>
   );
 }

@@ -27,7 +27,7 @@ export class ComposeOutput {
   /** The most lines kept per app: an update pulls many layers, each a line of progress. */
   static readonly MaxLines = 2_000;
 
-  /** The output of a batch over `apps`, in the order they run, before its first event. */
+  /** The output of a batch over `apps`, in the order they run, before its first event: none until its `batch` says. */
   static create(apps: readonly string[]): ComposeOutputState {
     return {
       apps: apps.map(ComposeOutput.waiting),
@@ -48,6 +48,12 @@ export class ComposeOutput {
 
   private static applyOne(state: ComposeOutputState, event: ComposeEvent): ComposeOutputState {
     switch (event.kind) {
+      case "batch":
+        // The apps in the order the batch runs them, which the page that asked for it did not know.
+        return {
+          ...state,
+          apps: event.apps.map(app => state.apps.find(run => run.app === app) ?? ComposeOutput.waiting(app)),
+        };
       case "started":
         return ComposeOutput.update(state, event.app, run => ({ ...run, status: "running" }));
       case "line":

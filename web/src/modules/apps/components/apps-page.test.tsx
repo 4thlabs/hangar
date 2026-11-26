@@ -1,7 +1,8 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ProjectDetail, ProjectStatus, ProjectSummary } from "#libs/api";
+import type { ComposeAction, ComposeReport, ProjectDetail, ProjectStatus, ProjectSummary } from "#libs/api";
 import { coded, events, FakeEventSource, problem, renderAt, serve } from "#app/mock/page.tsx";
+import { ComposeActions } from "#modules/apps/compose-actions.ts";
 
 /** An installed app with one container, `<name>-1`. */
 function project(name: string, status: ProjectStatus, category?: string): ProjectSummary {
@@ -309,7 +310,21 @@ describe("/apps/:project", () => {
 });
 
 describe("compose commands", () => {
-  /** A batch's events on `app`: its start, a line, its end, and the batch's report. */
+  /** The batch of `action` over `apps`, in the order they run, as the server lists it and as its output starts. */
+  function batch(id: number, action: ComposeAction, apps: string[], report: ComposeReport | null = null) {
+    return {
+      id,
+      action,
+      commandLine: ComposeActions.commandLine(action),
+      apps,
+      startedAt: "2026-11-26T10:00:00.000Z",
+      report,
+    };
+  }
+
+  const plainUp: ComposeAction = { operation: "up", pull: false, forceRecreate: false };
+
+  /** A batch's events on `app`: its start, a line, and its end. */
   function ran(app: string) {
     const outcome = { app, status: "succeeded", error: null };
 
@@ -326,13 +341,15 @@ describe("compose commands", () => {
       "GET /api/docker/compose": () => Response.json([]),
       "POST /api/docker/compose": () =>
         events([
-          ...ran("jellyfin"),
+          // `hangar.yml` lists miniflux first.
+          { kind: "batch", ...batch(1, plainUp, ["miniflux", "jellyfin"]) },
           ...ran("miniflux"),
+          ...ran("jellyfin"),
           {
             kind: "end",
             apps: [
-              { app: "jellyfin", status: "succeeded", error: null },
               { app: "miniflux", status: "succeeded", error: null },
+              { app: "jellyfin", status: "succeeded", error: null },
             ],
           },
         ]),
@@ -355,6 +372,14 @@ describe("compose commands", () => {
       apps: ["jellyfin", "miniflux"],
     });
 
+    // Laid out in the order the batch runs them, not the table's.
+    const panel = within(screen.getByRole("dialog"));
+
+    expect(panel.getAllByRole("region").map(region => region.getAttribute("aria-label"))).toEqual([
+      "miniflux",
+      "jellyfin",
+    ]);
+
     const miniflux = screen.getByRole("region", { name: "miniflux" });
 
     expect(within(miniflux).getByText("Succeeded")).toBeDefined();
@@ -375,6 +400,7 @@ describe("compose commands", () => {
       "GET /api/docker/compose": () => Response.json([]),
       "POST /api/docker/compose": () =>
         events([
+          { kind: "batch", ...batch(1, { operation: "down" }, ["alpha"]) },
           { kind: "started", app: "alpha" },
           { kind: "line", app: "alpha", line: "alpha: no such network" },
           { kind: "finished", app: "alpha", status: "failed", error },
@@ -412,23 +438,21 @@ describe("compose commands", () => {
   it("finds a batch that runs again, and shows its output from its start", async () => {
     serve({
       "GET /api/docker/apps/alpha": () => Response.json(alpha),
-      "GET /api/docker/compose": () =>
-        Response.json([
-          {
-            id: 4,
-            action: { operation: "restart" },
-            commandLine: "docker compose restart",
-            apps: ["alpha", "beta"],
-            startedAt: "2026-11-26T10:00:00.000Z",
-            report: null,
-          },
+      "GET /api/docker/compose": () => Response.json([batch(4, { operation: "restart" }, ["alpha", "beta"])]),
+      "GET /api/docker/compose/4": () =>
+        events([
+          { kind: "batch", ...batch(4, { operation: "restart" }, ["alpha", "beta"]) },
+          ...ran("alpha"),
+          { kind: "started", app: "beta" },
         ]),
-      "GET /api/docker/compose/4": () => events([...ran("alpha"), { kind: "started", app: "beta" }]),
     });
 
     renderAt("/apps/alpha");
 
     expect(await screen.findByText(/Restart runs on 2 apps/)).toBeDefined();
+    // Another command holds the app: none of its buttons runs one.
+    expect((screen.getByRole("button", { name: "Restart" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Up: docker compose up -d" }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Show output" }));
 
@@ -438,5 +462,58 @@ describe("compose commands", () => {
     expect(within(screen.getByRole("region", { name: "alpha" })).getByText("Succeeded")).toBeDefined();
     // Cut before its end: the batch goes on, which the panel says.
     expect(await screen.findByText("The output was cut short: the command goes on on the server.")).toBeDefined();
+  });
+
+  it("closes a confirmation whose selection was emptied", async () => {
+    let listed = projects;
+
+    serve({
+      "GET /api/docker/apps": () => Response.json(listed),
+      "GET /api/docker/compose": () => Response.json([]),
+    });
+
+    renderAt("/apps");
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Select miniflux" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }));
+
+    expect(await screen.findByText("Restart miniflux?")).toBeDefined();
+
+    // Uninstalled meanwhile: the apps read again drop it from the selection.
+    const changes = await source("/api/docker/changes");
+
+    listed = projects.filter(project => project.name !== "miniflux");
+    act(() => changes.send("containers"));
+
+    await waitFor(() => expect(screen.queryByText("Restart miniflux?")).toBeNull());
+  });
+
+  it("keeps the panel of an app's page while a read again of the app fails", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    let isReadable = true;
+
+    serve({
+      "GET /api/docker/apps/alpha": () => (isReadable ? Response.json(alpha) : problem(500, "the daemon went away")),
+      "GET /api/docker/compose": () => Response.json([batch(4, { operation: "restart" }, ["alpha"])]),
+      "GET /api/docker/compose/4": () =>
+        events([
+          { kind: "batch", ...batch(4, { operation: "restart" }, ["alpha"]) },
+          { kind: "started", app: "alpha" },
+        ]),
+    });
+
+    renderAt("/apps/alpha");
+    fireEvent.click(await screen.findByRole("button", { name: "Show output" }));
+    expect(await screen.findByRole("region", { name: "alpha" })).toBeDefined();
+
+    const changes = await source("/api/docker/changes");
+
+    isReadable = false;
+    act(() => changes.send("containers"));
+    // The query's three retries, a second, two and four apart.
+    await act(() => vi.advanceTimersByTimeAsync(8_000));
+
+    expect(await screen.findByText("Could not read this app")).toBeDefined();
+    expect(screen.getByRole("region", { name: "alpha" })).toBeDefined();
   });
 });

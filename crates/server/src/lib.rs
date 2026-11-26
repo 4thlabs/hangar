@@ -8,6 +8,7 @@
 //! that comes back.
 
 mod app;
+mod app_locks;
 mod auth;
 mod compose;
 mod docker;

@@ -43,7 +43,7 @@ mod command;
 mod error;
 mod project;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -317,22 +317,22 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
             return Err(ComposeError::EmptyBatch);
         }
 
-        let stacks = config.stacks();
-        let mut ordered: Vec<Arc<str>> = Vec::new();
-
-        for app in apps.iter().map(AsRef::as_ref) {
-            if !ordered.iter().any(|known| known.as_ref() == app) {
-                ordered.push(Arc::from(app));
-            }
-        }
+        let stacks: HashMap<&str, usize> = config
+            .stacks()
+            .into_iter()
+            .enumerate()
+            .map(|(position, stack)| (stack, position))
+            .collect();
+        let mut seen = HashSet::new();
+        let mut ordered: Vec<Arc<str>> = apps
+            .iter()
+            .map(AsRef::as_ref)
+            .filter(|app| seen.insert(*app))
+            .map(Arc::from)
+            .collect();
 
         // Stable: the apps `hangar.yml` does not list keep the order they were given in.
-        ordered.sort_by_key(|app| {
-            stacks
-                .iter()
-                .position(|stack| *stack == app.as_ref())
-                .unwrap_or(usize::MAX)
-        });
+        ordered.sort_by_key(|app| stacks.get(app.as_ref()).copied().unwrap_or(usize::MAX));
 
         if command.order() == Order::Reverse {
             ordered.reverse();

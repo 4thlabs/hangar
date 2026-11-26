@@ -49,8 +49,10 @@ services:
         ErrorCode::UnknownApp { app: id.to_owned() }.into()
     }
 
-    /// Installs the app `id`, unless it is already: links it, then seeds the variables its files reference.
+    /// Installs the app `id`, unless it is already: links it, then seeds the variables its files reference. A 409 while
+    /// a compose batch holds it.
     async fn install(&self, id: &str) -> Result<StoreApp> {
+        let _claim = self.locks.claim([id])?;
         let _change = self.change().await?;
         let Some(app) = self.find(id).await? else {
             return Err(Self::unknown(id));
@@ -79,8 +81,10 @@ services:
     /// compose files are out of reach, and what runs an orphan Hangar can no longer manage; then its link.
     ///
     /// An app installed that the store no longer reads, its folder gone, its `compose.yml` or `hangar.yml` broken, goes
-    /// by its link alone, as the core's `uninstall_app` does.
+    /// by its link alone, as the core's `uninstall_app` does. A 409 while a compose batch holds it, which would bring
+    /// back what `down` took down; a batch is refused while this runs.
     async fn uninstall(&self, id: &str) -> Result<StoreApp> {
+        let _claim = self.locks.claim([id])?;
         let _change = self.change().await?;
         let app = match self.store.apps().await {
             Ok(apps) => apps.into_iter().find(|app| app.id == id).map(Self::view),

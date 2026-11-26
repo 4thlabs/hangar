@@ -1,14 +1,8 @@
 import { TerminalIcon } from "lucide-react";
-import { useComposeBatches, type ComposeBatch } from "#libs/api";
 import { ComposeActions } from "#modules/apps/compose-actions.ts";
 import type { ComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
-
-/** How often the listing is read again while a batch runs, so that its end takes it off the page. */
-class RunningBatchesPolling {
-  static readonly Interval = 5_000;
-}
 
 type RunningBatchesProps = {
   compose: ComposeCommand;
@@ -21,16 +15,7 @@ type RunningBatchesProps = {
  * panel on its output, from its start. None is listed while the panel is open.
  */
 export function RunningBatches({ compose, project }: RunningBatchesProps) {
-  const { data } = useComposeBatches({
-    query: {
-      refetchInterval: query =>
-        query.state.data?.some(batch => batch.report === null) ? RunningBatchesPolling.Interval : false,
-    },
-  });
-
-  const running = (data ?? []).filter(
-    (batch: ComposeBatch) => batch.report === null && (project === undefined || batch.apps.includes(project)),
-  );
+  const running = compose.running.filter(batch => project === undefined || batch.apps.includes(project));
 
   if (running.length === 0 || compose.shown !== null) {
     return null;

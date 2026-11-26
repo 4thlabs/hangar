@@ -5,8 +5,11 @@ use hangar_api::{
     ErrorDetail,
 };
 use hangar_core::{
-    AppOutcome, AppStatus, BatchEvent, BatchReport, ComposeCommand, ComposeError, UpOptions,
+    AppOutcome, AppStatus, BatchEvent, BatchReport, ComposeCommand, ComposeError, Secrets,
+    UpOptions,
 };
+
+use crate::failure::Failure;
 
 /// The contract's view of the core's batches.
 #[derive(Debug)]
@@ -56,15 +59,16 @@ impl ComposeViews {
             .join(",")
     }
 
-    /// `event` of a batch of `command`, the command line, as the page reads it.
-    pub(crate) fn event(event: BatchEvent, command: &str) -> ComposeEvent {
+    /// `event` of a batch of `command`, the command line, as the page reads it, a line masked of `secrets` and of the
+    /// credentials of a URL, as compose's complaint about a file is.
+    pub(crate) fn event(event: BatchEvent, command: &str, secrets: &Secrets) -> ComposeEvent {
         match event {
             BatchEvent::Started { app } => ComposeEvent::Started {
                 app: app.to_string(),
             },
             BatchEvent::Output { app, line } => ComposeEvent::Line {
                 app: app.to_string(),
-                line: Self::line(&line),
+                line: Failure::redacted(&secrets.mask(&Self::line(&line))).into_owned(),
             },
             BatchEvent::Finished(outcome) => {
                 ComposeEvent::Finished(Self::outcome(&outcome, command))

@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use super::{Access, Disk, Store, StoreApp, StoreError};
-use crate::{CommandRunner, Compose, ComposeError};
+use crate::{CommandRunner, Compose, ComposeError, Secrets};
 use editable::EditableFile;
 use location::Location;
 use syntax::FileSyntax;
@@ -278,44 +278,13 @@ impl<'a, R: CommandRunner> AppFiles<'a, R> {
 
         complaint = complaint.replace(&format!("{}/", folder.to_string_lossy()), "");
 
-        let environment: Vec<String> = std::env::vars_os()
-            .filter_map(|(_, value)| value.into_string().ok())
-            .collect();
-        let values = variables
-            .values()
-            .map(String::as_str)
-            .chain(environment.iter().map(String::as_str));
-
-        complaint = Self::without_values(&complaint, values);
+        complaint = Secrets::with_environment(variables).mask(&complaint);
 
         StoreError::Rejected {
             path: path.to_owned(),
             complaint,
             source: Box::new(error),
         }
-    }
-}
-
-impl<R> AppFiles<'_, R> {
-    /// The fewest characters a value has to be taken out of a complaint: a shorter one, as `1` or `UTC`, is no secret,
-    /// and taken out it would take every number of the complaint with it.
-    const SHORTEST_SECRET: usize = 4;
-
-    /// `complaint` with each of `values` replaced by `***`, the longest first, so that a value inside another goes
-    /// with it.
-    fn without_values<'v>(complaint: &str, values: impl Iterator<Item = &'v str>) -> String {
-        let mut values: Vec<&str> = values
-            .filter(|value| value.chars().count() >= Self::SHORTEST_SECRET)
-            .collect();
-
-        values.sort_by_key(|value| std::cmp::Reverse(value.len()));
-        values.dedup();
-
-        values
-            .into_iter()
-            .fold(complaint.to_owned(), |complaint, value| {
-                complaint.replace(value, "***")
-            })
     }
 }
 

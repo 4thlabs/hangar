@@ -16,6 +16,7 @@ use hangar_core::{Compose, Runtime, Store};
 use tokio::sync::{Mutex, watch};
 
 use crate::Settings;
+use crate::app_locks::AppLocks;
 use crate::docker::DockerChanges;
 use crate::notifications::Notifier;
 use gate::{Change, ChangeGate};
@@ -34,18 +35,22 @@ pub(crate) struct StoreState {
     /// or not, is then what no other sync is changing.
     starting: Mutex<()>,
     notifier: Notifier,
+    /// The apps each command holds: an install or an uninstall holds its app, as a compose batch does.
+    locks: Arc<AppLocks>,
     /// Told when what is installed may have changed, for the Docker pages, which list the installed apps.
     docker_changes: DockerChanges,
 }
 
 impl StoreState {
     /// The store of the server's settings, its commands, `git` and `docker compose`, run by `runtime`; what it installs
-    /// or uninstalls is told to the Docker pages through `docker_changes`, and the end of a sync filed with `notifier`.
+    /// or uninstalls is told to the Docker pages through `docker_changes`, the end of a sync filed with `notifier`, and
+    /// an install or an uninstall holds its app in `locks`.
     pub(crate) fn new(
         settings: &Settings,
         runtime: Runtime,
         docker_changes: DockerChanges,
         notifier: Notifier,
+        locks: Arc<AppLocks>,
     ) -> Arc<Self> {
         Arc::new(Self {
             store: Store::new(
@@ -58,6 +63,7 @@ impl StoreState {
             gate: ChangeGate::default(),
             starting: Mutex::new(()),
             notifier,
+            locks,
             docker_changes,
         })
     }

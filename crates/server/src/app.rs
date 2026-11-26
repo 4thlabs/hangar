@@ -9,6 +9,7 @@ use quoll::server;
 use hangar_core::{Docker, Runtime};
 
 use crate::Settings;
+use crate::app_locks::AppLocks;
 use crate::auth::{Auth, AuthBodyLimit, OriginCheck};
 use crate::compose::ComposeState;
 use crate::docker::{DockerChanges, DockerState};
@@ -39,12 +40,25 @@ impl App {
     pub async fn with_runtime(settings: &Settings, runtime: Runtime, docker: Docker) -> Self {
         let docker_changes = DockerChanges::new();
         let notifier = Notifier::load(&settings.data_dir).await;
+        let locks = Arc::new(AppLocks::default());
         let docker = DockerState::new(settings, runtime.clone(), docker, docker_changes.clone());
 
         Self {
             auth: Arc::new(Auth::new(settings)),
-            store: StoreState::new(settings, runtime.clone(), docker_changes, notifier.clone()),
-            compose: ComposeState::new(settings, runtime, Arc::clone(&docker), notifier.clone()),
+            store: StoreState::new(
+                settings,
+                runtime.clone(),
+                docker_changes,
+                notifier.clone(),
+                Arc::clone(&locks),
+            ),
+            compose: ComposeState::new(
+                settings,
+                runtime,
+                Arc::clone(&docker),
+                notifier.clone(),
+                locks,
+            ),
             docker,
             notifier,
         }
