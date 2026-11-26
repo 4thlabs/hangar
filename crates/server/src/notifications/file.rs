@@ -1,6 +1,6 @@
 //! The file the notifications are kept in, `app-data/hangar/notifications.json`: read once as the server starts, and
 //! replaced whole at each change, written beside it then renamed in its place, so that a crash never leaves it half
-//! written.
+//! written. A file that cannot be read is put aside rather than replaced.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -32,55 +32,68 @@ impl NotificationFile {
         &self.path
     }
 
-    /// The list the file holds; none when there is no file. A file that is not a list is put aside, as
-    /// `notifications.json.bad`, for its owner to read, and the list starts empty; a file that cannot be read starts
-    /// it empty too. Both are logged.
-    ///
-    /// Read as the server starts, before it serves: the file is small, and nothing waits on it then.
-    pub(super) fn read(&self) -> NotificationList {
-        let json = match std::fs::read_to_string(&self.path) {
-            Ok(json) => json,
+    /// The list the file holds; a new one, of an epoch of its own, when there is no file. A file that cannot be read
+    /// as a list, not there as a file, unreadable, or not the JSON of one, is put aside, as
+    /// `notifications.json.<time>.bad`, for its owner to read, and a new list starts; both are logged.
+    pub(super) async fn read(&self) -> NotificationList {
+        let read = match tokio::fs::read(&self.path).await {
+            Ok(json) => NotificationList::from_json(&json).map_err(io::Error::other),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                return NotificationList::default();
+                return NotificationList::new();
             }
-            Err(error) => {
-                tracing::error!(
-                    path = %self.path.display(),
-                    %error,
-                    "the notifications could not be read: the list starts empty"
-                );
-                return NotificationList::default();
-            }
+            Err(error) => Err(error),
         };
 
-        match NotificationList::from_json(&json) {
+        match read {
             Ok(list) => list,
             Err(error) => {
-                self.put_aside(&error);
-                NotificationList::default()
+                self.put_aside(&error).await;
+                NotificationList::new()
             }
         }
     }
 
-    /// Moves the file aside, as `notifications.json.bad`, which `error` says it is not a list.
-    fn put_aside(&self, error: &serde_json::Error) {
-        let aside = self.path.with_extension("json.bad");
-        let moved = std::fs::rename(&self.path, &aside);
+    /// Moves the file aside, as `notifications.json.<time>.bad`, which `error` says cannot be read as a list.
+    async fn put_aside(&self, error: &io::Error) {
+        // `:` is fine on Linux but not everywhere, and these names are read by humans.
+        let stamp = format!("{:.3}", jiff::Timestamp::now()).replace(':', "-");
+        let aside = self.free_name(&stamp).await;
 
-        match moved {
+        match tokio::fs::rename(&self.path, &aside).await {
             Ok(()) => tracing::error!(
                 path = %self.path.display(),
                 aside = %aside.display(),
                 %error,
-                "the notifications' file is not a list: put aside, and the list starts empty"
+                "the notifications' file cannot be read as a list: put aside, and a new list starts"
             ),
             Err(rename_error) => tracing::error!(
                 path = %self.path.display(),
                 %error,
                 %rename_error,
-                "the notifications' file is not a list, and could not be put aside: the list starts empty, and \
-                 replaces it at its first change"
+                "the notifications' file cannot be read as a list, and could not be put aside: a new list starts, \
+                 which replaces it at its first change"
             ),
+        }
+    }
+
+    /// `notifications.json.<stamp>.bad`, with a number after the stamp when a file of that name is there already, so
+    /// that a file put aside never replaces another.
+    async fn free_name(&self, stamp: &str) -> PathBuf {
+        let mut attempt = 1;
+
+        loop {
+            let name = match attempt {
+                1 => format!("json.{stamp}.bad"),
+                _ => format!("json.{stamp}-{attempt}.bad"),
+            };
+            let aside = self.path.with_extension(name);
+
+            // A name that cannot be checked is tried: the rename then says why it fails.
+            if !tokio::fs::try_exists(&aside).await.unwrap_or(false) {
+                return aside;
+            }
+
+            attempt += 1;
         }
     }
 
@@ -152,10 +165,24 @@ mod tests {
 
     use super::NotificationFile;
     use crate::notifications::Notification;
-    use crate::notifications::list::NotificationList;
 
     fn file(dir: &tempfile::TempDir) -> NotificationFile {
         NotificationFile::new(&DataDir::new(dir.path()).expect("a data directory"))
+    }
+
+    /// The names of the folder of the file, but its own.
+    fn beside(file: &NotificationFile) -> Vec<String> {
+        std::fs::read_dir(file.path().parent().expect("a folder"))
+            .expect("listed")
+            .map(|entry| {
+                entry
+                    .expect("an entry")
+                    .file_name()
+                    .into_string()
+                    .expect("UTF-8")
+            })
+            .filter(|name| name != "notifications.json")
+            .collect()
     }
 
     #[test]
@@ -172,9 +199,9 @@ mod tests {
     async fn writes_the_list_whole_and_reads_it_back() {
         let dir = tempfile::tempdir().expect("a temporary directory");
         let file = file(&dir);
-        let mut list = NotificationList::default();
+        let mut list = file.read().await;
 
-        assert_eq!(file.read().newest(1), [], "no file, no notification");
+        assert_eq!(list.newest(1), [], "no file, no notification");
 
         list.file(
             Notification {
@@ -188,30 +215,58 @@ mod tests {
         file.write(&list.to_json()).await.expect("written");
         file.write(&list.to_json()).await.expect("written again");
 
-        assert_eq!(file.read().newest(1), list.newest(1));
-        assert_eq!(
-            std::fs::read_dir(file.path().parent().expect("a folder"))
-                .expect("listed")
-                .count(),
-            1,
-            "nothing left beside"
-        );
+        let read = file.read().await;
+
+        assert_eq!(read.newest(1), list.newest(1));
+        assert_eq!(read.epoch(), list.epoch());
+        assert_eq!(beside(&file), Vec::<String>::new(), "nothing left beside");
     }
 
-    #[test]
-    fn puts_aside_a_file_that_is_not_a_list() {
+    #[tokio::test]
+    async fn puts_aside_each_file_that_is_not_a_list_under_a_name_of_its_own_and_starts_a_new_epoch()
+     {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let file = file(&dir);
+        let mut epochs = Vec::new();
+
+        std::fs::create_dir_all(file.path().parent().expect("a folder")).expect("created");
+
+        for contents in [
+            &b"{ broken"[..],
+            b"{ \"epoch\": \"\xff\", \"nextId\": 1, \"notifications\": [] }",
+        ] {
+            std::fs::write(file.path(), contents).expect("written");
+
+            let list = file.read().await;
+
+            assert_eq!(list.newest(1), []);
+            assert!(!file.path().exists());
+            epochs.push(list.epoch().to_owned());
+        }
+
+        let mut aside = beside(&file);
+
+        aside.sort();
+
+        assert_eq!(aside.len(), 2, "{aside:?}");
+        assert!(
+            aside
+                .iter()
+                .all(|name| name.starts_with("notifications.json.") && name.ends_with(".bad"))
+        );
+        assert_ne!(epochs[0], epochs[1]);
+    }
+
+    #[tokio::test]
+    async fn puts_aside_a_file_it_cannot_read() {
         let dir = tempfile::tempdir().expect("a temporary directory");
         let file = file(&dir);
 
-        std::fs::create_dir_all(file.path().parent().expect("a folder")).expect("created");
-        std::fs::write(file.path(), "{ broken").expect("written");
+        // A folder in its place: a read fails, as one of a file the server may not read does.
+        std::fs::create_dir_all(file.path()).expect("created");
 
-        assert_eq!(file.read().newest(1), []);
-        assert!(!file.path().exists());
-        assert_eq!(
-            std::fs::read_to_string(dir.path().join("app-data/hangar/notifications.json.bad"))
-                .expect("put aside"),
-            "{ broken"
-        );
+        assert_eq!(file.read().await.newest(1), []);
+        assert!(!file.path().exists(), "put aside, not saved over");
+        assert_eq!(beside(&file).len(), 1);
     }
 }

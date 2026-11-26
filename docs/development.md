@@ -171,14 +171,18 @@ no-store`). Both tabs read their file anew each time they open, as a sync or an 
 
 The server keeps one list of notifications for every user, as there are no roles: the last 100, in
 `app-data/hangar/notifications.json`, which it reads as it starts and replaces whole at each change, written beside then
-renamed in its place. A file it cannot read as a list is put aside, as `notifications.json.bad`, and the list starts
-empty. Each notification has an id that only grows, its level, its message as a key and its params (`storeUpdated`),
+renamed in its place; it saves what is left to save once it stops serving, on `SIGTERM`. A file it cannot read as a list
+is put aside, as `notifications.json.<time>.bad`, and a new list starts; a notification of a key this version does not
+know is kept as it is. Each notification has an id, its level, its message as a key and its params (`storeUpdated`),
 which the page words in English, the page it leads to, and whether it was seen and read; one filed with a dedupe key
-replaces the one before it of that key, and comes first. The navbar's bell reads the newest 30 from
-`GET /api/notifications`, then follows `GET /api/notifications/events?since=<id>`, which gives those filed after the
-newest it holds, then each new one as it is filed, pushed in process. A new one is shown as a toast once, which marks it
-seen for every page, as a page that comes back would show it again; it counts as unread until a user closes the bell,
-which marks every one read, for everyone.
+replaces the one before it of that key, and comes first. The ids grow within an epoch, a random id the file holds, drawn
+anew each time they start again from 1, as after a file put aside.
+
+The navbar's bell reads the newest 30 and their epoch from `GET /api/notifications`, then follows
+`GET /api/notifications/events?since=<id>&epoch=<epoch>`, which opens with the server's epoch, then gives those filed
+after the newest it holds, then each new one as it is filed, pushed in process; a page of another epoch is given every
+one kept, and drops what it held. Each page open shows a new one as a toast, which marks it seen, so that a page opened
+after does not; it counts as unread until a user closes the bell, which marks every one read, for everyone.
 
 ### Docker
 

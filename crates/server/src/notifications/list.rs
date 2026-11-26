@@ -1,5 +1,5 @@
-//! The list of notifications as the server keeps it: the newest first, the last 100, each with its dedupe key, and the
-//! JSON of its file.
+//! The list of notifications as the server keeps it: the newest first, the last 100, each with its dedupe key, the
+//! epoch of their ids, and the JSON of its file.
 
 use std::collections::VecDeque;
 
@@ -8,16 +8,27 @@ use serde_json::Value;
 
 use super::Notification;
 
-/// The notifications kept, the newest first, and the id of the next one. Each change counts a version, which tells
-/// what is saved from what is not yet.
-#[derive(Debug, Default)]
+/// The notifications kept, the newest first, the epoch of their ids and the id of the next one. Each change counts a
+/// version, which tells what is saved from what is not yet.
+#[derive(Debug)]
 pub(super) struct NotificationList {
-    kept: VecDeque<Kept>,
+    epoch: String,
+    kept: VecDeque<Entry>,
     next_id: u64,
     version: u64,
 }
 
-/// A notification kept: what the page reads of it, and the key that a newer one of the same replaces it by.
+/// A notification kept: one this version reads, or one another wrote, of a key this one does not know, kept as it is
+/// so that the version that knows it reads it again.
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+enum Entry {
+    Known(Kept),
+    Foreign(Value),
+}
+
+/// A notification this version reads: what the page reads of it, and the key that a newer one of the same replaces it
+/// by.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Kept {
@@ -30,54 +41,110 @@ struct Kept {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Written<'a> {
+    epoch: &'a str,
     next_id: u64,
-    notifications: &'a VecDeque<Kept>,
+    notifications: &'a VecDeque<Entry>,
 }
 
-/// The file of the list, as it is read: each notification apart, so that one another version wrote, of a key this one
-/// does not know, is passed over rather than lose the others.
+/// The file of the list, as it is read: each notification apart, so that one another version wrote is kept as it is
+/// rather than lose the others.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Read {
+    epoch: String,
     next_id: u64,
     notifications: Vec<Value>,
+}
+
+impl Entry {
+    /// What the page reads of it, for one this version reads.
+    fn known(&self) -> Option<&hangar_api::Notification> {
+        match self {
+            Self::Known(kept) => Some(&kept.notification),
+            Self::Foreign(_) => None,
+        }
+    }
+
+    fn id(&self) -> Option<u64> {
+        match self {
+            Self::Known(kept) => Some(kept.notification.id),
+            Self::Foreign(value) => value.get("id").and_then(Value::as_u64),
+        }
+    }
+
+    fn dedupe_key(&self) -> Option<&str> {
+        match self {
+            Self::Known(kept) => kept.dedupe_key.as_deref(),
+            Self::Foreign(value) => value.get("dedupeKey").and_then(Value::as_str),
+        }
+    }
 }
 
 impl NotificationList {
     /// How many notifications are kept: an older one goes as a new one is filed.
     pub(super) const KEPT: usize = 100;
 
+    /// An empty list, whose ids start from 1 in an epoch of their own.
+    pub(super) fn new() -> Self {
+        Self::with_epoch(Self::draw_epoch())
+    }
+
+    /// An empty list of ids from 1 in `epoch`.
+    fn with_epoch(epoch: String) -> Self {
+        Self {
+            epoch,
+            kept: VecDeque::new(),
+            next_id: 1,
+            version: 0,
+        }
+    }
+
+    /// A random epoch: 16 bytes, in hexadecimal. Should the system give no random numbers, the time to the
+    /// nanosecond, which tells one start of the server from another as well.
+    fn draw_epoch() -> String {
+        let mut bytes = [0_u8; 16];
+
+        if let Err(error) = getrandom::fill(&mut bytes) {
+            tracing::warn!(%error, "no random numbers for the notifications' epoch: it is the time");
+
+            return jiff::Timestamp::now().as_nanosecond().to_string();
+        }
+
+        bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
     /// The list that `json`, its file, holds.
     ///
     /// # Errors
     ///
-    /// The error of a file that is not the JSON of a list. A notification of the list that is not one this version
-    /// reads, as one of a key it does not know, is passed over, and logged.
-    pub(super) fn from_json(json: &str) -> serde_json::Result<Self> {
-        let read: Read = serde_json::from_str(json)?;
-        // Past every id of the file, those passed over included, which a page may hold: ids only grow, or it would
-        // miss the next ones. A file edited by hand may hold one past its `nextId`.
-        let next_id = read
-            .notifications
-            .iter()
-            .filter_map(|notification| notification.get("id").and_then(Value::as_u64))
-            .map(|id| id.saturating_add(1))
-            .fold(read.next_id.max(1), u64::max);
-        let mut kept: VecDeque<Kept> = read
+    /// The error of a file that is not the JSON of a list. A notification of the list that this version does not
+    /// read, as one of a key it does not know, is kept as it is, and logged.
+    pub(super) fn from_json(json: &[u8]) -> serde_json::Result<Self> {
+        let read: Read = serde_json::from_slice(json)?;
+        let mut kept: VecDeque<Entry> = read
             .notifications
             .into_iter()
-            .filter_map(|notification| match serde_json::from_value(notification) {
-                Ok(kept) => Some(kept),
+            .map(|notification| match serde_json::from_value(notification.clone()) {
+                Ok(kept) => Entry::Known(kept),
                 Err(error) => {
-                    tracing::warn!(%error, "a notification of the file is not one this version reads: passed over");
-                    None
+                    tracing::warn!(%error, "a notification of the file is not one this version reads: kept as it is");
+                    Entry::Foreign(notification)
                 }
             })
             .collect();
 
         kept.truncate(Self::KEPT);
 
+        // Past every id of the file, which a page may hold: ids only grow within an epoch, or a page would miss the
+        // next ones. A file edited by hand may hold one past its `nextId`.
+        let next_id = kept
+            .iter()
+            .filter_map(Entry::id)
+            .map(|id| id.saturating_add(1))
+            .fold(read.next_id.max(1), u64::max);
+
         Ok(Self {
+            epoch: read.epoch,
             kept,
             next_id,
             version: 0,
@@ -87,10 +154,16 @@ impl NotificationList {
     /// The JSON of its file.
     pub(super) fn to_json(&self) -> Vec<u8> {
         serde_json::to_vec_pretty(&Written {
-            next_id: self.next_id(),
+            epoch: &self.epoch,
+            next_id: self.next_id,
             notifications: &self.kept,
         })
-        .expect("a notification holds strings, numbers and booleans, which JSON writes")
+        .expect("a notification holds strings, numbers, booleans and the JSON it was read from, which JSON writes")
+    }
+
+    /// The epoch of its ids.
+    pub(super) fn epoch(&self) -> &str {
+        &self.epoch
     }
 
     /// The version of the list, counted by each change since it was read.
@@ -105,7 +178,7 @@ impl NotificationList {
         notification: Notification,
         created_at: String,
     ) -> hangar_api::Notification {
-        let id = self.next_id();
+        let id = self.next_id;
         let filed = hangar_api::Notification {
             id,
             level: notification.level,
@@ -120,13 +193,13 @@ impl NotificationList {
         // older one was.
         if let Some(key) = &notification.dedupe_key {
             self.kept
-                .retain(|kept| kept.dedupe_key.as_ref() != Some(key));
+                .retain(|entry| entry.dedupe_key() != Some(key.as_str()));
         }
 
-        self.kept.push_front(Kept {
+        self.kept.push_front(Entry::Known(Kept {
             notification: filed.clone(),
             dedupe_key: notification.dedupe_key,
-        });
+        }));
         self.kept.truncate(Self::KEPT);
         self.next_id = id + 1;
         self.version += 1;
@@ -134,22 +207,24 @@ impl NotificationList {
         filed
     }
 
-    /// The newest `count`, the newest first.
+    /// The newest `count` this version reads, the newest first.
     pub(super) fn newest(&self, count: usize) -> Vec<hangar_api::Notification> {
         self.kept
             .iter()
+            .filter_map(Entry::known)
             .take(count)
-            .map(|kept| kept.notification.clone())
+            .cloned()
             .collect()
     }
 
-    /// Those of an id greater than `id`, the oldest first.
+    /// Those this version reads of an id greater than `id`, the oldest first.
     pub(super) fn after(&self, id: u64) -> Vec<hangar_api::Notification> {
         self.kept
             .iter()
             .rev()
-            .filter(|kept| kept.notification.id > id)
-            .map(|kept| kept.notification.clone())
+            .filter_map(Entry::known)
+            .filter(|notification| notification.id > id)
+            .cloned()
             .collect()
     }
 
@@ -164,7 +239,7 @@ impl NotificationList {
         })
     }
 
-    /// Marks every one as read; whether one was not yet.
+    /// Marks every one this version reads as read; whether one was not yet.
     pub(super) fn mark_read(&mut self) -> bool {
         self.mark(|notification| {
             let is_marked = !notification.read;
@@ -175,22 +250,22 @@ impl NotificationList {
         })
     }
 
-    /// Calls `mark` on each notification, which answers whether it changed it, and counts a version if one did.
+    /// Calls `mark` on each notification this version reads, which answers whether it changed it, and counts a
+    /// version if one did.
     fn mark(&mut self, mut mark: impl FnMut(&mut hangar_api::Notification) -> bool) -> bool {
-        let changed = self.kept.iter_mut().fold(false, |changed, kept| {
-            mark(&mut kept.notification) | changed
-        });
+        let changed = self
+            .kept
+            .iter_mut()
+            .fold(false, |changed, entry| match entry {
+                Entry::Known(kept) => mark(&mut kept.notification) | changed,
+                Entry::Foreign(_) => changed,
+            });
 
         if changed {
             self.version += 1;
         }
 
         changed
-    }
-
-    /// The id of the next notification, from 1.
-    fn next_id(&self) -> u64 {
-        self.next_id.max(1)
     }
 }
 
@@ -220,7 +295,7 @@ mod tests {
 
     #[test]
     fn files_the_newest_first_with_ids_from_1() {
-        let mut list = NotificationList::default();
+        let mut list = NotificationList::with_epoch("epoch-1".to_owned());
 
         let first = list.file(
             notification(NotificationMessage::StoreInstalled, None),
@@ -247,7 +322,7 @@ mod tests {
 
     #[test]
     fn a_notification_of_a_dedupe_key_replaces_the_older_one_and_comes_first() {
-        let mut list = NotificationList::default();
+        let mut list = NotificationList::with_epoch("epoch-1".to_owned());
 
         list.file(
             notification(NotificationMessage::StoreInstallFailed, Some("store")),
@@ -273,7 +348,7 @@ mod tests {
 
     #[test]
     fn keeps_the_last_100() {
-        let mut list = NotificationList::default();
+        let mut list = NotificationList::with_epoch("epoch-1".to_owned());
 
         for _ in 0..105 {
             list.file(
@@ -291,7 +366,7 @@ mod tests {
 
     #[test]
     fn gives_those_after_an_id_the_oldest_first() {
-        let mut list = NotificationList::default();
+        let mut list = NotificationList::with_epoch("epoch-1".to_owned());
 
         for _ in 0..4 {
             list.file(
@@ -314,7 +389,7 @@ mod tests {
 
     #[test]
     fn marks_those_shown_seen_and_all_read_counting_a_version_only_for_a_change() {
-        let mut list = NotificationList::default();
+        let mut list = NotificationList::with_epoch("epoch-1".to_owned());
 
         for _ in 0..3 {
             list.file(
@@ -338,8 +413,26 @@ mod tests {
     }
 
     #[test]
+    fn draws_an_epoch_of_its_own_for_each_new_list() {
+        let first = NotificationList::new();
+        let second = NotificationList::new();
+
+        assert_eq!(first.epoch().len(), 32);
+        assert_ne!(first.epoch(), second.epoch());
+        assert_eq!(
+            NotificationList::new()
+                .file(
+                    notification(NotificationMessage::StoreUpdated, None),
+                    String::new()
+                )
+                .id,
+            1
+        );
+    }
+
+    #[test]
     fn reads_back_what_it_writes_and_files_on_from_its_next_id() {
-        let mut list = NotificationList::default();
+        let mut list = NotificationList::with_epoch("epoch-1".to_owned());
 
         list.file(
             notification(NotificationMessage::StoreInstalled, Some("store")),
@@ -347,11 +440,12 @@ mod tests {
         );
         list.mark_seen(&[1]);
 
-        let json = String::from_utf8(list.to_json()).expect("UTF-8");
+        let json = list.to_json();
 
         assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&json).expect("JSON"),
+            serde_json::from_slice::<serde_json::Value>(&json).expect("JSON"),
             json!({
+                "epoch": "epoch-1",
                 "nextId": 2,
                 "notifications": [{
                     "id": 1,
@@ -368,6 +462,7 @@ mod tests {
 
         let mut read = NotificationList::from_json(&json).expect("a list");
 
+        assert_eq!(read.epoch(), "epoch-1");
         assert_eq!(read.newest(1), list.newest(1));
         assert_eq!(read.version(), 0);
 
@@ -384,23 +479,29 @@ mod tests {
     }
 
     #[test]
-    fn passes_over_a_notification_it_does_not_read_and_never_gives_an_id_twice() {
-        let json = json!({
+    fn keeps_a_notification_it_does_not_read_as_it_is_and_never_gives_its_id_again() {
+        let newer = json!({
+            "id": 7, "level": "info", "message": { "key": "fromANewerVersion", "params": { "count": 2 } },
+            "href": null, "seen": false, "read": false, "createdAt": "2026-11-26T10:00:00.000Z",
+            "dedupeKey": "newer"
+        });
+        let file = json!({
+            "epoch": "epoch-1",
             "nextId": 3,
             "notifications": [
-                { "id": 7, "level": "info", "message": { "key": "fromANewerVersion", "params": { "count": 2 } },
-                  "href": null, "seen": false, "read": false, "createdAt": "2026-11-26T10:00:00.000Z" },
+                newer,
                 { "id": 2, "level": "error", "message": { "key": "storeUpdateFailed" },
                   "href": "/settings", "seen": false, "read": false, "createdAt": "2026-11-26T09:00:00.000Z" }
             ]
         });
 
-        let mut list = NotificationList::from_json(&json.to_string()).expect("a list");
+        let mut list = NotificationList::from_json(file.to_string().as_bytes()).expect("a list");
 
         assert_eq!(
             messages(&list),
             [(2, NotificationMessage::StoreUpdateFailed)]
         );
+        assert!(list.mark_read());
         assert_eq!(
             list.file(
                 notification(NotificationMessage::StoreUpdated, None),
@@ -408,13 +509,24 @@ mod tests {
             )
             .id,
             8,
-            "past the id of the one passed over, which a page may hold"
+            "past the id of the one it does not read, which a page may hold"
+        );
+
+        let written: serde_json::Value = serde_json::from_slice(&list.to_json()).expect("JSON");
+
+        assert_eq!(
+            written["notifications"][1], newer,
+            "written back as it was read"
         );
     }
 
     #[test]
     fn a_file_that_is_not_a_list_is_an_error() {
-        assert!(NotificationList::from_json("{ \"notifications\": ").is_err());
-        assert!(NotificationList::from_json("[]").is_err());
+        assert!(NotificationList::from_json(b"{ \"notifications\": ").is_err());
+        assert!(NotificationList::from_json(b"[]").is_err());
+        assert!(
+            NotificationList::from_json(b"{ \"nextId\": 1, \"notifications\": [] }").is_err(),
+            "no epoch"
+        );
     }
 }

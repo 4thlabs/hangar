@@ -47,7 +47,7 @@ fn main() -> ExitCode {
     tokio.block_on(serve(&settings, docker))
 }
 
-/// Serves until told to stop.
+/// Serves until told to stop, then saves what the server has not saved yet.
 async fn serve(settings: &Settings, docker: Docker) -> ExitCode {
     let address = settings.address;
 
@@ -61,13 +61,15 @@ async fn serve(settings: &Settings, docker: Docker) -> ExitCode {
         ),
     }
 
-    let app = App::new(settings, docker);
+    let app = App::new(settings, docker).await;
 
     app.start().await;
 
     let served = hangar_server::server(settings)
-        .serve(address, hangar_server::router(app))
+        .serve(address, hangar_server::router(app.clone()))
         .await;
+
+    app.stop().await;
 
     match served {
         Ok(()) => ExitCode::SUCCESS,

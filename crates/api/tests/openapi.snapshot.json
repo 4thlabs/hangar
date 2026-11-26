@@ -1756,7 +1756,7 @@
             "type": "boolean"
           },
           "seen": {
-            "description": "Whether a page has shown it already, as a toast: no page shows it again so.",
+            "description": "Whether a page has shown it already, as a toast: a page opened after does not show it again so. The pages open\nwhen it is filed each show it.",
             "type": "boolean"
           }
         },
@@ -1770,6 +1770,51 @@
           "createdAt"
         ],
         "type": "object"
+      },
+      "NotificationEvent": {
+        "description": "An event of the notifications' stream.",
+        "oneOf": [
+          {
+            "description": "The first event: the epoch of the ids that follow. A page that holds those of another drops them, as the stream\nthen gives every notification kept.",
+            "properties": {
+              "epoch": {
+                "description": "The epoch of the server's ids.",
+                "type": "string"
+              },
+              "kind": {
+                "const": "opened",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "epoch"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A notification, filed before the stream opened, of an id past its `since`, or since.",
+            "properties": {
+              "kind": {
+                "const": "filed",
+                "type": "string"
+              },
+              "notification": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Notification"
+                  }
+                ],
+                "description": "The notification."
+              }
+            },
+            "required": [
+              "kind",
+              "notification"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "NotificationLevel": {
         "description": "How a notification reads.",
@@ -2160,6 +2205,27 @@
           "privatePort",
           "publicPort",
           "protocol"
+        ],
+        "type": "object"
+      },
+      "RecentNotifications": {
+        "description": "The newest notifications, and the epoch of their ids.",
+        "properties": {
+          "epoch": {
+            "description": "What the ids count in: a random id, new each time they start again from 1, as when the server's file was lost.\nA page that holds ids of another epoch holds none of this one's.",
+            "type": "string"
+          },
+          "notifications": {
+            "description": "The newest 30, the newest first.",
+            "items": {
+              "$ref": "#/components/schemas/Notification"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "epoch",
+          "notifications"
         ],
         "type": "object"
       },
@@ -3099,10 +3165,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/Notification"
-                  },
-                  "type": "array"
+                  "$ref": "#/components/schemas/RecentNotifications"
                 }
               }
             },
@@ -3120,7 +3183,7 @@
             "Session": []
           }
         ],
-        "summary": "The newest 30, the newest first.",
+        "summary": "The newest 30, the newest first, and the epoch of their ids.",
         "tags": [
           "Notifications"
         ]
@@ -3139,6 +3202,14 @@
               "minimum": 0,
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "epoch",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3149,7 +3220,7 @@
                   "type": "string"
                 },
                 "x-item": {
-                  "$ref": "#/components/schemas/Notification"
+                  "$ref": "#/components/schemas/NotificationEvent"
                 }
               }
             },
@@ -3173,7 +3244,7 @@
             "Session": []
           }
         ],
-        "summary": "The notifications filed from now on, as they are, and first, given `since`, those of a greater id the server still keeps, the oldest first: a page follows the stream from the newest it holds, so that what was filed between its read of the list and the stream's opening is in it. It does not end.",
+        "summary": "The epoch of the ids, then the notifications filed from now on, as they are, and first, given `since`, those of a greater id the server still keeps, the oldest first: a page follows the stream from the newest it holds, so that what was filed between its read of the list and the stream's opening is in it. Given an `epoch` that is not the server's, `since` counts in another and every notification kept comes first. It does not end.",
         "tags": [
           "Notifications"
         ]

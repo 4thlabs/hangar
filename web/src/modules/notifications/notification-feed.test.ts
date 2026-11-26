@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Notification } from "#libs/api";
+import type { Notification, RecentNotifications } from "#libs/api";
 import { NotificationFeed } from "./notification-feed.ts";
 
 function notification(id: number): Notification {
@@ -14,32 +14,41 @@ function notification(id: number): Notification {
   };
 }
 
+function recent(...ids: number[]): RecentNotifications {
+  return { epoch: "first", notifications: ids.map(notification) };
+}
+
+function ids(feed: RecentNotifications): number[] {
+  return feed.notifications.map(item => item.id);
+}
+
 describe("NotificationFeed", () => {
   it("puts a new one first, and one it holds once", () => {
-    const list = [notification(2), notification(1)];
-
-    expect(NotificationFeed.add(list, notification(3)).map(item => item.id)).toEqual([3, 2, 1]);
-    expect(NotificationFeed.add(list, notification(2)).map(item => item.id)).toEqual([2, 1]);
+    expect(ids(NotificationFeed.add(recent(2, 1), notification(3)))).toEqual([3, 2, 1]);
+    expect(ids(NotificationFeed.add(recent(2, 1), notification(2)))).toEqual([2, 1]);
   });
 
   it("keeps the newest, in the order of their ids", () => {
-    const full = Array.from({ length: NotificationFeed.Size }, (_, index) =>
-      notification(NotificationFeed.Size - index),
-    );
-
+    const full = recent(...Array.from({ length: NotificationFeed.Size }, (_, index) => NotificationFeed.Size - index));
     const added = NotificationFeed.add(full, notification(NotificationFeed.Size + 1));
 
-    expect(added).toHaveLength(NotificationFeed.Size);
-    expect(added.at(0)?.id).toBe(NotificationFeed.Size + 1);
-    expect(added.at(-1)?.id).toBe(2);
+    expect(added.notifications).toHaveLength(NotificationFeed.Size);
+    expect(ids(added).at(0)).toBe(NotificationFeed.Size + 1);
+    expect(ids(added).at(-1)).toBe(2);
+  });
+
+  it("drops what it holds when the stream opens in another epoch", () => {
+    expect(NotificationFeed.open(recent(2, 1), "first")).toEqual(recent(2, 1));
+    expect(NotificationFeed.open(recent(2, 1), "second")).toEqual({ epoch: "second", notifications: [] });
   });
 
   it("follows the stream from the newest it holds", () => {
-    expect(NotificationFeed.since([notification(4), notification(7)])).toBe(7);
-    expect(NotificationFeed.since([])).toBe(0);
+    expect(NotificationFeed.since(recent(4, 7))).toBe(7);
+    expect(NotificationFeed.since(recent())).toBe(0);
   });
 
-  it("reads every one", () => {
-    expect(NotificationFeed.read([notification(1)]).map(item => item.read)).toEqual([true]);
+  it("marks those shown seen, and every one read", () => {
+    expect(NotificationFeed.seen(recent(2, 1), [1]).notifications.map(item => item.seen)).toEqual([false, true]);
+    expect(NotificationFeed.read(recent(1)).notifications.map(item => item.read)).toEqual([true]);
   });
 });
