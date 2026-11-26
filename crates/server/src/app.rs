@@ -10,6 +10,7 @@ use hangar_core::{Docker, Runtime};
 
 use crate::Settings;
 use crate::auth::{Auth, AuthBodyLimit, OriginCheck};
+use crate::compose::ComposeState;
 use crate::docker::{DockerChanges, DockerState};
 use crate::notifications::Notifier;
 use crate::store::StoreState;
@@ -22,6 +23,7 @@ pub struct App {
     pub(crate) store: Arc<StoreState>,
     pub(crate) docker: Arc<DockerState>,
     pub(crate) notifier: Notifier,
+    pub(crate) compose: Arc<ComposeState>,
 }
 
 impl App {
@@ -37,16 +39,13 @@ impl App {
     pub async fn with_runtime(settings: &Settings, runtime: Runtime, docker: Docker) -> Self {
         let docker_changes = DockerChanges::new();
         let notifier = Notifier::load(&settings.data_dir).await;
+        let docker = DockerState::new(settings, runtime.clone(), docker, docker_changes.clone());
 
         Self {
             auth: Arc::new(Auth::new(settings)),
-            store: StoreState::new(
-                settings,
-                runtime.clone(),
-                docker_changes.clone(),
-                notifier.clone(),
-            ),
-            docker: DockerState::new(settings, runtime, docker, docker_changes),
+            store: StoreState::new(settings, runtime.clone(), docker_changes, notifier.clone()),
+            compose: ComposeState::new(settings, runtime, Arc::clone(&docker), notifier.clone()),
+            docker,
             notifier,
         }
     }
@@ -75,7 +74,8 @@ pub fn router(app: App) -> axum::Router {
         config: app.clone(),
         env: app.clone(),
         docker: app.clone(),
-        notifications: app,
+        notifications: app.clone(),
+        compose: app,
     })
 }
 

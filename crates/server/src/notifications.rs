@@ -1,6 +1,6 @@
-//! What the server tells its users of an outcome they did not wait for, as the end of a store sync: one list for every
-//! user, as there are no roles, the last 100 kept in a JSON file of the data directory, and pushed to the pages that
-//! follow it as they are filed, in process.
+//! What the server tells its users of an outcome they did not wait for, as the end of a store sync or of a compose
+//! command on an app: one list for every user, as there are no roles, the last 100 kept in a JSON file of the data
+//! directory, and pushed to the pages that follow it as they are filed, in process.
 //!
 //! A notification says what it says as a key and its params, which the page words. Each page open shows a new one as a
 //! toast, which marks it seen, so that a page opened after does not; its list counts it unread until a user reads the
@@ -19,6 +19,7 @@ use hangar_core::DataDir;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{broadcast, watch};
 
+use crate::timestamp::Timestamp;
 use file::NotificationFile;
 use list::NotificationList;
 
@@ -85,7 +86,7 @@ impl Notifier {
 
         {
             let mut list = self.lock();
-            let filed = list.file(notification, Self::now());
+            let filed = list.file(notification, Timestamp::now());
 
             // An error says no page follows the notifications, which is no failure.
             let _ = self.0.filed.send(filed);
@@ -181,11 +182,6 @@ impl Notifier {
 
     fn lock(&self) -> MutexGuard<'_, NotificationList> {
         self.0.lock()
-    }
-
-    /// Now, in RFC 3339, to the millisecond, as the store's syncs are dated.
-    fn now() -> String {
-        format!("{:.3}", jiff::Timestamp::now())
     }
 
     /// Resolves once the file holds the list as it is now.

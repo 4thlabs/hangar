@@ -44,6 +44,24 @@ pub enum NotificationMessage {
     StoreInstallFailed,
     /// The store's pull failed: why is in the server's log, and in the store's last sync.
     StoreUpdateFailed,
+    /// A compose command succeeded on an app.
+    ComposeSucceeded {
+        /// The app.
+        project: String,
+        /// `up`, `restart` or `down`.
+        operation: String,
+        /// The options of `up`, comma-separated, as `pull,forceRecreate`; empty for none.
+        flags: String,
+    },
+    /// A compose command failed on an app: why is in its output, and in the server's log.
+    ComposeFailed {
+        /// The app.
+        project: String,
+        /// `up`, `restart` or `down`.
+        operation: String,
+        /// The options of `up`, comma-separated, as `pull,forceRecreate`; empty for none.
+        flags: String,
+    },
 }
 
 /// A notification, as the page shows it.

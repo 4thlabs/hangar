@@ -13,6 +13,7 @@ use super::StoreState;
 use super::command_log::CommandLog;
 use crate::failure::Failure;
 use crate::notifications::Notification;
+use crate::timestamp::Timestamp;
 
 impl StoreState {
     /// The page a sync's notification leads to.
@@ -59,7 +60,7 @@ impl StoreState {
         let started = StoreSync {
             operation,
             state: SyncState::Running,
-            started_at: Self::now(),
+            started_at: Timestamp::now(),
             finished_at: None,
             error: None,
         };
@@ -140,7 +141,7 @@ impl StoreState {
                 Some(ErrorDetail::from(code)),
             ),
         };
-        let finished_at = Self::now();
+        let finished_at = Timestamp::now();
 
         self.gate.end_sync(|| {
             self.sync.send_modify(|latest| {
@@ -168,11 +169,6 @@ impl StoreState {
             StoreError::Config { source, .. } => Failure::config(source),
             _ => failed,
         }
-    }
-
-    /// Now, in RFC 3339, to the millisecond.
-    fn now() -> String {
-        format!("{:.3}", jiff::Timestamp::now())
     }
 }
 

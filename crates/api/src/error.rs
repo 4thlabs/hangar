@@ -321,6 +321,13 @@ pub enum ErrorCode {
         project: String,
     },
 
+    /// A name `docker compose -p` does not take as a project: lowercase letters, digits, `_` and `-`, starting with a
+    /// letter or a digit.
+    #[serde(rename = "docker.invalid_project")]
+    InvalidProject {
+        /// The name asked for.
+        project: String,
+    },
     /// No container of the app has this id.
     #[serde(rename = "docker.unknown_container")]
     UnknownContainer {
@@ -330,6 +337,23 @@ pub enum ErrorCode {
         container: String,
     },
 
+    /// A batch of compose commands asked for no app.
+    #[serde(rename = "compose.no_apps")]
+    NoApps,
+    /// A compose command failed on an app: its output says why, and the server's log.
+    #[serde(rename = "compose.failed")]
+    ComposeFailed {
+        /// The app.
+        app: String,
+        /// The command line, as `docker compose up -d`.
+        command: String,
+    },
+    /// No batch of compose commands of this id runs, or ended a short while ago.
+    #[serde(rename = "compose.unknown_batch")]
+    UnknownBatch {
+        /// The id asked for.
+        batch: u64,
+    },
     /// A sign-in by password of an email unknown to `hangar.yml`, or with a wrong password.
     #[serde(rename = "auth.invalid_credentials")]
     InvalidCredentials,
@@ -472,7 +496,11 @@ impl ErrorCode {
             Self::AppCreateFailed { .. } => "editor.create_failed",
             Self::DockerUnavailable => "docker.unavailable",
             Self::UnknownProject { .. } => "docker.unknown_project",
+            Self::InvalidProject { .. } => "docker.invalid_project",
             Self::UnknownContainer { .. } => "docker.unknown_container",
+            Self::NoApps => "compose.no_apps",
+            Self::ComposeFailed { .. } => "compose.failed",
+            Self::UnknownBatch { .. } => "compose.unknown_batch",
             Self::InvalidCredentials => "auth.invalid_credentials",
             Self::TooManySignIns => "auth.too_many_sign_ins",
             Self::SessionExpired => "auth.session_expired",
@@ -491,6 +519,7 @@ impl ErrorCode {
             | Self::NoSuchFile { .. }
             | Self::UnknownProject { .. }
             | Self::UnknownContainer { .. }
+            | Self::UnknownBatch { .. }
             | Self::NoOidcProvider => StatusCode::NOT_FOUND,
             Self::InvalidCredentials
             | Self::SessionExpired
@@ -522,7 +551,9 @@ impl ErrorCode {
             | Self::BinaryFile { .. }
             | Self::NotUtf8Text { .. }
             | Self::InvalidFile { .. }
-            | Self::ComposeRejected { .. } => StatusCode::BAD_REQUEST,
+            | Self::ComposeRejected { .. }
+            | Self::InvalidProject { .. }
+            | Self::NoApps => StatusCode::BAD_REQUEST,
             Self::AppsUnreadable
             | Self::InstallFailed { .. }
             | Self::UninstallFailed { .. }
@@ -537,7 +568,8 @@ impl ErrorCode {
             | Self::FilesUnreadable { .. }
             | Self::FileReadFailed { .. }
             | Self::FileSaveFailed { .. }
-            | Self::AppCreateFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            | Self::AppCreateFailed { .. }
+            | Self::ComposeFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -613,6 +645,14 @@ impl ErrorCode {
             }
             Self::DockerUnavailable => Self::hinted("the Docker daemon could not be read"),
             Self::UnknownProject { project } => format!("no app {project} is installed"),
+            Self::InvalidProject { project } => format!(
+                "{project} is not a compose project name: lowercase letters, digits, `_` and `-`, starting with a letter or a digit"
+            ),
+            Self::NoApps => "a compose command needs at least one app".to_owned(),
+            Self::ComposeFailed { app, command } => {
+                Self::hinted(&format!("{command} failed on {app}"))
+            }
+            Self::UnknownBatch { batch } => format!("no compose batch {batch} is kept"),
             Self::UnknownContainer { project, container } => {
                 format!("the app {project} has no container {container}")
             }
@@ -757,6 +797,15 @@ mod tests {
             ErrorCode::AppCreateFailed { app: app() },
             ErrorCode::DockerUnavailable,
             ErrorCode::UnknownProject { project: app() },
+            ErrorCode::InvalidProject {
+                project: "llama.cpp".to_owned(),
+            },
+            ErrorCode::NoApps,
+            ErrorCode::ComposeFailed {
+                app: app(),
+                command: "docker compose up -d".to_owned(),
+            },
+            ErrorCode::UnknownBatch { batch: 7 },
             ErrorCode::UnknownContainer {
                 project: app(),
                 container: "0123456789ab".to_owned(),
