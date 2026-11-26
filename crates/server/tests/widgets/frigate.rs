@@ -1,6 +1,7 @@
 //! `frigate-events`, on a fake Frigate.
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use axum::Json;
 use axum::body::Body;
@@ -270,4 +271,43 @@ async fn answers_404_for_an_image_the_service_has_not_or_that_is_none() {
             "{id}"
         );
     }
+}
+
+#[tokio::test]
+async fn sends_the_new_key_once_env_global_changes_it() {
+    let keys = Arc::new(Mutex::new(Vec::new()));
+    let router = axum::Router::new()
+        .route(
+            "/api/events/{id}/thumbnail.jpg",
+            get(
+                |State(keys): State<Arc<Mutex<Vec<String>>>>, headers: HeaderMap| async move {
+                    let key = headers
+                        .get("x-api-key")
+                        .and_then(|key| key.to_str().ok())
+                        .unwrap_or_default()
+                        .to_owned();
+
+                    keys.lock().expect("no test panics with the lock").push(key);
+
+                    ([(CONTENT_TYPE, "image/jpeg")], "jpeg bytes")
+                },
+            ),
+        )
+        .with_state(Arc::clone(&keys));
+    let url = quoll::test::spawn(router).await;
+    let fixture = fixture(&url);
+    let server = fixture.serve().await;
+    let key = server.key("frigate-events").await;
+    let thumbnail = format!("/api/widgets/{key}/image/1700000000.5-abc");
+
+    assert_eq!(server.get(&thumbnail).await.0, StatusCode::OK);
+    assert_eq!(server.get(&thumbnail).await.0, StatusCode::OK);
+
+    fixture.env("FRIGATE_NVR_API_KEY=rotated-key\n");
+
+    assert_eq!(server.get(&thumbnail).await.0, StatusCode::OK);
+    assert_eq!(
+        *keys.lock().expect("no test panics with the lock"),
+        [KEY, KEY, "rotated-key"]
+    );
 }

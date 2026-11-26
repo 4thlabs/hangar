@@ -4,6 +4,8 @@ import { WidgetError } from "./widget-states.tsx";
 
 type WidgetBoundaryProps = {
   look: WidgetLook;
+  /** What the card shows: when it changes, a card that threw renders again, as when its data is read again. */
+  resetKey?: unknown;
   children: ReactNode;
 };
 
@@ -20,6 +22,12 @@ export class WidgetBoundary extends Component<WidgetBoundaryProps, WidgetBoundar
 
   static getDerivedStateFromError(): WidgetBoundaryState {
     return { hasFailed: true };
+  }
+
+  override componentDidUpdate(previous: WidgetBoundaryProps) {
+    if (this.state.hasFailed && previous.resetKey !== this.props.resetKey) {
+      this.setState({ hasFailed: false });
+    }
   }
 
   override render() {
