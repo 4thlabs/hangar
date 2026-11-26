@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { SettingsIcon } from "lucide-react";
+import { UserMenu } from "#modules/common/components/user-menu.tsx";
 import { useCurrentPath } from "#modules/common/hooks/use-current-path.ts";
 import { Navigations } from "#modules/common/navigations.ts";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -82,8 +83,8 @@ function SettingsButton() {
 }
 
 /**
- * The bar at the top of every page. Its search, spotlight, terminal, notifications and user menu come with the
- * issues of their areas, in the places the Waku version gives them.
+ * The bar at the top of every page. Its search, spotlight, terminal and notifications come with the issues of their
+ * areas, in the places the Waku version gives them.
  */
 export function AppNavbar() {
   return (
@@ -100,6 +101,7 @@ export function AppNavbar() {
 
         <div className="col-start-3 flex items-center justify-end gap-2">
           <SettingsButton />
+          <UserMenu />
         </div>
       </div>
     </header>
