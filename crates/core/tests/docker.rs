@@ -448,7 +448,7 @@ async fn gives_the_digests_of_the_image_a_container_runs_and_the_usage_of_the_ho
     let containers = docker.containers().await.expect("the containers");
     let digests = docker.image_digests().await.expect("the digests");
     let overview = docker.overview().await.expect("the overview");
-    let running = containers.running_images([project.name.as_str()], &digests);
+    let running = containers.running_images([(project.name.as_str(), &[][..])], &digests);
 
     assert_eq!(running.len(), 1);
     assert_eq!(running[0].image, format!("{IMAGE}:{TAG}"));

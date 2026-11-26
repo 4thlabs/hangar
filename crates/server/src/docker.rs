@@ -197,27 +197,19 @@ impl DockerState {
         registry.outdated(&Self::registry_images(containers, apps, &digests))
     }
 
-    /// The images that the containers of the installed `apps` run, of `digests`, those of a service that its
-    /// `compose.yml` builds counted built on the host, whatever their registry digests say: on containerd's store, an
-    /// image built on the host has one, as a pulled image does.
+    /// The images that the containers of the installed `apps` run, of `digests`, each app given with the services its
+    /// `compose.yml` builds.
     pub(crate) fn registry_images(
         containers: &ComposeContainers,
         apps: &[StoreApp],
         digests: &ImageDigests,
     ) -> Vec<RunningImage> {
-        let installed = apps.iter().filter(|app| app.installed);
-        let mut running =
-            containers.running_images(installed.clone().map(|app| app.id.as_str()), digests);
+        let installed = apps
+            .iter()
+            .filter(|app| app.installed)
+            .map(|app| (app.id.as_str(), app.built_services.as_slice()));
 
-        for image in &mut running {
-            let is_built = installed
-                .clone()
-                .any(|app| app.id == image.project && app.built_services.contains(&image.service));
-
-            image.is_built_here |= is_built;
-        }
-
-        running
+        containers.running_images(installed, digests)
     }
 
     /// What the registries served at the image checks, whatever a panic left it: it is replaced whole.

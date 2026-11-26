@@ -245,19 +245,20 @@ its earlier west of it. A clock set back once a cron fired does not fire it twic
 
 The image check lists the containers of the installed apps, each with its image as it was created with it, from its
 inspection: the daemon's list names the image by its id once its reference names a newer one, as after another app's
-pull. Then it asks the registry for the digest it serves for each reference they run, once each, through the daemon so
-that its credentials apply (`GET /distribution/<ref>/json`). The calls are `registryThrottling` apart, and each
-registry has 10 s to answer. A registry that does not answer, or refuses a private image, is left out. The first 429,
-or a `toomanyrequests` the daemon passes on, stops the check: the references no check answered are asked first next
-time, then those answered the longest ago. A reference pinned to a digest is not asked, nor an image built on the host:
-one of a service whose `compose.yml` has a `build`, and, on Docker's classic image store, one with no registry digest.
-On containerd's, Docker 29's default, an image built on the host has a registry digest as a pulled one does, and only
-its `build` tells it. The answers are kept in memory, each until a check answers its reference again: one a check did
-not answer keeps its last answer. An app has an update when one of its containers runs an image whose registry digests,
-or its id, as on containerd's store, are not the digest the registry serves. The server compares the image the
-container was created from, never its tag, as a pull moves the tag before the container is recreated. The Docker pages show it as `updateAvailable`, and
-are told on `GET /api/docker/changes` when it changes. The check notifies `updatesAvailable` when apps have an update,
-in place of its notification of before.
+pull. Then it asks the registry for the digest it serves for each reference they run, once each, through the daemon
+so that its credentials apply (`GET /distribution/<ref>/json`). The calls are `registryThrottling` apart, and each
+registry has 10 s to answer. A registry that does not answer, or refuses a private image, as when its credentials
+were revoked, says nothing of the reference: it has no digest until a check gets one. The first 429, or a
+`toomanyrequests` the daemon passes on, stops the check: the references it did not reach keep their last digest, and
+are asked first next time, those no check answered before the others, then those answered the longest ago. A
+reference pinned to a digest is not asked, nor an image built on the host: one of a service whose `compose.yml` has a
+`build`, and, on Docker's classic image store, one with no registry digest. On containerd's, Docker 29's default,
+which the daemon's info names, an image built on the host has a registry digest as a pulled one does, and only its
+`build` tells it. The answers are kept in memory. An app has an update when one of its containers runs an image whose
+registry digests, or its id, as on containerd's store, are not the digest the registry serves. The server compares
+the image the container was created from, never its tag, as a pull moves the tag before the container is recreated.
+The Docker pages show it as `updateAvailable`, and are told on `GET /api/docker/changes` when it changes. The check
+notifies `updatesAvailable` when apps have an update, in place of its notification of before.
 
 The update of the apps checks the images again, then runs `docker compose up -d --pull always` on each app the
 registry has moved past. It runs them one at a time, in the order of `hangar.yml`, carries on after one that fails, and
@@ -265,14 +266,13 @@ notifies `autoUpdate` once for them all, naming those that failed. It holds its 
 install, an uninstall or a batch of one of them is refused while it runs. It fails with `compose.app_busy`, and updates
 no app, when another command holds one of them or a sync of the store runs.
 
-**Settings → Jobs** lists the last 50 runs, the newest first, from `GET /api/jobs`, their ids counted from the time
-the server started, in milliseconds, so that a page opened before a restart names no run of the new server: the job,
-its queue and its state,
-when it was asked for and when it ended, and why it failed, as a code. **Run again** asks for the job of a run again,
-`POST /api/jobs/<id>/run`. **Cancel**, `POST /api/jobs/<id>/cancel`, takes a run that waits out of its queue, and
-tells one that runs to stop: the image check stops at once, the update of the apps once the app it updates is updated.
-The tab reads the runs again each second while one waits or runs. A restart forgets the runs and the registries'
-answers, and the check at the start brings the answers back.
+**Settings → Jobs** lists the last 50 runs, the newest first, from `GET /api/jobs`: the job, its queue and its state,
+when it was asked for and when it ended, and why it failed, as a code. The ids count from the time the server
+started, in milliseconds, so that a page opened before a restart names no run of the new server. **Run again** asks
+for the job of a run again, `POST /api/jobs/<id>/run`. **Cancel**, `POST /api/jobs/<id>/cancel`, takes a run that
+waits out of its queue, and tells one that runs to stop: the image check stops at once, the update of the apps once
+the app it updates is updated. The tab reads the runs again each second while one waits or runs. A restart forgets
+the runs and the registries' answers, and the check at the start brings the answers back.
 
 ## Database
 

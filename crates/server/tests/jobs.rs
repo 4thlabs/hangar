@@ -45,6 +45,7 @@ async fn daemon() -> String {
             get(|| async { Json(json!({})) }),
         )
         .route("/v1.44/images/json", get(images))
+        .route("/v1.44/info", get(|| async { Json(json!({})) }))
         .route("/v1.44/distribution/{reference}/json", get(distribution))
         .route("/v1.44/events", get(futures::future::pending::<()>));
     let url = quoll::test::spawn(router).await;

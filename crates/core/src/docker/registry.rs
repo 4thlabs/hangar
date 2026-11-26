@@ -36,6 +36,9 @@ const TOO_MANY_REQUESTS: u16 = 429;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RegistryDigests {
     by_reference: BTreeMap<String, Served>,
+    /// The references a check asked and got no digest for: the registry could not be reached, did not answer in
+    /// time, or refused them, as an image of revoked credentials. Those a rate limit left out are not among them.
+    unanswered: BTreeSet<String>,
     /// The number of the last check, from 1; 0 for the answers of one check alone.
     checks: u64,
 }
@@ -111,19 +114,25 @@ impl RegistryDigests {
     }
 
     /// These digests after a check whose answers are `answered`, of the references `running` names: the check's
-    /// answer for a reference it answered, the last one for a reference it did not, as when a rate limit stopped it,
-    /// and none for a reference no container runs any more.
+    /// digest for a reference it answered; none for one it asked and got none for, as its registry no longer says
+    /// what it serves; the last one for a reference it did not reach, as when a rate limit stopped it; and none for a
+    /// reference no container runs any more.
     pub fn refreshed(&self, answered: Self, running: &[RunningImage]) -> Self {
         let check = self.checks + 1;
-        let mut answered = answered.by_reference;
+        let Self {
+            by_reference: mut served_now,
+            unanswered,
+            ..
+        } = answered;
         let by_reference = Self::checked_references(running)
             .into_iter()
             .filter_map(|reference| {
-                let served = match answered.remove(reference) {
+                let served = match served_now.remove(reference) {
                     Some(served) => Served {
                         digest: served.digest,
                         check,
                     },
+                    None if unanswered.contains(reference) => return None,
                     None => self.by_reference.get(reference)?.clone(),
                 };
 
@@ -133,6 +142,7 @@ impl RegistryDigests {
 
         Self {
             by_reference,
+            unanswered: BTreeSet::new(),
             checks: check,
         }
     }
@@ -174,6 +184,7 @@ impl FromIterator<(String, String)> for RegistryDigests {
                 .into_iter()
                 .map(|(reference, digest)| (reference, Served { digest, check: 0 }))
                 .collect(),
+            unanswered: BTreeSet::new(),
             checks: 0,
         }
     }
@@ -203,6 +214,7 @@ impl Docker {
     ) -> RegistryDigests {
         let references = RegistryDigests::checked_references(running);
         let mut answered = Vec::new();
+        let mut unanswered = BTreeSet::new();
 
         for (index, reference) in references.iter().enumerate() {
             if index > 0 {
@@ -211,7 +223,9 @@ impl Docker {
 
             match self.registry_digest(reference, deadline).await {
                 Answer::Digest(digest) => answered.push(((*reference).to_owned(), digest)),
-                Answer::Unknown => {}
+                Answer::Unknown => {
+                    unanswered.insert((*reference).to_owned());
+                }
                 Answer::RateLimited => {
                     tracing::warn!(
                         reference,
@@ -226,7 +240,10 @@ impl Docker {
             }
         }
 
-        answered.into_iter().collect()
+        RegistryDigests {
+            unanswered,
+            ..answered.into_iter().collect()
+        }
     }
 
     /// What the registry of `reference` answers within `deadline`.
@@ -536,6 +553,10 @@ mod tests {
 
         assert_eq!(daemon.asked(), ["alpha:1", "beta:1"]);
         assert_eq!(served, digests(&[("alpha:1", "sha256:alpha")]));
+        assert!(
+            served.unanswered.is_empty(),
+            "a rate limit says nothing of an image"
+        );
     }
 
     #[tokio::test]
@@ -583,7 +604,11 @@ mod tests {
             .await;
 
         assert_eq!(daemon.asked(), ["alpha:1", "beta:1", "gamma:1"]);
-        assert_eq!(served, digests(&[("gamma:1", "sha256:gamma")]));
+        assert!(served.has_same_digests(&digests(&[("gamma:1", "sha256:gamma")])));
+        assert_eq!(
+            served.unanswered,
+            BTreeSet::from(["alpha:1".to_owned(), "beta:1".to_owned()])
+        );
     }
 
     #[tokio::test]
@@ -654,7 +679,7 @@ mod tests {
     }
 
     #[test]
-    fn keeps_the_last_answer_of_a_reference_a_check_did_not_answer() {
+    fn keeps_the_last_answer_of_a_reference_a_check_did_not_reach_alone() {
         let running = [
             running("alpha", "alpha:1", &["alpha@sha256:old"]),
             running("beta", "beta:1", &["beta@sha256:old"]),
@@ -669,18 +694,22 @@ mod tests {
             &running,
         );
 
-        // A rate limit stopped the second check after `gamma`, asked first as no check had answered it.
-        let second = first.refreshed(digests(&[("gamma:1", "sha256:g2")]), &running);
+        // The second check asked `gamma` first, as no check had answered it, then `alpha`, whose registry answered
+        // nothing, then a rate limit stopped it before `beta`.
+        let second_answers = RegistryDigests {
+            unanswered: BTreeSet::from(["alpha:1".to_owned()]),
+            ..digests(&[("gamma:1", "sha256:g2")])
+        };
+        let second = first.refreshed(second_answers, &running);
 
         assert_eq!(first.get("gone:1"), None, "no container runs it");
         assert!(second.has_same_digests(&digests(&[
-            ("alpha:1", "sha256:a1"),
             ("beta:1", "sha256:b1"),
             ("gamma:1", "sha256:g2"),
         ])));
         assert_eq!(
             second.outdated(&running),
-            BTreeSet::from(["alpha".to_owned(), "beta".to_owned(), "gamma".to_owned()])
+            BTreeSet::from(["beta".to_owned(), "gamma".to_owned()])
         );
     }
 
