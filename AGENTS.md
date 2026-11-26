@@ -128,12 +128,16 @@ web/              # the server's page: a Vite SPA on the TanStack Query hooks or
 `web/` is a package of its own, beside Waku's: the switch removes the root's without touching it. It follows the
 TypeScript conventions above, with the same import mapping and the root's Prettier and eslint (`npm run lint` covers
 `web/src`), and takes from `src/` what a page it moves needs, copied: the Waku version keeps its own until the switch.
-Its `src/libs/api/generated.ts` and `web/openapi.json` are written by `cargo quoll gen`, never committed.
+Its `src/libs/api/generated.ts` and `web/openapi.json` are written by `cargo quoll gen`, never committed. Its design
+is [ADR 0002](docs/adr/0002-web-design.md), accepted on 2026-11-26, and the `hangar-web` skill gives its rules in short.
+Where the ADR and the conventions above differ, `web/` follows the ADR: no class made only of statics (#195 rewrites
+the Classes section), and its words in a plain `messages.ts` per module.
 
 The page is English only, decided with the maintainer on 2026-11-24: the Translations section above is the Waku
-version's alone, until the switch. `web/` has no catalog, no translation helper, no language cookie or switch; its
-text is written in English in its components, and `Intl` formats dates and numbers in English. A page moved from
-`src/` leaves its `messages.ts` behind and takes the English words.
+version's alone, until the switch. `web/` has no translation helper, no `t()`, no language cookie or switch. Its words
+are written in English, in each module's `messages.ts`, a plain object (ADR 0002, decision 5, which partly reverses
+the 2026-11-24 line "in its components"), and `Intl` formats dates and numbers in English. A page moved from `src/`
+takes the English words of its `messages.ts`, without the French.
 
 The Rust server runs its jobs in its own process, in memory (`crates/server/src/jobs.rs`): a scheduler, its crons
 read by the core's `CronSchedule`, and queues of one job at a time. The Sidequest worker and its composition root,
@@ -197,3 +201,40 @@ Waku version's `npm run dev`. The Docker image builds the binary in its `cli` st
 `/usr/local/bin/hangar`; nothing else of the workspace goes into the image. CI's `cli` job builds it static for the
 host, x86_64 and aarch64 musl, and a `v*` tag attaches it to its release. A build given `HANGAR_VERSION`, the tag,
 prints it for `--version`, its `v` left out; any other prints the workspace's version with `-dev`.
+
+## Skills
+
+The agents' skills are in `.claude/skills/`, a link to `.agents/skills/`, so that every worktree has them. For
+`web/`, load them before writing or reviewing its code:
+
+- **`hangar-web`**, this project's: ADR 0002's rules in short, with one example per layer. It comes first.
+- **`react-query`**: TkDodo's guides to TanStack Query, vendored from `umxr/react-query-skills`.
+- **`vercel-react-best-practices`** and **`vercel-composition-patterns`**: React's performance rules and its
+  composition patterns, vendored from `vercel-labs/agent-skills`.
+- **TanStack Router's own skills**, which ship in its npm packages and are read with TanStack Intent, a dev dependency
+  of `web/` pinned to an exact version. `intent.skills` in `web/package.json` lists the packages it shows. From
+  `web/`, after `npm ci`:
+
+  ```bash
+  npm exec --no -- intent list
+  npm exec --no -- intent load @tanstack/router-core#router-core/data-loading
+  ```
+
+  TanStack Query 5.108 ships none: its skill is `react-query`.
+
+Each vendored folder is the upstream folder byte for byte, at the commit its `SOURCE.md` gives, with its license. To
+update one, copy the folder again from a newer commit and change its `SOURCE.md`; never edit it in place. The
+coding-team plugin's `lang-typescript` stays the language's skill, and nothing of it is copied here.
+
+What of the third-party skills does not apply here:
+
+- **React's compiler is on.** The rules of manual memoization are not followed: `rerender-memo`,
+  `rerender-memo-with-default-value`, `rerender-simple-expression-in-memo`, and any advice to add `useMemo`,
+  `useCallback` or `memo`. The compiler memoizes, and a hand-written one only adds noise.
+- **The page is an SPA, with no RSC and no SSR.** The `server-*` rules, `async-api-routes`, the `rendering-hydration-*`
+  rules, and everything about Next.js, Remix or server components do not apply. `client-swr-dedup` does not either:
+  the page's cache is TanStack Query.
+- **Where a third-party skill and ADR 0002 disagree, the ADR wins.** For example: no global toast on every failure,
+  against `error-global-callbacks`; a form submits with `mutateAsync` inside TanStack Form's `onSubmit`, against
+  `mutation-prefer-mutate`; optimistic updates only by the ADR's rule (decision 12), narrower than
+  `mutation-optimistic-when`.
