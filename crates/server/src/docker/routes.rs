@@ -8,6 +8,7 @@ use hangar_api::{
 };
 use hangar_core::DockerError;
 use quoll::{Error, Events, Response, Result};
+use std::error::Error as StdError;
 use tokio::sync::broadcast::error::RecvError;
 
 use super::DockerState;
@@ -17,11 +18,20 @@ use crate::auth::SignedIn;
 use crate::failure::Failure;
 
 impl DockerState {
-    /// What the store knows of the installed apps.
+    /// What the store knows of the installed apps, from one read of `hangar.yml`.
     async fn installed(&self) -> Result<Installed> {
-        let (apps, config) = tokio::join!(self.store.installed_apps(), self.store.config());
-        let apps = apps.map_err(|error| Failure::store(ErrorCode::AppsUnreadable, &error))?;
-        let config = config.map_err(|error| Failure::store(ErrorCode::ConfigUnreadable, &error))?;
+        let config = self
+            .store
+            .config()
+            .await
+            .map_err(|error| Failure::store(ErrorCode::ConfigUnreadable, &error))?;
+        let mut apps = self
+            .store
+            .apps_with(&config)
+            .await
+            .map_err(|error| Failure::store(ErrorCode::AppsUnreadable, &error))?;
+
+        apps.retain(|app| app.installed);
 
         Ok(Installed {
             apps,
@@ -29,8 +39,20 @@ impl DockerState {
         })
     }
 
+    /// The 404 of `project` when it is not an installed app.
+    async fn require_installed(&self, project: &str) -> Result<()> {
+        if self.installed().await?.ids().any(|id| id == project) {
+            return Ok(());
+        }
+
+        Err(ErrorCode::UnknownProject {
+            project: project.to_owned(),
+        }
+        .into())
+    }
+
     /// The answer of a failed read of the daemon, once logged whole.
-    fn unavailable(error: &DockerError) -> Error {
+    fn unavailable(error: &dyn StdError) -> Error {
         Failure::logged(ErrorCode::DockerUnavailable, error)
     }
 
@@ -65,9 +87,12 @@ impl DockerState {
         Ok(installed.detail(detail))
     }
 
-    /// The followed log of the container `container` of `project`, ended by [`LogEvent::End`] once the container
-    /// stops, or by a problem when the daemon fails.
+    /// The followed log of the container `container` of the installed app `project`, ended by [`LogEvent::End`] once
+    /// the container stops, or by a problem when the daemon fails. The app is checked first: another compose project
+    /// of the host is none of Hangar's.
     async fn logs(&self, project: &str, container: &str) -> Result<Events<LogEvent>> {
+        self.require_installed(project).await?;
+
         let lines = self
             .docker
             .logs(project, container)

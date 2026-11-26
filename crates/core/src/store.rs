@@ -227,6 +227,17 @@ impl<R: CommandRunner> Store<R> {
         }
 
         let config = self.config().await?;
+
+        self.apps_with(&config).await
+    }
+
+    /// The apps of [`apps`](Self::apps), for a caller that has read `config`, `hangar.yml`, already: its shared files
+    /// are no apps. None before the store is cloned, as it has no `store/` yet.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] when `store/` or `app-installed/` cannot be listed.
+    pub async fn apps_with(&self, config: &Config) -> Result<Vec<StoreApp>, StoreError> {
         // A clone without `app-installed/` yet, made by the Waku version say, has no app installed.
         let installed = match Self::names(self.data_dir.installed()).await {
             Ok(names) => names,

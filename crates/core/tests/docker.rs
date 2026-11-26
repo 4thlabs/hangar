@@ -459,7 +459,10 @@ async fn gives_the_digests_of_the_image_a_container_runs_and_the_usage_of_the_ho
             .any(|digest| digest.starts_with(&format!("{IMAGE}@sha256:"))),
         "a pulled image has its registry's digest: {running:?}"
     );
-    assert!(!overview.version.is_empty());
+    assert!(
+        !overview.version.is_empty() && overview.memory > 0,
+        "{overview:?}"
+    );
     assert!(overview.containers.running >= 1, "{overview:?}");
     assert!(
         overview.images.total >= 1 && overview.images.size > 0,

@@ -208,6 +208,7 @@ impl FakeDaemon {
             "Containers": 3,
             "ContainersRunning": 2,
             "ContainersStopped": 1,
+            "MemTotal": 16_000,
         }))
     }
 
@@ -553,7 +554,10 @@ async fn gives_the_usage_of_the_whole_host() -> quoll::Result<()> {
 
     let overview = server.api().docker().overview().await?;
 
-    assert_eq!(overview.version, "29.0.1");
+    assert_eq!(
+        (overview.version.as_str(), overview.memory),
+        ("29.0.1", 16_000)
+    );
     assert_eq!(
         (overview.containers.total, overview.containers.running),
         (3, 2)
@@ -589,4 +593,46 @@ async fn answers_503_with_its_code_when_the_daemon_does_not_answer() {
             "{path}"
         );
     }
+}
+
+#[tokio::test]
+async fn answers_404_for_the_log_of_a_container_of_an_app_not_installed() {
+    let fixture = Fixture::new();
+    let (_, docker_host, _events) = FakeDaemon::serve().await;
+    let (server, _) = fixture.serve(docker(&docker_host)).await;
+
+    let (status, problem) = server
+        .get(&format!(
+            "/api/docker/apps/beta/containers/{}/logs",
+            beta_id()
+        ))
+        .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(problem["detail"], "no app beta is installed");
+}
+
+#[tokio::test]
+async fn tells_the_pages_that_an_app_was_installed() -> quoll::Result<()> {
+    let fixture = Fixture::new();
+    let (_, docker_host, _events) = FakeDaemon::serve().await;
+    let (server, _) = fixture.serve(docker(&docker_host)).await;
+    let api = server.api();
+    let mut changes = api.docker().changes().await?;
+
+    let installed = reqwest::Client::new()
+        .post(format!("{}/api/store/apps/beta/install", server.url))
+        .header(COOKIE, &server.cookie)
+        .header(ORIGIN, URL)
+        .send()
+        .await
+        .expect("the server answers");
+
+    assert_eq!(installed.status(), StatusCode::OK);
+    assert_eq!(
+        next("the change", &mut changes).await?,
+        DockerChange::Containers
+    );
+    assert_eq!(api.docker().projects().await?.len(), 2);
+    Ok(())
 }

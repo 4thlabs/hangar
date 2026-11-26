@@ -8,6 +8,8 @@ use super::{Docker, DockerError};
 pub struct DockerOverview {
     /// The daemon's version, as `29.0.1`.
     pub version: String,
+    /// The memory of the host, in bytes: what a container with no limit of its own may take.
+    pub memory: u64,
     /// Its containers.
     pub containers: ContainerCounts,
     /// Its images.
@@ -69,6 +71,7 @@ impl DockerOverview {
 
         Self {
             version: info.server_version,
+            memory: info.mem_total,
             containers: ContainerCounts {
                 total: info.containers,
                 running: info.containers_running,
@@ -124,6 +127,7 @@ mod tests {
             "ContainersRunning": 3,
             "ContainersPaused": 1,
             "ContainersStopped": 1,
+            "MemTotal": 16_000,
         }))
         .expect("an info");
         let usage: DiskUsage = serde_json::from_value(serde_json::json!({
@@ -142,6 +146,7 @@ mod tests {
             DockerOverview::new(info, usage),
             DockerOverview {
                 version: "29.0.1".to_owned(),
+                memory: 16_000,
                 containers: ContainerCounts {
                     total: 5,
                     running: 3,

@@ -1,7 +1,8 @@
 //! A value read from the daemon, kept and reloaded behind its readers: fresh for a while, then served stale while it
-//! reloads, then awaited.
+//! reloads, then awaited; after a failed load, not read again for a while that grows.
 
 use std::fmt;
+use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -12,8 +13,22 @@ use tokio::time::Instant;
 
 use crate::failure::Failure;
 
-/// What a load gives: the value, or why the daemon did not give it, shared by every reader that waited for it.
-pub(crate) type Loaded<T> = Result<Arc<T>, Arc<DockerError>>;
+/// What a load gives: the value, or why it did not, shared by every reader that waited for it.
+pub(crate) type Loaded<T> = Result<Arc<T>, Arc<LoadError>>;
+
+/// Why a load gave no value.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum LoadError {
+    /// The daemon did not answer, or answered with an error.
+    #[error(transparent)]
+    Docker(#[from] DockerError),
+    /// The load panicked: a bug, which the next load may not meet.
+    #[error("the read of the {value} panicked")]
+    Panicked {
+        /// What was read.
+        value: &'static str,
+    },
+}
 
 /// A load in flight, which every reader that asks meanwhile shares.
 type Loading<T> = Shared<BoxFuture<'static, Loaded<T>>>;
@@ -31,8 +46,10 @@ pub(crate) struct Policy {
 }
 
 /// A value of the daemon, kept: its reads share one load, a failed load is never kept, and a failed reload keeps the
-/// last good value, served until it is too old. The daemon's events [`refresh`](Self::refresh) it; its policy is the
-/// net for a change they missed, as while they are followed again.
+/// last good value, served until it is too old. After a failure, the daemon is not asked again before a wait, from 2
+/// seconds, doubled by each failure up to a minute: meanwhile a read gets the last value while it may be served, the
+/// error otherwise. The daemon's events [`refresh`](Self::refresh) it, whatever the wait, as an event means the daemon
+/// answers; its policy is the net for a change they missed, as while they are followed again.
 pub(crate) struct Cached<T> {
     /// What the value is, in the log.
     name: &'static str,
@@ -50,9 +67,25 @@ struct State<T> {
     loading: Option<Loading<T>>,
     /// Set by a refresh while a load runs, which may have read the daemon before the change: one more load follows it.
     is_queued: bool,
+    /// The last load, when it failed.
+    failure: Option<LoadFailure>,
+}
+
+/// A load that failed, and when the next may start.
+struct LoadFailure {
+    error: Arc<LoadError>,
+    /// How long the daemon is left alone after it.
+    wait: Duration,
+    retry_at: Instant,
 }
 
 impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
+    /// The wait after a first failure.
+    const FIRST_WAIT: Duration = Duration::from_secs(2);
+
+    /// The longest wait, after many failures.
+    const LONGEST_WAIT: Duration = Duration::from_secs(60);
+
     /// A value called `name` in the log, kept by `policy`, read by `load`; `on_change` is called once a reload changes
     /// it.
     pub(crate) fn new<L, F>(
@@ -74,19 +107,27 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
                 value: None,
                 loading: None,
                 is_queued: false,
+                failure: None,
             }),
         })
     }
 
     /// The value: as kept while fresh, as kept with a reload behind it while stale, and once loaded when there is none
-    /// or it is too old.
+    /// or it is too old. While the wait after a failure runs, no load starts: the value is served while it may be, and
+    /// the failure otherwise.
     ///
     /// # Errors
     ///
-    /// The error of the load awaited, when one was.
+    /// The error of the load awaited, when one was, or of the last load, while its wait runs.
     pub(crate) async fn get(self: &Arc<Self>) -> Loaded<T> {
         let loading = {
             let mut state = self.lock();
+            let waiting = match &state.failure {
+                Some(failure) if state.loading.is_none() && Instant::now() < failure.retry_at => {
+                    Some(Arc::clone(&failure.error))
+                }
+                _ => None,
+            };
 
             if let Some((value, loaded_at)) = &state.value {
                 let age = loaded_at.elapsed();
@@ -97,10 +138,16 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
                 }
 
                 if age < self.policy.fresh + self.policy.stale {
-                    self.start(&mut state);
+                    if waiting.is_none() {
+                        self.start(&mut state);
+                    }
 
                     return Ok(value);
                 }
+            }
+
+            if let Some(error) = waiting {
+                return Err(error);
             }
 
             self.loading(&mut state)
@@ -138,9 +185,16 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
         }
 
         let this = Arc::clone(self);
-        let load = (self.load)();
         let loading = async move {
-            let loaded = load.await.map(Arc::new).map_err(Arc::new);
+            // A load that panics fails as any other, rather than leave its shared future to panic every later read.
+            let loaded = match AssertUnwindSafe(async { (this.load)().await })
+                .catch_unwind()
+                .await
+            {
+                Ok(Ok(value)) => Ok(Arc::new(value)),
+                Ok(Err(error)) => Err(Arc::new(LoadError::Docker(error))),
+                Err(_) => Err(Arc::new(LoadError::Panicked { value: this.name })),
+            };
 
             this.finish(&loaded);
 
@@ -155,7 +209,7 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
         loading
     }
 
-    /// Keeps what a load gave, and starts the one a refresh queued meanwhile.
+    /// Keeps what a load gave, or the failure and the wait it starts, and starts the load a refresh queued meanwhile.
     fn finish(self: &Arc<Self>, loaded: &Loaded<T>) {
         let has_changed = {
             let mut state = self.lock();
@@ -167,17 +221,29 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
                         .is_some_and(|(previous, _)| previous != value);
 
                     state.value = Some((Arc::clone(value), Instant::now()));
+                    state.failure = None;
 
                     has_changed
                 }
                 Err(error) => {
+                    let wait = state.failure.as_ref().map_or(Self::FIRST_WAIT, |failure| {
+                        (failure.wait * 2).min(Self::LONGEST_WAIT)
+                    });
+
                     if state.value.is_some() {
                         tracing::warn!(
                             value = self.name,
                             error = %Failure::chain(&**error),
+                            ?wait,
                             "could not reload a value of the Docker daemon: the last one is kept"
                         );
                     }
+
+                    state.failure = Some(LoadFailure {
+                        error: Arc::clone(error),
+                        wait,
+                        retry_at: Instant::now() + wait,
+                    });
 
                     false
                 }
@@ -237,20 +303,24 @@ mod tests {
 
     use super::*;
 
+    /// What a load of the test's daemon does.
+    enum Answer {
+        Gives(u32),
+        Fails,
+        Panics,
+    }
+
     /// A daemon whose answers the test writes, each load given its own once the gate lets it through.
     struct Source {
         loads: AtomicUsize,
         changes: AtomicUsize,
-        answers: Mutex<VecDeque<Result<u32, DockerError>>>,
+        answers: Mutex<VecDeque<Answer>>,
         gate: Semaphore,
     }
 
     impl Source {
         /// The source of `answers`, its gate open for `permits` loads; once they run out, a load fails.
-        fn new(
-            answers: impl IntoIterator<Item = Result<u32, DockerError>>,
-            permits: usize,
-        ) -> Arc<Self> {
+        fn new(answers: impl IntoIterator<Item = Answer>, permits: usize) -> Arc<Self> {
             Arc::new(Self {
                 loads: AtomicUsize::new(0),
                 changes: AtomicUsize::new(0),
@@ -288,7 +358,13 @@ mod tests {
                             .expect("no test panics with the answers")
                             .pop_front();
 
-                        answer.unwrap_or_else(|| Err(failure()))
+                        match answer {
+                            Some(Answer::Gives(value)) => Ok(value),
+                            Some(Answer::Panics) => panic!("the load panics, as the test asks"),
+                            Some(Answer::Fails) | None => Err(DockerError::NotFound {
+                                subject: "the daemon".to_owned(),
+                            }),
+                        }
                     }
                 },
                 move || {
@@ -306,11 +382,8 @@ mod tests {
         }
     }
 
-    fn failure() -> DockerError {
-        DockerError::NotFound {
-            subject: "the daemon".to_owned(),
-        }
-    }
+    /// Enough permits for every load of a test.
+    const OPEN: usize = 1_000;
 
     async fn value(cached: &Arc<Cached<u32>>) -> u32 {
         *cached.get().await.expect("a value")
@@ -318,7 +391,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn shares_one_load_between_its_readers_and_keeps_the_value_while_fresh() {
-        let source = Source::new([Ok(1)], usize::MAX >> 4);
+        let source = Source::new([Answer::Gives(1)], OPEN);
         let cached = source.cached();
 
         let (first, second) = tokio::join!(value(&cached), value(&cached));
@@ -331,7 +404,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn serves_a_stale_value_at_once_while_it_reloads_then_the_new_one() {
-        let source = Source::new([Ok(1), Ok(2)], 1);
+        let source = Source::new([Answer::Gives(1), Answer::Gives(2)], 1);
         let cached = source.cached();
 
         assert_eq!(value(&cached).await, 1);
@@ -349,7 +422,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn waits_for_the_reload_of_a_value_too_old_to_serve() {
-        let source = Source::new([Ok(1), Ok(2)], 2);
+        let source = Source::new([Answer::Gives(1), Answer::Gives(2)], OPEN);
         let cached = source.cached();
 
         assert_eq!(value(&cached).await, 1);
@@ -360,18 +433,26 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn keeps_no_failed_load() {
-        let source = Source::new([Err(failure()), Ok(1)], 2);
+    async fn keeps_no_failed_load_and_loads_again_once_its_wait_has_passed() {
+        let source = Source::new([Answer::Fails, Answer::Gives(1)], OPEN);
         let cached = source.cached();
 
         assert!(cached.get().await.is_err());
+        assert!(
+            cached.get().await.is_err(),
+            "the failure, while its wait runs"
+        );
+        assert_eq!(source.loads(), 1);
+
+        tokio::time::advance(Duration::from_secs(2)).await;
+
         assert_eq!(value(&cached).await, 1);
         assert_eq!(source.loads(), 2);
     }
 
     #[tokio::test(start_paused = true)]
     async fn keeps_the_last_value_when_a_reload_fails() {
-        let source = Source::new([Ok(1), Err(failure())], 3);
+        let source = Source::new([Answer::Gives(1), Answer::Fails], OPEN);
         let cached = source.cached();
 
         assert_eq!(value(&cached).await, 1);
@@ -387,8 +468,60 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
+    async fn asks_a_failing_daemon_again_after_a_wait_that_doubles() {
+        let source = Source::new(
+            [
+                Answer::Gives(1),
+                Answer::Fails,
+                Answer::Fails,
+                Answer::Gives(2),
+            ],
+            OPEN,
+        );
+        let cached = source.cached();
+        let read_after = async |wait: u64| {
+            tokio::time::advance(Duration::from_secs(wait)).await;
+
+            let value = value(&cached).await;
+
+            cached.settled().await;
+
+            (value, source.loads())
+        };
+
+        assert_eq!(read_after(0).await, (1, 1));
+        assert_eq!(read_after(11).await, (1, 2), "stale: reloaded, and failed");
+        assert_eq!(read_after(1).await, (1, 2), "within the first wait, 2 s");
+        assert_eq!(
+            read_after(1).await,
+            (1, 3),
+            "after it: reloaded, and failed again"
+        );
+        assert_eq!(read_after(3).await, (1, 3), "within the second wait, 4 s");
+        assert_eq!(read_after(1).await, (1, 4), "after it: reloaded");
+        assert_eq!(read_after(0).await, (2, 4));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn fails_a_load_that_panics_and_loads_again_after_it() {
+        let source = Source::new([Answer::Panics, Answer::Gives(1)], OPEN);
+        let cached = source.cached();
+
+        let error = cached.get().await.expect_err("the load panicked");
+
+        assert!(
+            matches!(*error, LoadError::Panicked { value: "test" }),
+            "{error}"
+        );
+
+        tokio::time::advance(Duration::from_secs(2)).await;
+
+        assert_eq!(value(&cached).await, 1);
+    }
+
+    #[tokio::test(start_paused = true)]
     async fn reloads_once_more_after_a_load_a_refresh_came_during() {
-        let source = Source::new([Ok(1), Ok(2), Ok(3)], 1);
+        let source = Source::new([Answer::Gives(1), Answer::Gives(2), Answer::Gives(3)], 1);
         let cached = source.cached();
 
         cached.refresh();
@@ -407,7 +540,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn tells_of_a_change_only_when_a_reload_gives_another_value() {
-        let source = Source::new([Ok(1), Ok(1), Ok(2)], 3);
+        let source = Source::new([Answer::Gives(1), Answer::Gives(1), Answer::Gives(2)], OPEN);
         let cached = source.cached();
 
         assert_eq!(value(&cached).await, 1);

@@ -155,6 +155,7 @@ impl Views {
     pub(crate) fn overview(overview: &hangar_core::DockerOverview) -> DockerOverview {
         let hangar_core::DockerOverview {
             version,
+            memory,
             containers,
             images,
             volumes,
@@ -162,6 +163,7 @@ impl Views {
 
         DockerOverview {
             version: version.clone(),
+            memory: *memory,
             containers: ContainerCounts {
                 total: containers.total,
                 running: containers.running,
