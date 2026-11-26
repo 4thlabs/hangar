@@ -16,7 +16,7 @@ import { describeError } from "#modules/common/error-message.ts";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
-import { StoreSyncText } from "#modules/settings/store-sync-text.ts";
+import { describeSync, syncPollMs, syncStarted } from "#modules/settings/store-sync.ts";
 
 /**
  * The store's URL, whether it is cloned, and its sync: started here, run by the server apart from the request, and
@@ -26,7 +26,7 @@ export function StoreSettingsCard() {
   const queryClient = useQueryClient();
 
   const { data: status, error } = useStoreStatus({
-    query: { refetchInterval: query => (query.state.data?.sync?.state === "running" ? StoreSyncText.PollMs : false) },
+    query: { refetchInterval: query => (query.state.data?.sync?.state === "running" ? syncPollMs : false) },
   });
 
   const sync = useStoreSync({
@@ -36,7 +36,7 @@ export function StoreSettingsCard() {
           previous ? { ...previous, sync: started } : previous,
         );
 
-        toastSuccess("Synchronization started", StoreSyncText.started(started));
+        toastSuccess("Synchronization started", syncStarted(started));
       },
       onError: failure => toastFailure("Launch failed", failure),
     },
@@ -73,7 +73,7 @@ export function StoreSettingsCard() {
               {status?.sync && (
                 <>
                   <br />
-                  <span role="status">{StoreSyncText.describe(status.sync)}</span>
+                  <span role="status">{describeSync(status.sync)}</span>
                 </>
               )}
             </FieldDescription>

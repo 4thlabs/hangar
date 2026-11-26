@@ -8,7 +8,15 @@ import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#modules/common/ui/empty.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
-import { JobText } from "#modules/settings/job-text.ts";
+import {
+  askedAgain,
+  formatRunTime,
+  isRunActive,
+  jobName,
+  jobsPollDelay,
+  jobStateLabel,
+  runFailure,
+} from "#modules/settings/job-text.ts";
 
 /**
  * The runs of the server's jobs, the last 50 it keeps in memory, the newest first: each can be run again, and one that
@@ -20,7 +28,7 @@ export function JobsSettingsCard() {
 
   const { data: runs, error } = useJobsList({
     query: {
-      refetchInterval: query => JobText.pollMs(query.state.data ?? []),
+      refetchInterval: query => jobsPollDelay(query.state.data ?? []),
     },
   });
 
@@ -29,7 +37,7 @@ export function JobsSettingsCard() {
   // Read again whatever the outcome: a run refused, as one that ended, has changed since the list was read.
   const runAgain = useJobsRun({
     mutation: {
-      onSuccess: asked => toastSuccess("Job asked for again", JobText.askedAgain(asked)),
+      onSuccess: asked => toastSuccess("Job asked for again", askedAgain(asked)),
       onError: failure => toastFailure("Run again failed", failure),
       onSettled: readAgain,
     },
@@ -37,7 +45,7 @@ export function JobsSettingsCard() {
 
   const cancel = useJobsCancel({
     mutation: {
-      onSuccess: canceled => toastSuccess("Job canceled", `${JobText.name(canceled.job)} stops.`),
+      onSuccess: canceled => toastSuccess("Job canceled", `${jobName(canceled.job)} stops.`),
       onError: failure => toastFailure("Cancel failed", failure),
       onSettled: readAgain,
     },
@@ -104,8 +112,8 @@ type JobRowProps = {
 
 /** A run: its job, its queue, its state and why it failed, its times, and its buttons. */
 function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
-  const name = JobText.name(run.job);
-  const failure = JobText.failure(run);
+  const name = jobName(run.job);
+  const failure = runFailure(run);
 
   return (
     <TableRow>
@@ -113,12 +121,12 @@ function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
       <TableCell>{run.queue}</TableCell>
       <TableCell>
         <div className="flex flex-col items-start gap-1">
-          <Badge variant={run.state === "failed" ? "destructive" : "secondary"}>{JobText.state(run.state)}</Badge>
+          <Badge variant={run.state === "failed" ? "destructive" : "secondary"}>{jobStateLabel(run.state)}</Badge>
           {failure && <span className="text-xs whitespace-normal text-muted-foreground">{failure}</span>}
         </div>
       </TableCell>
-      <TableCell>{JobText.time(run.createdAt)}</TableCell>
-      <TableCell>{JobText.time(run.endedAt)}</TableCell>
+      <TableCell>{formatRunTime(run.createdAt)}</TableCell>
+      <TableCell>{formatRunTime(run.endedAt)}</TableCell>
       <TableCell>
         <div className="flex gap-2">
           <Button
@@ -132,7 +140,7 @@ function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
           >
             <RotateCcwIcon />
           </Button>
-          {JobText.isActive(run) && (
+          {isRunActive(run) && (
             <Button
               type="button"
               size="icon-sm"

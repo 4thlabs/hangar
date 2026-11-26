@@ -4,7 +4,7 @@ import { ConfigSettingsCard } from "#modules/settings/components/config-settings
 import { EnvSettingsCard } from "#modules/settings/components/env-settings-card.tsx";
 import { JobsSettingsCard } from "#modules/settings/components/jobs-settings-card.tsx";
 import { StoreSettingsCard } from "#modules/settings/components/store-settings-card.tsx";
-import { SettingsTab, type SettingsTabId } from "#modules/settings/settings-tab.ts";
+import { parseSettingsTab, settingsTabs, type SettingsTabId } from "#modules/settings/settings-tab.ts";
 
 /**
  * `/settings`: the store, `.env.global`, `hangar.yml` and the server's jobs, a tab each, the URL's hash saying which one
@@ -22,12 +22,12 @@ export function SettingsPage() {
         <p className="text-sm text-muted-foreground">Manage the configuration of your Hangar installation.</p>
       </div>
       <Tabs
-        value={SettingsTab.parse(hash)}
+        value={parseSettingsTab(hash)}
         onValueChange={(tab: SettingsTabId) => void navigate({ to: "/settings", hash: tab, replace: true })}
         className="gap-6"
       >
         <TabsList className="self-center">
-          {SettingsTab.All.map(tab => (
+          {settingsTabs.map(tab => (
             <TabsTrigger key={tab.id} value={tab.id}>
               {tab.label}
             </TabsTrigger>

@@ -9,13 +9,11 @@ import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
-import { EnvChangeSet } from "#modules/settings/env-change-set.ts";
+import { envChanges } from "#modules/settings/env-changes.ts";
 
 /** A secret for a variable, of the shape of `openssl rand -hex 32`. */
-class Secrets {
-  static create(): string {
-    return Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
-  }
+function randomSecret(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /**
@@ -136,7 +134,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                 variant="ghost"
                 size="icon"
                 aria-label={`Generate a secret for ${key}`}
-                onClick={() => setValue(key, Secrets.create())}
+                onClick={() => setValue(key, randomSecret())}
               >
                 <KeyRoundIcon />
               </Button>
@@ -183,7 +181,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
           pending={save.isPending}
           pendingLabel="Saving…"
           icon={<SaveIcon data-icon="inline-start" />}
-          onClick={() => save.mutate({ data: EnvChangeSet.create(variables, values, removed) })}
+          onClick={() => save.mutate({ data: envChanges(variables, values, removed) })}
         >
           Save
         </PendingButton>

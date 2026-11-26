@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { JobRun } from "#libs/api";
-import { JobText } from "#modules/settings/job-text.ts";
+import {
+  askedAgain,
+  formatRunTime,
+  isRunActive,
+  jobName,
+  jobsPollDelay,
+  jobStateLabel,
+  runFailure,
+} from "#modules/settings/job-text.ts";
 
 const run: JobRun = {
   id: 1,
@@ -13,12 +21,12 @@ const run: JobRun = {
   error: null,
 };
 
-describe("JobText", () => {
+describe("the jobs' words", () => {
   it("takes a run that waits or runs for one a cancel stops", () => {
-    expect(JobText.isActive(run)).toBe(true);
-    expect(JobText.isActive({ ...run, state: "running" })).toBe(true);
-    expect(JobText.isActive({ ...run, state: "completed" })).toBe(false);
-    expect(JobText.isActive({ ...run, state: "canceled" })).toBe(false);
+    expect(isRunActive(run)).toBe(true);
+    expect(isRunActive({ ...run, state: "running" })).toBe(true);
+    expect(isRunActive({ ...run, state: "completed" })).toBe(false);
+    expect(isRunActive({ ...run, state: "canceled" })).toBe(false);
   });
 
   it("says why a run failed, as the server says it", () => {
@@ -28,29 +36,29 @@ describe("JobText", () => {
       error: { code: "docker.unavailable", message: "the Docker daemon could not be read. See the server's log." },
     };
 
-    expect(JobText.failure(failed)).toBe("The Docker daemon could not be read. See the server's log.");
-    expect(JobText.failure(run)).toBeUndefined();
+    expect(runFailure(failed)).toBe("The Docker daemon could not be read. See the server's log.");
+    expect(runFailure(run)).toBeUndefined();
   });
 
   it("reads the runs again each second while one waits or runs, every 30 seconds otherwise", () => {
-    expect(JobText.pollMs([run])).toBe(1000);
-    expect(JobText.pollMs([{ ...run, state: "completed" }])).toBe(30_000);
-    expect(JobText.pollMs([])).toBe(30_000);
+    expect(jobsPollDelay([run])).toBe(1000);
+    expect(jobsPollDelay([{ ...run, state: "completed" }])).toBe(30_000);
+    expect(jobsPollDelay([])).toBe(30_000);
   });
 
   it("says a time it has none of as a dash", () => {
-    expect(JobText.time(null)).toBe("—");
-    expect(JobText.time(run.createdAt)).toContain("2026");
+    expect(formatRunTime(null)).toBe("—");
+    expect(formatRunTime(run.createdAt)).toContain("2026");
   });
 
   it("names a job or a state it does not know, from a newer server, as the server does", () => {
-    expect(JobText.name("image_check")).toBe("Image check");
-    expect(JobText.name("backup")).toBe("backup");
-    expect(JobText.state("paused")).toBe("paused");
+    expect(jobName("image_check")).toBe("Image check");
+    expect(jobName("backup")).toBe("backup");
+    expect(jobStateLabel("paused")).toBe("paused");
   });
 
   it("says whether the job asked for again waits or runs", () => {
-    expect(JobText.askedAgain(run)).toBe("Image check waits its turn.");
-    expect(JobText.askedAgain({ ...run, job: "auto_update", state: "running" })).toBe("Update of the apps runs.");
+    expect(askedAgain(run)).toBe("Image check waits its turn.");
+    expect(askedAgain({ ...run, job: "auto_update", state: "running" })).toBe("Update of the apps runs.");
   });
 });

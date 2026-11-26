@@ -2,9 +2,9 @@
 export type AvailableMemory = { bytes: number; isHost: boolean };
 
 /**
- * The memory an app's containers may take, from the limits their stats report: the sum of the containers' own limits, at most the host's memory; the host's memory, once, when one has none of
- * its own, as its stats then report the host's memory as its limit. `null` before a container or the host has a
- * reading.
+ * The memory an app's containers may take, from the limits their stats report: the sum of the containers' own limits,
+ * at most the host's memory; the host's memory, once, when one has none of its own, as its stats then report the
+ * host's memory as its limit. `null` before a container or the host has a reading.
  */
 export function availableMemory(
   limits: readonly (number | null)[],

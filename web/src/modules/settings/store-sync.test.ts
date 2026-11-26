@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StoreSync } from "#libs/api";
-import { StoreSyncText } from "./store-sync-text.ts";
+import { describeSync } from "./store-sync.ts";
 
 const update: StoreSync = {
   operation: "update",
@@ -10,14 +10,14 @@ const update: StoreSync = {
   error: null,
 };
 
-describe("StoreSyncText.describe", () => {
+describe("describeSync", () => {
   it("says a sync runs", () => {
-    expect(StoreSyncText.describe(update)).toBe("Updating the store…");
-    expect(StoreSyncText.describe({ ...update, operation: "install" })).toBe("Installing the store…");
+    expect(describeSync(update)).toBe("Updating the store…");
+    expect(describeSync({ ...update, operation: "install" })).toBe("Installing the store…");
   });
 
   it("says when a sync ended well", () => {
-    const ended = StoreSyncText.describe({ ...update, state: "succeeded", finishedAt: "2026-11-26T10:00:05.000Z" });
+    const ended = describeSync({ ...update, state: "succeeded", finishedAt: "2026-11-26T10:00:05.000Z" });
 
     expect(ended).toMatch(/^The store was updated on Nov 26, 2026, \d{1,2}:\d{2}\s[AP]M\.$/);
   });
@@ -29,7 +29,7 @@ describe("StoreSyncText.describe", () => {
       error: { code: "store.pull_failed", message: "the store could not be pulled. See the server's log." },
     };
 
-    expect(StoreSyncText.describe(failed)).toBe(
+    expect(describeSync(failed)).toBe(
       "The update of the store failed: The store could not be pulled. See the server's log.",
     );
   });
