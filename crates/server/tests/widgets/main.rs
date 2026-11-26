@@ -4,6 +4,7 @@
 mod arcane;
 mod backrest;
 mod beszel;
+mod forgejo;
 mod frigate;
 mod gluetun;
 mod jellyfin;

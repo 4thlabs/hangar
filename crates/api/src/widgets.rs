@@ -170,6 +170,52 @@ pub struct BeszelSystem {
     pub cpu_model: Option<String>,
 }
 
+/// What Forgejo Actions runs, and the repositories updated last.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ForgejoCi {
+    /// How many repositories the card covers.
+    pub repository_count: u64,
+    /// Every run not finished yet, running ones first, then newest first.
+    pub active_runs: Vec<ForgejoRun>,
+    /// The three repositories updated last, newest first, archived ones left out.
+    pub recent_repositories: Vec<ForgejoRepository>,
+}
+
+/// A run of Forgejo Actions that has not finished.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ForgejoRun {
+    /// Its id.
+    pub id: u64,
+    /// The repository it runs in, `owner/name`.
+    pub repository: String,
+    /// The title of the commit or pull request it runs for.
+    pub title: String,
+    /// `running`, `waiting` or `blocked`.
+    pub status: String,
+    /// Whether it waits for a runner or an approval, rather than runs.
+    pub is_queued: bool,
+    /// The branch, tag or pull request it runs on, as `main` or `#2`.
+    pub reference: String,
+    /// Its page.
+    pub url: String,
+    /// When it started, or, until it does, when it was queued, in RFC 3339.
+    pub since: String,
+}
+
+/// A repository of Forgejo's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ForgejoRepository {
+    /// `owner/name`.
+    pub full_name: String,
+    /// Its page.
+    pub url: String,
+    /// When it was pushed to or changed last, in RFC 3339.
+    pub updated_at: String,
+}
+
 /// Frigate's latest events, and how its detection runs.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -351,6 +397,8 @@ pub enum WidgetData {
     BackrestSummary(BackrestSummary),
     /// `beszel-server-stats`.
     BeszelServerStats(BeszelServerStats),
+    /// `forgejo-ci`.
+    ForgejoCi(ForgejoCi),
     /// `frigate-events`.
     FrigateEvents(FrigateEvents),
     /// `gluetun-vpn-status`.

@@ -6,6 +6,7 @@ mod backrest;
 mod beszel;
 mod cache;
 mod error;
+mod forgejo;
 mod frigate;
 mod gluetun;
 mod jellyfin;
@@ -204,6 +205,13 @@ impl Loader {
                 beszel::load(&self.http, &service)
                     .await
                     .map(WidgetData::BeszelServerStats)
+            }
+            WidgetKind::ForgejoCi { owners, .. } => {
+                let service = self.service(&kind).await?;
+
+                forgejo::load(&self.http, &service, owners.as_deref())
+                    .await
+                    .map(WidgetData::ForgejoCi)
             }
             WidgetKind::FrigateEvents { .. } => {
                 let service = self.service(&kind).await?;
