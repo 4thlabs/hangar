@@ -14,6 +14,7 @@ import { EditAppPage } from "#modules/store/components/edit-app-page.tsx";
 import { NewAppPage } from "#modules/store/components/new-app-page.tsx";
 import { StorePage } from "#modules/store/components/store-page.tsx";
 import { StoreSearchParams } from "#modules/store/store-search.ts";
+import { DashboardPage } from "#modules/widgets/components/dashboard-page.tsx";
 
 /** What every route reads: the page's query client, which keeps the session. */
 type RouterContext = { queryClient: QueryClient };
@@ -47,7 +48,7 @@ export class Routes {
     notFoundComponent: NotFoundPage,
   });
 
-  static readonly dashboard = createRoute({ getParentRoute: () => Routes.app, path: "/", component: PendingPage });
+  static readonly dashboard = createRoute({ getParentRoute: () => Routes.app, path: "/", component: DashboardPage });
 
   static readonly apps = createRoute({
     getParentRoute: () => Routes.app,
