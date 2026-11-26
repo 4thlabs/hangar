@@ -164,6 +164,11 @@ backups:
   - app: jellyfin
     schedule: "30 3 * * *"
     exclude: ["**/cache/**", "**/*.log"]
+
+users:
+  - name: Thomas
+    email: thomas@example.com
+    passwordHash: "$argon2id$v=19$m=19456,t=2,p=1$…"
 ```
 
 ### `categories`
@@ -254,3 +259,43 @@ unzip -o immich-2026-10-18T03-00-00-000Z.zip -d <data>/app-data
 chown -R 1000:1000 <data>/app-data/immich/library
 node bin/cli.js store immich start
 ```
+
+### `users`
+
+Default `[]`. Who may sign in to the Rust server, which runs beside the Waku version until the
+switch; the Waku version ignores the field and keeps its own account. There are no roles: a user
+signed in may do everything.
+
+```yaml
+users:
+  - name: Thomas
+    email: thomas@example.com
+    passwordHash: "$argon2id$v=19$m=19456,t=2,p=1$…"
+  - name: Ana
+    email: ana@example.com # signs in through the identity provider, by a verified email
+  - name: Bo
+    email: bo@example.com
+    oidcSubject: "248289761001" # signs in through the identity provider, by this subject alone
+```
+
+| Field          | Type   | Default | Description                                                                              |
+| -------------- | ------ | ------- | ---------------------------------------------------------------------------------------- |
+| `name`         | string | —       | The name the page shows.                                                                 |
+| `email`        | string | —       | The email the user signs in with, whatever its case. Each email appears once.            |
+| `passwordHash` | string | none    | The argon2id hash `hangar user hash` prints. Without one, no password signs the user in. |
+| `oidcSubject`  | string | none    | The subject (`sub`) the identity provider gives the user. Each subject appears once.     |
+
+`hangar user hash` asks the password twice and prints its hash: copy it, quoted, into
+`passwordHash`. A password is 8 to 128 characters long. The store is a git repository: keep it
+private, as a hash can be attacked offline, or leave `passwordHash` out and sign in through the
+identity provider alone.
+
+The identity provider, when the server has one (see [development](development.md#the-rust-server)),
+signs in only a user this list references: the one whose `oidcSubject` is the subject it gives,
+or else one with no `oidcSubject` whose `email` it gives as verified. Anyone else is sent back to
+the sign-in page, which says so. A user with an `oidcSubject` signs in by it alone, so that a
+provider where anyone can claim an email cannot sign in as them.
+
+The file is read again at each request: a user added can sign in at once, and one removed is
+signed out at their next request. If the file is broken, by a pull that brought an invalid one, the
+users of the last file that read are kept until it is fixed.

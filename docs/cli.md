@@ -139,6 +139,7 @@ its variables on to `docker` and `git`. It needs only what a command uses: `HANG
 | `store <target> up -d\|down\|restart\|pull`        | the command on a stack or a category, options as above               |
 | `store <target> [command] [args...]`               | any other compose command, its arguments passed as they are          |
 | `store ls [args...]`                               | `docker compose ls`, with the arguments                              |
+| `user hash`                                        | the argon2id hash of a password, for a user of `hangar.yml`          |
 
 A command with an argument the table does not list, as `down --volumes` or `up -d --build`, is
 passed through as well, and so is an `up` on a target without `-d`, `--detach`, `--wait` or
@@ -156,6 +157,10 @@ cargo run -p hangar-cli -- store jellyfin logs -f
 cargo run -p hangar-cli -- store jellyfin exec jellyfin sh
 cargo run -p hangar-cli -- store Media stop
 ```
+
+`user hash`, the Rust server's alone, asks a password twice on the terminal, without echo, and prints its hash for
+the `passwordHash` of a user in `hangar.yml` (see [the store](store.md#users)); without a terminal it reads the
+first line of stdin, `printf '%s\n' "$PASSWORD" | hangar user hash`. It needs no variable.
 
 Where it differs from the Node CLI:
 
