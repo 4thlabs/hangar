@@ -276,6 +276,32 @@ the app it updates is updated. The tab reads the runs again each second while on
 otherwise, so that a run a cron asks for shows. A restart forgets the runs and the registries' answers, and the check
 at the start brings the answers back.
 
+### Widgets
+
+The dashboard reads `GET /api/widgets`, the widgets `hangar.yml` places, in its order: each with its column, its link,
+and a key, `<type>-<hash>` of its options but not its column, so that moving a card keeps what it loaded, a second
+placement of the same options taking `-2`. Each card then reads `GET /api/widgets/<key>` on its own, a slow service
+holding its card alone. A widget's service is a quoll contract of its own in `crates/server/src/widgets/`, called at
+its `url`, else `https://<container>.<DOMAIN>`, the container's that the store's app declares, with its key from
+`.env.global`, `<CONTAINER>_API_KEY` under either prefix of the container's name, `SYNCIN_` or `SYNC_IN_`; GitHub's
+releases with `GITHUB_TOKEN`, and Finnhub's stocks with `FINNHUB_API_KEY`. Every call goes through one client, given 10
+seconds and tried again once.
+
+What a placement loaded is kept by its key: fresh for its `ttl`, 60 seconds unless `hangar.yml` says, then served while
+it loads again behind its reader for 15 minutes more, which is also how long a service that stopped answering keeps
+its last card. A failed first load is not kept. Nothing is loaded without a reader: the Waku version's keep-warm loop,
+which polled every widget every 30 seconds, is gone. The readers of a key share one load, which runs on its own, so a
+page that leaves does not cancel it. GitHub's releases and Finnhub's calls are also kept per repository and per symbol,
+as the Waku version keeps them, and shared by every placement. A service that does not answer, or not as the widget
+reads it, is a 502, `widgets.unavailable`, the cause in the server's log; a key that places nothing, the clock or
+Docker's stats, which load nothing here, is a 404. Docker's stats read `GET /api/docker/overview`, which the
+dashboard reads again as the daemon's changes come; the apps due an update come with the image check (#176).
+
+`GET /api/widgets/<key>/image/<id>` relays a Frigate thumbnail, a Jellyfin poster or a tcg-collector card, so that the
+browser needs neither the service's address nor its key. An id is letters, digits, `_`, `.` and `-`, checked rather
+than escaped, as it goes in the service's path; an answer that is not an image, a page of a proxy say, is a 404 like a
+missing image. The browser keeps an image a day, `Cache-Control: private, max-age=86400`.
+
 ## Database
 
 Hangar keeps its own state in SQLite, through Drizzle: the Better Auth tables
@@ -328,3 +354,13 @@ down in [`AGENTS.md`](../AGENTS.md). Read it before adding a library or a module
 
 The existing widgets each come with tests next to them, against a mocked service; follow one of
 them.
+
+On the Rust server, a widget is:
+
+1. Its options in the core's `WidgetKind`, read from `hangar.yml` in `crates/core/src/store/config/widget.rs`.
+2. Its data in the contract, a variant of `hangar_api::WidgetData`, and its type in `WidgetType`.
+3. Its service's contract and its load in `crates/server/src/widgets/<app>.rs`, `#[server(none)]`, its key sent in a
+   header the route takes, listed in `Loader::load`, and in `Service::options` for a widget of a store app.
+4. Its card in `web/src/modules/widgets/components/cards/`, its title and icon in `widget-appearance.ts`, placed by
+   `DashboardPage`.
+5. A test in `crates/server/tests/widgets/`, against its service faked on port 0.
