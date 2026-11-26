@@ -1,7 +1,7 @@
 //! The routes of the group `Config`: the store's `hangar.yml`, read and saved as it is written.
 
 use hangar_api::{ConfigServer, ConfigSource, ErrorCode};
-use hangar_core::StoreError;
+use hangar_core::{StoreError, User};
 use quoll::{Response, Result};
 
 use crate::App;
@@ -21,6 +21,12 @@ impl ConfigServer for App {
     }
 
     async fn save(&self, _: &SignedIn, config: ConfigSource) -> Result<Response<()>> {
+        // The users too, which the store's own check leaves to the server: a file with a user wrong signs nobody in,
+        // the one who would fix it from this page included.
+        if let Err(error) = User::list(&config.source) {
+            return Err(Failure::config(&error).into());
+        }
+
         let _change = self.store.change().await?;
 
         match self.store.store.save_config(&config.source).await {
