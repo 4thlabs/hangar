@@ -15,3 +15,5 @@ plans/
 
 # Rust
 target/
+# The OpenAPI document of the Rust server, which `cargo quoll gen` writes from its contract.
+web/openapi.json

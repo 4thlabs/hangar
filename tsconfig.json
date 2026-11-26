@@ -18,5 +18,7 @@
       "#*": ["./src/*"],
       "#libs/*": ["./src/libs/*/index.ts"]
     }
-  }
+  },
+  // `web/` is the Rust server's page, a package of its own with its own tsconfig.json.
+  "exclude": ["node_modules", "web", "target"]
 }
