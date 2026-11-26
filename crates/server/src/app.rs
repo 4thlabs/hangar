@@ -6,10 +6,11 @@ use axum::middleware;
 use hangar_api::{Api, ApiServices};
 use quoll::server;
 
-use hangar_core::Runtime;
+use hangar_core::{Docker, Runtime};
 
 use crate::Settings;
 use crate::auth::{Auth, AuthBodyLimit, OriginCheck};
+use crate::docker::DockerState;
 use crate::store::StoreState;
 use crate::trailing_slash::TrailingSlash;
 
@@ -18,25 +19,30 @@ use crate::trailing_slash::TrailingSlash;
 pub struct App {
     pub(crate) auth: Arc<Auth>,
     pub(crate) store: Arc<StoreState>,
+    pub(crate) docker: Arc<DockerState>,
 }
 
 impl App {
-    /// The state of a server of `settings`, its commands, `git` and `docker compose`, run as children of this process.
-    pub fn new(settings: &Settings) -> Self {
-        Self::with_runtime(settings, Runtime::new())
+    /// The state of a server of `settings` on the daemon of `docker`, its commands, `git` and `docker compose`, run as
+    /// children of this process.
+    pub fn new(settings: &Settings, docker: Docker) -> Self {
+        Self::with_runtime(settings, Runtime::new(), docker)
     }
 
-    /// The state of a server of `settings`, its commands run by `runtime`: with the variables it sets, as a `PATH`
-    /// that finds another `docker`, or the cancellation that stops them.
-    pub fn with_runtime(settings: &Settings, runtime: Runtime) -> Self {
+    /// The state of a server of `settings` on the daemon of `docker`, its commands run by `runtime`: with the variables
+    /// it sets, as a `PATH` that finds another `docker`, or the cancellation that stops them.
+    pub fn with_runtime(settings: &Settings, runtime: Runtime, docker: Docker) -> Self {
         Self {
             auth: Arc::new(Auth::new(settings)),
-            store: StoreState::new(settings, runtime),
+            store: StoreState::new(settings, runtime.clone()),
+            docker: DockerState::new(settings, runtime, docker),
         }
     }
 
-    /// Readies the state as the server starts: the password check, and the log of who may sign in, and how.
+    /// Readies the state as the server starts: the password check, the log of who may sign in, and how, and the
+    /// daemon's events followed, which keep what the server reads of Docker fresh.
     pub async fn start(&self) {
+        self.docker.follow();
         self.auth.start().await;
     }
 }
@@ -49,7 +55,8 @@ pub fn router(app: App) -> axum::Router {
         store: app.clone(),
         editor: app.clone(),
         config: app.clone(),
-        env: app,
+        env: app.clone(),
+        docker: app,
     })
 }
 

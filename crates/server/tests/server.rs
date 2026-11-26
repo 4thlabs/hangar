@@ -26,8 +26,8 @@ fn settings(page: Option<&Path>) -> Settings {
 
 /// Serves the server of `settings` on port 0, and gives its URL.
 async fn serve(settings: &Settings) -> String {
-    let router =
-        hangar_server::server(settings).into_router(hangar_server::router(App::new(settings)));
+    let router = hangar_server::server(settings)
+        .into_router(hangar_server::router(App::new(settings, docker())));
 
     quoll::test::spawn(router).await
 }
@@ -177,4 +177,9 @@ async fn an_answer_is_gzipped_for_a_caller_that_accepts_it() -> reqwest::Result<
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()[CONTENT_ENCODING], "gzip");
     Ok(())
+}
+
+/// A client of no daemon: these tests call no Docker route.
+fn docker() -> hangar_core::Docker {
+    hangar_core::Docker::with_host("tcp://127.0.0.1:9").expect("a client")
 }

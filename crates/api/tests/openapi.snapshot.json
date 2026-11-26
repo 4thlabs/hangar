@@ -51,6 +51,24 @@
       }
     },
     "schemas": {
+      "AppCategory": {
+        "description": "The category of `hangar.yml` an app is filed under.",
+        "properties": {
+          "color": {
+            "description": "Its color, as `hangar.yml` writes it.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Its name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "color"
+        ],
+        "type": "object"
+      },
       "AppCounts": {
         "description": "How many of the store's apps each filter keeps.",
         "properties": {
@@ -144,6 +162,186 @@
         ],
         "type": "object"
       },
+      "ContainerCounts": {
+        "description": "How many containers the host has.",
+        "properties": {
+          "running": {
+            "description": "The running ones.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stopped": {
+            "description": "The stopped ones.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "description": "Every container, in any state.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "running",
+          "stopped"
+        ],
+        "type": "object"
+      },
+      "ContainerHealth": {
+        "description": "What the healthcheck of a container says.",
+        "oneOf": [
+          {
+            "const": "starting",
+            "description": "Not checked yet, within the start period.",
+            "type": "string"
+          },
+          {
+            "const": "healthy",
+            "description": "The last checks passed.",
+            "type": "string"
+          },
+          {
+            "const": "unhealthy",
+            "description": "The last checks failed.",
+            "type": "string"
+          }
+        ]
+      },
+      "ContainerMetrics": {
+        "description": "The resource usage of a container at a point in time. A figure is `None` when the daemon gave too little to compute\nit, rather than a misleading zero.",
+        "properties": {
+          "blockRead": {
+            "description": "The bytes it read, on all its block devices.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "blockWrite": {
+            "description": "The bytes it wrote, on all its block devices.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "cpuPercent": {
+            "description": "Its share of the host's CPU time since the previous frame, 100 per core it uses; `None` in the first frame.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "memoryLimit": {
+            "description": "The memory it may hold, in bytes.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memoryPercent": {
+            "description": "`memoryUsage` as a share of `memoryLimit`, out of 100.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "memoryUsage": {
+            "description": "The memory it holds, in bytes, without the page cache.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "networkRx": {
+            "description": "The bytes it received, on all its networks.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "networkTx": {
+            "description": "The bytes it sent, on all its networks.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "cpuPercent",
+          "memoryUsage",
+          "memoryLimit",
+          "memoryPercent",
+          "networkRx",
+          "networkTx",
+          "blockRead",
+          "blockWrite"
+        ],
+        "type": "object"
+      },
+      "ContainerState": {
+        "description": "What a container is doing, as the daemon reports it.",
+        "oneOf": [
+          {
+            "const": "created",
+            "description": "Created, never started.",
+            "type": "string"
+          },
+          {
+            "const": "running",
+            "description": "Running.",
+            "type": "string"
+          },
+          {
+            "const": "paused",
+            "description": "Paused.",
+            "type": "string"
+          },
+          {
+            "const": "restarting",
+            "description": "Being restarted by the daemon.",
+            "type": "string"
+          },
+          {
+            "const": "exited",
+            "description": "Stopped.",
+            "type": "string"
+          },
+          {
+            "const": "removing",
+            "description": "Being removed.",
+            "type": "string"
+          },
+          {
+            "const": "dead",
+            "description": "Stopped after the daemon failed to stop or remove it.",
+            "type": "string"
+          },
+          {
+            "const": "unknown",
+            "description": "A state the daemon did not name, or one newer than Hangar.",
+            "type": "string"
+          }
+        ]
+      },
       "Credentials": {
         "description": "The email and the password of a user of `hangar.yml`.",
         "properties": {
@@ -159,6 +357,61 @@
         "required": [
           "email",
           "password"
+        ],
+        "type": "object"
+      },
+      "DockerChange": {
+        "description": "What the daemon changed, which a page that shows it reads again.",
+        "oneOf": [
+          {
+            "const": "containers",
+            "description": "The containers of the apps: the projects and each project's detail.",
+            "type": "string"
+          },
+          {
+            "const": "overview",
+            "description": "The usage of the whole host.",
+            "type": "string"
+          }
+        ]
+      },
+      "DockerOverview": {
+        "description": "The usage of the whole host: every container, image and volume of the daemon, not only those of Hangar's apps.",
+        "properties": {
+          "containers": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContainerCounts"
+              }
+            ],
+            "description": "Its containers."
+          },
+          "images": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImageCounts"
+              }
+            ],
+            "description": "Its images."
+          },
+          "version": {
+            "description": "The daemon's version.",
+            "type": "string"
+          },
+          "volumes": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VolumeCounts"
+              }
+            ],
+            "description": "Its volumes."
+          }
+        },
+        "required": [
+          "version",
+          "containers",
+          "images",
+          "volumes"
         ],
         "type": "object"
       },
@@ -1130,6 +1383,76 @@
               "params"
             ],
             "type": "object"
+          },
+          {
+            "description": "The Docker daemon could not be reached, or answered with an error.",
+            "properties": {
+              "code": {
+                "const": "docker.unavailable",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "No installed app of this name.",
+            "properties": {
+              "code": {
+                "const": "docker.unknown_project",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "project": {
+                    "description": "The name asked for.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "project"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "No container of the app has this id.",
+            "properties": {
+              "code": {
+                "const": "docker.unknown_container",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "container": {
+                    "description": "The id asked for.",
+                    "type": "string"
+                  },
+                  "project": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "project",
+                  "container"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
           }
         ],
         "properties": {
@@ -1171,6 +1494,71 @@
           "variables"
         ],
         "type": "object"
+      },
+      "ImageCounts": {
+        "description": "How many images the host has, and the disk they take.",
+        "properties": {
+          "size": {
+            "description": "The bytes their layers take, each layer once.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "description": "Every image.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unused": {
+            "description": "The images no container uses.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "unused",
+          "size"
+        ],
+        "type": "object"
+      },
+      "LogEvent": {
+        "description": "An event of a container's followed log.",
+        "oneOf": [
+          {
+            "description": "A line, which starts with the time the daemon read it, as `2026-11-24T10:00:00.000000000Z ready`.",
+            "properties": {
+              "kind": {
+                "const": "line",
+                "type": "string"
+              },
+              "line": {
+                "description": "The line, without its line break.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "line"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The last event: the container stopped, and its log has nothing more.",
+            "properties": {
+              "kind": {
+                "const": "end",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "NewApp": {
         "description": "A new app: its id, and its `compose.yml`.",
@@ -1234,6 +1622,285 @@
         },
         "type": "object"
       },
+      "ProjectContainer": {
+        "description": "A container of a compose service.",
+        "properties": {
+          "health": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContainerHealth"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What its healthcheck says; `None` when it declares none, or the daemon does not say."
+          },
+          "id": {
+            "description": "The full container id.",
+            "type": "string"
+          },
+          "image": {
+            "description": "The image as compose runs it, such as `nginx:alpine`.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Its name, as `alpha-web-1`.",
+            "type": "string"
+          },
+          "ports": {
+            "description": "The ports it publishes on the host, by host port.",
+            "items": {
+              "$ref": "#/components/schemas/PublishedPort"
+            },
+            "type": "array"
+          },
+          "replica": {
+            "description": "Its index among the replicas of its service, from 1, when compose gave it a readable one.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "restartCount": {
+            "description": "How many times the daemon restarted it; `None` when the daemon does not say.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "service": {
+            "description": "The compose service it is a replica of.",
+            "type": "string"
+          },
+          "state": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContainerState"
+              }
+            ],
+            "description": "What it is doing."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "service",
+          "replica",
+          "image",
+          "state",
+          "health",
+          "restartCount",
+          "ports"
+        ],
+        "type": "object"
+      },
+      "ProjectDetail": {
+        "description": "An installed app as the daemon runs it, with its services and their containers.",
+        "properties": {
+          "services": {
+            "description": "Its services, by name; none before its first start.",
+            "items": {
+              "$ref": "#/components/schemas/ProjectService"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProjectSummary"
+              }
+            ],
+            "description": "The app in a line."
+          }
+        },
+        "required": [
+          "summary",
+          "services"
+        ],
+        "type": "object"
+      },
+      "ProjectService": {
+        "description": "A compose service: the replicas of one container.",
+        "properties": {
+          "containers": {
+            "description": "Its containers, by replica index.",
+            "items": {
+              "$ref": "#/components/schemas/ProjectContainer"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "The service's name.",
+            "type": "string"
+          },
+          "runningCount": {
+            "description": "How many of its containers run.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProjectStatus"
+              }
+            ],
+            "description": "How it runs as a whole."
+          },
+          "unhealthyCount": {
+            "description": "How many of its containers are unhealthy.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "runningCount",
+          "unhealthyCount",
+          "containers"
+        ],
+        "type": "object"
+      },
+      "ProjectStatus": {
+        "description": "How a compose project, or one of its services, runs as a whole.",
+        "oneOf": [
+          {
+            "const": "running",
+            "description": "Every container runs, and none is unhealthy.",
+            "type": "string"
+          },
+          {
+            "const": "partial",
+            "description": "Some containers run, others not, and none is unhealthy.",
+            "type": "string"
+          },
+          {
+            "const": "stopped",
+            "description": "No container runs, or there is none.",
+            "type": "string"
+          },
+          {
+            "const": "unhealthy",
+            "description": "At least one container is unhealthy, whatever the others do.",
+            "type": "string"
+          }
+        ]
+      },
+      "ProjectSummary": {
+        "description": "An installed app as the daemon runs it, in a line.",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppCategory"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first category of `hangar.yml` that lists it."
+          },
+          "containerIds": {
+            "description": "The full ids of its containers, which pick its rows out of the stats.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "icon": {
+            "description": "The URL of its icon, `x-hangar.icon`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "The app's id, its compose project.",
+            "type": "string"
+          },
+          "runningCount": {
+            "description": "How many of its containers run.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "serviceCount": {
+            "description": "How many services its containers belong to.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProjectStatus"
+              }
+            ],
+            "description": "How it runs as a whole."
+          },
+          "unhealthyCount": {
+            "description": "How many of its containers are unhealthy.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "icon",
+          "category",
+          "status",
+          "serviceCount",
+          "runningCount",
+          "unhealthyCount",
+          "containerIds"
+        ],
+        "type": "object"
+      },
+      "PublishedPort": {
+        "description": "A port that a container publishes on the host.",
+        "properties": {
+          "ip": {
+            "description": "The host address it is bound to, such as `0.0.0.0` or `::`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "privatePort": {
+            "description": "The port inside the container.",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "protocol": {
+            "description": "`tcp`, `udp` or `sctp`.",
+            "type": "string"
+          },
+          "publicPort": {
+            "description": "The port on the host.",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ip",
+          "privatePort",
+          "publicPort",
+          "protocol"
+        ],
+        "type": "object"
+      },
       "SavedFile": {
         "description": "What a save of a file did.",
         "properties": {
@@ -1288,6 +1955,22 @@
         },
         "required": [
           "oidc"
+        ],
+        "type": "object"
+      },
+      "StatsFrame": {
+        "description": "The resource usage of the running containers of every compose project on the host, those of apps Hangar did not\ninstall among them: a page keeps the ids its apps list.",
+        "properties": {
+          "containers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ContainerMetrics"
+            },
+            "description": "The metrics of each running container, by full container id.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "containers"
         ],
         "type": "object"
       },
@@ -1467,6 +2150,35 @@
             "type": "string"
           }
         ]
+      },
+      "VolumeCounts": {
+        "description": "How many volumes the host has.",
+        "properties": {
+          "inUse": {
+            "description": "The volumes a container mounts.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "description": "Every volume.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unused": {
+            "description": "The others.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "inUse",
+          "unused"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -1747,6 +2459,253 @@
         "summary": "Checks the file, then writes it as it is and links the apps and shared files it lists. A file that is not valid is a 400 that names the field at fault, and is not written; a store not cloned yet is a 409.",
         "tags": [
           "Config"
+        ]
+      }
+    },
+    "/api/docker/apps": {
+      "get": {
+        "operationId": "docker_projects",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Every installed app, by name, with no container yet or not: one never started is stopped.",
+        "tags": [
+          "Docker"
+        ]
+      }
+    },
+    "/api/docker/apps/{project}": {
+      "get": {
+        "operationId": "docker_project",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "An installed app with its services and containers. A 404 for an app that is not installed.",
+        "tags": [
+          "Docker"
+        ]
+      }
+    },
+    "/api/docker/apps/{project}/containers/{container}/logs": {
+      "get": {
+        "operationId": "docker_logs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "container",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                },
+                "x-item": {
+                  "$ref": "#/components/schemas/LogEvent"
+                }
+              }
+            },
+            "description": "Server-sent events, the data of each the JSON of an item, whose schema is `x-item`. A failure ends the stream with an event `problem`, whose data is a `Problem`."
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The log of a container of an app, followed: its last 200 lines, then each new one, and an `end` once the container stops. A 404 for an id that is not that of a container of the app, 12 to 64 hexadecimal digits.",
+        "tags": [
+          "Docker"
+        ]
+      }
+    },
+    "/api/docker/changes": {
+      "get": {
+        "operationId": "docker_changes",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                },
+                "x-item": {
+                  "$ref": "#/components/schemas/DockerChange"
+                }
+              }
+            },
+            "description": "Server-sent events, the data of each the JSON of an item, whose schema is `x-item`. A failure ends the stream with an event `problem`, whose data is a `Problem`."
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "What the daemon changed, once the server's cache holds it: a page reads again what it shows. What changed before the stream opened is not in it, so a page reads everything again once it is open. It does not end.",
+        "tags": [
+          "Docker"
+        ]
+      }
+    },
+    "/api/docker/overview": {
+      "get": {
+        "operationId": "docker_overview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DockerOverview"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The usage of the whole host.",
+        "tags": [
+          "Docker"
+        ]
+      }
+    },
+    "/api/docker/stats": {
+      "get": {
+        "operationId": "docker_stats",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                },
+                "x-item": {
+                  "$ref": "#/components/schemas/StatsFrame"
+                }
+              }
+            },
+            "description": "Server-sent events, the data of each the JSON of an item, whose schema is `x-item`. A failure ends the stream with an event `problem`, whose data is a `Problem`."
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The resource usage of the running containers of every compose project, a frame every second. Each stream measures its CPU shares from its own samples: the first frame has none. It does not end; a daemon that fails ends it with a problem.",
+        "tags": [
+          "Docker"
         ]
       }
     },
@@ -2390,6 +3349,10 @@
     {
       "description": "The global environment, `.env.global`, which every compose call reads.",
       "name": "Env"
+    },
+    {
+      "description": "The installed apps as the daemon runs them, read from the server's cache, which the daemon's events keep fresh.",
+      "name": "Docker"
     }
   ]
 }
