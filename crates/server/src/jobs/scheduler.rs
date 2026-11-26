@@ -67,6 +67,10 @@ impl<R: JobRunner> Scheduler<R> {
     /// How many runs are kept: those that wait or run, and the last that ended.
     const KEPT: usize = 50;
 
+    /// The longest a cron waits before it reads the clock again: Tokio's sleep runs on a clock that a suspend of the
+    /// host or a pause of its VM stops, where the system's goes on, and that a clock set either way does not move.
+    const LONGEST_WAIT: Duration = Duration::from_secs(60);
+
     /// A scheduler of the jobs that `runner` runs, its crons read in the time of `clock`. The ids of its runs start
     /// from the time it starts, in milliseconds since 1970: a page that holds the id of a run of the server before a
     /// restart names no run of this one.
@@ -107,7 +111,7 @@ impl<R: JobRunner> Scheduler<R> {
                 return;
             };
 
-            // Waited again when the system's clock was set back meanwhile.
+            // A minute at a time, the clock read again after each, which may have moved on or been set back meanwhile.
             loop {
                 let wait = next
                     .timestamp()
@@ -120,7 +124,7 @@ impl<R: JobRunner> Scheduler<R> {
                     break;
                 }
 
-                tokio::time::sleep(wait).await;
+                tokio::time::sleep(wait.min(Self::LONGEST_WAIT)).await;
             }
 
             tracing::info!(?job, %cron, "a job's cron fires");
@@ -629,6 +633,29 @@ mod tests {
         // 2026-11-26T09:30:00Z, in milliseconds: a server that starts later numbers its runs past it.
         assert_eq!(first.id, 1_795_685_400_000);
         assert_eq!(second.id, first.id + 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn fires_within_a_minute_of_its_time_when_the_clock_moved_on_while_it_waited() {
+        let (scheduler, mut starts) = scheduler();
+
+        scheduler.runner.released.add_permits(1);
+        scheduler.schedule(
+            Job::ImageCheck,
+            CronSchedule::parse("17 */4 * * *").expect("a valid cron"),
+        );
+
+        // At 09:30, then the host sleeps three hours: Tokio's clock stops, the system's goes on to 12:30.
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        scheduler.clock.jump(3 * 3600);
+
+        let fired = tokio::time::timeout(Duration::from_secs(61), starts.recv()).await;
+
+        assert_eq!(
+            fired,
+            Ok(Some(Job::ImageCheck)),
+            "the 12:17 run is not put off to 15:17"
+        );
     }
 
     #[test]

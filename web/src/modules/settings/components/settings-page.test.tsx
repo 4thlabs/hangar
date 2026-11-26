@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JobRun, StoreStatus, StoreSync } from "#libs/api";
 import { coded, problem, renderAt, serve } from "#app/mock/page.tsx";
@@ -183,6 +183,22 @@ describe("/settings#jobs", () => {
     expect(screen.getByText("The Docker daemon could not be read. See the server's log.")).toBeDefined();
     // A run that ended cannot be canceled.
     expect(screen.queryByRole("button", { name: "Cancel the image check" })).toBeNull();
+  });
+
+  it("shows a run a cron asked for while no run waited or ran", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+
+    let runs = [update];
+
+    serve({ "GET /api/jobs": () => Response.json(runs) });
+    renderAt("/settings#jobs");
+
+    await screen.findByText("Update of the apps");
+
+    runs = [{ ...check, id: 3, state: "running", endedAt: null, error: null }, update];
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+
+    expect(await screen.findByText("Running")).toBeDefined();
   });
 
   it("names a job it does not know as the server does", async () => {

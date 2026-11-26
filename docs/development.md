@@ -236,12 +236,13 @@ its last MiB, the most a batch keeps.
 The server runs its jobs in its own process, in memory, with no Sidequest, worker or table, on crons read in its time
 zone, `TZ`, else `/etc/localtime`, else UTC. The **image check** runs as the server starts, then every four hours at
 the 17th minute, `17 */4 * * *`; the **update of the apps** runs every night at 04:47, `47 4 * * *`. A job waits its
-turn in its queue, `default` for both, which runs one job at a time, in the order they were asked for: a job asked for
-while a run of it waits or runs gets that run. The crons are read as node-cron 4.6 reads them, and checked as the
-`schedule` of a backup in `hangar.yml` is: five fields or six, the names, the nicknames, `L`, `W` and `#`, and the day
-of the month and the day of the week both asked for. A time the clock skips or repeats is read as node-cron reads it:
-a time skipped reads as the one an hour after, and a time repeated fires once, at its later occurrence east of UTC and
-its earlier west of it. A clock set back once a cron fired does not fire it twice.
+turn in its queue, `default` for both, which runs one job at a time, in the order they were asked for: a job asked
+for while a run of it waits or runs gets that run. The crons are read as node-cron 4.6 reads them, and checked as the
+`schedule` of a backup in `hangar.yml` is: five fields or six, the names, the nicknames, `L`, `W` and `#`, and the
+day of the month and the day of the week both asked for. A time the clock skips or repeats is read as node-cron reads
+it: a time skipped reads as the one an hour after, and a time repeated fires once, at its later occurrence east of
+UTC and its earlier west of it. A cron reads the clock again each minute it waits: a clock set back once it fired
+does not fire it twice, and one that moved on, as after a suspend of the host, fires it within a minute.
 
 The image check lists the containers of the installed apps, each with its image as it was created with it, from its
 inspection: the daemon's list names the image by its id once its reference names a newer one, as after another app's
@@ -271,8 +272,9 @@ when it was asked for and when it ended, and why it failed, as a code. The ids c
 started, in milliseconds, so that a page opened before a restart names no run of the new server. **Run again** asks
 for the job of a run again, `POST /api/jobs/<id>/run`. **Cancel**, `POST /api/jobs/<id>/cancel`, takes a run that
 waits out of its queue, and tells one that runs to stop: the image check stops at once, the update of the apps once
-the app it updates is updated. The tab reads the runs again each second while one waits or runs. A restart forgets
-the runs and the registries' answers, and the check at the start brings the answers back.
+the app it updates is updated. The tab reads the runs again each second while one waits or runs, and every 30 seconds
+otherwise, so that a run a cron asks for shows. A restart forgets the runs and the registries' answers, and the check
+at the start brings the answers back.
 
 ## Database
 

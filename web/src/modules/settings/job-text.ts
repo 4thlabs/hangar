@@ -6,6 +6,17 @@ export class JobText {
   /** How often the card reads the runs again while one waits or runs, in milliseconds. */
   static readonly PollMs = 1000;
 
+  /**
+   * How often the card reads the runs again while none waits or runs, in milliseconds: a run a cron asks for, or
+   * another page, shows within it.
+   */
+  static readonly IdlePollMs = 30_000;
+
+  /** How long the card waits before it reads `runs` again, in milliseconds. */
+  static pollMs(runs: readonly JobRun[]): number {
+    return runs.some(JobText.isActive) ? JobText.PollMs : JobText.IdlePollMs;
+  }
+
   /** The name of each job. */
   static readonly Names: Readonly<Record<Job, string>> = {
     image_check: "Image check",

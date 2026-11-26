@@ -12,14 +12,15 @@ import { JobText } from "#modules/settings/job-text.ts";
 
 /**
  * The runs of the server's jobs, the last 50 it keeps in memory, the newest first: each can be run again, and one that
- * waits or runs canceled. The card reads them again each second while one waits or runs.
+ * waits or runs canceled. The card reads them again each second while one waits or runs, and every 30 seconds
+ * otherwise, so that a run a cron asks for shows.
  */
 export function JobsSettingsCard() {
   const queryClient = useQueryClient();
 
   const { data: runs, error } = useJobsList({
     query: {
-      refetchInterval: query => ((query.state.data ?? []).some(JobText.isActive) ? JobText.PollMs : false),
+      refetchInterval: query => JobText.pollMs(query.state.data ?? []),
     },
   });
 
