@@ -1,6 +1,6 @@
 import { CircleAlertIcon } from "lucide-react";
 import { useWidgetsPlacements, type WidgetPlacement } from "#libs/api";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
@@ -127,7 +127,7 @@ export function DashboardPage() {
         <Alert variant="destructive">
           <CircleAlertIcon aria-hidden="true" />
           <AlertTitle>Could not read the dashboard</AlertTitle>
-          <AlertDescription>{ErrorMessage.describe(error)}</AlertDescription>
+          <AlertDescription>{describeError(error)}</AlertDescription>
         </Alert>
       </main>
     );

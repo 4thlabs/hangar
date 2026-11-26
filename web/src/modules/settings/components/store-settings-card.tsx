@@ -10,9 +10,9 @@ import {
   useStoreSync,
   type StoreStatus,
 } from "#libs/api";
-import { ActionToast } from "#modules/common/action-toast.ts";
+import { toastFailure, toastSuccess } from "#modules/common/components/action-toast.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/error-message.ts";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
@@ -36,9 +36,9 @@ export function StoreSettingsCard() {
           previous ? { ...previous, sync: started } : previous,
         );
 
-        ActionToast.success("Synchronization started", StoreSyncText.started(started));
+        toastSuccess("Synchronization started", StoreSyncText.started(started));
       },
-      onError: failure => ActionToast.failure("Launch failed", failure),
+      onError: failure => toastFailure("Launch failed", failure),
     },
   });
 
@@ -68,7 +68,7 @@ export function StoreSettingsCard() {
             <FieldLabel htmlFor="store-url">Store URL</FieldLabel>
             <Input id="store-url" value={status?.url ?? ""} readOnly aria-describedby="store-status" />
             <FieldDescription id="store-status">
-              {error && ErrorMessage.describe(error)}
+              {error && describeError(error)}
               {status && (status.installed ? "The store is installed locally." : "The store is not installed yet.")}
               {status?.sync && (
                 <>

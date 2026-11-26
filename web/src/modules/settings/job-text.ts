@@ -1,5 +1,5 @@
 import type { Job, JobRun, JobState } from "#libs/api";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeErrorDetail } from "#modules/common/error-message.ts";
 
 /** What the jobs' card says of the server's jobs and their runs. */
 export class JobText {
@@ -57,7 +57,7 @@ export class JobText {
 
   /** Why `run` failed, as the server says it; nothing for a run that did not. */
   static failure(run: JobRun): string | undefined {
-    return run.error ? ErrorMessage.describeDetail(run.error) : undefined;
+    return run.error ? describeErrorDetail(run.error) : undefined;
   }
 
   /** What the toast of a job asked for again says: its run waits its turn, or already runs. */

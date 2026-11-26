@@ -1,9 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { SaveIcon } from "lucide-react";
 import { getConfigReadQueryKey, getStoreAppsQueryKey, useConfigRead, useConfigSave } from "#libs/api";
-import { ActionToast } from "#modules/common/action-toast.ts";
+import { toastFailure, toastSuccess } from "#modules/common/components/action-toast.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/error-message.ts";
 import { useYamlEditor } from "#modules/common/hooks/use-yaml-editor.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 
@@ -26,7 +26,7 @@ export function ConfigSettingsCard() {
       </CardHeader>
       {error && (
         <CardContent>
-          <p className="text-sm text-destructive">{ErrorMessage.describe(error)}</p>
+          <p className="text-sm text-destructive">{describeError(error)}</p>
         </CardContent>
       )}
       {data && isFetchedAfterMount && <ConfigEditor key={dataUpdatedAt} source={data.source} />}
@@ -43,7 +43,7 @@ function ConfigEditor({ source }: { source: string }) {
     mutation: {
       onSuccess: async () => {
         setRefusal(null);
-        ActionToast.success("Configuration saved", "The configuration was saved.");
+        toastSuccess("Configuration saved", "The configuration was saved.");
         // The file as written, and the apps it links, are read again; the save stays pending until they are, so
         // that the editor, which takes no typing meanwhile, opens on what was saved.
         await Promise.all([
@@ -52,8 +52,8 @@ function ConfigEditor({ source }: { source: string }) {
         ]);
       },
       onError: failure => {
-        setRefusal(ErrorMessage.describe(failure));
-        ActionToast.failure("Configuration rejected", failure);
+        setRefusal(describeError(failure));
+        toastFailure("Configuration rejected", failure);
       },
     },
   });

@@ -4,7 +4,7 @@ import type { AppSortColumn, AppsSort } from "#modules/apps/apps-search.ts";
 import { CategoryBadge } from "#modules/apps/category-badge.ts";
 import { ProjectStatusView } from "#modules/apps/project-status.ts";
 import { SortableHead } from "#modules/common/components/sortable-head.tsx";
-import { ToggledSet } from "#modules/common/toggled-set.ts";
+import { toggledSet } from "#modules/common/toggled-set.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
 
@@ -23,7 +23,7 @@ type AppsTableProps = {
  */
 export function AppsTable({ projects, sort, onSort, selection, onSelectionChange }: AppsTableProps) {
   const isAllSelected = projects.length > 0 && projects.every(project => selection.has(project.name));
-  const toggle = (name: string, checked: boolean) => onSelectionChange(ToggledSet.create(selection, name, checked));
+  const toggle = (name: string, checked: boolean) => onSelectionChange(toggledSet(selection, name, checked));
 
   return (
     <Table>

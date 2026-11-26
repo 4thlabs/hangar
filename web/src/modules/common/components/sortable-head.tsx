@@ -1,5 +1,5 @@
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
-import { TableSort, type SortState } from "#modules/common/table-sort.ts";
+import { sortDirection, type SortState } from "#modules/common/table-sort.ts";
 import { TableHead } from "#modules/common/ui/table.tsx";
 
 type SortableHeadProps<Column extends string> = {
@@ -18,7 +18,7 @@ export function SortableHead<Column extends string>({
   onSort,
   className,
 }: SortableHeadProps<Column>) {
-  const direction = TableSort.direction(sort, column);
+  const direction = sortDirection(sort, column);
   const isActive = direction !== "none";
   const Icon = { ascending: ArrowUpIcon, descending: ArrowDownIcon, none: ChevronsUpDownIcon }[direction];
 

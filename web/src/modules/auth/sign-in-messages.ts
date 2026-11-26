@@ -1,5 +1,5 @@
 import { ApiError } from "#libs/api";
-import { ErrorMessage } from "#modules/common/error-message.ts";
+import { describeError } from "#modules/common/error-message.ts";
 
 /** Why a sign-in through the provider ended back on `/login`, as the server's `error` says it. */
 export type SignInRefusal = "unavailable" | "expired" | "denied" | "not-a-user";
@@ -33,7 +33,7 @@ export function describeSignInFailure(error: unknown): string {
   }
 
   if (error.detail) {
-    return ErrorMessage.describe(error);
+    return describeError(error);
   }
 
   return error.status === 401 ? invalidCredentials : failed;

@@ -1,8 +1,8 @@
 import { Link, useSearch } from "@tanstack/react-router";
 import { PlusIcon } from "lucide-react";
 import { useStoreApps } from "#libs/api";
-import { ErrorMessage } from "#modules/common/error-message.ts";
-import { NameSearch } from "#modules/common/search.ts";
+import { describeError } from "#modules/common/error-message.ts";
+import { searchByName } from "#modules/common/search-by-name.ts";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { StoreAppCard } from "#modules/store/components/store-app-card.tsx";
 import { StoreFilterMenu } from "#modules/store/components/store-filter-menu.tsx";
@@ -13,7 +13,7 @@ export function StorePage() {
   const search = useSearch({ from: "/app/store" });
   const filters = StoreSearchParams.read(search.filter);
   const { data, error, isPending } = useStoreApps(filters.length > 0 ? { filter: filters } : undefined);
-  const apps = NameSearch.apply(search.q ?? "", data?.apps ?? []);
+  const apps = searchByName(search.q ?? "", data?.apps ?? []);
   const total = (data?.counts.installed ?? 0) + (data?.counts.available ?? 0);
 
   return (
@@ -29,7 +29,7 @@ export function StorePage() {
           </Link>
         </div>
       </div>
-      {error && <p className="text-sm text-destructive">{ErrorMessage.describe(error)}</p>}
+      {error && <p className="text-sm text-destructive">{describeError(error)}</p>}
       {apps.length > 0 && (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3">
           {apps.map(app => (

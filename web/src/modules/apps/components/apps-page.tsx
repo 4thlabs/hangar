@@ -15,8 +15,8 @@ import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import { MetricFormat } from "#modules/apps/metric-format.ts";
 import { ProjectFilter } from "#modules/apps/project-filter.ts";
-import { ErrorMessage } from "#modules/common/error-message.ts";
-import { TableSort } from "#modules/common/table-sort.ts";
+import { describeError } from "#modules/common/error-message.ts";
+import { nextSort, serializeSort } from "#modules/common/table-sort.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#modules/common/ui/empty.tsx";
@@ -100,10 +100,10 @@ export function AppsPage() {
   });
 
   const onSort = (column: AppSortColumn) => {
-    const next = TableSort.next(sort, column);
+    const next = nextSort(sort, column);
 
     void navigate({
-      search: previous => ({ ...previous, sort: next ? TableSort.serialize(next) : undefined }),
+      search: previous => ({ ...previous, sort: next ? serializeSort(next) : undefined }),
       replace: true,
     });
   };
@@ -132,7 +132,7 @@ export function AppsPage() {
       {error && (
         <Alert variant="destructive">
           <AlertTitle>Could not read the apps</AlertTitle>
-          <AlertDescription>{ErrorMessage.describe(error)}</AlertDescription>
+          <AlertDescription>{describeError(error)}</AlertDescription>
           <AlertAction>
             <Button type="button" variant="outline" size="sm" disabled={isRefetching} onClick={() => void refetch()}>
               Retry

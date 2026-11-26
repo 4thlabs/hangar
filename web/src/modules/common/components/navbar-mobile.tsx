@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { cn } from "cn";
 import { useCurrentPath } from "#modules/common/hooks/use-current-path.ts";
-import { Navigations } from "#modules/common/navigations.ts";
+import { isNavigationActive, navigationCategories } from "#modules/common/navigations.ts";
 
 /**
  * Phone tab bar. A second tree is fine here: stateless links only.
@@ -9,7 +9,7 @@ import { Navigations } from "#modules/common/navigations.ts";
  */
 export function MobileTabBar() {
   const path = useCurrentPath();
-  const items = Navigations.Categories.flatMap(category => category.items);
+  const items = navigationCategories.flatMap(category => category.items);
 
   return (
     <nav
@@ -17,7 +17,7 @@ export function MobileTabBar() {
       aria-label="Main navigation"
     >
       {items.map(item => {
-        const active = Navigations.isActive(path, item.href);
+        const active = isNavigationActive(path, item.href);
 
         return (
           <Link
