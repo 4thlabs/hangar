@@ -212,8 +212,9 @@ terminal, runs it with `docker exec hangar hangar …`.
 A `docker exec` adds its start-up time to every command: typed often, the binary runs better on
 the host itself. Each release attaches it, static, with its checksum: `hangar-x86_64-unknown-linux-musl`,
 and `hangar-aarch64-unknown-linux-musl` for an ARM host. It links no library, whatever the host's
-libc: `file` reads it as "static-pie linked", a static binary that keeps its address randomized,
-and `hangar --version` prints the release's version. It needs two things on the host; check both:
+libc: `file` reads the x86_64 one as "static-pie linked", a static binary that keeps its address
+randomized, and the aarch64 one as "statically linked", Rust's default for that target. `hangar
+--version` prints the release's version. It needs two things on the host; check both:
 
 ```bash
 docker compose version   # the Compose Manager plugin provides it on Unraid
