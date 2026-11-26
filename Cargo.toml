@@ -1,5 +1,6 @@
 [workspace]
-# The server rewritten in Rust, beside the Waku version, which stays the published image until the switch.
+# The server rewritten in Rust, beside the Waku version, which stays the published image until the switch; its page
+# is in `web/`, which no crate holds.
 members = ["crates/*"]
 resolver = "3"
 
@@ -26,3 +27,24 @@ tracing = "0.1"
 [workspace.lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
+
+# The config of `cargo quoll`, run from the root, its paths relative to it. The contract's binary writes the document,
+# and orval the page's TypeScript from it, both gitignored.
+[[workspace.metadata.quoll.api]]
+package = "hangar-api"
+bin = "openapi"
+output = "web/openapi.json"
+# Run in `web/`. `--no`: the orval of the page's package-lock.json, which `npm ci` installs, never one npx downloads.
+after = [["npx", "--no", "orval"]]
+
+# Run by `cargo quoll dev`, ready once its url accepts a connection. The page's vite.config.ts proxies `/api` to this
+# url: the two change together.
+[[workspace.metadata.quoll.server]]
+package = "hangar-server"
+url = "http://127.0.0.1:3010"
+
+# The page: `dev` runs beside the server in `cargo quoll dev`, `build` after the document in `cargo quoll build`.
+[workspace.metadata.quoll.web]
+dir = "web"
+dev = ["npm", "run", "dev"]
+build = ["npm", "run", "build"]

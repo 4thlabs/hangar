@@ -646,6 +646,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "hangar-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "hangar-api",
+ "hangar-core",
+ "http",
+ "percent-encoding",
+ "quoll",
+ "reqwest",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
