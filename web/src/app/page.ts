@@ -8,7 +8,10 @@ import { Session } from "#modules/auth/api/session.ts";
 type PageOptions = {
   /** The history the router reads and writes, the browser's unless given. */
   history?: RouterHistory;
-  /** The user's preferences, from `document.cookie` unless given, their cookies then renewed. */
+  /**
+   * The user's preferences. Unless given, they are read from `document.cookie` and their cookies renewed; an instance
+   * given, as a test's, is taken as it is, and writes no cookie.
+   */
   preferences?: Preferences;
 };
 

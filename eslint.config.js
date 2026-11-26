@@ -51,10 +51,11 @@ const staticOnlyClass = {
 };
 
 /**
- * ADR 0002, rule 4: a module's root `.ts` is its domain, pure and tested without rendering. It imports no React, no
- * icons, no TanStack, only the types, enums and classes of `#libs/api` (its names that start with a capital: orval's
- * hooks, fetchers and keys, and the transport's functions, start with a lowercase letter), and only types from a
- * module's `api/`, `hooks/`, `components/` or `ui/`, by `#modules/...` or a relative path. The specifiers are
+ * ADR 0002, rule 4: a module's root `.ts` is its domain, pure and tested without rendering. It imports no React and
+ * no package of React's (`react-*`, `lucide-react`, `@base-ui/`), no TanStack, only the types, enums and classes of
+ * `#libs/api` (its names that start with a capital: orval's hooks, fetchers and keys, and the transport's functions,
+ * start with a lowercase letter), and only types from a module's `api/`, `hooks/`, `components/` or `ui/`, by
+ * `#modules/...`, `./` or `../<module>/`. The specifiers are
  * `#modules/...`, which a gitignore-style `group` would read as a comment: they are written as `regex`.
  */
 const rootModuleImports = [
@@ -62,10 +63,13 @@ const rootModuleImports = [
   {
     patterns: [
       {
-        regex: "^react(-dom)?(/.*)?$",
+        regex: "^react(-[^/]+)?(/|$)",
         message: "A module's root .ts renders nothing: no React (ADR 0002, decision 1).",
       },
-      { regex: "^lucide-react$", message: "A module's root .ts renders nothing: no icons (ADR 0002, decision 1)." },
+      {
+        regex: "^(lucide-react(/|$)|@base-ui/)",
+        message: "A module's root .ts renders nothing: no icons or components (ADR 0002, decision 1).",
+      },
       { regex: "^@tanstack/", message: "A module's root .ts is pure: no TanStack (ADR 0002, decision 1)." },
       {
         regex: "^#libs/api$",
@@ -73,7 +77,7 @@ const rootModuleImports = [
         message: "A module's root .ts takes only the types and enums of #libs/api (ADR 0002, decision 1).",
       },
       {
-        regex: "^(#modules/[^/]+|\\.)/(api|hooks|components|ui)/",
+        regex: "^(#modules/[^/]+|\\.|\\.\\./[^/]+)/(api|hooks|components|ui)/",
         allowTypeImports: true,
         message: "A module's root .ts takes only types from api/, hooks/, components/ and ui/ (ADR 0002, decision 1).",
       },
@@ -83,7 +87,8 @@ const rootModuleImports = [
 
 /** Rule 4 for `import()`, which `no-restricted-imports` does not read: no module's `api/`, `hooks/` or `components/`. */
 const rootModuleDynamicImport = {
-  selector: "ImportExpression[source.value=/^(#modules\\/[^\\/]+|\\.)\\/(api|hooks|components|ui)\\//]",
+  selector:
+    "ImportExpression[source.value=/^(#modules\\/[^\\/]+|\\.|\\.\\.\\/[^\\/]+)\\/(api|hooks|components|ui)\\//]",
   message: "A module's root .ts loads nothing of api/, hooks/, components/ or ui/ (ADR 0002, decision 1).",
 };
 

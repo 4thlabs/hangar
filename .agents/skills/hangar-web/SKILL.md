@@ -192,7 +192,16 @@ export const Route = createFileRoute("/_app/apps")({
 `app/page.ts` creates, once, what the page is built on. `main.tsx` and the tests' `renderAt` both call it:
 
 ```ts
-export function createPage({ history, preferences = Preferences.fromCookies(document.cookie) }: PageOptions = {}) {
+/** The preferences `document.cookie` holds, their cookies renewed for another year, defaults included. */
+function loadedPreferences(): Preferences {
+  const preferences = Preferences.fromCookies(document.cookie);
+
+  preferences.renew();
+
+  return preferences;
+}
+
+export function createPage({ history, preferences = loadedPreferences() }: PageOptions = {}) {
   const queryClient = createQueryClient(() => session.signedOut(router));
   const session = new Session(queryClient);
   const router = createPageRouter({ queryClient, session }, history);
@@ -205,7 +214,8 @@ export function createPage({ history, preferences = Preferences.fromCookies(docu
 - `Session` (`modules/auth/api/session.ts`) takes the client in its constructor and has `require()`, which redirects,
   and `signedOut(router)`. A test builds it with `new`, with no module mock.
 - `Preferences` (`#libs/preferences`) holds the user's preferences, writes their cookies on `set` and notifies its
-  subscribers. `createPage` creates it from `document.cookie`, and `AppProviders` hands it down through a context.
+  subscribers. `createPage` creates it from `document.cookie` and calls `renew()`, which writes every cookie again,
+  defaults included, for a year: nothing else renews them. `AppProviders` hands it down through a context.
   `usePreferences()` (`common/hooks/use-preferences.ts`) reads it with `useSyncExternalStore`. A test passes its own
   instance, or the cookies it sets.
 
