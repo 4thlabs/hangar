@@ -13,8 +13,9 @@
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2e3440" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eceff4" />
     <!--
-      The cookies of Theme (src/libs/preferences), applied before the first paint, which the page's module runs
-      after: without it a dark page would flash light. The page checks them again, and sets them right, at once.
+      The cookies of the preferences (src/libs/preferences/theme.ts), applied before the first paint, which the page's
+      module runs after: without it a dark page would flash light. The page reads them again at its load, and writes
+      them again, defaults included, through Preferences.renew.
     -->
     <script>
       (() => {

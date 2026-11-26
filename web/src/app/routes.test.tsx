@@ -30,18 +30,37 @@ describe("the shell", () => {
     expect(current.map(link => link.textContent)).toContain("Apps");
   });
 
-  it("applies the palette and the mode of the cookies, and keeps them", async () => {
+  it("writes the cookies of the default preferences at its load, for a browser that has none", async () => {
+    serve();
+    renderAt("/");
+
+    await screen.findByRole("button", { name: "User menu of Ana Lima" });
+
+    expect(document.cookie).toContain("theme=system");
+    expect(document.cookie).toContain("theme_palette=claude");
+  });
+
+  it("applies the palette and the mode of the cookies, and writes them again for another year", async () => {
     serve();
     document.cookie = "theme=dark; path=/";
     document.cookie = "theme_palette=nord; path=/";
+
+    const written: string[] = [];
+    const cookie = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
+
+    vi.spyOn(document, "cookie", "set").mockImplementation(value => {
+      written.push(value);
+      cookie?.set?.call(document, value);
+    });
+
     renderAt("/");
 
     await screen.findByRole("button", { name: "User menu of Ana Lima" });
 
     expect(document.documentElement.dataset.theme).toBe("nord");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
-    expect(document.cookie).toContain("theme=dark");
-    expect(document.cookie).toContain("theme_palette=nord");
+    expect(written).toContainEqual(expect.stringMatching(/^theme=dark; path=\/; max-age=31536000/));
+    expect(written).toContainEqual(expect.stringMatching(/^theme_palette=nord; path=\/; max-age=31536000/));
   });
 
   it("names the signed-in user in the navbar", async () => {

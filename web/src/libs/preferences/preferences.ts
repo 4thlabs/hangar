@@ -25,6 +25,15 @@ export class Preferences {
     return this.#current;
   }
 
+  /**
+   * Writes the cookies of every preference now, the defaults included, each for a year from now: the page calls it at
+   * its load, so that a preference picked once does not expire while the page is in use.
+   */
+  renew(): void {
+    writePreferenceCookie(colorModeCookie, this.#current.theme);
+    writePreferenceCookie(paletteCookie, this.#current.themePalette);
+  }
+
   /** Changes the preferences `change` names, writes their cookies, and tells the subscribers. */
   set(change: Partial<UserPreferences>): void {
     this.#current = { ...this.#current, ...change };
