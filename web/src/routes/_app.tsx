@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AppErrorPage } from "#modules/common/components/app-error-page.tsx";
-import { AppLayout } from "#modules/common/components/app-layout.tsx";
-import { NotFoundPage } from "#modules/common/components/not-found-page.tsx";
+import { NotFoundPage } from "#routes/_app/-not-found-page.tsx";
+import { AppErrorPage } from "#routes/-shell/app-error-page.tsx";
+import { AppLayout } from "#routes/-shell/app-layout.tsx";
 
 /**
  * The app's frame, the Waku version's `(app)/_layout.tsx`: a route with no path of its own, around every page but

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { NotFoundPage } from "#modules/common/components/not-found-page.tsx";
+import { NotFoundPage } from "#routes/_app/-not-found-page.tsx";
 
 /**
  * Any path no page has, as `/nowhere` or `/apps/alpha/nowhere`: the not-found page in the app's frame, behind its
