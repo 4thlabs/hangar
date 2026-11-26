@@ -135,6 +135,11 @@ version's alone, until the switch. `web/` has no catalog, no translation helper,
 text is written in English in its components, and `Intl` formats dates and numbers in English. A page moved from
 `src/` leaves its `messages.ts` behind and takes the English words.
 
+The Rust server runs its jobs in its own process, in memory (`crates/server/src/jobs.rs`): a scheduler, its crons
+read by the core's `CronSchedule`, and queues of one job at a time. The Sidequest worker and its composition root,
+above, are the Waku version's alone until the switch; a job of the Rust server takes what it works with from `App`,
+as a route does.
+
 ### Errors the page shows
 
 The page stays English only, but must take a translation later without the server being reworked. So the server never

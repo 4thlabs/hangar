@@ -205,8 +205,9 @@ uninstall, a saved `hangar.yml`, the end of a store sync, and the start and the 
 shows, and no longer reloads every 30 seconds. When that stream is lost, the page says so and connects again, after a
 wait from a second doubled up to 30 seconds, then reads everything again. The stats of the installed apps' containers, a frame a second, and the log of a
 container, its last 200 lines then followed, are streamed from the daemon, never kept; a log ends with an `end` event
-once its container stops, and an app Hangar did not install, or an id that is not one of a container of the app, is a 404. A daemon that does not answer is a 503, `docker.unavailable`. The update badge and its filter come with the image
-check (#176), the backups with #177, and a container's console with the terminal.
+once its container stops, and an app Hangar did not install, or an id that is not one of a container of the app, is a 404. A daemon that does not answer is a 503, `docker.unavailable`. An app the last image check found an update for has
+the badge **Update**, and the filter **Update** keeps those apps or the others (see [Jobs](#jobs)). The backups come
+with #177, and a container's console with the terminal.
 
 **Apps → Up**, **Restart** and **Down** run `docker compose up -d`, with `--pull always` and `--force-recreate` as Up's
 menu ticks them, `restart` or `down` on the apps selected, or on an app from its page, as a batch: `POST
@@ -229,6 +230,42 @@ never with compose's output, which the panel shows above it. The server keeps a 
 after, the last 20 that ended at most, listed by `GET /api/docker/compose`, with its report once ended; a page that
 comes back while one runs offers its output, which `GET /api/docker/compose/<id>` reads again from its start, as far as
 its last MiB, the most a batch keeps.
+
+### Jobs
+
+The server runs its jobs in its own process, in memory, with no Sidequest, worker or table, on crons read in its time
+zone, `TZ`, else `/etc/localtime`, else UTC. The **image check** runs as the server starts, then every four hours at
+the 17th minute, `17 */4 * * *`; the **update of the apps** runs every night at 04:47, `47 4 * * *`. A job waits its
+turn in its queue, `default` for both, which runs one job at a time, in the order they were asked for: a job asked for
+while a run of it waits or runs gets that run. The crons are read as node-cron 4.6 reads them, and checked as the
+`schedule` of a backup in `hangar.yml` is: five fields or six, the names, the nicknames, `L`, `W` and `#`, and the day
+of the month and the day of the week both asked for. A time the clock skips, as when it moves forward an hour, is not
+run that day.
+
+The image check lists the containers of the installed apps and the images they were created from. Then it asks the
+registry for the digest it serves for each reference they run, once each, through the daemon so that its credentials
+apply (`GET /distribution/<ref>/json`). The calls are `registryThrottling` apart, and each registry has 10 s to answer.
+A registry that does not answer, or refuses a private image, is left out. The first 429, or a `toomanyrequests` the
+daemon passes on, stops the check: the references after it are left out until the next. A reference pinned to a digest
+is not asked, nor an image built on the host, which has no registry digest. The answers are kept in memory until the
+next check. An app has an update when one of its containers runs an image whose digests are known and none of them is
+the one the registry serves. The server compares the digests of the image the container was created from, never its
+tag, as a pull moves the tag before the container is recreated. The Docker pages show it as `updateAvailable`, and
+are told on `GET /api/docker/changes` when it changes. The check notifies `updatesAvailable` when apps have an update,
+in place of its notification of before.
+
+The update of the apps checks the images again, then runs `docker compose up -d --pull always` on each app the
+registry has moved past. It runs them one at a time, in the order of `hangar.yml`, carries on after one that fails, and
+notifies `autoUpdate` once for them all, naming those that failed. It holds its apps as a compose batch does: an
+install, an uninstall or a batch of one of them is refused while it runs. It fails with `compose.app_busy`, and updates
+no app, when another command holds one of them or a sync of the store runs.
+
+**Settings → Jobs** lists the last 50 runs, the newest first, from `GET /api/jobs`: the job, its queue and its state,
+when it was asked for and when it ended, and why it failed, as a code. **Run again** asks for the job of a run again,
+`POST /api/jobs/<id>/run`. **Cancel**, `POST /api/jobs/<id>/cancel`, takes a run that waits out of its queue, and
+tells one that runs to stop: the image check stops at once, the update of the apps once the app it updates is updated.
+The tab reads the runs again each second while one waits or runs. A restart forgets the runs and the registries'
+answers, and the check at the start brings the answers back.
 
 ## Database
 
