@@ -77,7 +77,7 @@ at fault named.
 | `GITHUB_TOKEN`, `FINNHUB_API_KEY`                       | The keys of the widgets that call those services             |
 | `HANGAR_SSH_HOST`, `HANGAR_SSH_USER`, `HANGAR_SSH_PORT` | The host the terminal signs in to; a port 1–65535            |
 | `HANGAR_PAGE_DIR`                                       | The page to serve beside the API, with its `index.html`      |
-| `HANGAR_URL`                                            | The URL the page is reached at, required                     |
+| `HANGAR_URL`                                            | The origin the page is reached at, no path, required         |
 | `HANGAR_SECRET`                                         | What the cookies are signed with, 32 bytes or more, required |
 | `HANGAR_OIDC_ISSUER`, `HANGAR_OIDC_CLIENT_ID`           | The identity provider, set together                          |
 | `HANGAR_OIDC_CLIENT_SECRET`                             | The client's secret, unset for a public client               |
@@ -88,9 +88,11 @@ at fault named.
 The users of `hangar.yml` sign in (see [the store](store.md#users)), by password or through an OpenID Connect
 provider, and every route but those of `/api/auth` and `/api/health` answers 401 without a session. The session is
 a cookie the server signs with a key derived from `HANGAR_SECRET`, `openssl rand -base64 32` prints one: it holds the
-user's email and its expiry, and nothing is kept on the server. A session lasts seven days, and is renewed once a day
-old while the page is open, as Better Auth's are in the Waku version; signing out clears the cookie, and a user
-removed from `hangar.yml` is signed out at their next request. Changing `HANGAR_SECRET` signs everyone out.
+user's email, when they signed in, its expiry, and a value of their credentials, and nothing is kept on the server. A
+session lasts seven days, and is renewed once a day old while the page is open, as Better Auth's are in the Waku
+version, but never past thirty days from the sign-in. Signing out clears the cookie; a user removed from
+`hangar.yml`, or whose `passwordHash` or `oidcSubject` changed, is signed out at their next request; changing
+`HANGAR_SECRET` signs everyone out.
 
 The cookies are `__Host-`, `Secure`, `HttpOnly` and `SameSite=Lax`: a browser keeps them over HTTPS, and on
 `http://localhost`, which it takes as secure, but not over plain HTTP to another host. A `POST` or any other request
@@ -101,8 +103,14 @@ another origin than `BETTER_AUTH_URL`'s. Under `cargo quoll dev`, the page's ori
 HANGAR_URL=http://localhost:5173
 ```
 
-Ten failed sign-ins for one email in fifteen minutes refuse that email with a 429 until the oldest is fifteen minutes
-old. The limit is per email: behind the reverse proxy every request comes from its address.
+`HANGAR_URL` is an origin, `https://hangar.example.com`, with no path: the page is served at the root of its host.
+
+Ten sign-ins by password for one email in fifteen minutes that did not succeed refuse that email with a 429 until
+the oldest is fifteen minutes old. An attempt is counted as it starts, so that requests sent at once cannot get past
+the limit, and forgotten with the others of its email once one succeeds. The limit is per email: behind the reverse
+proxy every request comes from its address. The users `hangar.yml` lists are counted apart from the emails it does
+not, which are bounded: guesses on unknown emails never refuse a user. The routes of `/api/auth` read a body of 16 KiB
+at most.
 
 For the identity provider, register a confidential client whose redirect URL is the callback,
 `<HANGAR_URL>/api/auth/oidc/callback`, and give the server its issuer, as the provider writes it in its discovery

@@ -94,7 +94,10 @@ impl AuthServer for App {
             return Ok(response);
         }
 
-        let renewed = Session::new(&signed_in.user.email, now).cookie(&self.auth.cookies);
+        let renewed = signed_in
+            .session
+            .renewed(now)
+            .cookie(&self.auth.cookies, now);
 
         Ok(response.header(SET_COOKIE, renewed))
     }
@@ -165,7 +168,7 @@ impl AuthServer for App {
 
             return Ok(Self::refused(Refusal::NotAUser));
         };
-        let session = Session::new(&user.email, now).cookie(&self.auth.cookies);
+        let session = Session::new(&user, now).cookie(&self.auth.cookies, now);
 
         Ok(Self::redirect("/")
             .header(SET_COOKIE, Cookies::cleared(Flow::COOKIE))

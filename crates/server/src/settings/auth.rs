@@ -8,8 +8,8 @@ use super::{Secret, SettingError};
 /// How the server signs its users in.
 #[derive(Debug, Clone)]
 pub struct AuthSettings {
-    /// The URL the page is reached at, from `HANGAR_URL`: the origin a `POST` must come from, and the base of the
-    /// callback the provider sends the browser back to.
+    /// The URL the page is reached at, from `HANGAR_URL`: an origin, as the page is served at the root of its host,
+    /// which a `POST` must come from, and under which the provider sends the browser back.
     pub url: Url,
     /// What the cookies are signed and encrypted with, from `HANGAR_SECRET`: at least 32 bytes.
     pub secret: Secret,
@@ -57,7 +57,7 @@ impl AuthSettings {
     pub(super) fn read(
         variable: impl Fn(&str) -> Option<String>,
     ) -> Result<Self, Vec<SettingError>> {
-        let url = Self::url(Self::URL, variable(Self::URL));
+        let url = Self::origin(variable(Self::URL));
         let secret = Self::secret(variable(Self::SECRET));
         let oidc = match &url {
             Ok(url) => Self::oidc(url, &variable),
@@ -85,6 +85,26 @@ impl AuthSettings {
             variable: name,
             value,
         })
+    }
+
+    /// The URL of `HANGAR_URL`, an origin with no path, query or credentials: the page calls `/api` from the root, and
+    /// the redirects of signing in go to `/` and `/login`, so a page under a path would not work.
+    fn origin(value: Option<String>) -> Result<Url, SettingError> {
+        let url = Self::url(Self::URL, value)?;
+        let is_origin = url.path() == "/"
+            && url.query().is_none()
+            && url.fragment().is_none()
+            && url.username().is_empty()
+            && url.password().is_none();
+
+        if !is_origin {
+            return Err(SettingError::NotAnOrigin {
+                variable: Self::URL,
+                value: url.to_string(),
+            });
+        }
+
+        Ok(url)
     }
 
     /// The secret, at least 32 bytes.
@@ -145,17 +165,9 @@ impl AuthSettings {
         }
     }
 
-    /// The callback under `url`, whatever path it ends with.
+    /// The callback at the origin `url`.
     fn callback(url: &Url) -> Url {
-        let mut base = url.clone();
-
-        if !base.path().ends_with('/') {
-            let path = format!("{}/", base.path());
-
-            base.set_path(&path);
-        }
-
-        base.join(Self::CALLBACK_PATH)
+        url.join(Self::CALLBACK_PATH)
             .expect("a relative path joins any http URL")
     }
 }
@@ -222,9 +234,37 @@ mod tests {
     }
 
     #[test]
+    fn refuses_a_url_that_is_not_an_origin() {
+        for url in [
+            "https://example.com/hangar",
+            "https://hangar.example.com/?page=1",
+            "https://hangar.example.com/#top",
+            "https://ana:secret@hangar.example.com",
+        ] {
+            let errors = read(&[("HANGAR_URL", url), SECRET]).expect_err("refused");
+
+            assert!(
+                matches!(
+                    &errors[..],
+                    [SettingError::NotAnOrigin {
+                        variable: "HANGAR_URL",
+                        ..
+                    }]
+                ),
+                "{url}: {errors:?}"
+            );
+        }
+
+        assert!(
+            read(&[("HANGAR_URL", "http://localhost:5173/"), SECRET]).is_ok(),
+            "a final / is no path"
+        );
+    }
+
+    #[test]
     fn reads_the_provider_with_its_callback_under_the_url() {
         let settings = read(&[
-            ("HANGAR_URL", "https://example.com/hangar"),
+            ("HANGAR_URL", "https://hangar.example.com"),
             SECRET,
             (
                 "HANGAR_OIDC_ISSUER",
@@ -247,7 +287,7 @@ mod tests {
         );
         assert_eq!(
             oidc.redirect_url.as_str(),
-            "https://example.com/hangar/api/auth/oidc/callback"
+            "https://hangar.example.com/api/auth/oidc/callback"
         );
     }
 

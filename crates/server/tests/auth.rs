@@ -2,7 +2,7 @@
 //! what refuses it.
 
 use std::path::Path;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -93,23 +93,45 @@ async fn session(url: &str, cookie: &str) -> reqwest::Response {
         .expect("the server answers")
 }
 
-/// A session's cookie of `email` that expires at `expires`, signed with `secret`, as the server writes one.
-fn forged(secret: &str, email: &str, expires: SystemTime) -> String {
-    let expires = expires
-        .duration_since(UNIX_EPOCH)
-        .expect("after the epoch")
-        .as_secs();
-    let value = URL_SAFE_NO_PAD
-        .encode(json!([SESSION, { "email": email, "expires": expires }]).to_string());
+/// The length of the signature that prefixes the value of a cookie the `cookie` crate signs: a base64 HMAC-SHA256.
+const SIGNATURE_LENGTH: usize = 44;
+
+/// The session's cookie `real` with what it holds changed by `change`, then signed with `secret`, as the server
+/// signs one: the test needs to know only the times of the session, not how its other fields are made.
+fn forged(real: &str, secret: &str, change: impl FnOnce(&mut Value)) -> String {
+    let value = real
+        .strip_prefix(&format!("{SESSION}="))
+        .expect("the session's cookie");
+    let payload = URL_SAFE_NO_PAD
+        .decode(&value[SIGNATURE_LENGTH..])
+        .expect("base64url");
+    let mut held: Value = serde_json::from_slice(&payload).expect("JSON");
+
+    change(&mut held[1]);
+
     let mut jar = CookieJar::new();
 
     jar.signed_mut(&Key::derive_from(secret.as_bytes()))
-        .add(Cookie::new(SESSION, value));
+        .add(Cookie::new(
+            SESSION,
+            URL_SAFE_NO_PAD.encode(held.to_string()),
+        ));
 
-    let cookie = jar.get(SESSION).expect("signed");
-
-    format!("{SESSION}={}", cookie.value())
+    format!("{SESSION}={}", jar.get(SESSION).expect("signed").value())
 }
+
+/// Seconds since the epoch, `offset` seconds from now.
+fn epoch(offset: i64) -> i64 {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("after the epoch")
+        .as_secs();
+
+    i64::try_from(now).expect("a time") + offset
+}
+
+const HOUR: i64 = 60 * 60;
+const DAY: i64 = 24 * HOUR;
 
 #[tokio::test]
 async fn a_user_signs_in_with_their_password_and_their_session_names_them() {
@@ -198,6 +220,74 @@ async fn ten_failures_refuse_an_email_for_a_while() {
 }
 
 #[tokio::test]
+async fn at_most_ten_of_many_sign_ins_sent_at_once_reach_the_password_check() {
+    let dir = data_dir();
+    let url = serve(dir.path()).await;
+    let attempts = (0..50).map(|_| login(&url, "ana@example.com", "wrong horse"));
+    let statuses: Vec<StatusCode> = futures::future::join_all(attempts)
+        .await
+        .iter()
+        .map(reqwest::Response::status)
+        .collect();
+    let checked = statuses
+        .iter()
+        .filter(|status| **status == StatusCode::UNAUTHORIZED)
+        .count();
+    let refused = statuses
+        .iter()
+        .filter(|status| **status == StatusCode::TOO_MANY_REQUESTS)
+        .count();
+
+    assert_eq!((checked, refused), (10, 40), "{statuses:?}");
+}
+
+#[tokio::test]
+async fn an_email_longer_than_any_user_s_is_refused_before_it_is_counted() {
+    let dir = data_dir();
+    let url = serve(dir.path()).await;
+    let long = format!("{}@example.com", "a".repeat(250));
+
+    for _ in 0..20 {
+        assert_eq!(
+            login(&url, &long, "correct horse").await.status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_body_past_16_kib_is_refused_on_the_routes_of_signing_in() {
+    let dir = data_dir();
+    let url = serve(dir.path()).await;
+    let password = "a".repeat(32 * 1024);
+
+    let refused = login(&url, "ana@example.com", &password).await;
+
+    assert_eq!(refused.status(), StatusCode::PAYLOAD_TOO_LARGE);
+}
+
+#[tokio::test]
+async fn nobody_signs_in_while_a_user_of_hangar_yml_is_wrong() {
+    let dir = data_dir();
+    let url = serve(dir.path()).await;
+    let hash = PasswordHash::new("correct horse").expect("hashed");
+
+    write_config(
+        dir.path(),
+        &format!(
+            "categories: []\nusers:\n  - {{ name: Ana, email: ana@example.com, passwordHash: '{hash}' }}\n  - {{ name: Bo, email: bo }}\n"
+        ),
+    );
+
+    assert_eq!(
+        login(&url, "ana@example.com", "correct horse")
+            .await
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
 async fn a_route_that_takes_a_session_answers_401_in_the_api_s_shape_without_one() {
     let dir = data_dir();
     let url = serve(dir.path()).await;
@@ -217,11 +307,7 @@ async fn a_tampered_cookie_or_one_of_another_secret_is_refused() {
     let url = serve(dir.path()).await;
     let cookie = session_of(&login(&url, "ana@example.com", "correct horse").await);
     let tampered = cookie.replacen("hangar-session=", "hangar-session=A", 1);
-    let other_secret = forged(
-        "another secret, of at least 32 bytes",
-        "ana@example.com",
-        SystemTime::now() + Duration::from_secs(3600),
-    );
+    let other_secret = forged(&cookie, "another secret, of at least 32 bytes", |_| {});
 
     for cookie in [tampered, other_secret] {
         let refused = session(&url, &cookie).await;
@@ -238,16 +324,12 @@ async fn a_tampered_cookie_or_one_of_another_secret_is_refused() {
 async fn an_expired_session_is_refused_and_one_a_day_old_renewed() {
     let dir = data_dir();
     let url = serve(dir.path()).await;
-    let expired = forged(
-        SECRET,
-        "ana@example.com",
-        SystemTime::now() - Duration::from_secs(1),
-    );
-    let a_day_old = forged(
-        SECRET,
-        "ana@example.com",
-        SystemTime::now() + Duration::from_secs(6 * 24 * 3600 - 60),
-    );
+    let cookie = session_of(&login(&url, "ana@example.com", "correct horse").await);
+    let expired = forged(&cookie, SECRET, |held| held["expires"] = json!(epoch(-1)));
+    let a_day_old = forged(&cookie, SECRET, |held| {
+        held["issued"] = json!(epoch(-25 * HOUR));
+        held["expires"] = json!(epoch(7 * DAY - 25 * HOUR));
+    });
 
     assert_eq!(
         session(&url, &expired).await.status(),
@@ -262,6 +344,72 @@ async fn an_expired_session_is_refused_and_one_a_day_old_renewed() {
             .to_str()
             .expect("text")
             .contains("Max-Age=604800")
+    );
+}
+
+#[tokio::test]
+async fn a_session_ends_thirty_days_after_the_sign_in_whatever_its_renewals() {
+    let dir = data_dir();
+    let url = serve(dir.path()).await;
+    let cookie = session_of(&login(&url, "ana@example.com", "correct horse").await);
+    let renewed_for_a_month = forged(&cookie, SECRET, |held| {
+        held["issued"] = json!(epoch(-30 * DAY));
+        held["expires"] = json!(epoch(HOUR));
+    });
+    let nearly_a_month = forged(&cookie, SECRET, |held| {
+        held["issued"] = json!(epoch(-29 * DAY));
+        held["expires"] = json!(epoch(HOUR));
+    });
+
+    assert_eq!(
+        session(&url, &renewed_for_a_month).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+
+    let last_renewal = session(&url, &nearly_a_month).await;
+    let set_cookie = last_renewal.headers()[SET_COOKIE]
+        .to_str()
+        .expect("text")
+        .to_owned();
+    let max_age = Cookie::parse(set_cookie)
+        .expect("a cookie")
+        .max_age()
+        .expect("a Max-Age")
+        .whole_seconds();
+
+    assert_eq!(last_renewal.status(), StatusCode::OK);
+    assert!(
+        (DAY - 60..=DAY).contains(&max_age),
+        "renewed up to the thirtieth day alone: {max_age}"
+    );
+}
+
+#[tokio::test]
+async fn a_change_of_password_ends_the_sessions_opened_before() {
+    let dir = data_dir();
+    let url = serve(dir.path()).await;
+    let cookie = session_of(&login(&url, "ana@example.com", "correct horse").await);
+    let hash = PasswordHash::new("another horse").expect("hashed");
+
+    write_config(
+        dir.path(),
+        &format!(
+            "categories: []\nusers:\n  - {{ name: Ana, email: ana@example.com, passwordHash: '{hash}' }}\n"
+        ),
+    );
+
+    let refused = session(&url, &cookie).await;
+
+    assert_eq!(refused.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        refused.json::<Value>().await.expect("JSON")["detail"],
+        "the user's credentials have changed: sign in again"
+    );
+    assert_eq!(
+        login(&url, "ana@example.com", "another horse")
+            .await
+            .status(),
+        StatusCode::OK
     );
 }
 

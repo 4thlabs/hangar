@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 
 use argon2::password_hash::phc;
 use argon2::password_hash::{PasswordHasher, PasswordVerifier};
-use argon2::{Algorithm, Argon2, Params};
+use argon2::{Algorithm, Argon2, Params, Version};
 
 /// A password that cannot be hashed, or a hash that `hangar.yml` cannot hold.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -22,14 +22,9 @@ pub enum PasswordError {
     #[error("must be an argon2id hash, as `hangar user hash` prints one")]
     NotArgon2id,
 
-    /// The hash's costs are past what a sign-in may spend on one.
-    #[error(
-        "the costs of the hash are past m={}, t={}, p={}",
-        PasswordHash::MAX_MEMORY_KIB,
-        PasswordHash::MAX_TIME,
-        PasswordHash::MAX_LANES
-    )]
-    TooCostly,
+    /// The hash was made with other costs than those `hangar user hash` gives every hash.
+    #[error("must be hashed with m=19456, t=2, p=1: run `hangar user hash` again")]
+    OtherCosts,
 
     /// argon2 failed, as it does not with its own parameters.
     #[error("the password could not be hashed: {0}")]
@@ -39,9 +34,10 @@ pub enum PasswordError {
 /// The argon2id hash of a password, in the PHC string that `hangar user hash` prints:
 /// `$argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>`.
 ///
-/// A new hash takes argon2's default costs, OWASP's first recommendation for argon2id: 19 MiB of memory, two passes,
-/// one lane, some 20 to 50 ms on a small server. A check reads the costs of the hash it is given, so a hash made with
-/// other costs still checks; [`parse`](Self::parse) bounds them, so that a sign-in never spends more than 256 MiB.
+/// Every hash takes argon2's default costs, OWASP's first recommendation for argon2id: 19 MiB of memory, two passes,
+/// one lane, some 20 to 50 ms on a small server. [`parse`](Self::parse) takes no other: a check costs the same for
+/// every user, and for an email that is no user's, which [`verify_none`](Self::verify_none) spends, so that its time
+/// tells nothing.
 ///
 /// Hashing and checking are slow on purpose and block: the server runs them through `spawn_blocking`.
 ///
@@ -63,13 +59,6 @@ impl PasswordHash {
     pub const MIN_LENGTH: usize = 8;
     /// The most characters of a password, as the Waku version's sign-in form takes.
     pub const MAX_LENGTH: usize = 128;
-
-    /// The most memory a hash may ask, in KiB: 256 MiB.
-    const MAX_MEMORY_KIB: u32 = 256 * 1024;
-    /// The most passes a hash may ask.
-    const MAX_TIME: u32 = 16;
-    /// The most lanes a hash may ask.
-    const MAX_LANES: u32 = 8;
 
     /// Hashes `password` with a random salt and argon2's default costs.
     ///
@@ -95,7 +84,7 @@ impl PasswordHash {
     /// # Errors
     ///
     /// Returns [`PasswordError::NotArgon2id`] for a text that is no argon2id PHC string, and
-    /// [`PasswordError::TooCostly`] for a hash past 256 MiB of memory, 16 passes or 8 lanes.
+    /// [`PasswordError::OtherCosts`] for a hash of other costs, or another version or length, than argon2's defaults.
     pub fn parse(text: &str) -> Result<Self, PasswordError> {
         let hash = phc::PasswordHash::new(text).map_err(|_| PasswordError::NotArgon2id)?;
         let is_argon2id = hash.algorithm.as_str() == Algorithm::Argon2id.ident().as_str();
@@ -106,12 +95,16 @@ impl PasswordHash {
         }
 
         let params = Params::try_from(&hash).map_err(|_| PasswordError::NotArgon2id)?;
-        let is_bounded = params.m_cost() <= Self::MAX_MEMORY_KIB
-            && params.t_cost() <= Self::MAX_TIME
-            && params.p_cost() <= Self::MAX_LANES;
+        let has_default_costs = params.m_cost() == Params::DEFAULT_M_COST
+            && params.t_cost() == Params::DEFAULT_T_COST
+            && params.p_cost() == Params::DEFAULT_P_COST;
+        let has_default_shape = hash.version == Some(Version::default().into())
+            && hash
+                .hash
+                .is_some_and(|output| output.len() == Params::DEFAULT_OUTPUT_LEN);
 
-        if !is_bounded {
-            return Err(PasswordError::TooCostly);
+        if !has_default_costs || !has_default_shape {
+            return Err(PasswordError::OtherCosts);
         }
 
         Ok(Self(text.to_owned()))
@@ -224,10 +217,36 @@ mod tests {
     }
 
     #[test]
-    fn refuses_a_hash_whose_costs_a_sign_in_cannot_spend() {
-        let costly = "$argon2id$v=19$m=4194304,t=2,p=1$c29tZXNhbHQ$iWh06vD8Fy27wf9npn6FXWiCX4K6pW6Ue1Bnzz07Z8A";
+    fn refuses_a_hash_of_other_costs_than_the_defaults() {
+        let output = "$c29tZXNhbHQ$iWh06vD8Fy27wf9npn6FXWiCX4K6pW6Ue1Bnzz07Z8A";
 
-        assert_eq!(PasswordHash::parse(costly), Err(PasswordError::TooCostly));
+        for params in [
+            "m=4194304,t=2,p=1",
+            "m=19456,t=3,p=1",
+            "m=19456,t=2,p=4",
+            "m=8192,t=2,p=1",
+        ] {
+            let hash = format!("$argon2id$v=19${params}{output}");
+
+            assert_eq!(
+                PasswordHash::parse(&hash),
+                Err(PasswordError::OtherCosts),
+                "{params}"
+            );
+        }
+
+        assert_eq!(
+            PasswordHash::parse(&format!("$argon2id$v=16$m=19456,t=2,p=1{output}")),
+            Err(PasswordError::OtherCosts),
+            "another version"
+        );
+        assert_eq!(
+            PasswordHash::parse(
+                "$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHQ$iWh06vD8Fy27wf9npn6FXQ"
+            ),
+            Err(PasswordError::OtherCosts),
+            "another length"
+        );
     }
 
     #[test]

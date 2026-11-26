@@ -286,7 +286,9 @@ users:
 | `oidcSubject`  | string | none    | The subject (`sub`) the identity provider gives the user. Each subject appears once.     |
 
 `hangar user hash` asks the password twice and prints its hash: copy it, quoted, into
-`passwordHash`. A password is 8 to 128 characters long. The store is a git repository: keep it
+`passwordHash`. A password is 8 to 128 characters long, and its hash argon2id with the costs
+`hangar user hash` gives every hash (`m=19456,t=2,p=1`): a hash of other costs is refused, so that
+a sign-in takes as long for every user, and for an email that is no user's. The store is a git repository: keep it
 private, as a hash can be attacked offline, or leave `passwordHash` out and sign in through the
 identity provider alone.
 
@@ -296,6 +298,7 @@ or else one with no `oidcSubject` whose `email` it gives as verified. Anyone els
 the sign-in page, which says so. A user with an `oidcSubject` signs in by it alone, so that a
 provider where anyone can claim an email cannot sign in as them.
 
-The file is read again at each request: a user added can sign in at once, and one removed is
-signed out at their next request. If the file is broken, by a pull that brought an invalid one, the
-users of the last file that read are kept until it is fixed.
+The file is read again at each request: a user added can sign in at once, and one removed, or whose
+`passwordHash` or `oidcSubject` changed, is signed out at their next request. The users are read
+apart from the rest of the file: a mistake among them never stops the CLI, compose or the editor,
+but while it is there the server signs nobody in, and its log says which field is at fault.
