@@ -4,6 +4,7 @@
 
 mod api;
 mod auth;
+mod compose;
 mod config;
 mod docker;
 mod editor;
@@ -15,6 +16,7 @@ mod store;
 
 pub use api::*;
 pub use auth::*;
+pub use compose::*;
 pub use config::*;
 pub use docker::*;
 pub use editor::*;

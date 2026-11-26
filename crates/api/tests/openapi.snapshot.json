@@ -149,6 +149,315 @@
           }
         ]
       },
+      "ComposeAction": {
+        "description": "A compose command the Apps pages run: `up -d` with its options, `restart` or `down`.",
+        "oneOf": [
+          {
+            "description": "`up -d`: creates and starts what is missing, with the options it is given.",
+            "properties": {
+              "forceRecreate": {
+                "description": "`--force-recreate`: recreates the containers even when nothing changed.",
+                "type": "boolean"
+              },
+              "operation": {
+                "const": "up",
+                "type": "string"
+              },
+              "pull": {
+                "description": "`--pull always`: pulls every image first, which updates the app.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "operation",
+              "pull",
+              "forceRecreate"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`restart`: restarts the app's containers.",
+            "properties": {
+              "operation": {
+                "const": "restart",
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`down`: stops and removes the app's containers and networks; the app stays installed.",
+            "properties": {
+              "operation": {
+                "const": "down",
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "ComposeBatch": {
+        "description": "A batch the server runs, or ran a short while ago.",
+        "properties": {
+          "action": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ComposeAction"
+              }
+            ],
+            "description": "The command."
+          },
+          "apps": {
+            "description": "The apps, in the order the command runs on them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "commandLine": {
+            "description": "The command line, as `docker compose up -d --pull always`, without the project and its files.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Its id, which reads its output again.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComposeReport"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How it ended on each app; `None` while it runs."
+          },
+          "startedAt": {
+            "description": "When it started, in RFC 3339.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "commandLine",
+          "apps",
+          "startedAt",
+          "report"
+        ],
+        "type": "object"
+      },
+      "ComposeEvent": {
+        "description": "An event of a batch's output.",
+        "oneOf": [
+          {
+            "description": "The command starts on an app: the head of its lines.",
+            "properties": {
+              "app": {
+                "description": "The app.",
+                "type": "string"
+              },
+              "kind": {
+                "const": "started",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "app"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A line `docker compose` printed on an app, stdout and stderr together, without its line break.",
+            "properties": {
+              "app": {
+                "description": "The app.",
+                "type": "string"
+              },
+              "kind": {
+                "const": "line",
+                "type": "string"
+              },
+              "line": {
+                "description": "The line.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "app",
+              "line"
+            ],
+            "type": "object"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ComposeOutcome"
+              },
+              {
+                "properties": {
+                  "kind": {
+                    "const": "finished",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              }
+            ],
+            "description": "The command ended on an app, or the batch ended without running it there."
+          },
+          {
+            "description": "The events this reader missed, which the batch no longer keeps: it keeps the last MiB of its output.",
+            "properties": {
+              "events": {
+                "description": "How many.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "const": "skipped",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "events"
+            ],
+            "type": "object"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ComposeReport"
+              },
+              {
+                "properties": {
+                  "kind": {
+                    "const": "end",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              }
+            ],
+            "description": "The last event, once every app was read again from the daemon and notified: how the batch ended on each."
+          }
+        ]
+      },
+      "ComposeOutcome": {
+        "description": "How the command ended on one app of a batch.",
+        "properties": {
+          "app": {
+            "description": "The app.",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorDetail"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it failed, as a code and its params beside its English message; `None` unless it failed."
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ComposeStatus"
+              }
+            ],
+            "description": "How it ended."
+          }
+        },
+        "required": [
+          "app",
+          "status",
+          "error"
+        ],
+        "type": "object"
+      },
+      "ComposeReport": {
+        "description": "How a batch ended: one outcome per app, in the order the command ran on them.",
+        "properties": {
+          "apps": {
+            "description": "The outcomes.",
+            "items": {
+              "$ref": "#/components/schemas/ComposeOutcome"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "apps"
+        ],
+        "type": "object"
+      },
+      "ComposeRequest": {
+        "description": "A batch to start: a command, and the apps it runs on.",
+        "properties": {
+          "action": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ComposeAction"
+              }
+            ],
+            "description": "The command."
+          },
+          "apps": {
+            "description": "The apps, by id, in any order: the batch runs them in the order of `hangar.yml`, `down` in reverse, each once.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "action",
+          "apps"
+        ],
+        "type": "object"
+      },
+      "ComposeStatus": {
+        "description": "How the command ended on an app.",
+        "oneOf": [
+          {
+            "const": "succeeded",
+            "description": "It succeeded.",
+            "type": "string"
+          },
+          {
+            "const": "failed",
+            "description": "It failed: its output says why.",
+            "type": "string"
+          },
+          {
+            "const": "not_run",
+            "description": "It did not run, or did not end: the batch stopped short, and the server's log says why.",
+            "type": "string"
+          }
+        ]
+      },
       "ConfigSource": {
         "description": "`hangar.yml` as it is written.",
         "properties": {
@@ -1431,6 +1740,32 @@
             "type": "object"
           },
           {
+            "description": "A name `docker compose -p` does not take as a project: lowercase letters, digits, `_` and `-`, starting with a\nletter or a digit.",
+            "properties": {
+              "code": {
+                "const": "docker.invalid_project",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "project": {
+                    "description": "The name asked for.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "project"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
             "description": "No container of the app has this id.",
             "properties": {
               "code": {
@@ -1451,6 +1786,78 @@
                 "required": [
                   "project",
                   "container"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A batch of compose commands asked for no app.",
+            "properties": {
+              "code": {
+                "const": "compose.no_apps",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A compose command failed on an app: its output says why, and the server's log.",
+            "properties": {
+              "code": {
+                "const": "compose.failed",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  },
+                  "command": {
+                    "description": "The command line, as `docker compose up -d`.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app",
+                  "command"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "No batch of compose commands of this id runs, or ended a short while ago.",
+            "properties": {
+              "code": {
+                "const": "compose.unknown_batch",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "batch": {
+                    "description": "The id asked for.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "batch"
                 ],
                 "type": "object"
               }
@@ -1901,6 +2308,78 @@
             },
             "required": [
               "key"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A compose command succeeded on an app.",
+            "properties": {
+              "key": {
+                "const": "composeSucceeded",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "flags": {
+                    "description": "The options of `up`, comma-separated, as `pull,forceRecreate`; empty for none.",
+                    "type": "string"
+                  },
+                  "operation": {
+                    "description": "`up`, `restart` or `down`.",
+                    "type": "string"
+                  },
+                  "project": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "project",
+                  "operation",
+                  "flags"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "key",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A compose command failed on an app: why is in its output, and in the server's log.",
+            "properties": {
+              "key": {
+                "const": "composeFailed",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "flags": {
+                    "description": "The options of `up`, comma-separated, as `pull,forceRecreate`; empty for none.",
+                    "type": "string"
+                  },
+                  "operation": {
+                    "description": "`up`, `restart` or `down`.",
+                    "type": "string"
+                  },
+                  "project": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "project",
+                  "operation",
+                  "flags"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "key",
+              "params"
             ],
             "type": "object"
           }
@@ -2993,6 +3472,146 @@
         ]
       }
     },
+    "/api/docker/compose": {
+      "get": {
+        "operationId": "compose_batches",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ComposeBatch"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The batches that run, and those that ended in the last five minutes, by id.",
+        "tags": [
+          "Compose"
+        ]
+      },
+      "post": {
+        "operationId": "compose_run",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComposeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                },
+                "x-item": {
+                  "$ref": "#/components/schemas/ComposeEvent"
+                }
+              }
+            },
+            "description": "Server-sent events, the data of each the JSON of an item, whose schema is `x-item`. A failure ends the stream with an event `problem`, whose data is a `Problem`."
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Starts a batch, once every app is checked: a 400 for a name compose does not take or no app at all, a 404 for an app that is not installed, and none runs. Then its output, from its start: a `started` per app, its lines, its `finished`, and an `end` with the report. The batch goes on once the stream is closed; each app's end is notified.",
+        "tags": [
+          "Compose"
+        ]
+      }
+    },
+    "/api/docker/compose/{id}": {
+      "get": {
+        "operationId": "compose_output",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                },
+                "x-item": {
+                  "$ref": "#/components/schemas/ComposeEvent"
+                }
+              }
+            },
+            "description": "Server-sent events, the data of each the JSON of an item, whose schema is `x-item`. A failure ends the stream with an event `problem`, whose data is a `Problem`."
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The output of a batch from its start, as far as it keeps it, then as it comes, to its `end`. A 404 for a batch that is not listed.",
+        "tags": [
+          "Compose"
+        ]
+      }
+    },
     "/api/docker/overview": {
       "get": {
         "operationId": "docker_overview",
@@ -3870,6 +4489,10 @@
     {
       "description": "The notifications, one list for every user: the server keeps the last 100.",
       "name": "Notifications"
+    },
+    {
+      "description": "The compose commands of the installed apps, run in batches on the server, whoever reads their output.",
+      "name": "Compose"
     }
   ]
 }

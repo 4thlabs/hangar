@@ -131,6 +131,13 @@ impl DockerState {
         self.overview.get().await
     }
 
+    /// Reads the containers again after a change this server made, as a compose command, and resolves once the cache
+    /// holds what the daemon runs since: a page told of the change then reads the new state. The overview is left to
+    /// the events, as its disk usage is the daemon's slowest call. Readers keep what is kept meanwhile.
+    pub(crate) async fn settle(&self) {
+        self.containers.reload().await;
+    }
+
     /// Follows the daemon's events, which reload what they make stale, until the server stops; once, however many
     /// times it is called. When the daemon refuses them for good, as with a 403, what is kept is reloaded each time it
     /// goes stale instead.

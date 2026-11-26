@@ -173,6 +173,43 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
         }
     }
 
+    /// Reloads the value as [`refresh`](Self::refresh) does, and resolves once a load that started after the call has
+    /// ended, for a caller that changed what the daemon runs and is about to tell a page, which reads it again.
+    /// Readers keep the current value meanwhile; a value never asked for is left alone, and resolves at once.
+    pub(crate) async fn reload(self: &Arc<Self>) {
+        let (running, is_queued) = {
+            let mut state = self.lock();
+
+            match &state.loading {
+                Some(loading) => {
+                    let running = loading.clone();
+
+                    state.is_queued = true;
+
+                    (running, true)
+                }
+                None if state.value.is_some() || state.failure.is_some() => {
+                    (self.loading(&mut state), false)
+                }
+                None => return,
+            }
+        };
+
+        // The load running may have read the daemon before the change: the one queued after it, which it starts as
+        // it ends, did not.
+        let _ = running.await;
+
+        if !is_queued {
+            return;
+        }
+
+        let queued = self.lock().loading.clone();
+
+        if let Some(queued) = queued {
+            let _ = queued.await;
+        }
+    }
+
     /// Refreshes the value every time it goes stale, from now until the server stops, for a caller that can no longer
     /// learn it changed, as when the daemon refuses its events: a page then learns of a change late, but learns of it.
     pub(crate) fn poll(self: &Arc<Self>) {
@@ -572,6 +609,52 @@ mod tests {
         cached.settled().await;
 
         assert_eq!((value(&cached).await, source.changes()), (2, 1));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_reload_ends_once_a_load_started_after_it_has_ended() {
+        let source = Source::new([Answer::Gives(1), Answer::Gives(2), Answer::Gives(3)], 1);
+        let cached = source.cached();
+
+        assert_eq!(value(&cached).await, 1);
+
+        // A load that may have read the daemon before the change, waiting at the gate.
+        cached.refresh();
+
+        let mut reload = std::pin::pin!(cached.reload());
+
+        assert!(futures::poll!(reload.as_mut()).is_pending());
+
+        source.gate.add_permits(1);
+
+        // The load running ends and starts the one the reload queued, which waits at the gate.
+        while source.loads() < 3 {
+            assert!(futures::poll!(reload.as_mut()).is_pending());
+            tokio::task::yield_now().await;
+        }
+
+        assert!(futures::poll!(reload.as_mut()).is_pending());
+        assert_eq!(value(&cached).await, 2);
+
+        source.gate.add_permits(1);
+        reload.await;
+
+        assert_eq!(value(&cached).await, 3);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_reload_reads_the_daemon_once_when_no_load_runs() {
+        let source = Source::new([Answer::Gives(1), Answer::Gives(2)], OPEN);
+        let cached = source.cached();
+
+        cached.reload().await;
+
+        assert_eq!(source.loads(), 0, "a value never asked for is left alone");
+        assert_eq!(value(&cached).await, 1);
+
+        cached.reload().await;
+
+        assert_eq!((source.loads(), value(&cached).await), (2, 2));
     }
 
     #[tokio::test(start_paused = true)]
