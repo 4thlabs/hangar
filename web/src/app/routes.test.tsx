@@ -81,6 +81,24 @@ describe("signing in", () => {
     expect(router.state.location.pathname).toBe("/login");
   });
 
+  it("sends a signed-in page to /login once a call of its own is answered 401", async () => {
+    let expired = false;
+
+    serve({
+      "GET /api/auth/session": () => (expired ? unauthorized() : Response.json(ana)),
+      "GET /api/docker/apps": () => {
+        expired = true;
+
+        return unauthorized();
+      },
+    });
+
+    const router = renderAt("/apps");
+
+    expect(await screen.findByRole("heading", { name: "Sign in to Hangar" })).toBeDefined();
+    expect(router.state.location.pathname).toBe("/login");
+  });
+
   it("signs in by password and opens the dashboard", async () => {
     let signedIn = false;
 
