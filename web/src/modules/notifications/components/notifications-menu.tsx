@@ -1,6 +1,6 @@
 import { BellIcon } from "lucide-react";
 import type { Notification } from "#libs/api";
-import { RelativeTime } from "#libs/format";
+import { relativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#modules/common/ui/empty.tsx";
@@ -32,7 +32,7 @@ function NotificationItem({ notification, now, onFollow }: NotificationItemProps
         </span>
         {description && <span className="text-muted-foreground">{description}</span>}
         <time className="text-xs text-muted-foreground" dateTime={notification.createdAt}>
-          {RelativeTime.format(createdAt, now)}
+          {relativeTime(createdAt, now)}
         </time>
       </span>
     </>

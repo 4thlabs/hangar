@@ -1,8 +1,8 @@
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { render } from "@testing-library/react";
 import { vi } from "vitest";
-import { QueryClients } from "#libs/api";
-import type { UserPreferences } from "#libs/preferences";
+import { createQueryClient } from "#libs/api";
+import { Preferences } from "#libs/preferences";
 import { Routes } from "#app/routes.tsx";
 import { SessionGuard } from "#modules/auth/session-guard.ts";
 import { AppProviders } from "#modules/common/components/app-providers.tsx";
@@ -112,13 +112,13 @@ export function serve(answers: Answers = {}) {
   return fetch;
 }
 
-/** The page at `path`, with the preferences the cookies gave, light unless they say otherwise. */
-export function renderAt(path: string, preferences: UserPreferences = { theme: "light", themePalette: "claude" }) {
-  const queryClient = QueryClients.create(() => SessionGuard.signedOut(router, queryClient));
+/** The page at `path`, with the preferences the cookies hold. */
+export function renderAt(path: string) {
+  const queryClient = createQueryClient(() => SessionGuard.signedOut(router, queryClient));
   const router = Routes.createRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
 
   render(
-    <AppProviders queryClient={queryClient} preferences={preferences}>
+    <AppProviders queryClient={queryClient} preferences={Preferences.fromCookies(document.cookie)}>
       <RouterProvider router={router} />
     </AppProviders>,
   );

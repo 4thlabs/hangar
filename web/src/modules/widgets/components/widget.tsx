@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import { ExternalLinkIcon } from "lucide-react";
 import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
-import { RelativeTime } from "#libs/format";
+import { compactRelativeTime, relativeTime } from "#libs/format";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import type { WidgetIcon } from "#modules/widgets/widget-appearance.ts";
 import { Units } from "#modules/widgets/widget-format.ts";
@@ -146,7 +146,7 @@ type WidgetTimeProps = {
 
 /** A moment, as every widget's trailing column writes one. */
 export function WidgetTime({ at, now, variant = "long" }: WidgetTimeProps) {
-  const text = variant === "compact" ? RelativeTime.compact(at, now) : RelativeTime.format(at, now);
+  const text = variant === "compact" ? compactRelativeTime(at, now) : relativeTime(at, now);
   const isTime = Number.isFinite(at);
 
   return (

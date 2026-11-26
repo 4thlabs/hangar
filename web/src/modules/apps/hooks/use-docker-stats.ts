@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getDockerStatsUrl, ServerEvents, type ContainerMetrics, type StatsFrame } from "#libs/api";
+import { getDockerStatsUrl, keepEvents, type ContainerMetrics, type StatsFrame } from "#libs/api";
 
 /** The metrics of the running containers, by full container id. */
 export type ContainerStats = StatsFrame["containers"];
@@ -21,7 +21,7 @@ export function useDockerStats(containerIds: readonly string[]) {
     let stop: (() => void) | undefined;
 
     const open = () => {
-      stop ??= ServerEvents.keep<StatsFrame>(getDockerStatsUrl(), {
+      stop ??= keepEvents<StatsFrame>(getDockerStatsUrl(), {
         onItem: frame => setStats(frame.containers),
         onDown: () => setStats({}),
       });

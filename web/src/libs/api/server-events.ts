@@ -21,178 +21,178 @@ export type KeptHandlers<T> = {
   onDown?: () => void;
 };
 
+// The `Events` routes of the server are its server-sent events: an item in the `data` of each event with no name, and
+// `event: problem` for a failure after the 200, which ends the stream. The page is served on the server's own origin,
+// so its session cookie goes with each request.
+
+/** The wait before a stream closed for good is connected again, the first time, in milliseconds. */
+const firstWait = 1_000;
+
+/** The longest wait, after many failures in a row. */
+const longestWait = 30_000;
+
 /**
- * Reads the `Events` routes of the server, its server-sent events: an item in the `data` of each event with no name,
- * and `event: problem` for a failure after the 200, which ends the stream. The page is served on the server's own
- * origin, so its session cookie goes with each request.
+ * Follows a stream that does not end, until the function it returns is called, and connects it again however it was
+ * lost: `EventSource` itself after a clean end or a network failure, and this after an answer that closes the source
+ * for good, a 502 while the server restarts, a 401, or a problem, after a wait from a second, doubled by each
+ * failure in a row up to 30 seconds.
  */
-export class ServerEvents {
-  /** The wait before a stream closed for good is connected again, the first time, in milliseconds. */
-  static readonly FirstWait = 1_000;
+export function keepEvents<T>(
+  url: string,
+  { onItem, onOpen = () => {}, onDown = () => {} }: KeptHandlers<T>,
+): () => void {
+  let wait = firstWait;
+  let stop = () => {};
+  let timer: ReturnType<typeof setTimeout> | undefined;
 
-  /** The longest wait, after many failures in a row. */
-  static readonly LongestWait = 30_000;
-
-  /**
-   * Follows a stream that does not end, until the function it returns is called, and connects it again however it was
-   * lost: `EventSource` itself after a clean end or a network failure, and this after an answer that closes the source
-   * for good, a 502 while the server restarts, a 401, or a problem, after a wait from a second, doubled by each
-   * failure in a row up to 30 seconds.
-   */
-  static keep<T>(url: string, { onItem, onOpen = () => {}, onDown = () => {} }: KeptHandlers<T>): () => void {
-    let wait = ServerEvents.FirstWait;
-    let stop = () => {};
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const connect = () => {
-      stop = ServerEvents.follow<T>(url, {
-        onItem,
-        onOpen: () => {
-          wait = ServerEvents.FirstWait;
-          onOpen();
-        },
-        onDown,
-        onEnd: () => {
-          timer = setTimeout(connect, wait);
-          wait = Math.min(wait * 2, ServerEvents.LongestWait);
-        },
-      });
-    };
-
-    connect();
-
-    return () => {
-      clearTimeout(timer);
-      stop();
-    };
-  }
-
-  /**
-   * Follows a stream that does not end, with `EventSource`, until the function it returns is called; `onDown` is told
-   * each time it is lost. After a clean end the source connects again on its own, and `onOpen` is told; any other
-   * answer than a 200 closes it for good, as a 5xx of a proxy while the server restarts, which `onEnd` is told with no
-   * error, as the source sees no status.
-   */
-  static follow<T>(
-    url: string,
-    {
+  const connect = () => {
+    stop = followEvents<T>(url, {
       onItem,
-      onOpen = () => {},
-      onEnd = () => {},
-      onDown = () => {},
-    }: EventHandlers<T> & Pick<KeptHandlers<T>, "onDown">,
-  ): () => void {
-    const source = new EventSource(url);
-
-    source.onopen = () => onOpen();
-    source.onmessage = (event: MessageEvent<string>) => onItem(JSON.parse(event.data) as T);
-    source.addEventListener("problem", (event: MessageEvent<string>) => {
-      const problem = JSON.parse(event.data) as Problem;
-
-      source.close();
-      onDown();
-      onEnd(new ApiError(problem.status ?? 500, problem));
+      onOpen: () => {
+        wait = firstWait;
+        onOpen();
+      },
+      onDown,
+      onEnd: () => {
+        timer = setTimeout(connect, wait);
+        wait = Math.min(wait * 2, longestWait);
+      },
     });
+  };
 
-    // Whether the source tries again on its own or is closed for good, the stream is lost until it opens again.
-    source.onerror = () => {
-      onDown();
+  connect();
 
-      if (source.readyState === EventSource.CLOSED) {
-        onEnd();
-      }
-    };
+  return () => {
+    clearTimeout(timer);
+    stop();
+  };
+}
 
-    return () => source.close();
+/**
+ * Follows a stream that does not end, with `EventSource`, until the function it returns is called; `onDown` is told
+ * each time it is lost. After a clean end the source connects again on its own, and `onOpen` is told; any other
+ * answer than a 200 closes it for good, as a 5xx of a proxy while the server restarts, which `onEnd` is told with no
+ * error, as the source sees no status.
+ */
+export function followEvents<T>(
+  url: string,
+  {
+    onItem,
+    onOpen = () => {},
+    onEnd = () => {},
+    onDown = () => {},
+  }: EventHandlers<T> & Pick<KeptHandlers<T>, "onDown">,
+): () => void {
+  const source = new EventSource(url);
+
+  source.onopen = () => onOpen();
+  source.onmessage = (event: MessageEvent<string>) => onItem(JSON.parse(event.data) as T);
+  source.addEventListener("problem", (event: MessageEvent<string>) => {
+    const problem = JSON.parse(event.data) as Problem;
+
+    source.close();
+    onDown();
+    onEnd(new ApiError(problem.status ?? 500, problem));
+  });
+
+  // Whether the source tries again on its own or is closed for good, the stream is lost until it opens again.
+  source.onerror = () => {
+    onDown();
+
+    if (source.readyState === EventSource.CLOSED) {
+      onEnd();
+    }
+  };
+
+  return () => source.close();
+}
+
+/**
+ * Reads a stream once, with `fetch`, until it ends or the function it returns is called: an answer that is not a
+ * 200 is its `ApiError`, which `onEnd` is told, and nothing connects again. `request` is the call, a `GET` unless it
+ * says otherwise, as a `POST` whose answer is the stream.
+ */
+export function readEvents<T>(
+  url: string,
+  { onItem, onOpen = () => {}, onEnd = () => {} }: EventHandlers<T>,
+  request: RequestInit = {},
+): () => void {
+  const controller = new AbortController();
+
+  function ended(error?: unknown) {
+    if (!controller.signal.aborted) {
+      onEnd(error);
+    }
   }
 
-  /**
-   * Reads a stream once, with `fetch`, until it ends or the function it returns is called: an answer that is not a
-   * 200 is its `ApiError`, which `onEnd` is told, and nothing connects again. `request` is the call, a `GET` unless it
-   * says otherwise, as a `POST` whose answer is the stream.
-   */
-  static read<T>(
-    url: string,
-    { onItem, onOpen = () => {}, onEnd = () => {} }: EventHandlers<T>,
-    request: RequestInit = {},
-  ): () => void {
-    const controller = new AbortController();
+  readAll(url, { ...request, signal: controller.signal }, onItem, onOpen).then(() => ended(), ended);
 
-    function ended(error?: unknown) {
-      if (!controller.signal.aborted) {
-        onEnd(error);
-      }
-    }
+  return () => controller.abort();
+}
 
-    ServerEvents.readAll(url, { ...request, signal: controller.signal }, onItem, onOpen).then(() => ended(), ended);
+async function readAll<T>(url: string, request: RequestInit, onItem: (item: T) => void, onOpen: () => void) {
+  const response = await fetch(url, request);
 
-    return () => controller.abort();
+  if (!response.ok) {
+    throw await ApiError.read(response);
   }
 
-  private static async readAll<T>(url: string, request: RequestInit, onItem: (item: T) => void, onOpen: () => void) {
-    const response = await fetch(url, request);
+  // A 204 or a 205 has no body: a stream that ends at once.
+  if (response.body === null) {
+    return;
+  }
 
-    if (!response.ok) {
-      throw await ApiError.read(response);
-    }
+  onOpen();
 
-    // A 204 or a 205 has no body: a stream that ends at once.
-    if (response.body === null) {
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+
+  for (;;) {
+    const { done, value } = await reader.read();
+
+    if (done) {
       return;
     }
 
-    onOpen();
+    // A chunk may end within an event: its start waits in `buffer` for the next one.
+    const blocks = (buffer + value).split("\n\n");
 
-    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-    let buffer = "";
+    buffer = blocks.pop() ?? "";
 
-    for (;;) {
-      const { done, value } = await reader.read();
+    for (const block of blocks) {
+      const { event, data } = parseEvent(block);
 
-      if (done) {
-        return;
+      if (data === undefined) {
+        continue;
       }
 
-      // A chunk may end within an event: its start waits in `buffer` for the next one.
-      const blocks = (buffer + value).split("\n\n");
+      if (event === "problem") {
+        const problem = JSON.parse(data) as Problem;
 
-      buffer = blocks.pop() ?? "";
-
-      for (const block of blocks) {
-        const { event, data } = ServerEvents.parse(block);
-
-        if (data === undefined) {
-          continue;
-        }
-
-        if (event === "problem") {
-          const problem = JSON.parse(data) as Problem;
-
-          throw new ApiError(problem.status ?? 500, problem);
-        }
-
-        onItem(JSON.parse(data) as T);
+        throw new ApiError(problem.status ?? 500, problem);
       }
+
+      onItem(JSON.parse(data) as T);
+    }
+  }
+}
+
+/** One event, its lines `field: value`; a line that starts with `:` is a comment. */
+function parseEvent(block: string): { event: string | undefined; data: string | undefined } {
+  let event: string | undefined;
+  let data: string | undefined;
+
+  for (const line of block.split("\n")) {
+    const colon = line.indexOf(":");
+    const field = colon < 0 ? line : line.slice(0, colon);
+    const value = colon < 0 ? "" : line.slice(colon + 1).replace(/^ /, "");
+
+    if (field === "event") {
+      event = value;
+    } else if (field === "data") {
+      data = data === undefined ? value : `${data}\n${value}`;
     }
   }
 
-  /** One event, its lines `field: value`; a line that starts with `:` is a comment. */
-  private static parse(block: string): { event: string | undefined; data: string | undefined } {
-    let event: string | undefined;
-    let data: string | undefined;
-
-    for (const line of block.split("\n")) {
-      const colon = line.indexOf(":");
-      const field = colon < 0 ? line : line.slice(0, colon);
-      const value = colon < 0 ? "" : line.slice(colon + 1).replace(/^ /, "");
-
-      if (field === "event") {
-        event = value;
-      } else if (field === "data") {
-        data = data === undefined ? value : `${data}\n${value}`;
-      }
-    }
-
-    return { event, data };
-  }
+  return { event, data };
 }

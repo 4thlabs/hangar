@@ -32,7 +32,9 @@ describe("the shell", () => {
 
   it("applies the palette and the mode of the cookies, and keeps them", async () => {
     serve();
-    renderAt("/", { theme: "dark", themePalette: "nord" });
+    document.cookie = "theme=dark; path=/";
+    document.cookie = "theme_palette=nord; path=/";
+    renderAt("/");
 
     await screen.findByRole("button", { name: "User menu of Ana Lima" });
 

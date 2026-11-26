@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { RelativeTime } from "./relative-time.ts";
+import { compactRelativeTime, relativeTime } from "./relative-time.ts";
 
 const NOW = Date.UTC(2026, 8, 21, 12, 0, 0);
-const at = (offsetMs: number) => RelativeTime.format(NOW + offsetMs, NOW);
+const at = (offsetMs: number) => relativeTime(NOW + offsetMs, NOW);
 
-describe("RelativeTime.format", () => {
+describe("relativeTime", () => {
   it("climbs to the biggest unit that fits", () => {
     expect(at(-30_000)).toBe("30 seconds ago");
     expect(at(-900_000)).toBe("15 minutes ago");
@@ -19,13 +19,13 @@ describe("RelativeTime.format", () => {
   });
 
   it("says a moment that is no time, as a date that did not parse, as unknown", () => {
-    expect(RelativeTime.format(Date.parse("not a date"), NOW)).toBe("at an unknown time");
-    expect(RelativeTime.format(Number.POSITIVE_INFINITY, NOW)).toBe("at an unknown time");
+    expect(relativeTime(Date.parse("not a date"), NOW)).toBe("at an unknown time");
+    expect(relativeTime(Number.POSITIVE_INFINITY, NOW)).toBe("at an unknown time");
   });
 });
 
-describe("RelativeTime.compact", () => {
-  const compact = (offsetMs: number) => RelativeTime.compact(NOW + offsetMs, NOW);
+describe("compactRelativeTime", () => {
+  const compact = (offsetMs: number) => compactRelativeTime(NOW + offsetMs, NOW);
 
   it("writes the past bare and the future with `in`", () => {
     expect(compact(-7_200_000)).toBe("2h");
@@ -40,6 +40,6 @@ describe("RelativeTime.compact", () => {
   });
 
   it("says a moment that is no time as unknown", () => {
-    expect(RelativeTime.compact(Date.parse("not a date"), NOW)).toBe("at an unknown time");
+    expect(compactRelativeTime(Date.parse("not a date"), NOW)).toBe("at an unknown time");
   });
 });

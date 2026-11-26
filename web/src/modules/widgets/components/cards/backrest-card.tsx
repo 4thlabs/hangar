@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import type { BackrestHealth, BackrestSummary } from "#libs/api";
-import { RelativeTime } from "#libs/format";
+import { compactRelativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
 import { Units } from "#modules/widgets/widget-format.ts";
@@ -77,7 +77,7 @@ export function BackrestCard({ summary: { repositories }, link }: BackrestCardPr
                   <span>{Units.bytes(repository.bytesAdded)} added</span>
                   <span>{Units.bytes(repository.protectedBytes)} protected</span>
                   {repository.nextBackupAt && (
-                    <span>next {RelativeTime.compact(Date.parse(repository.nextBackupAt), now)}</span>
+                    <span>next {compactRelativeTime(Date.parse(repository.nextBackupAt), now)}</span>
                   )}
                 </WidgetMetadata>
               </p>

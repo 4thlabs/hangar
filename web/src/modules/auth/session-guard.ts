@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { redirect } from "@tanstack/react-router";
-import { getAuthSessionQueryKey, getAuthSessionQueryOptions, QueryClients, type SessionUser } from "#libs/api";
+import { getAuthSessionQueryKey, getAuthSessionQueryOptions, isUnauthorized, type SessionUser } from "#libs/api";
 
 /** What the guard needs of the router: where it is, and how to go elsewhere. */
 type GuardedRouter = {
@@ -30,7 +30,7 @@ export class SessionGuard {
         revalidateIfStale: true,
       });
     } catch (error) {
-      if (QueryClients.isUnauthorized(error)) {
+      if (isUnauthorized(error)) {
         throw redirect({ to: SessionGuard.LoginPath });
       }
 

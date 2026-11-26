@@ -33,7 +33,6 @@
     "codemirror": "^6.0.2",
     "cookie": "^2.0.2",
     "fuzzysort": "^4.0.2",
-    "jotai": "^3.0.0",
     "lucide-react": "^1.41.0",
     "react": "~19.3.0",
     "react-dom": "~19.3.0",

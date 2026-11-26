@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ServerEvents, type LogEvent } from "#libs/api";
+import { readEvents, type LogEvent } from "#libs/api";
 import { ErrorMessage } from "#modules/common/error-message.ts";
 
 /** Where a followed log is. */
@@ -53,7 +53,7 @@ export function useLogEvents(url: string) {
       }
     };
 
-    const stop = ServerEvents.read<LogEvent>(url, {
+    const stop = readEvents<LogEvent>(url, {
       onOpen: () => setStatus("connected"),
       onItem: event => {
         if (event.kind === "end") {

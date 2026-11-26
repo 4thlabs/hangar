@@ -4,7 +4,7 @@ import {
   getComposeBatchesQueryKey,
   getComposeOutputUrl,
   getComposeRunUrl,
-  ServerEvents,
+  readEvents,
   type ComposeBatch,
   type ComposeEvent,
   type ComposeRequest,
@@ -60,7 +60,7 @@ export function useComposeStream() {
       setStatus("connecting");
       setError(null);
 
-      const stop = ServerEvents.read<ComposeEvent>(
+      const stop = readEvents<ComposeEvent>(
         url,
         {
           onOpen: () => {
