@@ -142,7 +142,7 @@ impl<'a, R: CommandRunner> AppFiles<'a, R> {
             }
         }
 
-        FileSyntax::check(path, source)?;
+        FileSyntax::check(path, &location.file, source)?;
         EditableFile::write(&location.file, path, source).await?;
 
         Ok(SavedFile {
@@ -176,7 +176,10 @@ impl<'a, R: CommandRunner> AppFiles<'a, R> {
         let pending = Disk::write_new(name, source.as_bytes(), target, Access::Default)
             .await
             .map_err(|error| StoreError::io("write", target, error))?;
-        let moved = match self.check(&location.folder, &pending, path, kind).await {
+        let moved = match self
+            .check(&location.folder, &pending, path, kind, source)
+            .await
+        {
             Ok(()) => tokio::fs::rename(&pending, target)
                 .await
                 .map_err(|error| StoreError::io("rename", target, error)),
@@ -190,13 +193,16 @@ impl<'a, R: CommandRunner> AppFiles<'a, R> {
         moved
     }
 
-    /// Has Docker check `pending`, the new copy of the compose file `kind` at `path` of the app in `folder`.
+    /// Has Docker check `pending`, the new copy of the compose file `kind` at `path` of the app in `folder`, which
+    /// holds `source`. A blank `compose.swarm.yml` is not checked: `docker stack config` refuses an empty file, and a
+    /// blank one is how an app is taken off the swarm, as Hangar reads it as not ready for it.
     async fn check(
         &self,
         folder: &Path,
         pending: &Path,
         path: &str,
         kind: ComposeFile,
+        source: &str,
     ) -> Result<(), StoreError> {
         let compose = Compose::new(self.store.data_dir.clone(), &self.store.runner);
         let refusal = |error| Self::refusal(error, folder, pending, path);
@@ -217,6 +223,7 @@ impl<'a, R: CommandRunner> AppFiles<'a, R> {
                         .map_err(refusal)?;
                 }
             }
+            ComposeFile::Swarm if source.trim().is_empty() => {}
             ComposeFile::Swarm => {
                 let variables = self.store.env.read().await?;
                 let compose_file = folder.join(StoreApp::COMPOSE_FILE);
@@ -460,7 +467,28 @@ mod tests {
 
         let files = fixture.store.files("web").await.expect("web is an app");
 
-        assert_eq!(files.list().await.len(), 500);
+        let listed = files.list().await;
+
+        assert_eq!(listed.len(), 500);
+        assert_eq!(listed[0], "compose.yml");
+        assert_eq!(listed[499], "file-498.txt", "the first ones by name");
+    }
+
+    #[tokio::test]
+    async fn counts_only_the_files_it_lists_so_that_images_hide_none_of_the_app_s_own() {
+        let fixture = Fixture::new();
+
+        for index in 0..800 {
+            fs::write(
+                fixture.web().join(format!("image-{index:03}.png")),
+                b"\x89PNG\0",
+            )
+            .expect("written");
+        }
+
+        let files = fixture.store.files("web").await.expect("web is an app");
+
+        assert_eq!(files.list().await, ["compose.yml", "config/settings.yml"]);
     }
 
     #[tokio::test]
@@ -578,6 +606,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn refuses_a_visible_link_to_a_hidden_entry_of_the_app() {
+        let fixture = Fixture::new();
+        let web = fixture.web();
+
+        fs::write(web.join(".env"), "SECRET=1\n").expect("written");
+        fs::create_dir_all(web.join(".git")).expect("created");
+        symlink(web.join(".env"), web.join("env.txt")).expect("linked");
+        symlink(web.join(".git"), web.join("repository")).expect("linked");
+
+        let files = fixture.store.files("web").await.expect("web is an app");
+
+        for path in ["env.txt", "repository/config"] {
+            let read = files.read(path).await.expect_err("refused");
+            let create = files.create(path).await.expect_err("refused");
+            let write = files.write(path, "A=2\n").await.expect_err("refused");
+
+            for error in [read, create, write] {
+                assert_eq!(error.to_string(), format!("{path} leads to a hidden file"));
+            }
+        }
+
+        assert_eq!(fixture.read(&web.join(".env")), "SECRET=1\n");
+        assert!(!web.join(".git/config").exists());
+    }
+
+    #[tokio::test]
+    async fn checks_a_file_reached_through_a_link_by_its_own_extension() {
+        let fixture = Fixture::new();
+        let settings = fixture.web().join("config/settings.yml");
+
+        symlink(&settings, fixture.web().join("settings.txt")).expect("linked");
+
+        let files = fixture.store.files("web").await.expect("web is an app");
+        let error = files
+            .write("settings.txt", "a: [1\n")
+            .await
+            .expect_err("not YAML");
+
+        assert!(
+            matches!(error, StoreError::InvalidFile { ref path, .. } if path == "settings.txt")
+        );
+        assert_eq!(fixture.read(&settings), "a: 1\n");
+    }
+
+    #[tokio::test]
+    async fn saves_beside_a_dangling_link_in_place_of_a_compose_file() {
+        let fixture = Fixture::new();
+
+        symlink(
+            fixture.root.join("nowhere"),
+            fixture.web().join("compose.swarm.yml"),
+        )
+        .expect("linked");
+
+        let files = fixture.store.files("web").await.expect("web is an app");
+
+        files
+            .write("config/settings.yml", "a: 2\n")
+            .await
+            .expect("written");
+        files
+            .write("compose.yml", "services:\n  web: {}\n")
+            .await
+            .expect("accepted");
+
+        assert_eq!(fixture.store.runner.runs().len(), 1, "compose alone");
+        assert!(!fixture.root.join("nowhere").exists());
+    }
+
+    #[tokio::test]
     async fn follows_a_symlink_that_stays_in_the_app_s_folder() {
         let fixture = Fixture::new();
 
@@ -653,6 +751,13 @@ mod tests {
             fs::metadata(&settings).expect("there").ino(),
             inode,
             "the same inode"
+        );
+        assert_eq!(
+            fs::read_dir(fixture.web().join("config"))
+                .expect("reads")
+                .count(),
+            1,
+            "no copy left beside"
         );
         assert_eq!(
             fixture.read(&fixture.web().join("new/folder/notes.md")),
@@ -891,6 +996,24 @@ mod tests {
             real.join("compose.swarm.yml").to_str().expect("UTF-8")
         );
         assert_eq!(fixture.read(&swarm), "services:\n  web:\n    deploy: {}\n");
+
+        let saved = files
+            .write("compose.swarm.yml", "\n")
+            .await
+            .expect("taken off the swarm");
+
+        assert_eq!(
+            saved,
+            SavedFile {
+                compose_changed: true
+            }
+        );
+        assert_eq!(
+            fixture.store.runner.runs().len(),
+            4,
+            "a blank compose.swarm.yml is not checked"
+        );
+        assert_eq!(fixture.read(&swarm), "\n");
     }
 
     #[tokio::test]

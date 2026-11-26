@@ -19,13 +19,13 @@ pub(super) struct Location {
 impl Location {
     /// Where `path`, a file's path in the folder `folder` of the app `app`, really is: no NUL byte, not absolute, no
     /// empty segment, none that starts with a dot, which covers `.`, `..` and the files the listing hides, nothing
-    /// that goes through a file, and no symlink out of the folder. A file that does not exist yet is placed under its
-    /// closest folder that does.
+    /// that goes through a file, no symlink out of the folder, and none to a hidden entry of it. A file that does not
+    /// exist yet is placed under its closest folder that does.
     ///
     /// # Errors
     ///
-    /// Returns [`StoreError::InvalidPath`], [`StoreError::ThroughFile`], [`StoreError::BrokenSymlink`] or
-    /// [`StoreError::OutsideApp`] for a path that breaks those rules, and [`StoreError::Io`] when the folder or the
+    /// Returns [`StoreError::InvalidPath`], [`StoreError::ThroughFile`], [`StoreError::BrokenSymlink`],
+    /// [`StoreError::OutsideApp`] or [`StoreError::HiddenFile`] for a path that breaks those rules, and [`StoreError::Io`] when the folder or the
     /// path cannot be resolved.
     pub(super) async fn find(app: &str, folder: &Path, path: &str) -> Result<Self, StoreError> {
         let segments: Vec<&str> = path.split('/').collect();
@@ -50,9 +50,20 @@ impl Location {
         let real_file = Self::real_path(folder, &joined, path).await?;
 
         // By component: `/store/web-2` is not in `/store/web`.
-        if !real_file.starts_with(&real_folder) {
+        let Ok(inside) = real_file.strip_prefix(&real_folder) else {
             return Err(StoreError::OutsideApp {
                 app: app.to_owned(),
+                path: path.to_owned(),
+            });
+        };
+
+        // A visible link to a hidden file, as `env.txt` to `.env`, reaches what the path alone could not.
+        let is_hidden = inside
+            .iter()
+            .any(|segment| segment.to_string_lossy().starts_with('.'));
+
+        if is_hidden {
+            return Err(StoreError::HiddenFile {
                 path: path.to_owned(),
             });
         }
@@ -67,11 +78,17 @@ impl Location {
     /// symlink, as `alias.yml`, or spelled in another case, as `Compose.yml`, which a file system that ignores case
     /// takes for the same file.
     ///
+    /// A broken symlink in `name`'s place is not that file: nothing reaches it.
+    ///
     /// # Errors
     ///
-    /// Returns the errors of [`find`](Self::find) for `name` in the folder, as a broken symlink.
+    /// Returns the errors of [`find`](Self::find) for `name` in the folder.
     pub(super) async fn is_root_file(&self, name: &str) -> Result<bool, StoreError> {
-        let root = Self::real_path(&self.folder, &self.folder.join(name), name).await?;
+        let root = match Self::real_path(&self.folder, &self.folder.join(name), name).await {
+            Ok(root) => Some(root),
+            Err(StoreError::BrokenSymlink { .. }) => None,
+            Err(error) => return Err(error),
+        };
         let is_at_root = self.file.parent() == Some(self.folder.as_path());
         let is_spelled_so = self
             .file
@@ -79,7 +96,7 @@ impl Location {
             .and_then(|file_name| file_name.to_str())
             .is_some_and(|file_name| file_name.to_lowercase() == name);
 
-        Ok(self.file == root || (is_at_root && is_spelled_so))
+        Ok(root.as_ref() == Some(&self.file) || (is_at_root && is_spelled_so))
     }
 
     /// The real path of `target`, in `folder`, or while it does not exist yet, the real path of its closest folder

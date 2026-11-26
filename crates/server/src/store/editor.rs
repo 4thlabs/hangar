@@ -31,29 +31,45 @@ impl StoreState {
             })?;
         tracing::info!(app = %new.id, "an app was created");
 
-        match self.find(&new.id).await? {
-            Some(app) => Ok(app),
-            None => Err(Failure::logged(failed(), &Unlisted)),
-        }
+        // Created, whatever the listing says now: a retry would find its id taken.
+        self.edited(&new.id, failed()).await
     }
 
-    /// The app `id`, and the files the editor may open.
+    /// The app `id`, and the files the editor may open: those of its folder, whether its `compose.yml` parses or not,
+    /// as fixing it is what the editor is for.
     async fn app_files(&self, id: &str) -> Result<AppFileList> {
-        let Some(app) = self.find(id).await? else {
-            return Err(Self::unknown(id));
-        };
-        let failed = ErrorCode::FilesUnreadable {
-            app: app.id.clone(),
-        };
+        let failed = || ErrorCode::FilesUnreadable { app: id.to_owned() };
         let files = self
             .store
-            .files(&app.id)
+            .files(id)
             .await
-            .map_err(|error| Self::refusal(error, failed))?;
+            .map_err(|error| Self::refusal(error, failed()))?;
 
         Ok(AppFileList {
+            app: self.edited(id, failed()).await?,
             files: files.list().await,
-            app,
+        })
+    }
+
+    /// The app `id`, whose folder is in the store, as the store lists it, or by its id alone when the store does not,
+    /// its `compose.yml` broken say.
+    async fn edited(&self, id: &str, failed: ErrorCode) -> Result<StoreApp> {
+        if let Some(app) = self.find(id).await? {
+            return Ok(app);
+        }
+
+        let installed = self
+            .store
+            .is_linked(id)
+            .await
+            .map_err(|error| Failure::logged(failed, &error))?;
+
+        Ok(StoreApp {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            icon: None,
+            installed,
+            swarm_ready: false,
         })
     }
 
@@ -144,6 +160,7 @@ impl StoreState {
                 ErrorCode::OutsideApp { app, path }
             }
             StoreError::BrokenSymlink { path } => ErrorCode::BrokenSymlink { path },
+            StoreError::HiddenFile { path } => ErrorCode::HiddenFile { path },
             StoreError::NoSuchFile { app, path } => ErrorCode::NoSuchFile { app, path },
             StoreError::NotAFile { path } => ErrorCode::NotAFile { path },
             StoreError::TooLarge { path, size } => ErrorCode::TooLarge { path, size },
@@ -171,11 +188,6 @@ impl StoreState {
         code.into()
     }
 }
-
-/// An app created that the store does not list: another process, the Waku version say, changed it meanwhile.
-#[derive(Debug, thiserror::Error)]
-#[error("the app created is not among the store's apps")]
-struct Unlisted;
 
 impl EditorServer for App {
     async fn create_app(&self, _: &SignedIn, app: NewApp) -> Result<Response<StoreApp>> {

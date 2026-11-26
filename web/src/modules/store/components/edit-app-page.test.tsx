@@ -39,6 +39,22 @@ describe("/store/$id/edit", () => {
     expect(screen.getByText("config/settings.yml", { selector: "p" })).toBeDefined();
   });
 
+  it("opens a file whatever its name, `constructor` included", async () => {
+    serve({
+      ...answers,
+      "GET /api/store/apps/alpha/files": () => Response.json({ ...alpha, files: ["compose.yml", "constructor"] }),
+      "GET /api/store/apps/alpha/file?path=constructor": () =>
+        Response.json({ path: "constructor", source: "built\n" }),
+    });
+
+    renderAt("/store/alpha/edit");
+    await waitFor(() => expect(editorText()).toContain("alpha: {}"));
+    fireEvent.click(screen.getByRole("button", { name: "constructor" }));
+
+    await waitFor(() => expect(editorText()).toContain("built"));
+    expect(screen.queryByLabelText("unsaved changes")).toBeNull();
+  });
+
   it("saves the open file, and shows why compose refused it under the editor", async () => {
     const saved: unknown[] = [];
 

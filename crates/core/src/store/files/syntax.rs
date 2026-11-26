@@ -2,6 +2,7 @@
 //! compose files are not checked here: Docker checks them, which takes the runner.
 
 use std::collections::HashSet;
+use std::path::Path;
 
 use serde::Deserialize;
 use serde_norway::Value;
@@ -12,16 +13,21 @@ use crate::store::{Dotenv, StoreError};
 pub(super) struct FileSyntax;
 
 impl FileSyntax {
-    /// Checks `source`, the file at `path`, as its extension says: `.yml` and `.yaml` as YAML, `.env` as dotenv. A file
-    /// of any other extension passes as it is.
+    /// Checks `source`, the new text of `file`, as the file's own extension says, not that of a symlink to it: `.yml`
+    /// and `.yaml` as YAML, `.env` as dotenv. A file of any other extension passes as it is. `path`, the path it was
+    /// asked by, is the one the error names.
     ///
     /// # Errors
     ///
     /// Returns [`StoreError::InvalidFile`], with what is wrong, when `source` does not parse.
-    pub(super) fn check(path: &str, source: &str) -> Result<(), StoreError> {
-        let reason = if path.ends_with(".yml") || path.ends_with(".yaml") {
+    pub(super) fn check(path: &str, file: &Path, source: &str) -> Result<(), StoreError> {
+        let name = file
+            .file_name()
+            .map(|name| name.to_string_lossy())
+            .unwrap_or_default();
+        let reason = if name.ends_with(".yml") || name.ends_with(".yaml") {
             Self::yaml(source)
-        } else if path.ends_with(".env") {
+        } else if name.ends_with(".env") {
             Self::env(source)
         } else {
             None
@@ -87,11 +93,13 @@ impl FileSyntax {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::FileSyntax;
     use crate::StoreError;
 
     fn reason(path: &str, source: &str) -> Option<String> {
-        match FileSyntax::check(path, source) {
+        match FileSyntax::check(path, Path::new(path), source) {
             Ok(()) => None,
             Err(StoreError::InvalidFile { reason, .. }) => Some(reason),
             Err(error) => panic!("{error:?}"),
@@ -134,6 +142,18 @@ mod tests {
             reason("web.env", "A=1\nBROKEN LINE\n").as_deref(),
             Some("line 2: expected VARIABLE=value, got \"BROKEN LINE\"")
         );
+    }
+
+    #[test]
+    fn checks_a_file_by_its_own_extension_not_by_that_of_the_path_asked() {
+        let refused = FileSyntax::check("settings.txt", Path::new("/app/settings.yml"), "a: [1\n");
+        let passed = FileSyntax::check("settings.yml", Path::new("/app/settings.txt"), "a: [1\n");
+
+        assert!(
+            matches!(refused, Err(StoreError::InvalidFile { ref path, .. }) if path == "settings.txt"),
+            "{refused:?}"
+        );
+        assert!(passed.is_ok(), "{passed:?}");
     }
 
     #[test]

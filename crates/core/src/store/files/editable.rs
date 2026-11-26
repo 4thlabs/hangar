@@ -2,12 +2,12 @@
 //! whole. The paths given here are resolved already, and known to stay in the app's folder.
 
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::store::StoreError;
+use crate::store::{Access, Disk, StoreError};
 
 /// An entry of an app's folder that the listing met, by its path in the folder.
 struct ListedEntry {
@@ -35,14 +35,58 @@ impl EditableFile {
     /// The editable files under `folder`, as paths in it, sorted. Hidden entries, symlinks, binaries and files over
     /// the size limit are left out, and so is what cannot be read, with a warning: one entry that cannot be read does
     /// not hide the others.
+    ///
+    /// The folders are walked breadth first, each level sorted, and the count is of the files listed alone: a folder
+    /// of images beside the app's own files does not take their place, and the cap keeps the same files whatever order
+    /// the system lists a folder in.
     pub(super) async fn list(folder: &Path) -> Vec<String> {
         let mut files = Vec::new();
+        let mut folders = vec![String::new()];
+        let mut is_capped = false;
 
-        // One file at a time: a listing may hold hundreds, more than the files a process may open.
-        for path in Self::candidates(folder).await {
-            if Self::is_listed(folder, &path).await {
-                files.push(path);
+        'levels: for _ in 0..=Self::MAX_DEPTH {
+            let mut entries = Vec::new();
+
+            for relative in &folders {
+                entries.extend(Self::visible_entries(folder, relative).await);
             }
+
+            entries.sort_by(|left, right| left.path.cmp(&right.path));
+            folders = Vec::new();
+
+            for entry in entries {
+                if entry.is_folder {
+                    folders.push(entry.path);
+                    continue;
+                }
+
+                if !entry.is_file {
+                    continue;
+                }
+
+                if files.len() == Self::MAX_FILES {
+                    is_capped = true;
+                    break 'levels;
+                }
+
+                // One file at a time: a listing may hold hundreds, more than the files a process may open.
+                if Self::is_listed(folder, &entry.path).await {
+                    files.push(entry.path);
+                }
+            }
+
+            if folders.is_empty() {
+                break;
+            }
+        }
+
+        if is_capped || !folders.is_empty() {
+            tracing::warn!(
+                folder = %folder.display(),
+                max_depth = Self::MAX_DEPTH,
+                max_files = Self::MAX_FILES,
+                "an app's folder is listed only in part"
+            );
         }
 
         files.sort();
@@ -106,6 +150,9 @@ impl EditableFile {
     /// A file that is there is rewritten in place: a container that bind-mounts that one file holds its inode, and sees
     /// an edit made to that inode alone, not a new file renamed over it.
     ///
+    /// The new text is written whole to a copy beside it first, so that a write that fails, the disk full say, fails
+    /// there and leaves the file as it was; only then is it copied over the file, and synced.
+    ///
     /// # Errors
     ///
     /// Returns [`StoreError::NotAFile`] when it is not a regular file, a symlink swapped in after its path was
@@ -117,25 +164,57 @@ impl EditableFile {
         // No `create`: nothing is created through a symlink planted after the path was resolved.
         options.write(true);
 
-        let mut handle = match options.open(file).await {
+        let handle = match options.open(file).await {
             Ok(handle) => Self::regular(handle, file, path).await?,
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                Self::create_new(file, path, || StoreError::FileAppeared {
-                    path: path.to_owned(),
-                })
-                .await?
+                return Self::write_new_file(file, path, source).await;
             }
             Err(error) => return Err(Self::open_error(error, file, path)),
         };
-        let written = async {
-            handle.set_len(0).await?;
-            handle.write_all(source.as_bytes()).await?;
-            handle.flush().await
-        };
+        let copy = Self::copy_beside(file, source).await?;
+        let rewritten = Self::rewrite(handle, source).await;
 
-        written
+        Disk::discard(&copy).await;
+
+        rewritten.map_err(|error| StoreError::io("write", file, error))
+    }
+
+    /// Creates `file`, the file at `path`, holding `source`; one left half written is removed.
+    async fn write_new_file(file: &Path, path: &str, source: &str) -> Result<(), StoreError> {
+        let handle = Self::create_new(file, path, || StoreError::FileAppeared {
+            path: path.to_owned(),
+        })
+        .await?;
+
+        if let Err(error) = Self::rewrite(handle, source).await {
+            Disk::discard(file).await;
+
+            return Err(StoreError::io("write", file, error));
+        }
+
+        Ok(())
+    }
+
+    /// A copy of `source` written whole and synced beside `file`, hidden, under a name no other write holds.
+    async fn copy_beside(file: &Path, source: &str) -> Result<PathBuf, StoreError> {
+        let folder = file.parent().unwrap_or(file);
+        let name = file
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let process = std::process::id();
+        let copy = |attempt: u32| folder.join(format!(".{name}.{process}-{attempt}.saving"));
+
+        Disk::write_new(copy, source.as_bytes(), file, Access::Default)
             .await
             .map_err(|error| StoreError::io("write", file, error))
+    }
+
+    /// `handle`'s file holding `source` alone, synced.
+    async fn rewrite(mut handle: File, source: &str) -> io::Result<()> {
+        handle.set_len(0).await?;
+        handle.write_all(source.as_bytes()).await?;
+        handle.sync_all().await
     }
 
     /// Creates `file`, the file at `path`, empty, and its missing folders.
@@ -240,48 +319,6 @@ impl EditableFile {
         let sniffed = content.len().min(Self::SNIFF_LENGTH as usize);
 
         content[..sniffed].contains(&0)
-    }
-
-    /// The visible regular files under `folder`, breadth first, within the listing's depth and count.
-    async fn candidates(folder: &Path) -> Vec<String> {
-        let mut files = Vec::new();
-        let mut folders = vec![String::new()];
-
-        for _ in 0..=Self::MAX_DEPTH {
-            if folders.is_empty() {
-                break;
-            }
-
-            let mut next = Vec::new();
-
-            for relative in &folders {
-                for entry in Self::visible_entries(folder, relative).await {
-                    if entry.is_file {
-                        files.push(entry.path);
-                    } else if entry.is_folder {
-                        next.push(entry.path);
-                    }
-                }
-            }
-
-            folders = next;
-
-            if files.len() >= Self::MAX_FILES {
-                break;
-            }
-        }
-
-        if !folders.is_empty() || files.len() > Self::MAX_FILES {
-            tracing::warn!(
-                folder = %folder.display(),
-                max_depth = Self::MAX_DEPTH,
-                max_files = Self::MAX_FILES,
-                "an app's folder is listed only in part"
-            );
-        }
-
-        files.truncate(Self::MAX_FILES);
-        files
     }
 
     /// The entries of the folder `relative`, in `folder`, that the listing may show: not hidden, and named in UTF-8,

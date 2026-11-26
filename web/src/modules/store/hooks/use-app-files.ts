@@ -22,29 +22,30 @@ export function useAppFiles({ id, files, initialFile, onSaved }: AppFilesOptions
   const queryClient = useQueryClient();
   const [paths, setPaths] = useState(files);
   const [selectedPath, setSelectedPath] = useState(initialFile.path);
-  const [savedSources, setSavedSources] = useState<Record<string, string>>({ [initialFile.path]: initialFile.source });
-  const [drafts, setDrafts] = useState<Record<string, string>>({ [initialFile.path]: initialFile.source });
+  // Maps, not objects: a file may be named `constructor` or `toString`.
+  const [savedSources, setSavedSources] = useState(() => new Map([[initialFile.path, initialFile.source]]));
+  const [drafts, setDrafts] = useState(() => new Map([[initialFile.path, initialFile.source]]));
   const [loadingPath, setLoadingPath] = useState<string | null>(null);
   // One message per file, shown under the editor while it is open, as compose explains itself over several lines.
   // Keyed by path, so that a read that ends once another file is open stays with its own.
-  const [errors, setErrors] = useState<Record<string, string | null>>({});
+  const [errors, setErrors] = useState(() => new Map<string, string | null>());
   const write = useEditorWrite();
   const create = useEditorCreate();
 
-  const unsavedPaths = new Set(Object.keys(drafts).filter(path => drafts[path] !== savedSources[path]));
+  const unsavedPaths = new Set([...drafts.keys()].filter(path => drafts.get(path) !== savedSources.get(path)));
 
-  const setError = (path: string, message: string | null) => setErrors(current => ({ ...current, [path]: message }));
+  const setError = (path: string, message: string | null) => setErrors(current => new Map(current).set(path, message));
 
   /** Keeps what a file holds on disk, which its draft then starts from or is compared to. */
   const remember = (path: string, source: string) => {
-    setSavedSources(current => ({ ...current, [path]: source }));
-    setDrafts(current => ({ ...current, [path]: current[path] ?? source }));
+    setSavedSources(current => new Map(current).set(path, source));
+    setDrafts(current => new Map(current).set(path, current.get(path) ?? source));
   };
 
   const select = (path: string) => {
     setSelectedPath(path);
 
-    if (path in drafts) {
+    if (drafts.has(path)) {
       return;
     }
 
@@ -58,11 +59,11 @@ export function useAppFiles({ id, files, initialFile, onSaved }: AppFilesOptions
       .finally(() => setLoadingPath(current => (current === path ? null : current)));
   };
 
-  const updateDraft = (source: string) => setDrafts(current => ({ ...current, [selectedPath]: source }));
+  const updateDraft = (source: string) => setDrafts(current => new Map(current).set(selectedPath, source));
 
   const save = () => {
     const path = selectedPath;
-    const source = drafts[path];
+    const source = drafts.get(path);
 
     if (source === undefined) {
       return;
@@ -73,7 +74,7 @@ export function useAppFiles({ id, files, initialFile, onSaved }: AppFilesOptions
       {
         onSuccess: saved => {
           setError(path, null);
-          setSavedSources(current => ({ ...current, [path]: source }));
+          setSavedSources(current => new Map(current).set(path, source));
           ActionToast.success("File saved", `${path} was saved.`);
           onSaved(saved);
         },
@@ -117,9 +118,9 @@ export function useAppFiles({ id, files, initialFile, onSaved }: AppFilesOptions
   return {
     paths,
     selectedPath,
-    selectedDraft: drafts[selectedPath],
+    selectedDraft: drafts.get(selectedPath),
     unsavedPaths,
-    error: errors[selectedPath] ?? null,
+    error: errors.get(selectedPath) ?? null,
     isLoading: loadingPath === selectedPath,
     isPending: write.isPending || create.isPending,
     select,
