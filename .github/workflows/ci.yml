@@ -97,6 +97,49 @@ jobs:
       - name: Docs
         run: cargo doc --workspace --all-features --no-deps --locked
 
+  # The Rust server's page, in web/: the TypeScript written from the contract of the commit, type-checked and bundled,
+  # then its tests. A change of the contract that breaks the page breaks the pull request. Like `rust`, the image
+  # does not wait for it until the switch.
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+
+    env:
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      # At the tag of the quoll the contract uses; kept in ~/.cargo/bin by the cache.
+      - name: Install cargo quoll
+        run: cargo install --git https://github.com/4thlabs/quoll --tag v0.10.0 quoll-cli --locked
+
+      # Before the build: orval, which `cargo quoll gen` runs, is one of the page's dependencies.
+      - name: Install dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Build
+        run: cargo quoll build
+
+      - name: Run tests
+        run: npm test
+        working-directory: web
+
   # The static `hangar` binary, for a host with no Rust toolchain, as Unraid. Each architecture builds on its own runner,
   # with musl-tools' musl-gcc compiling the C of rustls' crypto (aws-lc-sys, ring): no cross toolchain. Every run keeps
   # it as an artifact; a `v*` tag attaches it to its release, in `release-cli`.
