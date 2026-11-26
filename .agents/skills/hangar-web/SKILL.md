@@ -161,15 +161,29 @@ or invalidate a key, open a stream, or write a word chosen by a code or an enum.
 ### Routes: thin
 
 ```ts
-// a file route of #186
+// routes/_app/apps.tsx
 export const Route = createFileRoute("/_app/apps")({
   validateSearch: validateAppsSearch,
-  beforeLoad: ({ context }) => context.session.require(),
+  staticData: { searchable: true },
   loader: ({ context }) => context.queryClient.ensureQueryData(appsQueries.projects()),
   component: AppsPage,
 });
 ```
 
+- One file per route under `web/src/routes/`, `export const Route = createFileRoute(...)`. The generator writes the
+  path from the file's name: rename the file, never the string. `_app.tsx` is the frame, with no path of its own,
+  whose `beforeLoad` requires the session for every page under `_app/`. `_app/$.tsx` is the not-found page of any
+  other path.
+- A page beside another at a longer path is `x_.y.tsx` (`apps_.$project.tsx`, `store_.new.tsx`): `x.y.tsx` would be a
+  child of `x.tsx`, rendered in its `Outlet`, which a page has not.
+- A route file imports its components from `modules/` and defines none: `autoCodeSplitting` moves each route's
+  components into a chunk of their own, loaded with its page. Only `validateSearch`, `beforeLoad`, `loader` and
+  `staticData` stay in the entry.
+- A component reads its route by id: `useSearch({ from: "/_app/apps" })`, `useParams({ from: "/_app/apps_/$project" })`.
+- `src/app/routeTree.gen.ts` is generated and gitignored. `src/app/router.ts` has `createPageRouter` and the
+  `Register` declaration.
+- The build fails when the entry, with the chunks it imports, passes `entryBudgetKb` in `vite.config.ts`. A change
+  that passes it loads what it added from a route's component, or raises the budget and says why.
 - The router has `defaultPreload: "intent"` and `defaultPreloadStaleTime: 0`: Query alone decides freshness.
 - A loader only calls `ensureQueryData` with its module's options.
 - The edited files (env, config, an app's file) are read with `refetchOnMount: "always"`, and their routes do not

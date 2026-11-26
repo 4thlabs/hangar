@@ -32,7 +32,8 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
   `switch-exhaustiveness-check`. It also holds `no-unused-vars`, since the core rule on Babel sees neither a name used
   in JSX nor one used only as a type, and `unbound-method`, as a method passed by reference loses its `this`.
   `npm run lint --prefix web` runs it, warnings as errors. It needs orval's `generated.ts`, so it runs after
-  `cargo quoll gen`: CI's `web` job runs it after `cargo quoll build`.
+  `cargo quoll gen`: CI's `web` job runs it after `cargo quoll build`. Its script writes the router's
+  `routeTree.gen.ts` first.
 - One rule, one tool: a rule is in ESLint or in oxlint, never in both.
 - A rule is turned off only on the line that needs it, with its reason, in the comment of the tool that runs it. Never
   for a whole file.
