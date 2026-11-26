@@ -447,7 +447,7 @@
         "type": "object"
       },
       "ErrorDetail": {
-        "description": "An error as a body carries it, where a problem does not: its code, its params, and its English message, which the\npage shows until a catalog words the code.\n\n```\nuse hangar_api::{ErrorCode, ErrorDetail};\n\nlet detail = ErrorDetail::from(ErrorCode::UnknownApp { app: \"alpha\".to_owned() });\n\nassert_eq!(\n    serde_json::to_value(&detail).expect(\"JSON\"),\n    serde_json::json!({\n        \"code\": \"store.unknown_app\",\n        \"params\": { \"app\": \"alpha\" },\n        \"message\": \"the store has no app alpha\",\n    })\n);\n```",
+        "description": "An error as a body carries it, as a store sync's: its code, its params, and its English message, which the page\nshows for a code it does not know.\n\n```\nuse hangar_api::{ErrorCode, ErrorDetail};\n\nlet detail = ErrorDetail::from(ErrorCode::UnknownApp { app: \"alpha\".to_owned() });\n\nassert_eq!(\n    serde_json::to_value(&detail).expect(\"JSON\"),\n    serde_json::json!({\n        \"code\": \"store.unknown_app\",\n        \"params\": { \"app\": \"alpha\" },\n        \"message\": \"the store has no app alpha\",\n    })\n);\n```",
         "oneOf": [
           {
             "description": "The store carries no app of this id.",

@@ -366,8 +366,8 @@ pub enum ErrorCode {
     },
 }
 
-/// An error as a body carries it, where a problem does not: its code, its params, and its English message, which the
-/// page shows until a catalog words the code.
+/// An error as a body carries it, as a store sync's: its code, its params, and its English message, which the page
+/// shows for a code it does not know.
 ///
 /// ```
 /// use hangar_api::{ErrorCode, ErrorDetail};
@@ -541,8 +541,8 @@ impl ErrorCode {
         }
     }
 
-    /// The message in English, which the page shows until a catalog words the code: a failure of the server's own
-    /// sends its reader to the log, where its cause is.
+    /// The message in English, the detail of its problem, which the page shows for a code it does not know: a failure
+    /// of the server's own sends its reader to the log, where its cause is.
     pub fn message(&self) -> String {
         match self {
             Self::UnknownApp { app } => format!("the store has no app {app}"),

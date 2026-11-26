@@ -9,6 +9,9 @@ export class SignInMessages {
   /** What a sign-in by password that failed with no error of the server's says. */
   private static readonly Failed = "Unable to sign in. Please try again.";
 
+  /** What a 401 of no code says, as the server's `auth.invalid_credentials` does. */
+  private static readonly InvalidCredentials = "Invalid email or password.";
+
   static readonly Refusals: Record<SignInRefusal, string> = {
     unavailable: "The identity provider cannot be reached. Try again, or sign in with your password.",
     expired: "The sign-in expired, or was started in another tab. Try again.",
@@ -25,12 +28,19 @@ export class SignInMessages {
     return error as SignInRefusal;
   }
 
-  /** What failed in a sign-in by password: the words of the server's error, a wrong password or too many attempts. */
+  /**
+   * What failed in a sign-in by password: the words of the server's error, a wrong password or too many attempts; a 401
+   * of no code, a proxy's or a body cut short, is a wrong password still.
+   */
   static ofPassword(error: unknown): string {
-    if (!(error instanceof ApiError) || !error.detail) {
+    if (!(error instanceof ApiError)) {
       return SignInMessages.Failed;
     }
 
-    return ErrorMessage.describe(error);
+    if (error.detail) {
+      return ErrorMessage.describe(error);
+    }
+
+    return error.status === 401 ? SignInMessages.InvalidCredentials : SignInMessages.Failed;
   }
 }

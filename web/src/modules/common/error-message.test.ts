@@ -55,6 +55,17 @@ describe("ErrorMessage.describe", () => {
     expect(ErrorMessage.describe(coded(409, "toString", {}))).toBe("The message of toString.");
   });
 
+  it("says a code without a param its words need in the server's message", () => {
+    expect(ErrorMessage.describe(coded(404, "store.unknown_app", {}))).toBe("The message of store.unknown_app.");
+    expect(ErrorMessage.describe(coded(404, "docker.unknown_container", { project: "alpha" }))).toBe(
+      "The message of docker.unknown_container.",
+    );
+
+    expect(ErrorMessage.describe(coded(404, "docker.unknown_container", { project: "alpha", container: null }))).toBe(
+      "The message of docker.unknown_container.",
+    );
+  });
+
   it("writes the detail of a problem of no code as a sentence", () => {
     expect(ErrorMessage.describe(answered(413, "the body is too large"))).toBe("The body is too large.");
   });
@@ -70,5 +81,11 @@ describe("ErrorMessage.describeDetail", () => {
     const detail: ErrorDetail = { code: "store.clone_failed", message: "the store could not be cloned" };
 
     expect(ErrorMessage.describeDetail(detail)).toBe("The store could not be cloned. See the server's log.");
+  });
+
+  it("says an error a body carries without a param its words need in the server's message", () => {
+    const detail = { code: "store.install_failed", message: "the installation of alpha failed" } as ErrorDetail;
+
+    expect(ErrorMessage.describeDetail(detail)).toBe("The installation of alpha failed.");
   });
 });

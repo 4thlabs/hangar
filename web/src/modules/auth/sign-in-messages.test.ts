@@ -31,6 +31,7 @@ describe("SignInMessages", () => {
       "Too many failed sign-ins for this email: try again in 15 minutes.",
     );
 
+    expect(SignInMessages.ofPassword(new ApiError(401))).toBe("Invalid email or password.");
     expect(SignInMessages.ofPassword(new ApiError(413))).toBe("Unable to sign in. Please try again.");
     expect(SignInMessages.ofPassword(new TypeError("Failed to fetch"))).toBe("Unable to sign in. Please try again.");
   });

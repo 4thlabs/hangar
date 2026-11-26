@@ -183,9 +183,18 @@ async fn a_directory_that_holds_a_compressed_index_alone_is_left_to_the_page() -
     std::fs::create_dir(page.path().join("docs")).expect("created");
     std::fs::write(page.path().join("docs/index.html.gz"), "gzipped").expect("written");
 
-    let slashed = http().get(format!("{url}/docs/")).send().await?;
+    let bare = http().get(format!("{url}/docs")).send().await?;
+    let slashed = http()
+        .get(format!("{url}/docs/"))
+        .header(ACCEPT_ENCODING, "gzip")
+        .send()
+        .await?;
 
-    assert_ne!(slashed.status(), StatusCode::MOVED_PERMANENTLY);
+    assert_eq!(bare.status(), StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(bare.headers()[LOCATION], "/docs/");
+    assert_eq!(slashed.status(), StatusCode::OK);
+    assert_eq!(slashed.headers()[CONTENT_ENCODING], "gzip");
+    assert_eq!(slashed.bytes().await?.as_ref(), b"gzipped");
     Ok(())
 }
 
