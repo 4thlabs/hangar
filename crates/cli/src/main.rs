@@ -18,7 +18,7 @@ use clap::Parser;
 use hangar_core::{CancellationToken, Runtime};
 
 use cli::Cli;
-use environment::Environment;
+use environment::Variables;
 use failure::Failure;
 use hangar::Hangar;
 use interrupts::Interrupts;
@@ -36,8 +36,8 @@ fn main() -> ExitCode {
         .with_target(false)
         .init();
 
-    let environment = match Environment::load() {
-        Ok(environment) => environment,
+    let variables = match Variables::load() {
+        Ok(variables) => variables,
         Err(failure) => return failure.report(),
     };
 
@@ -53,9 +53,9 @@ fn main() -> ExitCode {
         // The second Ctrl-C cancels it, which stops the children still running.
         let cancellation = CancellationToken::new();
         let runtime = Runtime::with_cancellation(cancellation.clone())
-            .envs(environment.file_variables().clone());
+            .envs(variables.file_variables().clone());
         let terminal = Terminal::default();
-        let hangar = Hangar::new(runtime.clone(), environment, terminal.clone());
+        let hangar = Hangar::new(runtime.clone(), variables, terminal.clone());
 
         Interrupts::new(runtime, cancellation, terminal)
             .run(cli.run(&hangar))
