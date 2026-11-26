@@ -73,7 +73,10 @@ export class ErrorMessage {
     "editor.save_failed": ["path"],
     "editor.create_failed": ["app"],
     "docker.unknown_project": ["project"],
+    "docker.invalid_project": ["project"],
     "docker.unknown_container": ["project", "container"],
+    "compose.failed": ["app", "command"],
+    "compose.unknown_batch": ["batch"],
     "auth.cross_origin": ["origin"],
   };
 
@@ -122,7 +125,12 @@ export class ErrorMessage {
     "editor.create_failed": ({ app }) => ErrorMessage.hinted(`The app ${app} could not be created.`),
     "docker.unavailable": () => ErrorMessage.hinted("The Docker daemon could not be read."),
     "docker.unknown_project": ({ project }) => `No app ${project} is installed.`,
+    "docker.invalid_project": ({ project }) =>
+      `${project} is not a compose project name: lowercase letters, digits, \`_\` and \`-\`, starting with a letter or a digit.`,
     "docker.unknown_container": ({ project, container }) => `The app ${project} has no container ${container}.`,
+    "compose.no_apps": () => "A compose command needs at least one app.",
+    "compose.failed": ({ app, command }) => ErrorMessage.hinted(`${command} failed on ${app}.`),
+    "compose.unknown_batch": () => "This compose command ended too long ago: its output is no longer kept.",
     "auth.invalid_credentials": () => "Invalid email or password.",
     "auth.too_many_sign_ins": (_, retryAfter) => ErrorMessage.tooManySignIns(retryAfter),
     "auth.session_expired": () => "Your session is no longer valid, or has expired: sign in again.",

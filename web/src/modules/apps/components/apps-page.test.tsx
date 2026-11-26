@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProjectDetail, ProjectStatus, ProjectSummary } from "#libs/api";
-import { events, FakeEventSource, problem, renderAt, serve } from "#app/mock/page.tsx";
+import { coded, events, FakeEventSource, problem, renderAt, serve } from "#app/mock/page.tsx";
 
 /** An installed app with one container, `<name>-1`. */
 function project(name: string, status: ProjectStatus, category?: string): ProjectSummary {
@@ -53,10 +53,13 @@ const alpha: ProjectDetail = {
 
 /** The names of the apps the table lists, in its order. */
 function rows(): string[] {
-  return screen
-    .getAllByRole("row")
-    .slice(1)
-    .map(row => within(row).getAllByRole("cell")[0]?.textContent ?? "");
+  return (
+    screen
+      .getAllByRole("row")
+      .slice(1)
+      // The first cell is the row's checkbox.
+      .map(row => within(row).getAllByRole("cell")[1]?.textContent ?? "")
+  );
 }
 
 /** The source of `url` the page holds open, once it does. */
@@ -302,5 +305,138 @@ describe("/apps/:project", () => {
     fireEvent.click(await screen.findByRole("button", { name: "View the logs of alpha-web-1" }));
 
     expect(await screen.findByText(`The app alpha has no container ${alphaId}.`)).toBeDefined();
+  });
+});
+
+describe("compose commands", () => {
+  /** A batch's events on `app`: its start, a line, its end, and the batch's report. */
+  function ran(app: string) {
+    const outcome = { app, status: "succeeded", error: null };
+
+    return [
+      { kind: "started", app },
+      { kind: "line", app, line: ` Container ${app}-web-1  Started` },
+      { kind: "finished", ...outcome },
+    ];
+  }
+
+  it("runs Up on the apps selected, and shows each one's output and outcome", async () => {
+    const fetch = serve({
+      "GET /api/docker/apps": () => Response.json(projects),
+      "GET /api/docker/compose": () => Response.json([]),
+      "POST /api/docker/compose": () =>
+        events([
+          ...ran("jellyfin"),
+          ...ran("miniflux"),
+          {
+            kind: "end",
+            apps: [
+              { app: "jellyfin", status: "succeeded", error: null },
+              { app: "miniflux", status: "succeeded", error: null },
+            ],
+          },
+        ]),
+    });
+
+    renderAt("/apps");
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Select miniflux" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select jellyfin" }));
+    expect(screen.getByText("2 apps selected")).toBeDefined();
+
+    // A plain up only adds what is missing: it asks for no confirmation.
+    fireEvent.click(screen.getByRole("button", { name: "Up: docker compose up -d" }));
+
+    expect(await screen.findByText("Done")).toBeDefined();
+
+    const post = fetch.mock.calls.find(([url, init]) => url === "/api/docker/compose" && init?.method === "POST");
+
+    expect(JSON.parse(post?.[1]?.body as string)).toEqual({
+      action: { operation: "up", pull: false, forceRecreate: false },
+      apps: ["jellyfin", "miniflux"],
+    });
+
+    const miniflux = screen.getByRole("region", { name: "miniflux" });
+
+    expect(within(miniflux).getByText("Succeeded")).toBeDefined();
+    expect(
+      within(miniflux).getByText(" Container miniflux-web-1  Started", { normalizer: text => text }),
+    ).toBeDefined();
+  });
+
+  it("asks before taking an app down, and says why the command failed on it", async () => {
+    const error = {
+      code: "compose.failed",
+      params: { app: "alpha", command: "docker compose down" },
+      message: "docker compose down failed on alpha. See the server's log.",
+    };
+
+    const fetch = serve({
+      "GET /api/docker/apps/alpha": () => Response.json(alpha),
+      "GET /api/docker/compose": () => Response.json([]),
+      "POST /api/docker/compose": () =>
+        events([
+          { kind: "started", app: "alpha" },
+          { kind: "line", app: "alpha", line: "alpha: no such network" },
+          { kind: "finished", app: "alpha", status: "failed", error },
+          { kind: "end", apps: [{ app: "alpha", status: "failed", error }] },
+        ]),
+    });
+
+    renderAt("/apps/alpha");
+    fireEvent.click(await screen.findByRole("button", { name: "Down" }));
+
+    expect(await screen.findByText("Stop alpha?")).toBeDefined();
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(await screen.findByText("docker compose down failed on alpha. See the server's log.")).toBeDefined();
+    expect(screen.getByText("Failed")).toBeDefined();
+    expect(screen.getByText("alpha: no such network")).toBeDefined();
+  });
+
+  it("says why a batch was refused", async () => {
+    serve({
+      "GET /api/docker/apps/alpha": () => Response.json(alpha),
+      "GET /api/docker/compose": () => Response.json([]),
+      "POST /api/docker/compose": () =>
+        coded(404, "docker.unknown_project", "no app alpha is installed", { project: "alpha" }),
+    });
+
+    renderAt("/apps/alpha");
+    fireEvent.click(await screen.findByRole("button", { name: "Up: docker compose up -d" }));
+
+    expect(await screen.findByText("No app alpha is installed.")).toBeDefined();
+  });
+
+  it("finds a batch that runs again, and shows its output from its start", async () => {
+    serve({
+      "GET /api/docker/apps/alpha": () => Response.json(alpha),
+      "GET /api/docker/compose": () =>
+        Response.json([
+          {
+            id: 4,
+            action: { operation: "restart" },
+            commandLine: "docker compose restart",
+            apps: ["alpha", "beta"],
+            startedAt: "2026-11-26T10:00:00.000Z",
+            report: null,
+          },
+        ]),
+      "GET /api/docker/compose/4": () => events([...ran("alpha"), { kind: "started", app: "beta" }]),
+    });
+
+    renderAt("/apps/alpha");
+
+    expect(await screen.findByText(/Restart runs on 2 apps/)).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show output" }));
+
+    const beta = await screen.findByRole("region", { name: "beta" });
+
+    expect(within(beta).getByText("Running")).toBeDefined();
+    expect(within(screen.getByRole("region", { name: "alpha" })).getByText("Succeeded")).toBeDefined();
+    // Cut before its end: the batch goes on, which the panel says.
+    expect(await screen.findByText("The output was cut short: the command goes on on the server.")).toBeDefined();
   });
 });
