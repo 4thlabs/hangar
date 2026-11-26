@@ -16,8 +16,8 @@ class DockerQueries {
 
 /**
  * Reads again what the page shows of Docker when the server says it changed, rather than every so often. The stream
- * is closed while the tab is hidden, and connected again when it is lost; once it opens again, everything is read
- * again, as what changed meanwhile is not in it. The first time it opens, the page's queries have just been read.
+ * is closed while the tab is hidden, and connected again when it is lost; each time it opens, the first time
+ * included, everything is read again, as what changed before it opened is not in it.
  *
  * @returns Whether the stream is lost, and the page may be out of date until it is back.
  */
@@ -27,7 +27,6 @@ export function useDockerChanges() {
 
   useEffect(() => {
     let stop: (() => void) | undefined;
-    let hasOpened = false;
 
     const invalidate = (prefix: string) =>
       void queryClient.invalidateQueries({
@@ -39,11 +38,9 @@ export function useDockerChanges() {
         onOpen: () => {
           setReconnecting(false);
 
-          if (hasOpened) {
-            invalidate(DockerQueries.All);
-          }
-
-          hasOpened = true;
+          // The first time too: a change between the page's first read and the stream's opening is in neither, and
+          // would leave the page stale until the next one. Its price is a read again, which the server's cache answers.
+          invalidate(DockerQueries.All);
         },
         onDown: () => setReconnecting(true),
         onItem: change => invalidate(DockerQueries.ByChange[change]),
