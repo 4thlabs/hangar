@@ -15,14 +15,14 @@ import {
   parseAppUpdates,
   type AppSortColumn,
 } from "#modules/apps/helpers/apps-search.ts";
-import { appCount, composeSubject } from "#modules/apps/helpers/compose-actions.ts";
 import { formatBytes, formatPercent } from "#modules/apps/helpers/metric-format.ts";
 import { filterProjects } from "#modules/apps/helpers/project-filter.ts";
 import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
-import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
+import { appCount, composeSubject } from "#modules/common/helpers/compose-actions.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { nextSort, serializeSort } from "#modules/common/helpers/table-sort.ts";
+import { useDockerChanges } from "#modules/common/hooks/use-docker-changes.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#modules/common/ui/empty.tsx";
