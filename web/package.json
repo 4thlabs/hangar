@@ -64,7 +64,8 @@
   "intent": {
     "skills": [
       "@tanstack/react-router",
-      "@tanstack/router-core"
+      "@tanstack/router-core",
+      "@tanstack/router-plugin"
     ]
   }
 }

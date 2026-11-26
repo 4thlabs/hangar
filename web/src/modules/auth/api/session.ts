@@ -45,6 +45,17 @@ export class Session {
     }
   }
 
+  /**
+   * Forgets a read of the session that failed, with the retries it may still be making, so that the next `require()`
+   * asks the server again from a first try. A session that was read is kept.
+   */
+  forgetFailure(): void {
+    this.#queryClient.removeQueries({
+      queryKey: getAuthSessionQueryKey(),
+      predicate: query => query.state.data === undefined,
+    });
+  }
+
   /** Forgets the session the server refused, and goes to `/login` unless the page is there already. */
   signedOut(router: SessionRouter): void {
     this.#queryClient.removeQueries({ queryKey: getAuthSessionQueryKey() });

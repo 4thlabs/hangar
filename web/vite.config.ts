@@ -5,14 +5,20 @@ import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig, type Plugin, type Rolldown } from "vite";
 
 /**
- * The most the page may load before any route's own code, minified, in kB as Vite prints them: the entry chunk and the
- * chunks it imports, a little above their size once the page is split by route (447 kB). A change that brings a page's
- * code back into them fails the build, which says by how much.
+ * What a signed-in page loads before its own code, by the module each chunk starts from: the entry, which `index.html`
+ * loads, and the component of `_app`, the frame every signed-in page is shown in. `/login` loads less.
  */
-const entryBudgetKb = 470;
+const firstLoad = ["index.html", "src/routes/_app.tsx?tsr-split=component"];
 
-/** The chunk `fileName` and every chunk it imports statically, which the browser loads with it. */
-function loadedWith(bundle: Rolldown.OutputBundle, fileName: string, loaded = new Set<string>()): Set<string> {
+/**
+ * The most `firstLoad` may weigh, minified, in kB as Vite prints them: their chunks, the chunks these import, and their
+ * CSS, a little above their size once the page is split by route (758 kB). A change that brings a page's code into the
+ * entry or the frame fails the build, which says by how much.
+ */
+const firstLoadBudgetKb = 790;
+
+/** The chunk `fileName` and every chunk it imports statically, which the browser loads with it, added to `loaded`. */
+function loadedWith(bundle: Rolldown.OutputBundle, fileName: string, loaded: Set<string>): Set<string> {
   const chunk = bundle[fileName];
 
   if (loaded.has(fileName) || chunk?.type !== "chunk") {
@@ -25,38 +31,70 @@ function loadedWith(bundle: Rolldown.OutputBundle, fileName: string, loaded = ne
     loadedWith(bundle, imported, loaded);
   }
 
+  for (const css of chunk.viteMetadata?.importedCss ?? []) {
+    loaded.add(css);
+  }
+
   return loaded;
 }
 
-/** Fails the build when an entry chunk, with the chunks it imports, is past `limitKb`. */
-function entryBudget(limitKb: number): Plugin {
+/** The bytes of the chunk or asset `fileName` of `bundle`. */
+function bytesOf(bundle: Rolldown.OutputBundle, fileName: string): number {
+  const file = bundle[fileName];
+
+  if (file === undefined) {
+    return 0;
+  }
+
+  if (file.type === "chunk") {
+    return Buffer.byteLength(file.code);
+  }
+
+  return typeof file.source === "string" ? Buffer.byteLength(file.source) : file.source.byteLength;
+}
+
+/**
+ * Fails the build when the chunks of `modules`, paths from Vite's root, weigh more than `limitKb` with the chunks they
+ * import and their CSS. A module with no chunk of its own, renamed or merged into another, fails it too: the budget
+ * would no longer count it.
+ */
+function firstLoadBudget(modules: readonly string[], limitKb: number): Plugin {
+  let root = "";
+
   return {
-    name: "hangar:entry-budget",
+    name: "hangar:first-load-budget",
     apply: "build",
+    configResolved(config) {
+      root = config.root;
+    },
     // After Vite's own hooks, which still rewrite the chunks' imports: the code measured is the code written.
     generateBundle: {
       order: "post",
       handler(_options, bundle) {
-        for (const entry of Object.values(bundle)) {
-          if (entry.type !== "chunk" || !entry.isEntry) {
-            continue;
-          }
+        const loaded = new Set<string>();
 
-          const loaded = [...loadedWith(bundle, entry.fileName)];
-          const bytes = loaded.reduce((total, fileName) => {
-            const chunk = bundle[fileName];
+        for (const module of modules) {
+          const chunk = Object.values(bundle).find(
+            file => file.type === "chunk" && file.facadeModuleId === `${root}/${module}`,
+          );
 
-            return total + (chunk?.type === "chunk" ? Buffer.byteLength(chunk.code) : 0);
-          }, 0);
-          const sizeKb = bytes / 1000;
-
-          if (sizeKb > limitKb) {
+          if (chunk === undefined) {
             this.error(
-              `${entry.fileName} loads ${sizeKb.toFixed(2)} kB with the ${loaded.length - 1} chunks it imports, past the ` +
-                `entry's budget of ${limitKb} kB (entryBudgetKb in vite.config.ts): import what it gained from a route's ` +
-                "component, or raise the budget in the same change.",
+              `no chunk starts from ${module}, which firstLoad in vite.config.ts names: say what replaced it.`,
             );
           }
+
+          loadedWith(bundle, chunk.fileName, loaded);
+        }
+
+        const sizeKb = [...loaded].reduce((total, fileName) => total + bytesOf(bundle, fileName), 0) / 1000;
+
+        if (sizeKb > limitKb) {
+          this.error(
+            `a signed-in page loads ${sizeKb.toFixed(2)} kB before its own code, in ${loaded.size} files, past its ` +
+              `budget of ${limitKb} kB (firstLoadBudgetKb in vite.config.ts): import what it gained from a route's ` +
+              "component, or raise the budget in the same change.",
+          );
         }
       },
     },
@@ -73,7 +111,7 @@ export default defineConfig({
     tailwindcss(),
     react(),
     babel({ presets: [reactCompilerPreset()] }),
-    entryBudget(entryBudgetKb),
+    firstLoadBudget(firstLoad, firstLoadBudgetKb),
   ],
   // `.vite/manifest.json` names the files Vite hashed, which the server's `.page(..)` keeps a year.
   build: { manifest: true },
