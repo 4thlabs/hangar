@@ -43,12 +43,18 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
     define.
 - The ADR's own rules come with the PRs that make the code pass them (decision 10), in ESLint's core rules:
   - rule 1, `no-restricted-syntax`, on `web/src`: no class made only of static members;
-  - rule 4, `no-restricted-imports`, on a module's root `.ts` (`modules/*/*.ts`, tests excepted): no React and no
-    package of React's (`react-*`, `lucide-react`, `@base-ui/`, each with its subpaths), no `@tanstack/`, from
-    `#libs/api` only the names that start with a capital (its types, enums and `ApiError`: orval's hooks, fetchers and
-    keys and the transport's functions start with a lowercase letter), and only types from `api/`, `hooks/`,
-    `components/` or `ui/`, by `#modules/...`, `./` or `../<module>/`; and `no-restricted-syntax`, on the same files,
-    refuses an `import()` of those folders;
+  - rule 4, `no-restricted-imports`, on a module's `helpers/` and its `messages.ts` (`modules/*/helpers/**` and
+    `modules/*/messages.ts`, tests excepted): no React and no package of React's (`react-*`, `lucide-react`,
+    `@base-ui/`, each with its subpaths), no `@tanstack/`, from `#libs/api` only the names that start with a capital
+    (its types, enums and `ApiError`: orval's hooks, fetchers and keys and the transport's functions start with a
+    lowercase letter), and only types from `api/`, `hooks/`, `components/` or `ui/`, by `#modules/...` or `./`; and
+    `no-restricted-syntax`, on the same files, refuses an `import()` of those folders;
+  - #207's isolation, `no-restricted-imports` on each `modules/<a>/`, its blocks written from the folders of
+    `web/src/modules`: no `#...` import but `#libs/`, `#modules/common/` and `#modules/<a>/` (`#mock/` too in a test),
+    so no other module, no `#routes/` and none of the wiring, and no `../`, so that every import names its module;
+    `no-restricted-syntax` does the same for `import()`;
+  - #207's loose files, `no-restricted-syntax` on `modules/*/*.{ts,tsx}`: no file directly under a module but
+    `messages.ts`;
   - rules 2 and 3, the orval hooks and the `api/` imports, come with the data layer.
 
 ## Language
@@ -151,9 +157,10 @@ Clarity beats cleverness and brevity.
   works".
 - Its setup is visible in the test: what the server answers, the clock, the route. A shared fixture is a plain value
   or a function the test calls, not a `beforeEach` that hides what the test depends on.
-- The domain's root `.ts` is tested directly, without rendering.
+- The domain's `helpers/` are tested directly, without rendering. A page's tests sit beside its route file
+  (`routes/_app/apps.test.tsx`), which the route generator ignores (`routeFileIgnorePattern` in `tsr.config.json`).
 - The API is answered at the network, by orval's MSW handlers, as the ADR's decision 13 says: a call no handler
-  answers fails the test. Until the data layer brings them, tests use `app/mock/page.tsx`'s `serve`, which is not
+  answers fails the test. Until the data layer brings them, tests use `mock/page.tsx`'s `serve`, which is not
   extended.
 - The clock is the fake timers' (`vi.useFakeTimers({ now })`), not a prop added for the test.
 - A fixed bug gets the test that fails without its fix.

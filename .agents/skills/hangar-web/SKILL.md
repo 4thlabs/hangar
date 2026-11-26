@@ -1,6 +1,6 @@
 ---
 name: hangar-web
-description: How Hangar's page in web/ is built, from ADR 0002. Its layers (#libs/api, a module's api/, root .ts, hooks/, components/, routes), the query and mutation options on orval's, useEventFeed and useEventStream, Region, createPage, Preferences, forms on TanStack Form with formErrorsOf, the optimistic rule, tests on orval's MSW handlers, the words in messages.ts, and no class made only of statics. Use it for any work under web/, the Rust server's Vite SPA - a page, a component, a hook, a query, a mutation, a route, a form, a test - and to review or plan such work.
+description: How Hangar's page in web/ is built, from ADR 0002. Its layout (routes are the pages, _app.tsx and routes/-shell/ the shell, the wiring at src/, modules apart with api/, helpers/, hooks/, components/ and messages.ts), the query and mutation options on orval's, useEventFeed and useEventStream, Region, createPage, Preferences, forms on TanStack Form with formErrorsOf, the optimistic rule, tests on orval's MSW handlers, the words in messages.ts, and no class made only of statics. Use it for any work under web/, the Rust server's Vite SPA - a page, a component, a hook, a query, a mutation, a route, a form, a test - and to review or plan such work.
 ---
 
 # Hangar's page in `web/`
@@ -24,33 +24,46 @@ mapping and the Rust section's "Errors the page shows". Load the other skills it
 `vercel-react-best-practices`, `vercel-composition-patterns`, and TanStack Router's through `intent`), with what
 AGENTS.md says does not apply.
 
-## The layers, and what each may import
+## The layout, and what each part may import
+
+TanStack Router's own layout (its examples `kitchen-sink-react-query-file-based`, `authenticated-routes`,
+`start-trellaux`), with modules kept apart, as #207 amended ADR 0002's decisions 1 and 6:
 
 ```
-#libs/api                orval's generated.ts, apiFetch and ApiError, createQueryClient, the Events transport
-modules/<d>/api/         query and mutation options on orval's, keys, what a change makes stale, Session
-modules/<d>/*.ts         the domain: pure functions, view models, search params, formats, messages.ts
-modules/<d>/hooks/       compose queries, feeds and local state machines
-modules/<d>/components/  render; the route's component is the page
-routes/                  path, validateSearch, beforeLoad, loader, component: thin
+src/main.tsx, page.ts, router.ts   the wiring: createPage, the router, the providers (app-providers.tsx,
+                                   theme-effects.tsx); mock/page.tsx, the tests' page; no app/ folder
+src/routes/                        one file per route = its page: path, validateSearch, beforeLoad, loader, and the
+                                   component that composes the modules; _app.tsx is the shell, its pieces in -shell/;
+                                   a page's own pieces in -<page>/; the not-found and pending pages beside their routes
+src/modules/<d>/api/               query and mutation options on orval's, keys, what a change makes stale, Session
+src/modules/<d>/helpers/           the domain: pure functions, view models, search params, formats, labels, parsers
+src/modules/<d>/hooks/             compose queries, feeds and local state machines
+src/modules/<d>/components/        the pieces the pages are made of
+src/modules/<d>/messages.ts        the module's words, the one file at a module's root
+src/modules/common/                what two modules or more share: ui/, components/, hooks/, api/, helpers/
+src/libs/                          the API client, formats, preferences
 ```
 
-| Layer         | May import                                                | Must not import                                                                                                |
-| ------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| root `.ts`    | types and enums of `#libs/api`, other modules' root `.ts` | React, `@tanstack/*`, orval's hooks, keys and fetchers, `api/`, `hooks/`, `components/`, `ui/` (types allowed) |
-| `api/`        | `#libs/api` options, keys, URLs; root `.ts`               | React, orval's `use*` hooks, `hooks/`, `components/`                                                           |
-| `hooks/`      | `api/`, root `.ts`, `common/hooks`                        | orval's `use*` hooks                                                                                           |
-| `components/` | everything above, `ui/`                                   | orval's `use*` hooks                                                                                           |
+| Layer                     | May import                                                         | Must not import                                                                                                |
+| ------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `helpers/`, `messages.ts` | types and enums of `#libs/api`, `helpers/` of its own and `common` | React, `@tanstack/*`, orval's hooks, keys and fetchers, `api/`, `hooks/`, `components/`, `ui/` (types allowed) |
+| `api/`                    | `#libs/api` options, keys, URLs; `helpers/`                        | React, orval's `use*` hooks, `hooks/`, `components/`                                                           |
+| `hooks/`                  | `api/`, `helpers/`, `common/hooks`                                 | orval's `use*` hooks                                                                                           |
+| `components/`             | everything above, `ui/`                                            | orval's `use*` hooks                                                                                           |
+| a module, any layer       | its own folders, `common`, `#libs/...`                             | another module, `#routes/`, the wiring; `common` imports no other module                                       |
+| `routes/`                 | every module, the wiring's types                                   | orval's `use*` hooks                                                                                           |
 
 - orval's `use*` hooks are never imported outside `#libs/api`. Call `useQuery(xQueries.y())` and
   `useMutation(xMutations.z())`.
-- Modules by domain, not by route. A module may import another. No barrel. Tests sit next to their code.
-- `modules/common` holds the shell, `ui/`, and the generic hooks and components (`use-event-feed`, `use-event-stream`,
-  `Region`, the toasts). `libs/` holds what has no React and no page domain.
+- Modules by domain, pages by route. **A module never imports another**: the route files compose them. What two
+  modules really share goes down into `common` (the compose vocabulary, the Docker changes feed), and only then.
+- No barrel. Tests sit next to their code; a page's beside its route file (`routes/_app/apps.test.tsx`).
+- No file sits directly under a module but `messages.ts`: ESLint refuses any other.
+- `libs/` holds what has no React and no page domain.
 - A file is named after its main export: `apps-view.ts` exports `appsView`.
 - The ADR's lint rules, which come with its PRs, are core ESLint (`no-restricted-syntax`, `no-restricted-imports`):
-  typescript-eslint does not load on TypeScript 7. In `modules/` and `app/`, import with `#modules/...`, never `../`,
-  so that the rules see every import.
+  typescript-eslint does not load on TypeScript 7. In `modules/`, import with `#modules/...`, never `../`, so that the
+  rules see every import: ESLint refuses `../` there.
 
 ### `#libs/api`: the client, said once
 
@@ -88,6 +101,8 @@ export const appsQueries = {
   projects: () => getDockerProjectsQueryOptions(),
   project: (project: string) => getDockerProjectQueryOptions(project),
 };
+
+// common/api/docker-changes.ts: the Docker changes feed is common's, as apps and widgets both follow it
 export const dockerQueries: QueryKey = ["api", "docker"];
 export const staleAfterDockerChange: Readonly<Record<DockerChange, readonly QueryKey[]>> = {
   containers: [getDockerProjectsQueryKey(), getComposeBatchesQueryKey()],
@@ -108,12 +123,12 @@ export const settingsMutations = {
 - `meta.invalidates` is for success only. "Read again whatever the outcome" (install, run, cancel) goes in that
   mutation's own `onSettled`.
 
-### Root `.ts`: the domain, pure and tested without rendering
+### `helpers/`: the domain, pure and tested without rendering
 
 Every computation a page needs: filter, sort, count, totals, the search params, the labels.
 
 ```ts
-// apps/apps-view.ts
+// apps/helpers/apps-view.ts
 /** What the apps page shows: the projects the search keeps, in its order, and what is selected of them. */
 export function appsView(projects: readonly DockerProject[], search: AppsSearch, selection: ReadonlySet<string>) {
   const sort = parseAppsSort(search.sort);
@@ -129,7 +144,7 @@ export function appsView(projects: readonly DockerProject[], search: AppsSearch,
 ### `hooks/`: queries, feeds and state machines composed
 
 ```ts
-// apps/hooks/use-docker-changes.ts
+// common/hooks/use-docker-changes.ts
 export function useDockerChanges() {
   const queryClient = useQueryClient();
   const invalidate = (queryKey: QueryKey) => void queryClient.invalidateQueries({ queryKey });
@@ -144,7 +159,7 @@ export function useDockerChanges() {
 
 A helper that one hook uses, and that needs what the hook has, is a closure of the hook, not a class.
 
-### `components/`: the page reads its inputs, calls one view model, lays out
+### The page reads its inputs, calls one view model, lays out
 
 ```tsx
 const { data, error, isPending } = useQuery(appsQueries.projects());
@@ -158,9 +173,9 @@ A page component **may** read the route (`useSearch`, `useParams`), call its mod
 state it owns, call one view-model function and lay out regions. It **may not** reduce, filter or sort inline, build
 or invalidate a key, open a stream, or write a word chosen by a code or an enum.
 
-### Routes: thin
+### Routes: each file is its page
 
-```ts
+```tsx
 // routes/_app/apps.tsx
 /** `/apps`, the installed apps, filtered by its search. */
 export const Route = createFileRoute("/_app/apps")({
@@ -168,6 +183,12 @@ export const Route = createFileRoute("/_app/apps")({
   staticData: { searchable: true },
   component: AppsPage,
 });
+
+/** The installed apps, ... */
+function AppsPage() {
+  const search = useSearch({ from: "/_app/apps" });
+  // ... reads the modules' queries and hooks, lays out their components
+}
 ```
 
 No route has a loader yet: they come with the data layer, once a module's `api/` gives its options. A route's loader
@@ -178,17 +199,21 @@ loader: ({ context }) => context.queryClient.ensureQueryData(appsQueries.project
 ```
 
 - One file per route under `web/src/routes/`, `export const Route = createFileRoute(...)`. The generator writes the
-  path from the file's name: rename the file, never the string. `_app.tsx` is the frame, with no path of its own,
-  whose `beforeLoad` requires the session for every page under `_app/`. `_app/$.tsx` is the not-found page of any
-  other path.
+  path from the file's name: rename the file, never the string. `_app.tsx` is the shell, a layout route with no path
+  of its own, whose `beforeLoad` requires the session for every page under `_app/`, and whose pieces are in
+  `routes/-shell/` (`app-layout`, `navbar`, `navbar-mobile`, `searchbar`, `user-menu`, `app-error-page`).
+  `_app/$.tsx` is the not-found page of any other path, `_app/-not-found-page.tsx` its component.
 - A page beside another at a longer path is `x_.y.tsx` (`apps_.$project.tsx`, `store_.new.tsx`): `x.y.tsx` would be a
   child of `x.tsx`, rendered in its `Outlet`, which a page has not.
-- A route file imports its components from `modules/` and defines none: `autoCodeSplitting` moves each route's
-  components into a chunk of their own, loaded with its page. Only `validateSearch`, `beforeLoad`, `loader` and
-  `staticData` stay in the entry.
+- A route file is its page: it defines its component, not exported, and composes the modules' components and hooks.
+  `autoCodeSplitting` moves the component, and what only it uses, into a chunk of its own, loaded with the page. Only
+  `validateSearch`, `beforeLoad`, `loader` and `staticData` stay in the entry. A route file exports `Route` alone.
+- A page's own pieces, which only it uses and which compose several modules, go in `routes/-<page>/`: a name that
+  starts with `-` is no route. Its tests sit beside it, `routes/_app/apps.test.tsx`, which `routeFileIgnorePattern`
+  in `tsr.config.json` keeps out of the routes.
 - A component reads its route by id: `useSearch({ from: "/_app/apps" })`, `useParams({ from: "/_app/apps_/$project" })`.
-- `src/app/routeTree.gen.ts` is generated and gitignored. `src/app/router.ts` has `createPageRouter` and the
-  `Register` declaration.
+- `src/routeTree.gen.ts` is generated and gitignored. `src/router.ts` has `createPageRouter` and the `Register`
+  declaration.
 - `_app.tsx` has an `errorComponent`, `AppErrorPage`, in the frame: a session the server could not read, or a page
   that failed with no `errorComponent` of its own. Its retry calls `session.forgetFailure()`, then `router.invalidate()`.
 - The build fails when what a signed-in page loads before its own code passes `firstLoadBudgetKb` in
@@ -213,7 +238,7 @@ loader: ({ context }) => context.queryClient.ensureQueryData(appsQueries.project
 
 ## `createPage`, `Session`, `Preferences`
 
-`app/page.ts` creates, once, what the page is built on. `main.tsx` and the tests' `renderAt` both call it:
+`page.ts` creates, once, what the page is built on. `main.tsx` and the tests' `renderAt` both call it:
 
 ```ts
 /** The preferences `document.cookie` holds, their cookies renewed for another year, defaults included. */
@@ -271,8 +296,8 @@ const stream = useEventStream<ComposeEvent, ComposeOutputState>(() => emptyCompo
 
 ## Errors, toasts and regions
 
-- `describeError(error)` and `describeErrorDetail(detail)` (`common/error-message.ts`) are the one table that words a
-  server code. A code with no words is a type error.
+- `describeError(error)` and `describeErrorDetail(detail)` (`common/helpers/error-message.ts`) are the one table that
+  words a server code. A code with no words is a type error.
 - `toastSuccess(title, description)` and `toastFailure(title, error)` are called from the mutation's own `onSuccess`
   and `onError`, with words from the module's messages. No global toast on every failure.
 - A 401 goes through the caches' `onError` to `session.signedOut(router)`.
@@ -288,9 +313,9 @@ const stream = useEventStream<ComposeEvent, ComposeOutputState>(() => emptyCompo
 
 ## Forms: TanStack Form, and `formErrorsOf`
 
-Every form uses TanStack Form. There is no schema library: a client check is a plain function in the form's root
-`.ts`. The server's refusal goes under the field its code names, through `formErrorsOf`
-(`modules/common/form-errors.ts`) and a `FieldsByCode` table per form:
+Every form uses TanStack Form. There is no schema library: a client check is a plain function in its module's
+`helpers/`. The server's refusal goes under the field its code names, through `formErrorsOf`
+(`modules/common/helpers/form-errors.ts`) and a `FieldsByCode` table per form:
 
 ```tsx
 const fieldsByCode = (variables: readonly EnvVariable[]): FieldsByCode<ValueField> => ({
@@ -351,7 +376,7 @@ cache.
 
 ## Tests: on orval's MSW handlers
 
-- One msw 3 `setupServer`, `network` in `app/mock/network.ts`, listening with `onUnhandledFrame: "error"`: a call no
+- One msw 3 `setupServer`, `network` in `mock/network.ts`, listening with `onUnhandledFrame: "error"`: a call no
   handler answers fails the test.
 - Its defaults are what the shell calls on every page: the session, the auth options, an empty bell and its quiet
   stream.
@@ -377,7 +402,7 @@ network.use(
 - `FakeEventSource` stays only for the tests that drive a lost stream and its reconnection.
 - Faker's answers are random: use them only for bodies the test never reads.
 - The old `serve({...})` fake goes module by module. Do not add to it.
-- Test the domain's root `.ts` directly, without rendering. Name a test after the behaviour it checks.
+- Test the domain's `helpers/` directly, without rendering. Name a test after the behaviour it checks.
 
 ## The words: `messages.ts`, in English
 
@@ -413,8 +438,8 @@ export const appsMessages = {
   effects would list, which `exhaustive-deps` asks to wrap in a `useCallback`.
 - `static` stays only for a real factory or constant of a class with instances: `Preferences.fromCookies`.
 - `ApiError extends Error` and test doubles with instances are classes as before.
-- ESLint's `no-restricted-syntax` flags a class made only of statics, and `no-restricted-imports` what a module's root
-  `.ts` may not import (ADR rules 1 and 4).
+- ESLint's `no-restricted-syntax` flags a class made only of statics, and `no-restricted-imports` what a module's
+  `helpers/` and `messages.ts` may not import (ADR rules 1 and 4), and any import of another module.
 
 ## Lists
 
