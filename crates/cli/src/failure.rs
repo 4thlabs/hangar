@@ -5,7 +5,7 @@ use std::io;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use hangar_core::{ComposeError, RunError, StoreError};
+use hangar_core::{ComposeError, PasswordError, RunError, StoreError};
 
 /// A command that failed, or that was refused before it ran.
 #[derive(Debug, thiserror::Error)]
@@ -55,6 +55,22 @@ pub(crate) enum Failure {
     /// Docker failed a compose command, and has no `compose` command: its plugin is not installed.
     #[error("docker compose is not installed")]
     NoCompose(#[source] Box<Failure>),
+
+    /// The password to hash could not be read from the terminal or stdin.
+    #[error("could not read the password")]
+    ReadPassword(#[source] io::Error),
+
+    /// The password typed again is not the first one.
+    #[error("the passwords do not match")]
+    PasswordMismatch,
+
+    /// The password cannot be hashed, as one too short.
+    #[error(transparent)]
+    Password(#[from] PasswordError),
+
+    /// What the command prints could not be written to stdout.
+    #[error("could not write to stdout")]
+    Write(#[source] io::Error),
 }
 
 impl Failure {

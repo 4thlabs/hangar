@@ -1,5 +1,5 @@
 //! The command line, as the Node CLI's commander definitions take it: `hangar store install`, `store up`,
-//! `store down`, `store ls` and `store <target> <command>`.
+//! `store down`, `store ls` and `store <target> <command>`; and `hangar user hash`, the Rust server's alone.
 
 use std::process::ExitCode;
 
@@ -8,6 +8,7 @@ use clap::{Parser, Subcommand};
 use crate::failure::Failure;
 use crate::hangar::Hangar;
 use crate::request::ComposeRequest;
+use crate::user::UserCommands;
 
 /// Hangar from a shell: the store and the compose commands on its apps.
 #[derive(Debug, Parser)]
@@ -38,6 +39,21 @@ Examples:
         #[command(subcommand)]
         command: StoreCommand,
     },
+
+    /// Commands for the users of hangar.yml, who sign in to the Rust server.
+    #[command(arg_required_else_help = true)]
+    User {
+        #[command(subcommand)]
+        command: UserCommand,
+    },
+}
+
+/// The commands of `hangar user`.
+#[derive(Debug, Subcommand)]
+enum UserCommand {
+    /// Prints the argon2id hash of a password, for the `passwordHash` of a user in hangar.yml. The password is asked
+    /// on the terminal, or read from the first line of stdin.
+    Hash,
 }
 
 /// The commands of `hangar store`.
@@ -75,7 +91,12 @@ enum StoreCommand {
 impl Cli {
     /// Runs the command.
     pub(crate) async fn run(self, hangar: &Hangar) -> Result<(), Failure> {
-        let Commands::Store { command } = self.command;
+        let command = match self.command {
+            Commands::Store { command } => command,
+            Commands::User {
+                command: UserCommand::Hash,
+            } => return UserCommands::hash().await,
+        };
 
         match command {
             StoreCommand::Install => hangar.install().await,
@@ -112,12 +133,14 @@ impl Cli {
 mod tests {
     use clap::Parser;
 
-    use super::{Cli, Commands, StoreCommand};
+    use super::{Cli, Commands, StoreCommand, UserCommand};
 
     fn store(args: &[&str]) -> StoreCommand {
         let cli = Cli::try_parse_from(["hangar", "store"].iter().chain(args))
             .expect("the command line parses");
-        let Commands::Store { command } = cli.command;
+        let Commands::Store { command } = cli.command else {
+            panic!("`hangar store` is the store's command");
+        };
 
         command
     }
@@ -138,5 +161,17 @@ mod tests {
         };
 
         assert_eq!(args, ["jellyfin", "logs", "-f"]);
+    }
+
+    #[test]
+    fn takes_user_hash() {
+        let cli = Cli::try_parse_from(["hangar", "user", "hash"]).expect("the command line parses");
+
+        assert!(matches!(
+            cli.command,
+            Commands::User {
+                command: UserCommand::Hash
+            }
+        ));
     }
 }

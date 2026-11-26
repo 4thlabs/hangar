@@ -1,6 +1,6 @@
 //! `hangar`: Hangar from a shell, on `hangar-core`. It installs the store and brings its apps up and down, with the
 //! commands and the targets of the Node CLI, `bin/cli.js`, so that the same invocations work with both until the
-//! switch.
+//! switch. It also hashes the password of a user of `hangar.yml`, for the Rust server.
 
 mod cli;
 mod environment;
@@ -10,6 +10,7 @@ mod interrupts;
 mod request;
 mod target;
 mod terminal;
+mod user;
 
 use std::io::IsTerminal;
 use std::process::ExitCode;
