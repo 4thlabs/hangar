@@ -223,6 +223,33 @@ pub struct GluetunVpnStatus {
     pub country: String,
 }
 
+/// Miniflux's newest entries, and how many are unread.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MinifluxEntries {
+    /// How many entries are unread, in every feed.
+    pub unread: u64,
+    /// The newest entries, read or not, newest first.
+    pub entries: Vec<MinifluxEntry>,
+}
+
+/// An entry of a feed of Miniflux's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MinifluxEntry {
+    /// Its id.
+    pub id: u64,
+    /// Its title.
+    pub title: String,
+    /// The page it links to.
+    pub url: String,
+    /// The title of its feed.
+    pub feed_title: String,
+    /// When it was published, in RFC 3339, as Miniflux writes it.
+    pub published_at: String,
+    /// Whether it is unread.
+    pub is_unread: bool,
+}
+
 /// What a widget loaded from its service, by its `type`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", content = "data", rename_all = "kebab-case")]
@@ -238,6 +265,8 @@ pub enum WidgetData {
     FrigateEvents(FrigateEvents),
     /// `gluetun-vpn-status`.
     GluetunVpnStatus(GluetunVpnStatus),
+    /// `miniflux-entries`.
+    MinifluxEntries(MinifluxEntries),
 }
 
 quoll::group! {
