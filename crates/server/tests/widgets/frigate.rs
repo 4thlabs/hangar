@@ -240,6 +240,8 @@ async fn relays_an_image_of_no_type_as_a_jpeg_and_one_of_its_type_in_any_case() 
         (status, &headers[CONTENT_TYPE]),
         (StatusCode::OK, &"image/jpeg".parse().expect("a header"))
     );
+    // Sent as a JPEG, never sniffed: bytes of no type that are a page are not run as one.
+    assert_eq!(headers["x-content-type-options"], "nosniff");
 
     let (status, headers, _) = server
         .get(&format!("/api/widgets/{key}/image/upper-case"))
