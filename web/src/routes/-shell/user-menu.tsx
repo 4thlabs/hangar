@@ -1,8 +1,8 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronDownIcon, LogOutIcon } from "lucide-react";
 import { useState } from "react";
-import { useAuthLogout, useAuthSession } from "#libs/api";
+import { authMutations, authQueries } from "#modules/auth/api/auth-queries.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   DropdownMenu,
@@ -18,10 +18,10 @@ import { UserAvatar } from "#routes/-shell/user-avatar.tsx";
 
 /** The signed-in user, and signing out. Its user settings and its language come with the issue of `/user/settings`. */
 export function UserMenu() {
-  const { data: user } = useAuthSession();
+  const { data: user } = useQuery(authQueries.session());
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const logout = useAuthLogout();
+  const logout = useMutation(authMutations.logout());
   const [failed, setFailed] = useState(false);
 
   if (!user) {

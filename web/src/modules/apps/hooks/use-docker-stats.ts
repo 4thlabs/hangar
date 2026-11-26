@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { getDockerStatsUrl, keepEvents, type ContainerMetrics, type StatsFrame } from "#libs/api";
+import { useState } from "react";
+import { getDockerStatsUrl, type ContainerMetrics, type StatsFrame } from "#libs/api";
+import { useEventFeed } from "#modules/common/hooks/use-event-feed.ts";
 
 /** The metrics of the running containers, by full container id. */
 export type ContainerStats = StatsFrame["containers"];
@@ -7,43 +8,18 @@ export type ContainerStats = StatsFrame["containers"];
 /**
  * The live usage of the containers, a frame a second, totalled over `containerIds`; closed while the tab is hidden,
  * never opened without a container, as each frame costs the daemon a call per running container, and connected again
- * when it is lost, its figures cleared meanwhile rather than left as they were.
+ * when it is lost, its figures cleared meanwhile rather than left as they were. The frames are no server state a query
+ * holds: they stay here.
  */
 export function useDockerStats(containerIds: readonly string[]) {
   const [stats, setStats] = useState<ContainerStats>({});
-  const hasContainers = containerIds.length > 0;
 
-  useEffect(() => {
-    if (!hasContainers) {
-      return;
-    }
-
-    let stop: (() => void) | undefined;
-
-    const open = () => {
-      stop ??= keepEvents<StatsFrame>(getDockerStatsUrl(), {
-        onItem: frame => setStats(frame.containers),
-        onDown: () => setStats({}),
-      });
-    };
-
-    const close = () => {
-      stop?.();
-      stop = undefined;
-      // Hidden, the figures would grow old: the tab shown again starts from none until its first frame.
-      setStats({});
-    };
-
-    const sync = () => (document.hidden ? close() : open());
-
-    sync();
-    document.addEventListener("visibilitychange", sync);
-
-    return () => {
-      document.removeEventListener("visibilitychange", sync);
-      close();
-    };
-  }, [hasContainers]);
+  useEventFeed<StatsFrame>(containerIds.length > 0 ? getDockerStatsUrl() : null, {
+    onItem: frame => setStats(frame.containers),
+    onDown: () => setStats({}),
+    // Hidden, the figures would grow old: the tab shown again starts from none until its first frame.
+    onClose: () => setStats({}),
+  });
 
   /** The sum of `pick` over the containers that have a reading; `null` when none has. */
   const total = (pick: (metrics: ContainerMetrics) => number | null) => {

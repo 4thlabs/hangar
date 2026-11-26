@@ -1,11 +1,12 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { DownloadIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
-import { getEnvReadQueryKey, getStoreAppsQueryKey, useStoreInstall, useStoreUninstall, type StoreApp } from "#libs/api";
+import type { StoreApp } from "#libs/api";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
+import { storeMutations } from "#modules/store/api/store-queries.ts";
 
 type StoreAppButtonProps = {
   app: StoreApp;
@@ -26,29 +27,20 @@ function buttonFace(app: StoreApp, isPending: boolean) {
 
 /** A card's install or uninstall, the latter confirmed first: it takes the app's containers down. */
 export function StoreAppButton({ app }: StoreAppButtonProps) {
-  const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
-  // The list and its counts follow the change, whatever its outcome: another process may have made it meanwhile.
-  const settled = () => queryClient.invalidateQueries({ queryKey: getStoreAppsQueryKey() });
 
-  // An install seeds .env.global with the variables the app references, even one that fails after the seed.
-  const installSettled = () =>
-    Promise.all([settled(), queryClient.invalidateQueries({ queryKey: getEnvReadQueryKey() })]);
-
-  const install = useStoreInstall({
-    mutation: {
-      onSuccess: () => toastSuccess("App installed", `${app.name} was installed.`),
-      onError: error => toastFailure("Installation failed", error),
-      onSettled: installSettled,
-    },
+  // The options read the list again whatever the outcome; the toasts are this button's, set beside them rather than on
+  // `mutate`, so that they show even when the list read again leaves this card out.
+  const install = useMutation({
+    ...storeMutations.install(),
+    onSuccess: () => toastSuccess("App installed", `${app.name} was installed.`),
+    onError: error => toastFailure("Installation failed", error),
   });
 
-  const uninstall = useStoreUninstall({
-    mutation: {
-      onSuccess: () => toastSuccess("App uninstalled", `${app.name} was uninstalled.`),
-      onError: error => toastFailure("Uninstallation failed", error),
-      onSettled: settled,
-    },
+  const uninstall = useMutation({
+    ...storeMutations.uninstall(),
+    onSuccess: () => toastSuccess("App uninstalled", `${app.name} was uninstalled.`),
+    onError: error => toastFailure("Uninstallation failed", error),
   });
 
   const isPending = install.isPending || uninstall.isPending;

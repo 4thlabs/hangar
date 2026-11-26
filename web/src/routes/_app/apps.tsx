@@ -1,7 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { BoxesIcon, CpuIcon, LayersIcon, MemoryStickIcon, PackageOpenIcon, PlayIcon, SquareIcon } from "lucide-react";
 import { useState } from "react";
-import { useDockerProjects, type ProjectSummary } from "#libs/api";
+import type { ProjectSummary } from "#libs/api";
 import { AppsFilterMenus } from "#modules/apps/components/apps-filter-menus.tsx";
 import { AppsTable } from "#modules/apps/components/apps-table.tsx";
 import { ComposeDialogs, ComposeOperationButtons } from "#modules/apps/components/compose-operations.tsx";
@@ -20,6 +21,7 @@ import { formatBytes, formatPercent } from "#modules/apps/helpers/metric-format.
 import { filterProjects } from "#modules/apps/helpers/project-filter.ts";
 import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
+import { dockerQueries } from "#modules/common/api/docker-queries.ts";
 import { appCount, composeSubject } from "#modules/common/helpers/compose-actions.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { nextSort, serializeSort } from "#modules/common/helpers/table-sort.ts";
@@ -101,7 +103,7 @@ function NoApps({ isInstalled }: { isInstalled: boolean }) {
 function AppsPage() {
   const search = useSearch({ from: "/_app/apps" });
   const navigate = useNavigate({ from: "/apps" });
-  const { data, error, isPending, refetch, isRefetching } = useDockerProjects();
+  const { data, error, isPending, refetch, isRefetching } = useQuery(dockerQueries.projects());
   const projects = data ?? [];
   const sort = parseAppsSort(search.sort);
 

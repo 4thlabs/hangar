@@ -1,8 +1,9 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { CircleAlertIcon, KeyRoundIcon } from "lucide-react";
 import { useState, type SubmitEvent } from "react";
-import { getAuthOidcLoginUrl, getAuthSessionQueryKey, useAuthLogin, useAuthOptions } from "#libs/api";
+import { getAuthOidcLoginUrl } from "#libs/api";
+import { authMutations, authQueries } from "#modules/auth/api/auth-queries.ts";
 import { describeSignInFailure, isSignInRefusal, signInRefusals } from "#modules/auth/helpers/sign-in-messages.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
@@ -31,9 +32,8 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const { error: refused } = useSearch({ from: "/login" });
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const login = useAuthLogin();
-  const { data: options } = useAuthOptions();
+  const login = useMutation(authMutations.login());
+  const { data: options } = useQuery(authQueries.options());
 
   const [error, setError] = useState<string | null>(() => (isSignInRefusal(refused) ? signInRefusals[refused] : null));
 
@@ -53,9 +53,8 @@ function LoginPage() {
     const credentials = { email: textOf("email"), password: textOf("password") };
 
     try {
-      const user = await login.mutateAsync({ data: credentials });
-
-      queryClient.setQueryData(getAuthSessionQueryKey(), user);
+      // The options keep the signed-in user as the session, which the frame then requires.
+      await login.mutateAsync({ data: credentials });
       await navigate({ to: "/", replace: true });
     } catch (failure) {
       setError(describeSignInFailure(failure));

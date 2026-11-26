@@ -1,9 +1,12 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { CircleAlertIcon } from "lucide-react";
-import { useWidgetsPlacements, type WidgetPlacement } from "#libs/api";
+import type { WidgetPlacement } from "#libs/api";
+import { Region } from "#modules/common/components/region.tsx";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
+import { widgetsQueries } from "#modules/widgets/api/widgets-queries.ts";
 import { ArcaneCard } from "#modules/widgets/components/cards/arcane-card.tsx";
 import { BackrestCard } from "#modules/widgets/components/cards/backrest-card.tsx";
 import { BeszelCard } from "#modules/widgets/components/cards/beszel-card.tsx";
@@ -18,7 +21,7 @@ import { MinifluxCard } from "#modules/widgets/components/cards/miniflux-card.ts
 import { StockCard } from "#modules/widgets/components/cards/stock-card.tsx";
 import { TcgCollectorCard } from "#modules/widgets/components/cards/tcg-collector-card.tsx";
 import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
-import { WidgetBoundary } from "#modules/widgets/components/widget-boundary.tsx";
+import { WidgetCardFailure, WidgetSkeleton } from "#modules/widgets/components/widget-states.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 
 /** `/`, the dashboard. */
@@ -114,13 +117,24 @@ function PlacedWidget({ placement }: { placement: WidgetPlacement }) {
   }
 }
 
+/** A widget in its own region: a card that throws as it renders fails alone, and the rest of the dashboard stands. */
+function PlacedRegion({ placement }: { placement: WidgetPlacement }) {
+  const look = widgetLook(placement.type);
+
+  return (
+    <Region fallback={<WidgetSkeleton look={look} />} failure={() => <WidgetCardFailure look={look} />}>
+      <PlacedWidget placement={placement} />
+    </Region>
+  );
+}
+
 /**
  * The dashboard: the widgets `hangar.yml` places, in their columns, top to bottom in its order. Each card loads on its
  * own, a slow service holding its card alone; Docker's is read again as the daemon's changes come, the others as the
  * page opens and as its tab is shown again.
  */
 function DashboardPage() {
-  const { data: placements, error } = useWidgetsPlacements();
+  const { data: placements, error } = useQuery(widgetsQueries.placements());
 
   const title = <title>Dashboard | Hangar</title>;
 
@@ -159,9 +173,7 @@ function DashboardPage() {
         return (
           <div key={column} className={columnClassNames[column]}>
             {inColumn.map(placement => (
-              <WidgetBoundary key={placement.key} look={widgetLook(placement.type)}>
-                <PlacedWidget placement={placement} />
-              </WidgetBoundary>
+              <PlacedRegion key={placement.key} placement={placement} />
             ))}
           </div>
         );

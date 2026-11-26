@@ -1,19 +1,21 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { RotateCcwIcon, XIcon } from "lucide-react";
-import { getJobsListQueryKey, useJobsCancel, useJobsList, useJobsRun, type JobRun } from "#libs/api";
+import type { JobRun } from "#libs/api";
+import { Region } from "#modules/common/components/region.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#modules/common/ui/empty.tsx";
+import { Skeleton } from "#modules/common/ui/skeleton.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
+import { settingsMutations, settingsQueries } from "#modules/settings/api/settings-queries.ts";
 import {
   askedAgainText,
   formatRunTime,
   isRunActive,
   jobName,
-  jobsPollDelay,
   jobStateLabel,
   runFailure,
 } from "#modules/settings/helpers/job-text.ts";
@@ -24,35 +26,6 @@ import {
  * otherwise, so that a run a cron asks for shows.
  */
 export function JobsSettingsCard() {
-  const queryClient = useQueryClient();
-
-  const { data: runs, error } = useJobsList({
-    query: {
-      refetchInterval: query => jobsPollDelay(query.state.data ?? []),
-    },
-  });
-
-  const readAgain = () => void queryClient.invalidateQueries({ queryKey: getJobsListQueryKey() });
-
-  // Read again whatever the outcome: a run refused, as one that ended, has changed since the list was read.
-  const runAgain = useJobsRun({
-    mutation: {
-      onSuccess: asked => toastSuccess("Job asked for again", askedAgainText(asked)),
-      onError: failure => toastFailure("Run again failed", failure),
-      onSettled: readAgain,
-    },
-  });
-
-  const cancel = useJobsCancel({
-    mutation: {
-      onSuccess: canceled => toastSuccess("Job canceled", `${jobName(canceled.job)} stops.`),
-      onError: failure => toastFailure("Cancel failed", failure),
-      onSettled: readAgain,
-    },
-  });
-
-  const isPending = runAgain.isPending || cancel.isPending;
-
   return (
     <Card className="w-full">
       <CardHeader>
@@ -63,42 +36,70 @@ export function JobsSettingsCard() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {error && <p className="text-sm text-destructive">{describeError(error)}</p>}
-        {runs && runs.length === 0 && (
-          <Empty>
-            <EmptyHeader>
-              <EmptyTitle>No jobs</EmptyTitle>
-              <EmptyDescription>No job has run since the server started.</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        )}
-        {runs && runs.length > 0 && (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Job</TableHead>
-                <TableHead>Queue</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Ended</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {runs.map(run => (
-                <JobRow
-                  key={run.id}
-                  run={run}
-                  isPending={isPending}
-                  onRunAgain={() => runAgain.mutate({ id: run.id })}
-                  onCancel={() => cancel.mutate({ id: run.id })}
-                />
-              ))}
-            </TableBody>
-          </Table>
-        )}
+        <Region failure="Could not read the jobs" fallback={<Skeleton className="h-24 w-full" />}>
+          <JobRuns />
+        </Region>
       </CardContent>
     </Card>
+  );
+}
+
+/** The runs, once read, and their buttons; a read again that fails says so above the runs as they were. */
+function JobRuns() {
+  const { data: runs, error } = useSuspenseQuery(settingsQueries.jobs());
+
+  // The options read the runs again whatever the outcome; the toasts are this card's.
+  const runAgain = useMutation({
+    ...settingsMutations.runJob(),
+    onSuccess: asked => toastSuccess("Job asked for again", askedAgainText(asked)),
+    onError: failure => toastFailure("Run again failed", failure),
+  });
+
+  const cancel = useMutation({
+    ...settingsMutations.cancelJob(),
+    onSuccess: canceled => toastSuccess("Job canceled", `${jobName(canceled.job)} stops.`),
+    onError: failure => toastFailure("Cancel failed", failure),
+  });
+
+  const isPending = runAgain.isPending || cancel.isPending;
+
+  return (
+    <>
+      {error && <p className="text-sm text-destructive">{describeError(error)}</p>}
+      {runs.length === 0 && (
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>No jobs</EmptyTitle>
+            <EmptyDescription>No job has run since the server started.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      )}
+      {runs.length > 0 && (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Job</TableHead>
+              <TableHead>Queue</TableHead>
+              <TableHead>State</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Ended</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {runs.map(run => (
+              <JobRow
+                key={run.id}
+                run={run}
+                isPending={isPending}
+                onRunAgain={() => runAgain.mutate({ id: run.id })}
+                onCancel={() => cancel.mutate({ id: run.id })}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </>
   );
 }
 

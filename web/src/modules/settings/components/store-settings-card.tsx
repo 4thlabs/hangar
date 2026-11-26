@@ -1,76 +1,67 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { DownloadIcon, RefreshCwIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
-import {
-  getConfigReadQueryKey,
-  getEnvReadQueryKey,
-  getStoreAppsQueryKey,
-  getStoreStatusQueryKey,
-  useStoreStatus,
-  useStoreSync,
-  type StoreStatus,
-} from "#libs/api";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
+import { Region } from "#modules/common/components/region.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
-import { describeSync, syncPollMs, syncStartedText } from "#modules/settings/helpers/store-sync.ts";
+import { Skeleton } from "#modules/common/ui/skeleton.tsx";
+import { settingsMutations, settingsQueries } from "#modules/settings/api/settings-queries.ts";
+import { describeSync, syncStartedText } from "#modules/settings/helpers/store-sync.ts";
+import { useSyncEnd } from "#modules/settings/hooks/use-sync-end.ts";
 
 /**
  * The store's URL, whether it is cloned, and its sync: started here, run by the server apart from the request, and
  * read again until it ends, by this page or another that comes back to it.
  */
 export function StoreSettingsCard() {
-  const queryClient = useQueryClient();
-
-  const { data: status, error } = useStoreStatus({
-    query: { refetchInterval: query => (query.state.data?.sync?.state === "running" ? syncPollMs : false) },
-  });
-
-  const sync = useStoreSync({
-    mutation: {
-      onSuccess: started => {
-        queryClient.setQueryData(getStoreStatusQueryKey(), (previous: StoreStatus | undefined) =>
-          previous ? { ...previous, sync: started } : previous,
-        );
-
-        toastSuccess("Synchronization started", syncStartedText(started));
-      },
-      onError: failure => toastFailure("Launch failed", failure),
-    },
-  });
-
-  const isRunning = status?.sync?.state === "running";
-  const wasRunning = useRef(false);
-
-  // A sync that ended may have linked other apps, brought another hangar.yml and seeded .env.global.
-  useEffect(() => {
-    if (wasRunning.current && !isRunning) {
-      for (const queryKey of [getStoreAppsQueryKey(), getConfigReadQueryKey(), getEnvReadQueryKey()]) {
-        void queryClient.invalidateQueries({ queryKey });
-      }
-    }
-
-    wasRunning.current = isRunning;
-  }, [isRunning, queryClient]);
-
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
         <CardTitle>STORE</CardTitle>
         <CardDescription>See the configured repository and synchronize its local copy.</CardDescription>
       </CardHeader>
+      <Region
+        failure="Could not read the store"
+        fallback={
+          <CardContent>
+            <Skeleton className="h-16 w-full" />
+          </CardContent>
+        }
+      >
+        <StoreStatusContent />
+      </Region>
+    </Card>
+  );
+}
+
+/** The store as the server last said, and its sync; a read again that fails says why under the URL. */
+function StoreStatusContent() {
+  const { data: status, error } = useSuspenseQuery(settingsQueries.storeStatus());
+  const sync = useMutation(settingsMutations.syncStore());
+  const isRunning = status.sync?.state === "running";
+
+  useSyncEnd(isRunning);
+
+  const start = () =>
+    sync.mutate(undefined, {
+      onSuccess: started => toastSuccess("Synchronization started", syncStartedText(started)),
+      onError: failure => toastFailure("Launch failed", failure),
+    });
+
+  return (
+    <>
       <CardContent>
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="store-url">Store URL</FieldLabel>
-            <Input id="store-url" value={status?.url ?? ""} readOnly aria-describedby="store-status" />
+            <Input id="store-url" value={status.url} readOnly aria-describedby="store-status" />
             <FieldDescription id="store-status">
               {error && describeError(error)}
-              {status && (status.installed ? "The store is installed locally." : "The store is not installed yet.")}
-              {status?.sync && (
+              {status.installed ? "The store is installed locally." : "The store is not installed yet."}
+              {status.sync && (
                 <>
                   <br />
                   <span role="status">{describeSync(status.sync)}</span>
@@ -85,15 +76,14 @@ export function StoreSettingsCard() {
           type="button"
           pending={sync.isPending || isRunning}
           pendingLabel="Synchronizing…"
-          disabled={!status}
           icon={
-            status?.installed ? <RefreshCwIcon data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />
+            status.installed ? <RefreshCwIcon data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />
           }
-          onClick={() => sync.mutate()}
+          onClick={start}
         >
-          {status?.installed ? "Update" : "Install"}
+          {status.installed ? "Update" : "Install"}
         </PendingButton>
       </CardFooter>
-    </Card>
+    </>
   );
 }

@@ -1,14 +1,15 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { EyeIcon, EyeOffIcon, KeyRoundIcon, PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
-import { getEnvReadQueryKey, useEnvRead, useEnvSave } from "#libs/api";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
+import { Region } from "#modules/common/components/region.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
+import { settingsMutations, settingsQueries } from "#modules/settings/api/settings-queries.ts";
 import { envChanges } from "#modules/settings/helpers/env-changes.ts";
 
 /** A secret for a variable, of the shape of `openssl rand -hex 32`. */
@@ -21,12 +22,6 @@ function randomSecret(): string {
  * and new ones to add. A save merges into the file as it is on disk: a variable added by hand meanwhile is kept.
  */
 export function EnvSettingsCard() {
-  // Read anew each time the tab opens, as a sync or an install may have changed the file since, and shown from that
-  // read alone; not when the window gets the focus back, which would load the file over what is being typed.
-  const { data, dataUpdatedAt, isFetchedAfterMount, error } = useEnvRead({
-    query: { staleTime: Infinity, refetchOnMount: "always", refetchOnWindowFocus: false },
-  });
-
   return (
     <Card className="w-full">
       <CardHeader>
@@ -36,6 +31,22 @@ export function EnvSettingsCard() {
           page are kept.
         </CardDescription>
       </CardHeader>
+      <Region failure="Could not show the environment">
+        <EnvContent />
+      </Region>
+    </Card>
+  );
+}
+
+/**
+ * The variables, read anew each time the tab opens and shown from that read alone. Read with `useQuery`, not a
+ * suspense query: one that suspends reads the file, then `refetchOnMount: "always"` reads it again as it mounts.
+ */
+function EnvContent() {
+  const { data, dataUpdatedAt, isFetchedAfterMount, error } = useQuery(settingsQueries.env());
+
+  return (
+    <>
       {error && (
         <CardContent>
           <p className="text-sm text-destructive">{describeError(error)}</p>
@@ -43,27 +54,28 @@ export function EnvSettingsCard() {
       )}
       {/* Keyed by the read: a save, which gives the file as written, starts the form again from it. */}
       {data && isFetchedAfterMount && <EnvForm key={dataUpdatedAt} variables={data.variables} />}
-    </Card>
+    </>
   );
 }
 
 /** The variables as they are being changed. */
 function EnvForm({ variables }: { variables: Record<string, string> }) {
-  const queryClient = useQueryClient();
   const [values, setValues] = useState(variables);
   const [removed, setRemoved] = useState<string[]>([]);
   const [shown, setShown] = useState<ReadonlySet<string>>(new Set());
   const [newKey, setNewKey] = useState("");
 
-  const save = useEnvSave({
-    mutation: {
-      onSuccess: written => {
-        queryClient.setQueryData(getEnvReadQueryKey(), written);
-        toastSuccess("Environment saved", "The global environment was saved.");
-      },
-      onError: failure => toastFailure("Save failed", failure),
-    },
-  });
+  const save = useMutation(settingsMutations.saveEnv());
+
+  // Awaited, as the file a save writes starts a new form, keyed by its read: this one's callbacks would go with it.
+  async function handleSave() {
+    try {
+      await save.mutateAsync({ data: envChanges(variables, values, removed) });
+      toastSuccess("Environment saved", "The global environment was saved.");
+    } catch (failure) {
+      toastFailure("Save failed", failure);
+    }
+  }
 
   const keys = Object.keys(values).sort();
 
@@ -181,7 +193,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
           pending={save.isPending}
           pendingLabel="Saving…"
           icon={<SaveIcon data-icon="inline-start" />}
-          onClick={() => save.mutate({ data: envChanges(variables, values, removed) })}
+          onClick={() => void handleSave()}
         >
           Save
         </PendingButton>

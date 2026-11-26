@@ -1,6 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { BoxIcon, CpuIcon, HardDriveIcon, MemoryStickIcon, NetworkIcon } from "lucide-react";
-import { ApiError, useDockerOverview, useDockerProject, type ProjectDetail } from "#libs/api";
+import { ApiError, type ProjectDetail } from "#libs/api";
 import { ComposeDialogs } from "#modules/apps/components/compose-operations.tsx";
 import { ProjectActions } from "#modules/apps/components/project-actions.tsx";
 import { ReconnectingNotice } from "#modules/apps/components/reconnecting-notice.tsx";
@@ -11,6 +12,7 @@ import { formatBytes, formatPercent } from "#modules/apps/helpers/metric-format.
 import { projectStatusLabels, statusBadgeVariant } from "#modules/apps/helpers/project-status.ts";
 import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
+import { dockerQueries } from "#modules/common/api/docker-queries.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { useDockerChanges } from "#modules/common/hooks/use-docker-changes.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
@@ -36,7 +38,7 @@ export const Route = createFileRoute("/_app/apps_/$project")({
 /** The usage of the app and its services; they hold the stats, so that a frame leaves the header alone. */
 function AppLiveStats({ detail }: { detail: ProjectDetail }) {
   const { stats, total } = useDockerStats(detail.summary.containerIds);
-  const { data: overview } = useDockerOverview();
+  const { data: overview } = useQuery(dockerQueries.overview());
   const bytes = (pick: Parameters<typeof total>[0]) => formatBytes(total(pick));
   const limits = detail.summary.containerIds.flatMap(id => (stats[id] ? [stats[id].memoryLimit] : []));
   const available = availableMemory(limits, overview?.memory);
@@ -131,7 +133,7 @@ function AppDetailPage() {
 
 /** The page of `project`, whose commands' dialogs and panel stay while a read again fails. */
 function AppDetail({ project }: { project: string }) {
-  const { data, error, refetch, isPending, isRefetching } = useDockerProject(project);
+  const { data, error, refetch, isPending, isRefetching } = useQuery(dockerQueries.project(project));
   const compose = useComposeCommand([project]);
   const isNotFound = error instanceof ApiError && error.status === 404;
   const { isReconnecting } = useDockerChanges();

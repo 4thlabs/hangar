@@ -1,5 +1,6 @@
 import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#modules/common/ui/tabs.tsx";
+import { settingsQueries } from "#modules/settings/api/settings-queries.ts";
 import { ConfigSettingsCard } from "#modules/settings/components/config-settings-card.tsx";
 import { EnvSettingsCard } from "#modules/settings/components/env-settings-card.tsx";
 import { JobsSettingsCard } from "#modules/settings/components/jobs-settings-card.tsx";
@@ -8,6 +9,12 @@ import { parseSettingsTab, settingsTabs, type SettingsTabId } from "#modules/set
 
 /** `/settings`, its tab in the hash. */
 export const Route = createFileRoute("/_app/settings")({
+  // Warmed, not waited for: each card shows its own skeleton and failure. The edited files are not: each is read as
+  // its tab opens, and shown from that read alone.
+  loader: ({ context }) => {
+    void context.queryClient.prefetchQuery(settingsQueries.storeStatus());
+    void context.queryClient.prefetchQuery(settingsQueries.jobs());
+  },
   component: SettingsPage,
 });
 

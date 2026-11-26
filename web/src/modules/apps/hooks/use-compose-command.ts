@@ -1,5 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { useComposeBatches, type ComposeAction, type ComposeBatch } from "#libs/api";
+import type { ComposeAction, ComposeBatch } from "#libs/api";
+import { composeQueries } from "#modules/apps/api/compose-queries.ts";
 import { useComposeStream } from "#modules/apps/hooks/use-compose-stream.ts";
 import { needsConfirmation, type UpFlag } from "#modules/common/helpers/compose-actions.ts";
 import { toggledSet } from "#modules/common/helpers/toggled-set.ts";
@@ -22,7 +24,7 @@ export function useComposeCommand(apps: readonly string[]) {
   const [flags, setFlags] = useState<ReadonlySet<UpFlag>>(() => new Set());
 
   // Read again as a batch starts or ends, whichever page started it, which the server says on its Docker changes.
-  const { data: batches } = useComposeBatches();
+  const { data: batches } = useQuery(composeQueries.batches());
 
   const running = (batches ?? []).filter(batch => batch.report === null);
   const isHeld = apps.some(app => running.some(batch => batch.apps.includes(app)));

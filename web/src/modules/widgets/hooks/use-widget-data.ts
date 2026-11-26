@@ -1,4 +1,6 @@
-import { useWidgetsData, type WidgetData } from "#libs/api";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import type { WidgetData } from "#libs/api";
+import { widgetsQueries } from "#modules/widgets/api/widgets-queries.ts";
 
 /** The type of a widget that loads data of its own. */
 export type LoadingWidgetType = WidgetData["type"];
@@ -7,13 +9,13 @@ export type LoadingWidgetType = WidgetData["type"];
 export type WidgetDataOf<Type extends LoadingWidgetType> = Extract<WidgetData, { type: Type }>["data"];
 
 /**
- * What the widget placed as `key`, of `type`, loaded. Not asked again on a failure: the server has tried its service
- * twice already, and keeps the last answer for 15 minutes; the card shows its error at once rather than seconds later.
- * `undefined` as data for a key that now places another type, until the placements are read again.
+ * What the widget placed as `key`, of `type`, loaded, read in its `Region`: it suspends until the first answer, and
+ * throws to the region a failure with no data. `undefined` as data for a key that now places another type, until the
+ * placements are read again.
  */
 export function useWidgetData<Type extends LoadingWidgetType>(key: string, type: Type) {
   // TypeScript narrows a union by a literal tag, not by a generic one: the check is written out, and the data cast.
   const select = (loaded: WidgetData) => (loaded.type === type ? (loaded.data as WidgetDataOf<Type>) : undefined);
 
-  return useWidgetsData<WidgetDataOf<Type> | undefined>(key, { query: { retry: false, select } });
+  return useSuspenseQuery({ ...widgetsQueries.data(key), select });
 }

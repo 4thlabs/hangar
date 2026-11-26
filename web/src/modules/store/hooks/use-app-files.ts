@@ -1,8 +1,9 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { getEditorReadQueryOptions, useEditorCreate, useEditorWrite, type AppFile, type SavedFile } from "#libs/api";
+import type { AppFile } from "#libs/api";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
+import { storeMutations, storeQueries } from "#modules/store/api/store-queries.ts";
 
 export type AppFilesOptions = {
   id: string;
@@ -10,15 +11,13 @@ export type AppFilesOptions = {
   files: string[];
   /** The file open on arrival, read with the page so the editor shows it at once */
   initialFile: AppFile;
-  /** Runs once a file is written, with what its save reports */
-  onSaved: (saved: SavedFile) => void;
 };
 
 /**
  * The files of an app, one open at a time. Every file opened keeps its draft: moving to another file loses nothing,
  * and a file whose draft differs from what was last read or saved counts as unsaved.
  */
-export function useAppFiles({ id, files, initialFile, onSaved }: AppFilesOptions) {
+export function useAppFiles({ id, files, initialFile }: AppFilesOptions) {
   const queryClient = useQueryClient();
   const [paths, setPaths] = useState(files);
   const [selectedPath, setSelectedPath] = useState(initialFile.path);
@@ -29,8 +28,8 @@ export function useAppFiles({ id, files, initialFile, onSaved }: AppFilesOptions
   // One message per file, shown under the editor while it is open, as compose explains itself over several lines.
   // Keyed by path, so that a read that ends once another file is open stays with its own.
   const [errors, setErrors] = useState(() => new Map<string, string | null>());
-  const write = useEditorWrite();
-  const create = useEditorCreate();
+  const write = useMutation(storeMutations.writeFile());
+  const create = useMutation(storeMutations.createFile());
 
   const unsavedPaths = new Set([...drafts.keys()].filter(path => drafts.get(path) !== savedSources.get(path)));
 
@@ -53,7 +52,7 @@ export function useAppFiles({ id, files, initialFile, onSaved }: AppFilesOptions
     setLoadingPath(path);
     // Read anew, never from a cache: another save, or a sync, may have changed it.
     queryClient
-      .fetchQuery({ ...getEditorReadQueryOptions(id, { path }), staleTime: 0 })
+      .fetchQuery(storeQueries.freshFile(id, path))
       .then(file => remember(path, file.source))
       .catch((error: unknown) => setError(path, describeError(error)))
       .finally(() => setLoadingPath(current => (current === path ? null : current)));
@@ -72,11 +71,10 @@ export function useAppFiles({ id, files, initialFile, onSaved }: AppFilesOptions
     write.mutate(
       { id, params: { path }, data: { source } },
       {
-        onSuccess: saved => {
+        onSuccess: () => {
           setError(path, null);
           setSavedSources(current => new Map(current).set(path, source));
           toastSuccess("File saved", `${path} was saved.`);
-          onSaved(saved);
         },
         onError: error => {
           setError(path, describeError(error));

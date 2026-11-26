@@ -1,136 +1,64 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getComposeBatchesQueryKey,
   getComposeOutputUrl,
   getComposeRunUrl,
-  readEvents,
   type ComposeBatch,
   type ComposeEvent,
   type ComposeRequest,
 } from "#libs/api";
+import { composeQueries } from "#modules/apps/api/compose-queries.ts";
 import {
   applyComposeEvents,
   emptyComposeOutput,
   type ComposeOutputState,
 } from "#modules/apps/helpers/compose-output.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
+import { useEventStream, type StreamStatus } from "#modules/common/hooks/use-event-stream.ts";
 
 /** What the panel says of a stream that ended before its `end`. */
 const cutShortMessage = "The output was cut short: the command goes on on the server.";
 
 /** Where the stream of a batch's output is. */
-export type ComposeStreamStatus = "connecting" | "connected" | "ended" | "error";
+export type ComposeStreamStatus = StreamStatus;
 
 /**
  * The output of one batch at a time: one this page starts, or one the server runs already, read again from its start.
  * A batch is started by `start`, from a click, never from an effect, which StrictMode runs twice: each call is a batch
- * on the server. Closing the stream, by `stop` or as the component goes, stops nothing there.
+ * on the server. Closing the stream, by `stop` or as the component goes, stops nothing there; one cut before its `end`
+ * goes on there all the same, and the listing says how it ends.
  */
 export function useComposeStream() {
   const queryClient = useQueryClient();
-  const [output, setOutput] = useState<ComposeOutputState>(() => emptyComposeOutput([]));
-  const [status, setStatus] = useState<ComposeStreamStatus>("connecting");
-  const [error, setError] = useState<string | null>(null);
-  const stopRef = useRef<() => void>(() => {});
+  // A batch this page started is listed once its stream opens, for the page to show it again once the panel is closed,
+  // and its end once it ends.
+  const readBatchesAgain = () => void queryClient.invalidateQueries({ queryKey: composeQueries.batches().queryKey });
 
-  const read = useCallback(
-    (url: string, apps: readonly string[], request: RequestInit = {}) => {
-      stopRef.current();
+  const stream = useEventStream<ComposeEvent, ComposeOutputState>(() => emptyComposeOutput([]), {
+    // The lines come in bursts, as an image's layers are pulled, and the output keeps a bounded number of them.
+    fold: applyComposeEvents,
+    isEnd: event => event.kind === "end",
+    requiresEnd: true,
+    onOpen: readBatchesAgain,
+    onEnd: readBatchesAgain,
+  });
 
-      // The lines come in bursts, as an image's layers are pulled: each event is folded as it comes, which bounds the
-      // lines kept even while a hidden tab runs no frame, and the output is rendered once a frame, not once a line.
-      let folded = emptyComposeOutput(apps);
-      let frame: number | undefined;
-      let hasEnded = false;
+  const { status, failure } = stream;
+  const isFailed = status === "error";
 
-      const render = () => {
-        frame = undefined;
-        setOutput(folded);
-      };
-
-      const renderNow = () => {
-        if (frame !== undefined) {
-          cancelAnimationFrame(frame);
-        }
-
-        render();
-      };
-
-      setOutput(folded);
-      setStatus("connecting");
-      setError(null);
-
-      const stop = readEvents<ComposeEvent>(
-        url,
-        {
-          onOpen: () => {
-            setStatus("connected");
-            // A batch this page started is listed from now on, for the page to show it again once the panel is closed.
-            void queryClient.invalidateQueries({ queryKey: getComposeBatchesQueryKey() });
-          },
-          onItem: event => {
-            folded = applyComposeEvents(folded, [event]);
-
-            if (event.kind !== "end") {
-              frame ??= requestAnimationFrame(render);
-
-              return;
-            }
-
-            hasEnded = true;
-            renderNow();
-            setStatus("ended");
-            void queryClient.invalidateQueries({ queryKey: getComposeBatchesQueryKey() });
-          },
-          onEnd: failure => {
-            renderNow();
-
-            if (hasEnded) {
-              return;
-            }
-
-            // Cut before its `end`, the batch goes on all the same: the listing says how it ends.
-            setStatus("error");
-            setError(failure === undefined ? cutShortMessage : describeError(failure));
-          },
-        },
-        request,
-      );
-
-      stopRef.current = () => {
-        if (frame !== undefined) {
-          cancelAnimationFrame(frame);
-        }
-
-        stop();
-      };
-    },
-    [queryClient],
-  );
-
-  /** Starts a batch of `request`, and reads its output. */
-  const start = useCallback(
-    (request: ComposeRequest) =>
-      // Laid out once its first event, the batch, says the order its apps run in.
-      read(getComposeRunUrl(), [], {
+  return {
+    output: stream.state,
+    status,
+    error: isFailed ? (failure === null ? cutShortMessage : describeError(failure)) : null,
+    /** Starts a batch of `request`, and reads its output, laid out once its first event, the batch, says its apps' order. */
+    start: (request: ComposeRequest) =>
+      stream.read(getComposeRunUrl(), emptyComposeOutput([]), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
       }),
-    [read],
-  );
-
-  /** Reads the output of `batch`, which runs already, from its start. */
-  const follow = useCallback((batch: ComposeBatch) => read(getComposeOutputUrl(batch.id), batch.apps), [read]);
-
-  /** Stops reading: the batch goes on. */
-  const stop = useCallback(() => {
-    stopRef.current();
-    stopRef.current = () => {};
-  }, []);
-
-  useEffect(() => stop, [stop]);
-
-  return { output, status, error, start, follow, stop };
+    /** Reads the output of `batch`, which runs already, from its start. */
+    follow: (batch: ComposeBatch) => stream.read(getComposeOutputUrl(batch.id), emptyComposeOutput(batch.apps)),
+    /** Stops reading: the batch goes on. */
+    stop: stream.stop,
+  };
 }
