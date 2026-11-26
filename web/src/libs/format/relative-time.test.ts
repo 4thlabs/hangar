@@ -23,3 +23,23 @@ describe("RelativeTime.format", () => {
     expect(RelativeTime.format(Number.POSITIVE_INFINITY, NOW)).toBe("at an unknown time");
   });
 });
+
+describe("RelativeTime.compact", () => {
+  const compact = (offsetMs: number) => RelativeTime.compact(NOW + offsetMs, NOW);
+
+  it("writes the past bare and the future with `in`", () => {
+    expect(compact(-7_200_000)).toBe("2h");
+    expect(compact(79_200_000)).toBe("in 22h");
+  });
+
+  it("climbs to the biggest unit that fits", () => {
+    expect(compact(-30_000)).toBe("30s");
+    expect(compact(-900_000)).toBe("15m");
+    expect(compact(-259_200_000)).toBe("3d");
+    expect(compact(-7_776_000_000)).toBe("3mo");
+  });
+
+  it("says a moment that is no time as unknown", () => {
+    expect(RelativeTime.compact(Date.parse("not a date"), NOW)).toBe("at an unknown time");
+  });
+});

@@ -34,7 +34,7 @@ describe("the shell", () => {
     serve();
     renderAt("/", { theme: "dark", themePalette: "nord" });
 
-    await screen.findByRole("heading", { name: "Not here yet" });
+    await screen.findByRole("button", { name: "User menu of Ana Lima" });
 
     expect(document.documentElement.dataset.theme).toBe("nord");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
@@ -78,7 +78,7 @@ describe("signing in", () => {
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "correct horse" } });
     fireEvent.submit(screen.getByRole("button", { name: "Sign in" }));
 
-    expect(await screen.findByRole("heading", { name: "Not here yet" })).toBeDefined();
+    expect(await screen.findByRole("button", { name: "User menu of Ana Lima" })).toBeDefined();
     expect(router.state.location.pathname).toBe("/");
 
     const login = fetch.mock.calls.find(([url]) => url === "/api/auth/login");

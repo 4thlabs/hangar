@@ -14,6 +14,15 @@ export class RelativeTime {
 
   private static readonly Format = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
+  /** How a compact moment shortens each unit. */
+  private static readonly Suffixes: Readonly<Record<RelativeUnit, string>> = {
+    second: "s",
+    minute: "m",
+    hour: "h",
+    day: "d",
+    month: "mo",
+  };
+
   /** What a moment that is no time, as a date that did not parse, says. */
   static readonly Unknown = "at an unknown time";
 
@@ -27,6 +36,23 @@ export class RelativeTime {
     }
 
     return RelativeTime.Format.format(Math.round(seconds / rung.divisor), rung.unit);
+  }
+
+  /**
+   * The same moment as short as a dashboard row needs: `18h`, `in 5h`, `3d`; Intl's `narrow` style still says
+   * "18 hr. ago". {@link RelativeTime.Unknown} for one that is no time.
+   */
+  static compact(timestamp: number, now: number = Date.now()) {
+    const seconds = (timestamp - now) / 1_000;
+    const rung = RelativeTime.unit(Math.abs(seconds));
+
+    if (rung === undefined) {
+      return RelativeTime.Unknown;
+    }
+
+    const span = `${Math.round(Math.abs(seconds) / rung.divisor)}${RelativeTime.Suffixes[rung.unit]}`;
+
+    return seconds > 0 ? `in ${span}` : span;
   }
 
   /**

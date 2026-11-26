@@ -1,0 +1,177 @@
+import { cn } from "cn";
+import { ExternalLinkIcon } from "lucide-react";
+import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
+import { RelativeTime } from "#libs/format";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
+import type { WidgetIcon } from "#modules/widgets/widget-appearance.ts";
+import { Units } from "#modules/widgets/widget-format.ts";
+import { WidgetIconImage } from "./widget-icon.tsx";
+
+export function WidgetCard({ className, ...props }: ComponentProps<typeof Card>) {
+  return <Card className={cn("w-full gap-3 bg-background pt-0", className)} {...props} />;
+}
+
+type WidgetHeaderProps = Omit<ComponentProps<typeof CardHeader>, "title"> & {
+  bordered?: boolean;
+  description?: ReactNode;
+  /** Where the title links to: the service's page. */
+  href?: string | null | undefined;
+  icon: WidgetIcon;
+  title: string;
+};
+
+export function WidgetHeader({
+  bordered = false,
+  className,
+  description,
+  href,
+  icon,
+  title,
+  ...props
+}: WidgetHeaderProps) {
+  const titleContent = (
+    <>
+      <WidgetIconImage icon={icon} />
+      {title.toUpperCase()}
+      {href && <ExternalLinkIcon aria-hidden="true" className="size-3.5" />}
+    </>
+  );
+
+  return (
+    <CardHeader
+      className={cn("pt-3 [.border-b]:pb-3", description && "gap-0 border-b", bordered && "border-b", className)}
+      {...props}
+    >
+      <CardTitle className="inline-flex items-center gap-1.5 text-sm tracking-wide">
+        {href ? (
+          <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 hover:underline">
+            {titleContent}
+          </a>
+        ) : (
+          titleContent
+        )}
+      </CardTitle>
+      {description && (
+        <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">{description}</CardDescription>
+      )}
+    </CardHeader>
+  );
+}
+
+/** Its children in a line, a dot between each two. */
+export function WidgetMetadata({ children }: { children: ReactNode }) {
+  const items = Children.toArray(children);
+
+  return items.map((item, index) => (
+    <Fragment key={index}>
+      {index > 0 && <span aria-hidden="true">·</span>}
+      {item}
+    </Fragment>
+  ));
+}
+
+export function WidgetContent({ className, ...props }: ComponentProps<typeof CardContent>) {
+  return <CardContent className={className} {...props} />;
+}
+
+export function WidgetMetricGrid({ className, ...props }: ComponentProps<"dl">) {
+  return <dl className={cn("grid grid-cols-2 gap-4 @2xl:grid-cols-4", className)} {...props} />;
+}
+
+type WidgetMetricProps = Omit<ComponentProps<"div">, "title"> & {
+  detail?: ReactNode;
+  label: ReactNode;
+  tone?: "default" | "destructive";
+  /** A number is formatted here, so that no caller has to remember to. */
+  value: ReactNode;
+};
+
+export function WidgetMetric({ className, detail, label, tone = "default", value, ...props }: WidgetMetricProps) {
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-0", className)} {...props}>
+      <dt className="text-xs font-medium uppercase leading-tight tracking-wide text-muted-foreground">{label}</dt>
+      <dd
+        className={cn(
+          "text-2xl font-semibold leading-tight tabular-nums text-primary",
+          tone === "destructive" && "text-destructive",
+        )}
+      >
+        {typeof value === "number" ? Units.integer(value) : value}
+      </dd>
+      {detail && <dd className="truncate text-xs leading-tight text-muted-foreground">{detail}</dd>}
+    </div>
+  );
+}
+
+type WidgetListProps = ComponentProps<"ul"> & {
+  /** What to say instead of an empty list; without it, the empty `<ul>`. */
+  empty?: ReactNode;
+};
+
+export function WidgetList({ children, className, empty, ...props }: WidgetListProps) {
+  if (empty !== undefined && Children.count(children) === 0) {
+    return <WidgetEmptyState>{empty}</WidgetEmptyState>;
+  }
+
+  return (
+    <ul className={cn("flex flex-col gap-3", className)} {...props}>
+      {children}
+    </ul>
+  );
+}
+
+type WidgetListItemProps = ComponentProps<"li"> & {
+  media?: ReactNode;
+  trailing?: ReactNode;
+};
+
+export function WidgetListItem({ children, className, media, trailing, ...props }: WidgetListItemProps) {
+  return (
+    <li className={cn("flex min-w-0 items-center gap-2", className)} {...props}>
+      {media}
+      <div className="min-w-0 grow">{children}</div>
+      {trailing}
+    </li>
+  );
+}
+
+type WidgetTimeProps = {
+  /** When it happened, or is due, in milliseconds: a moment ahead reads `in 22 hours`. */
+  at: number;
+  /** For a test that pins the clock. */
+  now?: number;
+  /** `compact` writes `18h` rather than `18 hours ago`, for a row that has other things to say. */
+  variant?: "long" | "compact";
+};
+
+/** A moment, as every widget's trailing column writes one. */
+export function WidgetTime({ at, variant = "long", now = Date.now() }: WidgetTimeProps) {
+  const text = variant === "compact" ? RelativeTime.compact(at, now) : RelativeTime.format(at, now);
+  const isTime = Number.isFinite(at);
+
+  return (
+    <time
+      {...(isTime ? { dateTime: new Date(at).toISOString() } : {})}
+      className="shrink-0 text-xs text-muted-foreground"
+    >
+      {text}
+    </time>
+  );
+}
+
+export function WidgetEmptyState({ className, ...props }: ComponentProps<"p">) {
+  return <p className={cn("text-muted-foreground", className)} {...props} />;
+}
+
+type WidgetFooterProps = Omit<ComponentProps<typeof CardFooter>, "title"> & {
+  title?: string;
+};
+
+export function WidgetFooter({ children, className, title, ...props }: WidgetFooterProps) {
+  return (
+    <CardFooter className={cn("flex-col items-start gap-2", className)} {...props}>
+      {title && <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>}
+      {children}
+    </CardFooter>
+  );
+}
