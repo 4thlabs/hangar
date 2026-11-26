@@ -20,6 +20,13 @@ export function problem(status: number, detail: string): Response {
   return Response.json(body, { status, headers: { "Content-Type": "application/problem+json" } });
 }
 
+/** The problem of Hangar's error `code`, with its English `detail` and its `params` as members, as the server answers. */
+export function coded(status: number, code: string, detail: string, params: Record<string, unknown> = {}): Response {
+  const body = { type: `/problems/${code}`, title: "Error", status, detail, ...params };
+
+  return Response.json(body, { status, headers: { "Content-Type": "application/problem+json" } });
+}
+
 /** A 401 problem, as the server answers a call without a session. */
 export function unauthorized(): Response {
   return problem(401, "no session");

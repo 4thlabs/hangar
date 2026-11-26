@@ -1,19 +1,36 @@
 //! The errors the page may show, each a stable code with its params beside its English message, so that a catalog can
 //! word them in another language later without the server changing.
 //!
-//! A problem does not carry the code yet: quoll writes its status and detail alone
-//! ([quoll#140](https://github.com/4thlabs/quoll/issues/140)), and until it writes more the page shows the detail,
-//! which is [`ErrorCode::message`]. A body that holds an error, as the sync of the store's, carries it whole, an
+//! A problem carries the code as its `type`, `/problems/store.unknown_app`, its params as extension members, and the
+//! English message as its detail. A body that holds an error, as the sync of the store's, carries it whole, an
 //! [`ErrorDetail`].
+
+#[cfg(feature = "client")]
+mod client;
 
 use std::fmt;
 
 use http::StatusCode;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 /// An error the page may show: its code, as `store.unknown_app`, and its params, as `{ "app": "alpha" }`. The server
-/// answers it with its [`status`](Self::status) and its English [`message`](Self::message) as the problem's detail.
+/// answers it with its [`status`](Self::status), as a problem whose `type` is [`problem_type`](Self::problem_type),
+/// whose extension members are the params, and whose detail is its English [`message`](Self::message):
+///
+/// ```json
+/// {
+///   "type": "/problems/store.unknown_app",
+///   "title": "Not Found",
+///   "status": 404,
+///   "detail": "the store has no app alpha",
+///   "app": "alpha"
+/// }
+/// ```
+///
+/// A param is named as RFC 9457 names an extension member, a letter, then letters, digits or `_`, three characters
+/// at least, and none of `type`, `title`, `status`, `detail` and `instance`, which quoll would leave out.
 ///
 /// ```
 /// use hangar_api::ErrorCode;
@@ -312,6 +329,41 @@ pub enum ErrorCode {
         /// The id asked for.
         container: String,
     },
+
+    /// A sign-in by password of an email unknown to `hangar.yml`, or with a wrong password.
+    #[serde(rename = "auth.invalid_credentials")]
+    InvalidCredentials,
+
+    /// Too many sign-ins by password failed for this email: the answer's `Retry-After` says when it is taken again.
+    #[serde(rename = "auth.too_many_sign_ins")]
+    TooManySignIns,
+
+    /// A session cookie that is not one the server signed, or one that has expired.
+    #[serde(rename = "auth.session_expired")]
+    SessionExpired,
+
+    /// The user of a session that `hangar.yml` no longer lists.
+    #[serde(rename = "auth.user_removed")]
+    UserRemoved,
+
+    /// The user of a session whose password or provider's subject changed in `hangar.yml` since they signed in.
+    #[serde(rename = "auth.credentials_changed")]
+    CredentialsChanged,
+
+    /// A `Cookie` header that is not text.
+    #[serde(rename = "auth.unreadable_cookie")]
+    UnreadableCookie,
+
+    /// A sign-in through an OpenID Connect provider, which the server has none of.
+    #[serde(rename = "auth.no_oidc_provider")]
+    NoOidcProvider,
+
+    /// A request that changes something, from a page of another origin than the server's.
+    #[serde(rename = "auth.cross_origin")]
+    CrossOrigin {
+        /// The server's origin, `HANGAR_URL`'s.
+        origin: String,
+    },
 }
 
 /// An error as a body carries it, where a problem does not: its code, its params, and its English message, which the
@@ -350,8 +402,30 @@ impl From<ErrorCode> for ErrorDetail {
 }
 
 impl ErrorCode {
+    /// What the `type` of a problem of the server's holds before its code.
+    pub const PROBLEM_TYPE_PREFIX: &str = "/problems/";
+
     /// Where the page sends its reader for the rest of a failure of the server's own.
     const LOG_HINT: &str = "See the server's log.";
+
+    /// The `type` of its problem, a URI relative to the server: `/problems/store.unknown_app`.
+    pub fn problem_type(&self) -> String {
+        format!("{}{}", Self::PROBLEM_TYPE_PREFIX, self.code())
+    }
+
+    /// Its params by their names, as `{ "app": "alpha" }`; none for a code that has none.
+    pub fn params(&self) -> Map<String, Value> {
+        let written = serde_json::to_value(self)
+            .expect("a code holds strings and numbers, which JSON writes");
+
+        match written {
+            Value::Object(mut fields) => match fields.remove("params") {
+                Some(Value::Object(params)) => params,
+                _ => Map::new(),
+            },
+            _ => Map::new(),
+        }
+    }
 
     /// The code, as `store.unknown_app`.
     pub fn code(&self) -> &'static str {
@@ -399,6 +473,14 @@ impl ErrorCode {
             Self::DockerUnavailable => "docker.unavailable",
             Self::UnknownProject { .. } => "docker.unknown_project",
             Self::UnknownContainer { .. } => "docker.unknown_container",
+            Self::InvalidCredentials => "auth.invalid_credentials",
+            Self::TooManySignIns => "auth.too_many_sign_ins",
+            Self::SessionExpired => "auth.session_expired",
+            Self::UserRemoved => "auth.user_removed",
+            Self::CredentialsChanged => "auth.credentials_changed",
+            Self::UnreadableCookie => "auth.unreadable_cookie",
+            Self::NoOidcProvider => "auth.no_oidc_provider",
+            Self::CrossOrigin { .. } => "auth.cross_origin",
         }
     }
 
@@ -408,7 +490,15 @@ impl ErrorCode {
             Self::UnknownApp { .. }
             | Self::NoSuchFile { .. }
             | Self::UnknownProject { .. }
-            | Self::UnknownContainer { .. } => StatusCode::NOT_FOUND,
+            | Self::UnknownContainer { .. }
+            | Self::NoOidcProvider => StatusCode::NOT_FOUND,
+            Self::InvalidCredentials
+            | Self::SessionExpired
+            | Self::UserRemoved
+            | Self::CredentialsChanged
+            | Self::UnreadableCookie => StatusCode::UNAUTHORIZED,
+            Self::CrossOrigin { .. } => StatusCode::FORBIDDEN,
+            Self::TooManySignIns => StatusCode::TOO_MANY_REQUESTS,
             Self::DockerUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             Self::StoreNotInstalled
             | Self::SyncRunning
@@ -526,6 +616,22 @@ impl ErrorCode {
             Self::UnknownContainer { project, container } => {
                 format!("the app {project} has no container {container}")
             }
+            Self::InvalidCredentials => "invalid email or password".to_owned(),
+            Self::TooManySignIns => {
+                "too many failed sign-ins for this email: try again later".to_owned()
+            }
+            Self::SessionExpired => {
+                "the session is not valid or has expired: sign in again".to_owned()
+            }
+            Self::UserRemoved => "the session's user is no longer in hangar.yml".to_owned(),
+            Self::CredentialsChanged => {
+                "the user's credentials have changed: sign in again".to_owned()
+            }
+            Self::UnreadableCookie => "the Cookie header is not text".to_owned(),
+            Self::NoOidcProvider => "no OpenID Connect provider is configured".to_owned(),
+            Self::CrossOrigin { origin } => {
+                format!("the request comes from another origin than {origin}")
+            }
         }
     }
 
@@ -542,9 +648,16 @@ impl fmt::Display for ErrorCode {
 }
 
 impl From<ErrorCode> for quoll::Error {
-    /// The problem of `code`: its status, and its English message as the detail.
+    /// The problem of `code`: its status, its `type`, its params as extension members, and its English message as the
+    /// detail.
     fn from(code: ErrorCode) -> Self {
-        Self::new(code.status(), code.message())
+        let problem = Self::new(code.status(), code.message()).with_type(code.problem_type());
+
+        code.params()
+            .into_iter()
+            .fold(problem, |problem, (name, value)| {
+                problem.with_member(name, value)
+            })
     }
 }
 
@@ -553,7 +666,7 @@ mod tests {
     use super::ErrorCode;
 
     /// One of each code, so that a test sees them all.
-    fn every_code() -> Vec<ErrorCode> {
+    pub(super) fn every_code() -> Vec<ErrorCode> {
         let app = || "alpha".to_owned();
         let name = || "ALPHA_KEY".to_owned();
 
@@ -648,6 +761,16 @@ mod tests {
                 project: app(),
                 container: "0123456789ab".to_owned(),
             },
+            ErrorCode::InvalidCredentials,
+            ErrorCode::TooManySignIns,
+            ErrorCode::SessionExpired,
+            ErrorCode::UserRemoved,
+            ErrorCode::CredentialsChanged,
+            ErrorCode::UnreadableCookie,
+            ErrorCode::NoOidcProvider,
+            ErrorCode::CrossOrigin {
+                origin: "https://hangar.example.com".to_owned(),
+            },
         ]
     }
 
@@ -694,6 +817,28 @@ mod tests {
             code.message(),
             "invalid hangar.yml: categories[0].color: required"
         );
+    }
+
+    #[test]
+    fn answers_each_code_as_a_problem_of_its_type_with_each_param_a_member() {
+        for code in every_code() {
+            let answered = quoll::Error::from(code.clone()).into_answered();
+            let body = answered.body().expect("a problem");
+            let problem: serde_json::Value = serde_json::from_slice(body).expect("JSON");
+            let mut expected = serde_json::json!({
+                "type": format!("/problems/{}", code.code()),
+                "title": code.status().canonical_reason(),
+                "status": code.status().as_u16(),
+                "detail": code.message(),
+            });
+
+            expected
+                .as_object_mut()
+                .expect("an object")
+                .extend(code.params());
+
+            assert_eq!(problem, expected, "{code:?}");
+        }
     }
 
     #[test]

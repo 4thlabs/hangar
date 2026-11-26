@@ -3,12 +3,12 @@
 use std::time::SystemTime;
 
 use hangar_api::{
-    AuthServer, CookieCredential, Credentials, OidcCallback, OidcFlow, Session as SessionScheme,
-    SessionUser, SignInOptions,
+    AuthServer, CookieCredential, Credentials, ErrorCode, OidcCallback, OidcFlow,
+    Session as SessionScheme, SessionUser, SignInOptions,
 };
 use hangar_core::User;
 use http::header::{LOCATION, SET_COOKIE};
-use quoll::{Authenticate, Error, Response, Result, Status};
+use quoll::{Authenticate, Response, Result, Status};
 
 use super::SignedIn;
 use super::cookies::ServerCookie;
@@ -106,7 +106,7 @@ impl AuthServer for App {
 
     async fn oidc_login(&self) -> Result<Response<()>> {
         let Some(oidc) = &self.auth.oidc else {
-            return Err(Error::not_found("no OpenID Connect provider is configured"));
+            return Err(ErrorCode::NoOidcProvider.into());
         };
 
         match oidc.start(SystemTime::now()).await {
@@ -130,7 +130,7 @@ impl AuthServer for App {
         callback: OidcCallback,
     ) -> Result<Response<()>> {
         let Some(oidc) = &self.auth.oidc else {
-            return Err(Error::not_found("no OpenID Connect provider is configured"));
+            return Err(ErrorCode::NoOidcProvider.into());
         };
         let now = SystemTime::now();
         let flow = flow

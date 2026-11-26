@@ -17,8 +17,7 @@ http.workspace = true
 quoll.workspace = true
 schemars = "1"
 serde.workspace = true
-
-[dev-dependencies]
+# The params of an error, which its problem carries as extension members.
 serde_json.workspace = true
 
 [lints]

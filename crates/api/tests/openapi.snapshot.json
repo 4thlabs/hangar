@@ -1460,6 +1460,123 @@
               "params"
             ],
             "type": "object"
+          },
+          {
+            "description": "A sign-in by password of an email unknown to `hangar.yml`, or with a wrong password.",
+            "properties": {
+              "code": {
+                "const": "auth.invalid_credentials",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Too many sign-ins by password failed for this email: the answer's `Retry-After` says when it is taken again.",
+            "properties": {
+              "code": {
+                "const": "auth.too_many_sign_ins",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A session cookie that is not one the server signed, or one that has expired.",
+            "properties": {
+              "code": {
+                "const": "auth.session_expired",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The user of a session that `hangar.yml` no longer lists.",
+            "properties": {
+              "code": {
+                "const": "auth.user_removed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The user of a session whose password or provider's subject changed in `hangar.yml` since they signed in.",
+            "properties": {
+              "code": {
+                "const": "auth.credentials_changed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A `Cookie` header that is not text.",
+            "properties": {
+              "code": {
+                "const": "auth.unreadable_cookie",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A sign-in through an OpenID Connect provider, which the server has none of.",
+            "properties": {
+              "code": {
+                "const": "auth.no_oidc_provider",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A request that changes something, from a page of another origin than the server's.",
+            "properties": {
+              "code": {
+                "const": "auth.cross_origin",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "origin": {
+                    "description": "The server's origin, `HANGAR_URL`'s.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "origin"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
           }
         ],
         "properties": {

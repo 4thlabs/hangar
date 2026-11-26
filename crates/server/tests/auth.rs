@@ -10,7 +10,7 @@ use cookie::{Cookie, CookieJar, Key};
 use hangar_core::{DataDir, PasswordHash};
 use hangar_server::{App, Settings};
 use http::StatusCode;
-use http::header::{CONTENT_TYPE, COOKIE, ORIGIN, SET_COOKIE, WWW_AUTHENTICATE};
+use http::header::{CONTENT_TYPE, COOKIE, ORIGIN, RETRY_AFTER, SET_COOKIE, WWW_AUTHENTICATE};
 use serde_json::{Value, json};
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
@@ -197,10 +197,11 @@ async fn a_wrong_password_an_unknown_email_and_a_user_without_one_are_refused_al
         assert_eq!(refused.status(), StatusCode::UNAUTHORIZED, "{email}");
         assert!(refused.headers().get(SET_COOKIE).is_none(), "{email}");
         assert_eq!(refused.headers()[CONTENT_TYPE], "application/problem+json");
-        assert_eq!(
-            refused.json::<Value>().await.expect("JSON")["detail"],
-            "invalid email or password"
-        );
+
+        let problem = refused.json::<Value>().await.expect("JSON");
+
+        assert_eq!(problem["type"], "/problems/auth.invalid_credentials");
+        assert_eq!(problem["detail"], "invalid email or password");
     }
 }
 
@@ -217,11 +218,23 @@ async fn ten_failures_refuse_an_email_for_a_while() {
     }
 
     let limited = login(&url, "ana@example.com", "correct horse").await;
+    let retry_after: u64 = limited.headers()[RETRY_AFTER]
+        .to_str()
+        .expect("text")
+        .parse()
+        .expect("seconds");
 
     assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
+    // Until the oldest failure is 15 minutes old: the ten took a few seconds at most.
+    assert!((840..=900).contains(&retry_after), "{retry_after}");
     assert_eq!(
-        limited.json::<Value>().await.expect("JSON")["detail"],
-        "too many failed sign-ins for this email: try again in 15 min"
+        limited.json::<Value>().await.expect("JSON"),
+        json!({
+            "type": "/problems/auth.too_many_sign_ins",
+            "title": "Too Many Requests",
+            "status": 429,
+            "detail": "too many failed sign-ins for this email: try again later",
+        })
     );
 }
 
@@ -476,8 +489,14 @@ async fn a_post_from_another_origin_is_refused_before_it_signs_in() {
     assert_eq!(refused.status(), StatusCode::FORBIDDEN);
     assert!(refused.headers().get(SET_COOKIE).is_none());
     assert_eq!(
-        refused.json::<Value>().await.expect("JSON")["detail"],
-        "the request comes from another origin than https://hangar.example.com"
+        refused.json::<Value>().await.expect("JSON"),
+        json!({
+            "type": "/problems/auth.cross_origin",
+            "title": "Forbidden",
+            "status": 403,
+            "detail": "the request comes from another origin than https://hangar.example.com",
+            "origin": "https://hangar.example.com",
+        })
     );
 }
 
