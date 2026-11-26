@@ -1,58 +1,6 @@
-import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { QueryClients } from "#libs/api";
-import type { UserPreferences } from "#libs/preferences";
-import { Routes } from "#app/routes.tsx";
-import { SessionGuard } from "#modules/auth/session-guard.ts";
-import { AppProviders } from "#modules/common/components/app-providers.tsx";
-
-const light: UserPreferences = { theme: "light", themePalette: "claude" };
-
-const ana = { name: "Ana Lima", email: "ana@example.com" };
-
-/** The server's answer to a call, by `METHOD /path`. */
-type Answers = Record<string, () => Response>;
-
-/** A 401 problem, as the server answers a call without a session. */
-function unauthorized(): Response {
-  const problem = { type: "about:blank", title: "Unauthorized", status: 401, detail: "no session" };
-
-  return Response.json(problem, { status: 401, headers: { "Content-Type": "application/problem+json" } });
-}
-
-/** Answers every `fetch` from `answers`, a signed-in session with no provider unless they say otherwise. */
-function serve(answers: Answers = {}) {
-  const all: Answers = {
-    "GET /api/auth/session": () => Response.json(ana),
-    "GET /api/auth/options": () => Response.json({ oidc: false }),
-    ...answers,
-  };
-
-  const fetch = vi.fn(async (url: string, init: RequestInit = {}) => {
-    const answer = all[`${init.method ?? "GET"} ${url}`];
-
-    return answer ? answer() : new Response(null, { status: 404 });
-  });
-
-  vi.stubGlobal("fetch", fetch);
-
-  return fetch;
-}
-
-/** The page at `path`, with the preferences the cookies gave. */
-function renderAt(path: string, preferences: UserPreferences = light) {
-  const queryClient = QueryClients.create(() => SessionGuard.signedOut(router, queryClient));
-  const router = Routes.createRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
-
-  render(
-    <AppProviders queryClient={queryClient} preferences={preferences}>
-      <RouterProvider router={router} />
-    </AppProviders>,
-  );
-
-  return router;
-}
+import { ana, renderAt, serve, unauthorized } from "#app/mock/page.tsx";
 
 afterEach(() => {
   cleanup();

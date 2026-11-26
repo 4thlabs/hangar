@@ -1,0 +1,25 @@
+/** One tab of the settings page. */
+export type SettingsTabId = "store" | "env" | "config";
+
+/** A tab, and its label. */
+type SettingsTabEntry = { id: SettingsTabId; label: string };
+
+/**
+ * The tabs of `/settings`, and the URL hash that opens each one: a link or the spotlight opens any of them. The jobs
+ * and Hangar's update of itself come with the issues of their areas.
+ */
+export class SettingsTab {
+  /** In the order the page lists them; the first one opens when the hash names none. */
+  static readonly All: readonly SettingsTabEntry[] = [
+    { id: "store", label: "Store" },
+    { id: "env", label: "Environment" },
+    { id: "config", label: "Configuration" },
+  ];
+
+  /** The tab a URL hash names, with or without its `#`; the first tab for any other hash. */
+  static parse(hash: string): SettingsTabId {
+    const id = hash.replace(/^#/, "");
+
+    return SettingsTab.All.find(tab => tab.id === id)?.id ?? SettingsTab.All[0]!.id;
+  }
+}
