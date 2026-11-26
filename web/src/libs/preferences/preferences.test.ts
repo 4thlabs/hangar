@@ -28,6 +28,13 @@ describe("Preferences", () => {
     expect(listener).toHaveBeenCalledOnce();
   });
 
+  it("writes the cookies of every preference it renews, the defaults included", () => {
+    Preferences.fromCookies("").renew();
+
+    expect(document.cookie).toContain("theme=system");
+    expect(document.cookie).toContain("theme_palette=claude");
+  });
+
   it("keeps the same preferences until a change, and tells no one who left", () => {
     const preferences = new Preferences({ theme: "light", themePalette: "claude" });
     const listener = vi.fn();

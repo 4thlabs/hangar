@@ -8,15 +8,24 @@ import { Session } from "#modules/auth/api/session.ts";
 type PageOptions = {
   /** The history the router reads and writes, the browser's unless given. */
   history?: RouterHistory;
-  /** The user's preferences, from `document.cookie` unless given. */
+  /** The user's preferences, from `document.cookie` unless given, their cookies then renewed. */
   preferences?: Preferences;
 };
+
+/** The preferences `document.cookie` holds, their cookies renewed for another year, defaults included. */
+function loadedPreferences(): Preferences {
+  const preferences = Preferences.fromCookies(document.cookie);
+
+  preferences.renew();
+
+  return preferences;
+}
 
 /**
  * Creates, once, what the page is built on: its query client, its session, its router and its preferences. `main.tsx`
  * calls it, and so do the tests, through `renderAt`.
  */
-export function createPage({ history, preferences = Preferences.fromCookies(document.cookie) }: PageOptions = {}) {
+export function createPage({ history, preferences = loadedPreferences() }: PageOptions = {}) {
   // A 401 of any call sends the page to /login: the session expired, or its user left hangar.yml. The callback runs
   // only once the page is up, when `session` and `router` exist.
   const queryClient = createQueryClient(() => session.signedOut(router));
