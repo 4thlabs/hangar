@@ -3,6 +3,7 @@ import type { WidgetPlacement } from "#libs/api";
 import { ErrorMessage } from "#modules/common/error-message.ts";
 import { useWidgetData, type LoadingWidgetType, type WidgetDataOf } from "#modules/widgets/hooks/use-widget-data.ts";
 import { WidgetAppearance } from "#modules/widgets/widget-appearance.ts";
+import { WidgetBoundary } from "./widget-boundary.tsx";
 import { WidgetError, WidgetSkeleton } from "./widget-states.tsx";
 
 type LoadedWidgetProps<Type extends LoadingWidgetType> = {
@@ -20,10 +21,15 @@ type LoadedWidgetProps<Type extends LoadingWidgetType> = {
  */
 export function LoadedWidget<Type extends LoadingWidgetType>({ placement, type, children }: LoadedWidgetProps<Type>) {
   const look = WidgetAppearance.get(type);
-  const { data, error } = useWidgetData(placement.key, type);
+  const { data, error, dataUpdatedAt } = useWidgetData(placement.key, type);
 
   if (data !== undefined) {
-    return children(data);
+    // A card that threw on one answer renders the next.
+    return (
+      <WidgetBoundary look={look} resetKey={dataUpdatedAt}>
+        {children(data)}
+      </WidgetBoundary>
+    );
   }
 
   if (error) {

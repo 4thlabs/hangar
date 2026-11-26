@@ -170,6 +170,52 @@ describe("/", () => {
     expect(await screen.findByText("Your VPN is connected!")).toBeDefined();
   });
 
+  it("shows a card that threw once again, when its data is read again and renders", async () => {
+    let isBroken = true;
+
+    serve({
+      "GET /api/widgets": () => Response.json([{ key: "stock-prices-1", type: "stock-prices", column: 3, link: null }]),
+      "GET /api/widgets/stock-prices-1": () =>
+        Response.json(
+          isBroken
+            ? { type: "stock-prices", data: {} }
+            : {
+                type: "stock-prices",
+                data: {
+                  stocks: [
+                    {
+                      symbol: "AAPL",
+                      name: "Apple Inc",
+                      currency: "USD",
+                      price: 190.5,
+                      changePercent: 1.06,
+                      high: 191,
+                      low: 187,
+                      open: 188,
+                      closes: [],
+                    },
+                  ],
+                },
+              },
+        ),
+    });
+
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    renderAt("/");
+
+    expect(await screen.findByText("Stocks is unavailable")).toBeDefined();
+
+    isBroken = false;
+    act(() => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+
+    expect(await screen.findByText("$190.50")).toBeDefined();
+    expect(screen.queryByText("Stocks is unavailable")).toBeNull();
+    act(() => focusManager.setFocused(undefined));
+  });
+
   it("keeps a card's data when reading it again fails", async () => {
     let isGluetunDown = false;
     const fetch = serveDashboard({ isGluetunDown: () => isGluetunDown });

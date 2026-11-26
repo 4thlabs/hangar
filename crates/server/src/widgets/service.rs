@@ -67,8 +67,9 @@ impl Service {
 
     /// The credential that sends `value` as the `Authorization` of each call of a client, for a service whose key goes
     /// there in a form of its own: Beszel's raw token, Jellyfin's `MediaBrowser Token="..."`. quoll's header schemes
-    /// leave `Authorization` to its `Bearer` and `Basic`, and send a key as it is: until a scheme can say the form of
-    /// its value, the header is written here. The value is marked sensitive, as quoll marks a key's.
+    /// leave `Authorization` to its `Bearer` and `Basic`, and send a key as it is: until a scheme of the client can say
+    /// where and in which form its value goes, apart from the server's schemes (quoll#147), the header is written here.
+    /// The value is marked sensitive, as quoll marks a key's.
     ///
     /// # Errors
     ///
