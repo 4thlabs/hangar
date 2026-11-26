@@ -1,5 +1,5 @@
 import type { NotificationMessage } from "#libs/api";
-import { composeActionOfNotification, composeLabel, composeOutcome } from "#modules/apps/compose-actions.ts";
+import { composeActionOfNotification, composeLabel, composeOutcome } from "#modules/apps/helpers/compose-actions.ts";
 
 /** What a notification says once worded. */
 export type NotificationWords = { title: string; description?: string };

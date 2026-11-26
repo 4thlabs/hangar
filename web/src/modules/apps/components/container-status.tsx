@@ -1,5 +1,5 @@
 import type { ProjectContainer } from "#libs/api";
-import { containerStatusLabel, isContainerFailing } from "#modules/apps/project-status.ts";
+import { containerStatusLabel, isContainerFailing } from "#modules/apps/helpers/project-status.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 
 /** A container's health when it has a healthcheck, its state otherwise. */

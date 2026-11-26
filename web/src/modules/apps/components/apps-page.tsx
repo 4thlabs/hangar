@@ -2,25 +2,25 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { BoxesIcon, CpuIcon, LayersIcon, MemoryStickIcon, PackageOpenIcon, PlayIcon, SquareIcon } from "lucide-react";
 import { useState } from "react";
 import { useDockerProjects, type ProjectSummary } from "#libs/api";
-import {
-  parseAppCategories,
-  parseAppsSort,
-  parseAppStatuses,
-  parseAppUpdates,
-  type AppSortColumn,
-} from "#modules/apps/apps-search.ts";
 import { AppsFilterMenus } from "#modules/apps/components/apps-filter-menus.tsx";
 import { AppsTable } from "#modules/apps/components/apps-table.tsx";
 import { ComposeDialogs, ComposeOperationButtons } from "#modules/apps/components/compose-operations.tsx";
 import { ReconnectingNotice } from "#modules/apps/components/reconnecting-notice.tsx";
 import { RunningBatches } from "#modules/apps/components/running-batches.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
-import { appCount, composeSubject } from "#modules/apps/compose-actions.ts";
+import {
+  parseAppCategories,
+  parseAppsSort,
+  parseAppStatuses,
+  parseAppUpdates,
+  type AppSortColumn,
+} from "#modules/apps/helpers/apps-search.ts";
+import { appCount, composeSubject } from "#modules/apps/helpers/compose-actions.ts";
+import { formatBytes, formatPercent } from "#modules/apps/helpers/metric-format.ts";
+import { filterProjects } from "#modules/apps/helpers/project-filter.ts";
 import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerChanges } from "#modules/apps/hooks/use-docker-changes.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { formatBytes, formatPercent } from "#modules/apps/metric-format.ts";
-import { filterProjects } from "#modules/apps/project-filter.ts";
 import { describeError } from "#modules/common/error-message.ts";
 import { nextSort, serializeSort } from "#modules/common/table-sort.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";

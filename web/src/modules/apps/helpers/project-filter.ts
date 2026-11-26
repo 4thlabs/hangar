@@ -1,5 +1,5 @@
 import type { ProjectStatus, ProjectSummary } from "#libs/api";
-import { appStatuses, type AppSortColumn, type AppsSort, type AppUpdate } from "#modules/apps/apps-search.ts";
+import { appStatuses, type AppSortColumn, type AppsSort, type AppUpdate } from "#modules/apps/helpers/apps-search.ts";
 import { searchByName } from "#modules/common/search-by-name.ts";
 import { sortRows } from "#modules/common/table-sort.ts";
 

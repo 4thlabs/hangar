@@ -9,7 +9,11 @@ import {
   type ComposeEvent,
   type ComposeRequest,
 } from "#libs/api";
-import { applyComposeEvents, emptyComposeOutput, type ComposeOutputState } from "#modules/apps/compose-output.ts";
+import {
+  applyComposeEvents,
+  emptyComposeOutput,
+  type ComposeOutputState,
+} from "#modules/apps/helpers/compose-output.ts";
 import { describeError } from "#modules/common/error-message.ts";
 
 /** What the panel says of a stream that ended before its `end`. */
