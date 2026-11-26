@@ -1,0 +1,227 @@
+//! `frigate-events`, on a fake Frigate.
+
+use std::collections::HashMap;
+
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use axum::http::HeaderMap;
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
+use axum::response::{IntoResponse, Response};
+use axum::routing::get;
+use hangar_api::Widgets as _;
+use hangar_api::{FrigateDetector, FrigateEvent, FrigateEvents, WidgetData};
+use http::StatusCode;
+use serde_json::json;
+
+use super::{Calls, Fixture};
+
+/// The key `.env.global` gives Frigate.
+const KEY: &str = "frigate-key";
+
+/// A Frigate on port 0, which answers only with its key, and counts the calls for its events; its URL.
+async fn frigate(calls: Calls) -> String {
+    let router = axum::Router::new()
+        .route("/api/events", get(events))
+        .route("/api/stats", get(stats))
+        .route("/api/events/{id}/thumbnail.jpg", get(thumbnail))
+        .with_state(calls);
+
+    quoll::test::spawn(router).await
+}
+
+/// Whether a request carries Frigate's key.
+fn has_key(headers: &HeaderMap) -> bool {
+    headers.get("x-api-key").is_some_and(|key| key == KEY)
+}
+
+async fn events(
+    State(calls): State<Calls>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response {
+    calls.count();
+
+    if !has_key(&headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+
+    assert_eq!(query["limit"], "5");
+
+    Json(json!([
+        {
+            "id": "1700000000.5-abc",
+            "camera": "frigate_front_door",
+            "label": "person",
+            "sub_label": ["Ana", 0.92],
+            "start_time": 1_700_000_000.5,
+            "top_score": 0.8,
+        },
+        { "id": "1699990000.0-def", "camera": "garden", "label": "cat", "sub_label": null, "start_time": 1_699_990_000.0 },
+    ]))
+    .into_response()
+}
+
+async fn stats(headers: HeaderMap) -> Response {
+    if !has_key(&headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+
+    Json(json!({
+        "detection_fps": 4.25,
+        "cameras": { "frigate_front_door": { "camera_fps": 5.0 }, "garden": {} },
+        "detectors": { "coral": { "inference_speed": 8.5, "pid": 42 } },
+        "service": { "version": "0.14.1" },
+    }))
+    .into_response()
+}
+
+async fn thumbnail(Path(id): Path<String>, headers: HeaderMap) -> Response {
+    if !has_key(&headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+
+    match id.as_str() {
+        "1700000000.5-abc" => ([(CONTENT_TYPE, "image/jpeg")], "jpeg bytes").into_response(),
+        "a-page" => ([(CONTENT_TYPE, "text/html")], "<script>alert(1)</script>").into_response(),
+        _ => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// A store whose Frigate, `frigate-nvr` in the store, is at `url`, with its key in `.env.global`.
+fn fixture(url: &str) -> Fixture {
+    let fixture = Fixture::new(&format!(
+        "  - {{ type: frigate-events, column: 3, url: '{url}' }}\n"
+    ));
+
+    fixture
+        .app(
+            "frigate",
+            "services:\n  frigate:\n    image: frigate\n    container_name: frigate-nvr\n",
+        )
+        .env(&format!("FRIGATE_NVR_API_KEY={KEY}\n"));
+
+    fixture
+}
+
+#[tokio::test]
+async fn loads_the_latest_events_and_the_stats_with_the_key_of_its_container() -> quoll::Result<()>
+{
+    let url = frigate(Calls::default()).await;
+    let fixture = fixture(&url);
+    let server = fixture.serve().await;
+    let key = server.key("frigate-events").await;
+
+    let data = server.api().widgets().data(&key).await?;
+
+    assert_eq!(
+        data,
+        WidgetData::FrigateEvents(FrigateEvents {
+            camera_count: 2,
+            detection_fps: 4.25,
+            detectors: vec![FrigateDetector {
+                name: "coral".to_owned(),
+                inference_speed: 8.5,
+            }],
+            events: vec![
+                FrigateEvent {
+                    id: "1700000000.5-abc".to_owned(),
+                    camera: "frigate_front_door".to_owned(),
+                    label: "person".to_owned(),
+                    sub_label: Some("Ana".to_owned()),
+                    start_time: "2023-11-14T22:13:20.500Z".to_owned(),
+                },
+                FrigateEvent {
+                    id: "1699990000.0-def".to_owned(),
+                    camera: "garden".to_owned(),
+                    label: "cat".to_owned(),
+                    sub_label: None,
+                    start_time: "2023-11-14T19:26:40.000Z".to_owned(),
+                },
+            ],
+        })
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn keeps_what_it_loaded_for_the_next_reader() -> quoll::Result<()> {
+    let calls = Calls::default();
+    let url = frigate(calls.clone()).await;
+    let fixture = fixture(&url);
+    let server = fixture.serve().await;
+    let key = server.key("frigate-events").await;
+
+    let first = server.api().widgets().data(&key).await?;
+    let second = server.api().widgets().data(&key).await?;
+
+    assert_eq!(first, second);
+    assert_eq!(calls.get(), 1, "the second read is served from the cache");
+    Ok(())
+}
+
+#[tokio::test]
+async fn answers_502_with_its_code_when_the_service_does_not_answer() {
+    let fixture = fixture("http://127.0.0.1:9");
+    let server = fixture.serve().await;
+    let key = server.key("frigate-events").await;
+
+    assert_eq!(
+        server.problem(&format!("/api/widgets/{key}")).await,
+        (
+            StatusCode::BAD_GATEWAY,
+            Some("widgets.unavailable".to_owned())
+        )
+    );
+}
+
+#[tokio::test]
+async fn answers_502_when_the_service_refuses_a_missing_key() {
+    let url = frigate(Calls::default()).await;
+    let fixture = fixture(&url);
+
+    fixture.env("");
+
+    let server = fixture.serve().await;
+    let key = server.key("frigate-events").await;
+    let (status, _) = server.problem(&format!("/api/widgets/{key}")).await;
+
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+}
+
+#[tokio::test]
+async fn relays_a_thumbnail_kept_a_day_by_the_browser() {
+    let url = frigate(Calls::default()).await;
+    let fixture = fixture(&url);
+    let server = fixture.serve().await;
+    let key = server.key("frigate-events").await;
+
+    let (status, headers, body) = server
+        .get(&format!("/api/widgets/{key}/image/1700000000.5-abc"))
+        .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers[CONTENT_TYPE], "image/jpeg");
+    assert_eq!(headers[CACHE_CONTROL], "private, max-age=86400");
+    assert_eq!(body, b"jpeg bytes");
+}
+
+#[tokio::test]
+async fn answers_404_for_an_image_the_service_has_not_or_that_is_none() {
+    let url = frigate(Calls::default()).await;
+    let fixture = fixture(&url);
+    let server = fixture.serve().await;
+    let key = server.key("frigate-events").await;
+
+    for id in ["unknown", "a-page", "a%2F..%2Fstats", "a%20b"] {
+        assert_eq!(
+            server
+                .problem(&format!("/api/widgets/{key}/image/{id}"))
+                .await,
+            (
+                StatusCode::NOT_FOUND,
+                Some("widgets.unknown_image".to_owned())
+            ),
+            "{id}"
+        );
+    }
+}

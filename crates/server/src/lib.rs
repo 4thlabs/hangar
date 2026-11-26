@@ -7,6 +7,8 @@
 //! and the compose commands of the Apps pages run in batches on their own, their output streamed and kept for a page
 //! that comes back. The jobs run on their crons in the server's process, one at a time per queue: the image check, which
 //! tells the Docker pages the apps that have an update, and the update of those apps, every night.
+//! The dashboard's widgets each read their service through a quoll contract of its own, kept per
+//! placement and loaded only when a page asks.
 
 mod app;
 mod app_locks;
@@ -21,6 +23,7 @@ mod settings;
 mod store;
 mod timestamp;
 mod trailing_slash;
+mod widgets;
 
 pub use app::{App, router, server};
 pub use settings::{AuthSettings, OidcSettings, Secret, SettingError, Settings, SettingsError};

@@ -387,6 +387,28 @@ pub enum ErrorCode {
     /// A run of a job stopped short: the server failed it, and its log says how.
     #[serde(rename = "jobs.crashed")]
     JobCrashed,
+    /// No widget that loads is placed under this key: none at all, the clock, or Docker's stats, which the page reads
+    /// itself.
+    #[serde(rename = "widgets.unknown_placement")]
+    UnknownPlacement {
+        /// The key asked for.
+        key: String,
+    },
+    /// The service of a widget did not answer, or not as the widget reads it: the server's log says why.
+    #[serde(rename = "widgets.unavailable")]
+    WidgetUnavailable {
+        /// The widget's `type`, as `frigate-events`.
+        widget: String,
+    },
+    /// A widget has no such image to relay: it relays none, its service has none of this id, or the id is not one its
+    /// service would give.
+    #[serde(rename = "widgets.unknown_image")]
+    UnknownImage {
+        /// The placement's key.
+        key: String,
+        /// The image's id asked for.
+        image: String,
+    },
     /// A sign-in by password of an email unknown to `hangar.yml`, or with a wrong password.
     #[serde(rename = "auth.invalid_credentials")]
     InvalidCredentials,
@@ -540,6 +562,9 @@ impl ErrorCode {
             Self::UnknownJobRun { .. } => "jobs.unknown_run",
             Self::JobEnded { .. } => "jobs.ended",
             Self::JobCrashed => "jobs.crashed",
+            Self::UnknownPlacement { .. } => "widgets.unknown_placement",
+            Self::WidgetUnavailable { .. } => "widgets.unavailable",
+            Self::UnknownImage { .. } => "widgets.unknown_image",
             Self::InvalidCredentials => "auth.invalid_credentials",
             Self::TooManySignIns => "auth.too_many_sign_ins",
             Self::SessionExpired => "auth.session_expired",
@@ -560,7 +585,10 @@ impl ErrorCode {
             | Self::UnknownContainer { .. }
             | Self::UnknownBatch { .. }
             | Self::UnknownJobRun { .. }
+            | Self::UnknownPlacement { .. }
+            | Self::UnknownImage { .. }
             | Self::NoOidcProvider => StatusCode::NOT_FOUND,
+            Self::WidgetUnavailable { .. } => StatusCode::BAD_GATEWAY,
             Self::InvalidCredentials
             | Self::SessionExpired
             | Self::UserRemoved
@@ -711,6 +739,11 @@ impl ErrorCode {
             Self::UnknownJobRun { run } => format!("no run {run} of a job is kept"),
             Self::JobEnded { run } => format!("the run {run} of a job has ended already"),
             Self::JobCrashed => Self::hinted("the job stopped short"),
+            Self::UnknownPlacement { key } => format!("no widget that loads is placed as {key}"),
+            Self::WidgetUnavailable { widget } => {
+                Self::hinted(&format!("the {widget} widget could not be loaded"))
+            }
+            Self::UnknownImage { key, image } => format!("the widget {key} has no image {image}"),
             Self::UnknownContainer { project, container } => {
                 format!("the app {project} has no container {container}")
             }
@@ -874,6 +907,16 @@ mod tests {
             ErrorCode::UnknownJobRun { run: 7 },
             ErrorCode::JobEnded { run: 7 },
             ErrorCode::JobCrashed,
+            ErrorCode::UnknownPlacement {
+                key: "frigate-events-1x2y3z".to_owned(),
+            },
+            ErrorCode::WidgetUnavailable {
+                widget: "frigate-events".to_owned(),
+            },
+            ErrorCode::UnknownImage {
+                key: "frigate-events-1x2y3z".to_owned(),
+                image: "1700000000.0-person".to_owned(),
+            },
             ErrorCode::UnknownContainer {
                 project: app(),
                 container: "0123456789ab".to_owned(),

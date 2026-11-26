@@ -14,6 +14,7 @@ mod health;
 mod jobs;
 mod notifications;
 mod store;
+mod widgets;
 
 pub use api::*;
 pub use auth::*;
@@ -27,3 +28,4 @@ pub use health::*;
 pub use jobs::*;
 pub use notifications::*;
 pub use store::*;
+pub use widgets::*;

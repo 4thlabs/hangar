@@ -17,6 +17,7 @@ use crate::jobs::{Clock, HangarJobs, Jobs, Updates};
 use crate::notifications::Notifier;
 use crate::store::StoreState;
 use crate::trailing_slash::TrailingSlash;
+use crate::widgets::WidgetsState;
 
 /// The state the routes run on, which each group of the contract is implemented for; its clones share it.
 #[derive(Debug, Clone)]
@@ -27,6 +28,7 @@ pub struct App {
     pub(crate) notifier: Notifier,
     pub(crate) compose: Arc<ComposeState>,
     pub(crate) jobs: Arc<Jobs>,
+    pub(crate) widgets: Arc<WidgetsState>,
 }
 
 impl App {
@@ -67,6 +69,7 @@ impl App {
                 notifier.clone(),
                 Arc::clone(&locks),
             ),
+            widgets: WidgetsState::new(settings, runtime.clone()),
             compose: ComposeState::new(
                 settings,
                 runtime,
@@ -112,7 +115,8 @@ pub fn router(app: App) -> axum::Router {
         docker: app.clone(),
         notifications: app.clone(),
         compose: app.clone(),
-        jobs: app,
+        jobs: app.clone(),
+        widgets: app,
     })
 }
 
