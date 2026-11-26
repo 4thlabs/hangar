@@ -113,16 +113,32 @@ impl ComposeRequest {
         Ok(up)
     }
 
-    /// The Node CLI's command line for the same request.
+    /// The Node CLI's command line for the same request, each word quoted for a shell where it needs to be.
     fn node_command(target: &str, line: &[String]) -> String {
         let words = std::iter::once(target)
             .filter(|target| !target.is_empty())
-            .chain(line.iter().map(String::as_str));
+            .chain(line.iter().map(String::as_str))
+            .map(Self::shell_word);
 
         format!(
             "node bin/cli.js store {}",
             words.collect::<Vec<_>>().join(" ")
         )
+    }
+
+    /// `word` as a shell reads it back: as it is when it holds only characters no shell treats apart, else in single
+    /// quotes, a `'` in it closed, escaped and opened again.
+    fn shell_word(word: &str) -> String {
+        let is_plain = !word.is_empty()
+            && word.chars().all(|character| {
+                character.is_ascii_alphanumeric() || "-_./:=@%+,".contains(character)
+            });
+
+        if is_plain {
+            return word.to_owned();
+        }
+
+        format!("'{}'", word.replace('\'', r"'\''"))
     }
 }
 
@@ -212,6 +228,20 @@ mod tests {
         );
         assert!(refused(&["up", "--pull", "missing"]).starts_with("`--pull` other than"));
         assert!(refused(&["jellyfin", "up", "--wait"]).starts_with("`--wait`"));
+    }
+
+    #[test]
+    fn quotes_the_words_a_shell_would_split_or_read_otherwise() {
+        let refused = parse(&[
+            "jellyfin", "logs", "--since", "2 hours", "it's", "$HOME", "",
+        ])
+        .expect_err("logs is refused")
+        .to_string();
+
+        assert!(
+            refused.ends_with(r#"run `node bin/cli.js store jellyfin logs --since '2 hours' 'it'\''s' '$HOME' ''`"#),
+            "{refused}"
+        );
     }
 
     #[test]

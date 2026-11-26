@@ -10,7 +10,7 @@ use hangar_core::{ComposeError, RunError, StoreError};
 /// A command that failed, or that was refused before it ran.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Failure {
-    /// A variable the command needs is not set, or is empty.
+    /// A variable the command needs is not set, empty, or not Unicode.
     #[error("{variable} is not set")]
     NotSet {
         /// The variable.
@@ -19,7 +19,7 @@ pub(crate) enum Failure {
 
     /// The `.env` of the working directory is there but cannot be read.
     #[error("could not read .env")]
-    Dotenv(#[source] dotenvy::Error),
+    Dotenv(#[source] io::Error),
 
     /// The Tokio runtime did not start.
     #[error("could not start")]
@@ -75,8 +75,20 @@ impl Failure {
         }
     }
 
-    /// Logs the failure, with its causes, and returns the code to exit with.
+    /// Logs the failure, and returns the code to exit with.
     pub(crate) fn report(&self) -> ExitCode {
+        tracing::error!("{}", self.message());
+
+        Self::exit(self.exit_code())
+    }
+
+    /// What the binary says of the failure: the failure, then its causes. A batch's says which app failed and the
+    /// code alone, as compose's stderr went with its output already, and the core logged the error.
+    fn message(&self) -> String {
+        if let Self::Batch(error) = self {
+            return format!("{error}, exit {}", self.exit_code());
+        }
+
         let mut message = self.to_string();
         let mut source = self.source();
 
@@ -86,9 +98,7 @@ impl Failure {
             source = cause.source();
         }
 
-        tracing::error!("{message}");
-
-        Self::exit(self.exit_code())
+        message
     }
 
     /// The exit code `code` stands for: a code a process cannot exit with is 1.
@@ -116,7 +126,7 @@ mod tests {
         RunError::Failed {
             program: "docker".into(),
             code,
-            stderr: String::new(),
+            stderr: "no such image".into(),
         }
     }
 
@@ -133,6 +143,10 @@ mod tests {
         });
 
         assert_eq!(batch.exit_code(), 17);
+        assert_eq!(
+            batch.message(),
+            "docker compose down failed on jellyfin, exit 17"
+        );
         assert_eq!(git.exit_code(), 128);
         assert_eq!(Failure::NoCommand.exit_code(), 1);
     }

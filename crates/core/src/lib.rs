@@ -19,7 +19,7 @@ pub use docker::{
 };
 pub use runtime::{Command, CommandRunner, Output, RunError, Runtime};
 pub use store::{
-    Backup, Category, Column, Config, ConfigError, DataDir, FollowedCard, GlobalEnv,
+    Backup, Category, Column, Config, ConfigError, DataDir, Dotenv, FollowedCard, GlobalEnv,
     ServiceOptions, Store, StoreApp, StoreError, Widget, WidgetKind, YamlError,
 };
 pub use tokio_util::sync::CancellationToken;

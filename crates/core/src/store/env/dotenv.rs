@@ -1,5 +1,5 @@
-//! `.env.global` read as dotenv 17's `parse` reads it, which the Waku version uses: a file hand-edited for one reads
-//! the same in the other.
+//! A dotenv file read as dotenv 17's `parse` reads it, which the Waku version uses: `.env.global`, hand-edited for one
+//! version, reads the same in the other, and so does the `.env` the CLI reads.
 
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
@@ -19,12 +19,24 @@ static LINE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&pattern.replace(r"\s", JAVASCRIPT_SPACE)).expect("the pattern is valid")
 });
 
-/// dotenv's parser.
-pub(super) struct Dotenv;
+/// The parser of dotenv 17, the Node package: a value is taken as it is written, `$` and all, with no expansion, and
+/// a line it does not read as a variable is skipped.
+///
+/// ```
+/// use hangar_core::Dotenv;
+///
+/// let variables = Dotenv::parse("HASH='admin:$apr1$abc'\nBROKEN LINE\nPASS=pa$word # a comment\n");
+///
+/// assert_eq!(variables["HASH"], "admin:$apr1$abc");
+/// assert_eq!(variables["PASS"], "pa$word");
+/// assert_eq!(variables.len(), 2);
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Dotenv;
 
 impl Dotenv {
     /// The variables of `source`; a key declared twice takes its last value.
-    pub(super) fn parse(source: &str) -> BTreeMap<String, String> {
+    pub fn parse(source: &str) -> BTreeMap<String, String> {
         let source = source.replace("\r\n", "\n").replace('\r', "\n");
 
         LINE.captures_iter(&source)

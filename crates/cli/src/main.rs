@@ -34,10 +34,10 @@ fn main() -> ExitCode {
         .with_target(false)
         .init();
 
-    // Before the Tokio runtime starts any thread: reading `.env` sets the process's environment.
-    if let Err(failure) = Environment::load() {
-        return failure.report();
-    }
+    let environment = match Environment::load() {
+        Ok(environment) => environment,
+        Err(failure) => return failure.report(),
+    };
 
     let tokio = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -47,14 +47,21 @@ fn main() -> ExitCode {
         Err(error) => return Failure::Startup(error).report(),
     };
 
-    tokio.block_on(async {
+    let exit = tokio.block_on(async {
         // The second Ctrl-C cancels it, which stops the children still running.
         let cancellation = CancellationToken::new();
-        let runtime = Runtime::with_cancellation(cancellation.clone());
-        let hangar = Hangar::new(runtime.clone());
+        let runtime = Runtime::with_cancellation(cancellation.clone())
+            .envs(environment.file_variables().clone());
+        let hangar = Hangar::new(runtime.clone(), environment);
 
         Interrupts::new(runtime, cancellation)
             .run(cli.run(&hangar))
             .await
-    })
+    });
+
+    // Without waiting for a write to a stdout that no one reads: the third Ctrl-C exits at once. The children still
+    // running are killed as their tasks are dropped.
+    tokio.shutdown_background();
+
+    exit
 }

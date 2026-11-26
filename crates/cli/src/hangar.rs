@@ -17,20 +17,24 @@ use crate::request::ComposeRequest;
 #[derive(Debug)]
 pub(crate) struct Hangar {
     runtime: Runtime,
+    environment: Environment,
 }
 
 impl Hangar {
-    /// The commands, their children run by `runtime`.
-    pub(crate) fn new(runtime: Runtime) -> Self {
-        Self { runtime }
+    /// The commands, their children run by `runtime`, their variables read from `environment`.
+    pub(crate) fn new(runtime: Runtime, environment: Environment) -> Self {
+        Self {
+            runtime,
+            environment,
+        }
     }
 
     /// `store install`: clones the store, or pulls it, with git's output on the terminal, then links its apps and
     /// seeds `.env.global`.
     pub(crate) async fn install(&self) -> Result<(), Failure> {
         let store = Store::new(
-            Environment::store_url()?,
-            Environment::data_dir()?,
+            self.environment.store_url()?,
+            self.environment.data_dir()?,
             self.runtime.clone(),
         );
 
@@ -40,7 +44,7 @@ impl Hangar {
     /// Runs a compose command on the apps of its target, one batch that stops at the first failure, as the Node CLI
     /// does, and prints their output as it comes.
     pub(crate) async fn compose(&self, request: ComposeRequest) -> Result<(), Failure> {
-        let data_dir = Environment::data_dir()?;
+        let data_dir = self.environment.data_dir()?;
         // Only `hangar.yml` is read: the URL serves an install alone.
         let config = Store::new(String::new(), data_dir.clone(), self.runtime.clone())
             .config()

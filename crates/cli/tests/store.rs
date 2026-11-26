@@ -9,16 +9,19 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
+use std::time::{Duration, Instant};
 
 use nix::sys::signal::{Signal, killpg};
 use nix::unistd::Pid;
 use tempfile::TempDir;
 
-/// The fake `docker`: it logs its arguments, one call per line, then prints `<project> done`. It fails with code 3 on
-/// the project `HANGAR_TEST_FAIL` names, and prints `<project> started` then sleeps on `HANGAR_TEST_HANG`'s, and on
-/// `HANGAR_TEST_DEAF`'s with SIGINT ignored.
+/// The fake `docker`: it logs its arguments, one call per line, and its environment, then prints `<project> done`. It
+/// fails with code 3 on the project `HANGAR_TEST_FAIL` names, and prints `<project> started` then sleeps on
+/// `HANGAR_TEST_HANG`'s, on `HANGAR_TEST_DEAF`'s with SIGINT ignored, and on `HANGAR_TEST_STUBBORN`'s with SIGTERM
+/// ignored too.
 const FAKE_DOCKER: &str = r#"#!/bin/sh
 echo "$*" >> "$HANGAR_TEST_LOG"
+env > "$HANGAR_TEST_LOG.env"
 project=""
 previous=""
 for arg in "$@"; do
@@ -29,9 +32,13 @@ case "$project" in
   "${HANGAR_TEST_FAIL:-none}") echo "$project: no such image" >&2; exit 3 ;;
   "${HANGAR_TEST_HANG:-none}") echo "$project started"; exec sleep 30 ;;
   "${HANGAR_TEST_DEAF:-none}") trap '' INT; echo "$project started"; exec sleep 30 ;;
+  "${HANGAR_TEST_STUBBORN:-none}") trap '' INT TERM; echo "$project started"; exec sleep 30 ;;
 esac
 echo "$project done"
 "#;
+
+/// The time a child has between SIGTERM and SIGKILL, which a third Ctrl-C does not wait for.
+const GRACE: Duration = Duration::from_secs(10);
 
 /// The categories: `traefik` in both, listed first.
 const CONFIG: &str = "
@@ -220,8 +227,13 @@ fn stops_at_the_first_failure_and_exits_with_its_code() {
         "compose's stderr is printed with its output"
     );
     assert!(
-        stderr(&output).contains("docker compose up -d failed on gluetun"),
+        stderr(&output).contains("docker compose up -d failed on gluetun, exit 3"),
         "{}",
+        stderr(&output)
+    );
+    assert!(
+        !stderr(&output).contains("no such image"),
+        "compose's stderr is not repeated: {}",
         stderr(&output)
     );
 }
@@ -293,6 +305,47 @@ fn reads_the_env_file_of_the_working_directory_after_the_environment() {
     assert_eq!(fixture.projects(), ["jellyfin"]);
 }
 
+#[test]
+fn passes_the_env_file_on_to_the_children_as_dotenv_reads_it() {
+    let fixture = Fixture::new();
+
+    fs::write(
+        fixture.dir.path().join(".env"),
+        format!(
+            "BROKEN LINE\n\
+             HANGAR_DATA_DIR=\"{}\"\n\
+             TRAEFIK_AUTH=\"admin:$apr1$abc\"\n\
+             TEST_PASSWORD=pa$word\n\
+             TEST_QUOTED='single $HOME # kept'\n\
+             TEST_OVERRIDDEN=from-file\n",
+            fixture.data.display()
+        ),
+    )
+    .expect(".env can be written");
+
+    let output = run(fixture
+        .bare(&["store", "jellyfin", "restart"])
+        .env("TEST_OVERRIDDEN", "from-environment"));
+    let environment = fs::read_to_string(fixture.log.with_extension("log.env"))
+        .expect("the fake docker logs its environment");
+    let lines: Vec<&str> = environment.lines().collect();
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(
+        lines.contains(&"TRAEFIK_AUTH=admin:$apr1$abc"),
+        "{environment}"
+    );
+    assert!(lines.contains(&"TEST_PASSWORD=pa$word"), "{environment}");
+    assert!(
+        lines.contains(&"TEST_QUOTED=single $HOME # kept"),
+        "{environment}"
+    );
+    assert!(
+        lines.contains(&"TEST_OVERRIDDEN=from-environment"),
+        "{environment}"
+    );
+}
+
 /// `hangar` run in a process group of its own, as a terminal's foreground job, its output piped.
 fn spawn_in_its_own_group(command: &mut Command) -> Child {
     command
@@ -358,6 +411,36 @@ fn a_second_ctrl_c_stops_an_app_that_ignores_the_first() {
 
     assert_eq!(status.code(), Some(130));
     assert_eq!(fixture.projects(), ["traefik"]);
+}
+
+#[test]
+fn a_third_ctrl_c_exits_without_waiting_for_an_app_that_ignores_the_second() {
+    let fixture = Fixture::new();
+    let mut child = spawn_in_its_own_group(
+        fixture
+            .hangar(&["store", "up"])
+            .env("HANGAR_TEST_STUBBORN", "traefik"),
+    );
+    let mut stdout = BufReader::new(child.stdout.take().expect("stdout is piped")).lines();
+    let mut stderr = BufReader::new(child.stderr.take().expect("stderr is piped")).lines();
+
+    wait_for(&mut stdout, "traefik started");
+    ctrl_c(&child);
+    wait_for(&mut stderr, "Ctrl-C again stops them");
+    ctrl_c(&child);
+    wait_for(&mut stderr, "Ctrl-C again exits without waiting");
+
+    let third = Instant::now();
+
+    ctrl_c(&child);
+
+    let status = child.wait().expect("the binary exits");
+
+    assert_eq!(status.code(), Some(130));
+    assert!(
+        third.elapsed() < GRACE,
+        "the binary exits before the grace period ends"
+    );
 }
 
 /// A store repository with `web`, whose compose file references `WEB_PORT`, in a category.
