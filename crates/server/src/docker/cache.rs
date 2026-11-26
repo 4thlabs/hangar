@@ -234,11 +234,13 @@ impl<T: PartialEq + Send + Sync + 'static> Cached<T> {
             let mut retry_at = None;
             let has_changed = match loaded {
                 Ok(value) => {
-                    // A first value after a failed read changes what the pages show too: their failure.
-                    let has_changed = match &state.value {
-                        Some((previous, _)) => previous != value,
-                        None => state.failure.is_some(),
-                    };
+                    // A value after a failure changes what a page shows too, unchanged or not: a page that read past the
+                    // time the last value could be served shows that failure.
+                    let has_changed = state.failure.is_some()
+                        || state
+                            .value
+                            .as_ref()
+                            .is_some_and(|(previous, _)| previous != value);
 
                     state.value = Some((Arc::clone(value), Instant::now()));
                     state.failure = None;
@@ -610,6 +612,21 @@ mod tests {
             "the refresh read it, whatever the wait"
         );
         assert_eq!(value(&cached).await, 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn tells_of_a_value_back_after_a_failure_even_unchanged() {
+        let source = Source::new([Answer::Gives(1), Answer::Fails, Answer::Gives(1)], OPEN);
+        let cached = source.cached();
+
+        assert_eq!(value(&cached).await, 1);
+
+        cached.refresh();
+        cached.settled().await;
+        cached.refresh();
+        cached.settled().await;
+
+        assert_eq!((source.loads(), source.changes()), (3, 1));
     }
 
     #[tokio::test(start_paused = true)]
