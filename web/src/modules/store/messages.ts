@@ -46,7 +46,8 @@ export const storeMessages = {
     identifierDescription: "The app's folder in the store, and the name of its compose project.",
     saved: "App saved",
     savedDescription: ({ id }: { id: string }) => `${id} was added to the store.`,
-    rejected: "App rejected",
+    invalidId: ({ id }: { id: string }) =>
+      `${id} is not an app id: lowercase letters, digits, \`.\`, \`_\` and \`-\`, starting with a letter or a digit.`,
   },
   editor: {
     documentTitle: ({ name }: { name: string }) => `${name} | Hangar`,
@@ -63,6 +64,5 @@ export const storeMessages = {
     fileSavedDescription: ({ path }: { path: string }) => `${path} was saved.`,
     fileCreated: "File created",
     fileCreatedDescription: ({ path }: { path: string }) => `${path} was created.`,
-    fileRejected: "File rejected",
   },
 } as const;

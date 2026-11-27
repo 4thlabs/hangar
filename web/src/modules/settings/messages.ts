@@ -51,7 +51,6 @@ export const settingsMessages = {
     showFailed: "Could not show the environment",
     saved: "Environment saved",
     savedDescription: "The global environment was saved.",
-    saveFailed: "Save failed",
     valuePlaceholder: "to fill in",
     showValue: ({ name }: { name: string }) => `Show the value of ${name}`,
     hideValue: ({ name }: { name: string }) => `Hide the value of ${name}`,
@@ -61,13 +60,14 @@ export const settingsMessages = {
     newNamePlaceholder: "NEW_VARIABLE",
     add: "Add",
     toRemove: "To remove on save:",
+    invalidName: ({ name }: { name: string }) => `Invalid variable name: ${name}.`,
+    exists: ({ name }: { name: string }) => `${name} is set already.`,
   },
   config: {
     title: "CONFIGURATION",
     showFailed: "Could not show the configuration",
     saved: "Configuration saved",
     savedDescription: "The configuration was saved.",
-    rejected: "Configuration rejected",
   },
   jobs: {
     title: "JOBS",

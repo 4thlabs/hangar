@@ -1,14 +1,17 @@
+import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { SaveIcon } from "lucide-react";
-import { useState } from "react";
+import type { StoreApp } from "#libs/api";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
-import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
+import { toastSuccess } from "#modules/common/components/toast.ts";
+import { YamlEditor } from "#modules/common/components/yaml-editor.tsx";
 import { describeError } from "#modules/common/helpers/error-message.ts";
-import { useYamlEditor } from "#modules/common/hooks/use-yaml-editor.tsx";
-import { Field, FieldDescription, FieldLabel } from "#modules/common/ui/field.tsx";
+import { errorText, formErrorsOf, type FieldsByCode } from "#modules/common/helpers/form-errors.ts";
+import { Field, FieldDescription, FieldError, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
 import { storeMutations, storeQueries } from "#modules/store/api/store-queries.ts";
+import { appIdError } from "#modules/store/helpers/app-id.ts";
 import { storeMessages } from "#modules/store/messages.ts";
 
 const words = storeMessages.newApp;
@@ -38,51 +41,100 @@ function NewAppPage() {
   );
 }
 
+/** The fields of a new app: its id, and its `compose.yml`. */
+type NewAppField = "id" | "compose";
+
+/** Where the server's codes go: the id's under the id, compose's under the file, any other under the form. */
+const fieldsByCode: FieldsByCode<NewAppField> = {
+  "editor.invalid_app_id": () => "id",
+  "editor.app_exists": () => "id",
+  "editor.compose_rejected": () => "compose",
+  "editor.invalid_file": () => "compose",
+};
+
 /** Writes a new app's `compose.yml` under the id typed in, then opens the app's own editor. */
 function NewAppEditor({ source }: { source: string }) {
   const navigate = useNavigate();
-  const [id, setId] = useState("");
-  const { editor, value, setRefusal } = useYamlEditor({ source, className: "h-[65vh]" });
+  // The options have the store's apps read again, which lists the new one, before the call ends.
+  const create = useMutation(storeMutations.createApp());
 
-  // The options have the store's apps read again, which lists the new one, before these run.
-  const create = useMutation({
-    ...storeMutations.createApp(),
-    onSuccess: async app => {
+  const form = useForm({
+    defaultValues: { id: "", compose: source },
+    onSubmit: async ({ value, formApi }) => {
+      let app: StoreApp;
+
+      try {
+        app = await create.mutateAsync({ data: { id: value.id, compose: value.compose } });
+      } catch (failure) {
+        formApi.setErrorMap({ onSubmit: formErrorsOf(failure, fieldsByCode) });
+
+        return;
+      }
+
       toastSuccess(words.saved, words.savedDescription({ id: app.id }));
       // The new app gets its own editor, so that a second save edits it rather than create it again.
       await navigate({ to: "/store/$id/edit", params: { id: app.id } });
     },
-    onError: failure => {
-      setRefusal(describeError(failure));
-      toastFailure(words.rejected, failure);
-    },
   });
 
   return (
-    <div className="flex flex-col gap-3">
-      <Field className="max-w-sm">
-        <FieldLabel htmlFor="app-id">{words.identifier}</FieldLabel>
-        <Input
-          id="app-id"
-          value={id}
-          placeholder={words.identifierPlaceholder}
-          className="font-mono"
-          onChange={event => setId(event.target.value.toLowerCase())}
-        />
-        <FieldDescription>{words.identifierDescription}</FieldDescription>
-      </Field>
-      {editor}
-      <PendingButton
-        type="button"
-        className="self-start"
-        pending={create.isPending}
-        pendingLabel={storeMessages.editor.validating}
-        icon={<SaveIcon data-icon="inline-start" />}
-        disabled={id.length === 0}
-        onClick={() => create.mutate({ data: { id, compose: value } })}
-      >
-        {storeMessages.editor.save}
-      </PendingButton>
-    </div>
+    <form
+      className="flex flex-col gap-3"
+      onSubmit={event => {
+        event.preventDefault();
+        void form.handleSubmit();
+      }}
+    >
+      <form.Field name="id" validators={{ onSubmit: ({ value }) => appIdError(value) }}>
+        {field => {
+          const error = errorText(field.state.meta.errors);
+
+          return (
+            <Field className="max-w-sm" data-invalid={error !== undefined}>
+              <FieldLabel htmlFor="app-id">{words.identifier}</FieldLabel>
+              <Input
+                id="app-id"
+                value={field.state.value}
+                placeholder={words.identifierPlaceholder}
+                className="font-mono"
+                aria-invalid={error !== undefined}
+                aria-describedby={error === undefined ? "app-id-description" : "app-id-error"}
+                onChange={event => field.handleChange(event.target.value.toLowerCase())}
+              />
+              <FieldDescription id="app-id-description">{words.identifierDescription}</FieldDescription>
+              {error !== undefined && <FieldError id="app-id-error">{error}</FieldError>}
+            </Field>
+          );
+        }}
+      </form.Field>
+      <form.Subscribe selector={state => errorText([state.errorMap.onSubmit])}>
+        {formError => (
+          <form.Field name="compose">
+            {field => (
+              <YamlEditor
+                source={source}
+                className="h-[65vh]"
+                onChange={field.handleChange}
+                refusal={errorText(field.state.meta.errors) ?? formError}
+              />
+            )}
+          </form.Field>
+        )}
+      </form.Subscribe>
+      <form.Subscribe selector={state => state.values.id.length === 0}>
+        {isIdEmpty => (
+          <PendingButton
+            type="submit"
+            className="self-start"
+            pending={create.isPending}
+            pendingLabel={storeMessages.editor.validating}
+            icon={<SaveIcon data-icon="inline-start" />}
+            disabled={isIdEmpty}
+          >
+            {storeMessages.editor.save}
+          </PendingButton>
+        )}
+      </form.Subscribe>
+    </form>
   );
 }

@@ -7,7 +7,7 @@ import {
   getEditorReadMockHandler,
   getEditorWriteMockHandler,
 } from "#libs/api/mock";
-import { network, problem } from "#mock/network.ts";
+import { coded, network, problem } from "#mock/network.ts";
 import { renderAt } from "#mock/page.tsx";
 
 const alpha: AppFileList = {
@@ -96,8 +96,66 @@ describe("/store/$id/edit", () => {
 
     const refusals = await screen.findAllByText(/services\.alpha\.image must be a string/);
 
-    expect(refusals.some(refusal => refusal.tagName === "PRE")).toBe(true);
+    // Under the editor alone: a form's refusal is no toast.
+    expect(refusals.map(refusal => refusal.tagName)).toEqual(["PRE"]);
     expect(saved).toEqual([{ path: "compose.yml", body: { source: "services:\n  alpha: {}\n" } }]);
+  });
+
+  it("shows a refusal of the server under the file its code names", async () => {
+    editor();
+    network.use(
+      getEditorWriteMockHandler(({ request }) => {
+        throw coded(400, {
+          code: "editor.invalid_file",
+          params: { path: pathOf(request), reason: "mapping values are not allowed here" },
+          message: "invalid file",
+        });
+      }),
+    );
+
+    renderAt("/store/alpha/edit");
+    await waitFor(() => expect(editorText()).toContain("alpha: {}"));
+    fireEvent.click(screen.getByRole("button", { name: "settings.yml" }));
+    await waitFor(() => expect(editorText()).toContain("level: debug"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const refusal = await screen.findByText("config/settings.yml is not valid: mapping values are not allowed here.");
+
+    expect(refusal.tagName).toBe("PRE");
+
+    // Not the compose file's: it shows none.
+    fireEvent.click(screen.getByRole("button", { name: "compose.yml" }));
+    await waitFor(() => expect(editorText()).toContain("alpha: {}"));
+    expect(screen.queryByText(/is not valid/)).toBeNull();
+  });
+
+  it("shows why a new file was refused under its path, which stays to be changed", async () => {
+    editor();
+    network.use(
+      getEditorCreateMockHandler(({ request }) => {
+        throw coded(400, { code: "editor.hidden_file", params: { path: pathOf(request) }, message: "hidden file" });
+      }),
+    );
+
+    renderAt("/store/alpha/edit");
+    await waitFor(() => expect(editorText()).toContain("alpha: {}"));
+    fireEvent.click(screen.getByRole("button", { name: "New file" }));
+
+    const path = screen.getByLabelText<HTMLInputElement>("Path of the new file");
+
+    fireEvent.change(path, { target: { value: ".secret" } });
+    fireEvent.submit(path.closest("form")!);
+
+    const refusal = await screen.findByText(".secret leads to a hidden file.");
+
+    expect(path.value).toBe(".secret");
+    expect(path.getAttribute("aria-invalid")).toBe("true");
+    expect(path.getAttribute("aria-describedby")).toBe(refusal.id);
+    expect(screen.getAllByText(".secret leads to a hidden file.")).toHaveLength(1);
+
+    fireEvent.change(path, { target: { value: "notes.md" } });
+
+    expect(screen.queryByText(".secret leads to a hidden file.")).toBeNull();
   });
 
   it("creates a file, then opens it", async () => {
