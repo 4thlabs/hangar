@@ -34,9 +34,10 @@ const URL: &str = "https://hangar.example.com";
 const PATIENCE: Duration = Duration::from_secs(30);
 
 /// The fake `docker`: it logs its arguments, one call per line, copies the file of `--env-file` beside the log, failing
-/// as compose does when it is not there, and prints two lines on stderr, where compose writes its progress. Between them, it holds the project that `HANGAR_TEST_HOLD` names until the file `HANGAR_TEST_RELEASE`
-/// exists, its child's wait and not the test's, and fails with code 1 on the one `HANGAR_TEST_FAIL` names. Given
-/// `HANGAR_TEST_SECRET`, it echoes it first, in a URL's credentials and alone, as a pull from a registry may.
+/// as compose does when it is not there, and prints two lines on stderr, where compose writes its progress. Between
+/// them, it holds the project that `HANGAR_TEST_HOLD` names until the file `HANGAR_TEST_RELEASE` exists, its child's
+/// wait and not the test's, and fails with code 1 on the one `HANGAR_TEST_FAIL` names. Given `HANGAR_TEST_SECRET`, it
+/// echoes it first, in a URL's credentials and alone, as a pull from a registry may.
 const FAKE_DOCKER: &str = r#"#!/bin/sh
 echo "$*" >> "$HANGAR_TEST_LOG"
 project=""
@@ -607,6 +608,26 @@ async fn carries_on_after_an_app_that_fails_and_says_why_without_its_output() ->
     );
     assert_eq!(fixture.projects(), ["gamma", "alpha"]);
     Ok(())
+}
+
+#[tokio::test]
+async fn says_env_global_could_not_be_saved_when_a_batch_cannot_create_it_and_runs_none() {
+    let fixture = Fixture::new();
+    let env_file = fixture.data.join(".env.global");
+
+    // A link to itself: whether it is there cannot be told, by root as by anyone.
+    fs::remove_file(&env_file).expect("removed");
+    std::os::unix::fs::symlink(".env.global", &env_file).expect("linked");
+
+    let (_, docker_host) = FakeDaemon::serve().await;
+    let server = fixture.serve(&docker_host, Behaviour::default()).await;
+    let (status, problem) = server
+        .refused(&json!({ "action": { "operation": "restart" }, "apps": ["alpha"] }))
+        .await;
+
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(problem["type"], "/problems/env.save_failed");
+    assert!(fixture.docker_calls().is_empty(), "docker never ran");
 }
 
 #[tokio::test]

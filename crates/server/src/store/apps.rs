@@ -5,7 +5,7 @@ use hangar_api::{
     AppCounts, AppFilter, ErrorCode, NewAppTemplate, StoreApp, StoreApps, StoreServer, StoreStatus,
     StoreSync,
 };
-use hangar_core::{ComposeCommand, StoreError};
+use hangar_core::{ComposeCommand, ComposeError, StoreError};
 use quoll::{Error, Response, Result};
 
 use super::StoreState;
@@ -112,7 +112,11 @@ services:
         self.compose
             .run(&app.id, ComposeCommand::Down, down)
             .await
-            .map_err(|error| Failure::logged(failed(), &error))?;
+            .map_err(|error| match error {
+                // A fresh data directory's `.env.global`, which compose cannot run without, could not be created.
+                ComposeError::Env { .. } => Failure::logged(ErrorCode::EnvSaveFailed, &error),
+                _ => Failure::logged(failed(), &error),
+            })?;
         self.store
             .uninstall_app(&app.id)
             .await
