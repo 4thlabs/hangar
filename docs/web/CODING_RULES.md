@@ -123,8 +123,8 @@ web/
 ```
 
 `@inlang/paraglide-js` and `@inlang/plugin-message-format` are pinned exactly in `web/package.json`. `paraglide-js
-init` writes the jsDelivr URL; Hangar loads the plugin from `node_modules`, pinned by the lockfile, so that builds and
-the Docker image work offline.
+init` writes the jsDelivr URL; Hangar loads the plugin from `node_modules`, pinned by the lockfile, so that builds work
+offline, in CI and locally.
 
 - **Ids.** `<module>_<group>_<message>`, in `snake_case`: the module whose pages show the words, one group, then the
   message, as `apps_logs_reconnect`, `settings_install_running` and `common_shell_home_link`. A group or a message

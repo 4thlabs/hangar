@@ -552,7 +552,7 @@ web/
 ```
 
 `paraglide-js init` writes the jsDelivr URL; Hangar loads the plugin from `node_modules`, pinned by the lockfile, so
-that builds and the Docker image work offline.
+that builds work offline, in CI and locally.
 
 ```json
 {

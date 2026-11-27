@@ -335,7 +335,7 @@ web/
 
 - **Versions.** `@inlang/paraglide-js` 3.2.2 and `@inlang/plugin-message-format` 4.6.2, exact, in `web/`'s
   devDependencies. `paraglide-js init` writes the jsDelivr URL; Hangar loads the plugin from `node_modules`, pinned by
-  the lockfile, so that builds and the Docker image work offline.
+  the lockfile, so that builds work offline, in CI and locally.
 - **Options.** Paraglide's defaults, and no option written at its default value. `paraglide.config.ts`, which the CLI
   and the Vite plugin both read, holds `outdir` alone: the CLI defaults it to `./src/paraglide`, the Vite plugin
   requires it. The strategy is the default one (`cookie`, `globalVariable`, `baseLocale`): with `en` the one locale,
@@ -348,8 +348,8 @@ web/
   same types. CI's `web` job needs no change: `cargo quoll build` runs the `build` script, `npm run lint --prefix web`
   its `lint`, and the tests the plugin, through `vitest.config.ts`, which merges `vite.config.ts`.
 - **An empty catalog.** A plugin that fails to load, from a wrong path or a URL with no network, makes Paraglide warn
-  and compile no message, and exit 0. `npm run build`, which CI and the Dockerfile run, fails all the same: its `tsc`
-  runs before `vite build`, and refuses every import of `m` (TS2305).
+  and compile no message, and exit 0. `npm run build`, which CI runs through `cargo quoll build`, fails all the same:
+  its `tsc` runs before `vite build`, and refuses every import of `m` (TS2305).
 - **Ids.** `<module>_<group>_<message>`, in `snake_case`, as `apps_logs_reconnect`, `settings_install_running` and
   `common_shell_home_link`. The module's prefix keeps #204's ownership in one file. Three parts, decided with the
   maintainer as the code moved: a nested group is flattened to its innermost (`list.totals.runningContainers` is
