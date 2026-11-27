@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StoreSync } from "#libs/api";
-import { describeSync } from "./store-sync.ts";
+import { describeSync, syncStartedText } from "./store-sync.ts";
 
 const update: StoreSync = {
   operation: "update",
@@ -32,5 +32,12 @@ describe("describeSync", () => {
     expect(describeSync(failed)).toBe(
       "The update of the store failed: The store could not be pulled. See the server's log.",
     );
+  });
+
+  it("words an operation it does not know, from a newer server, as an update", () => {
+    const unknown = { ...update, operation: "rebuild" } as unknown as StoreSync;
+
+    expect(describeSync(unknown)).toBe("Updating the store…");
+    expect(syncStartedText(unknown)).toBe("The update of the store was started.");
   });
 });

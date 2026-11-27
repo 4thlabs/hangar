@@ -248,7 +248,7 @@ describe("/apps/:project", () => {
     expect(screen.getByText("alpha-web-1")).toBeDefined();
     expect(screen.getByText("Healthy")).toBeDefined();
     expect(screen.getByText("0.0.0.0:8080 → 80/tcp")).toBeDefined();
-    expect(screen.getByText("1 service · 1/1 containers running")).toBeDefined();
+    expect(screen.getByText("1 service · 1/1 container running")).toBeDefined();
     expect(screen.queryByText("Update available")).toBeNull();
   });
 

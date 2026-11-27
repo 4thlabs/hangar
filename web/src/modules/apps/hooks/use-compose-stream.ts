@@ -14,10 +14,7 @@ import {
 } from "#modules/apps/helpers/compose-output.ts";
 import { appsMessages } from "#modules/apps/messages.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
-import { useEventStream, type StreamStatus } from "#modules/common/hooks/use-event-stream.ts";
-
-/** Where the stream of a batch's output is. */
-export type ComposeStreamStatus = StreamStatus;
+import { useEventStream } from "#modules/common/hooks/use-event-stream.ts";
 
 /**
  * The output of one batch at a time: one this page starts, or one the server runs already, read again from its start.

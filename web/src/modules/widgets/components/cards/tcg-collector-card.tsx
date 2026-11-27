@@ -49,7 +49,7 @@ export type PriceWindow = {
 
 /** Which price a curve follows, and that price on each day of the window, oldest first; null where it has none. */
 export type PriceSeries = {
-  label: "Trend" | "Low";
+  label: typeof words.trend | typeof words.low;
   prices: (number | null)[];
 };
 

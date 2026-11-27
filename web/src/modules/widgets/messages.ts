@@ -89,10 +89,10 @@ export const widgetsMessages = {
   },
   jellyfin: {
     empty: "No items found.",
-    movies: ({ count }: { count: number }) => `${formatInteger(count)} movies`,
-    shows: ({ count }: { count: number }) => `${formatInteger(count)} shows`,
-    episodes: ({ count }: { count: number }) => `${formatInteger(count)} episodes`,
-    songs: ({ count }: { count: number }) => `${formatInteger(count)} songs`,
+    movies: ({ count }: { count: number }) => formatCount(count, "movie", "movies"),
+    shows: ({ count }: { count: number }) => formatCount(count, "show", "shows"),
+    episodes: ({ count }: { count: number }) => formatCount(count, "episode", "episodes"),
+    songs: ({ count }: { count: number }) => formatCount(count, "song", "songs"),
   },
   miniflux: {
     empty: "No entries.",

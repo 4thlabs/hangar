@@ -13,6 +13,7 @@ function capitalized(text: string): string {
 /** What `common` says: the shell, the shared components, the compose commands and the server's errors. */
 export const commonMessages = {
   shell: {
+    brand: "Hangar",
     homeLink: "Hangar — Dashboard",
     mainNavigation: "Main navigation",
     navigation: {

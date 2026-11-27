@@ -23,7 +23,7 @@ import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
 import { appsMessages } from "#modules/apps/messages.ts";
 import { dockerQueries } from "#modules/common/api/docker-queries.ts";
-import { appCount, composeSubject } from "#modules/common/helpers/compose-actions.ts";
+import { composeSubject } from "#modules/common/helpers/compose-actions.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { nextSort, serializeSort } from "#modules/common/helpers/table-sort.ts";
 import { useDockerChanges } from "#modules/common/hooks/use-docker-changes.ts";
@@ -134,8 +134,7 @@ function AppsPage() {
   const selected = visible.map(project => project.name).filter(name => selection.has(name));
   const compose = useComposeCommand(selected);
 
-  const selectionLabel =
-    selected.length === 0 ? words.noSelection : words.selected({ apps: appCount(selected.length) });
+  const selectionLabel = selected.length === 0 ? words.noSelection : words.selected({ count: selected.length });
 
   return (
     <main>

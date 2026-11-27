@@ -302,12 +302,13 @@ only. There is no `t()`, no locale and no hook. Enum labels are typed by the con
 where they are (`error-message.ts` by `ErrorCode`, `notification-text.ts` by key). Prose with markup, such as a card
 description with `<code>`, may stay in its JSX until translation comes.
 
-When translation comes, with Paraglide, `messages.ts` becomes `messages/en.json` and `appsMessages.title` becomes
-`m.apps_title()`. That is mechanical, one module at a time, and the code-keyed tables keep their shape with `m.*`
+When translation comes, with Paraglide, `messages.ts` becomes `messages/en.json` and `appsMessages.list.title`
+becomes `m.apps_list_title()`. That is mechanical, one module at a time, and the code-keyed tables keep their shape with `m.*`
 inside. Without catalogs, the same work means finding every literal in every component.
 
 This partly reverses the 2026-11-24 line "its text is written in English in its components". The cost, measured:
-`apps/messages.ts` is 67 lines and `settings/messages.ts` 54.
+`apps/messages.ts` is 67 lines and `settings/messages.ts` 54 in the scratch worktree; as #204 wrote them, with the words
+of their pages, their logs and their four cards, 166 and 112.
 
 **Amended by #204, on the maintainer's decision of 2026-11-27.** The words that sit in no module go to a module's
 `messages.ts` too, as no other file is added for them:
@@ -488,6 +489,7 @@ const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
 const projects = data ?? [];
 const view = appsView(projects, search, selection); // { sort, visible, selected, totals, containerIds }, pure, tested
 const compose = useComposeCommand(view.selected);
+const words = appsMessages.list;
 // ... {view.selected.length === 0 ? words.noSelection : words.selected({ count: view.selected.length })}
 ```
 

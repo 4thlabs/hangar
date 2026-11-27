@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import type { LogEvent } from "#libs/api";
 import { describeError } from "#modules/common/helpers/error-message.ts";
-import { useEventStream, type StreamStatus } from "#modules/common/hooks/use-event-stream.ts";
-
-/** Where a followed log is. */
-export type LogStatus = StreamStatus;
+import { useEventStream } from "#modules/common/hooks/use-event-stream.ts";
 
 /** The most lines of a followed log the page keeps: a log followed for hours would otherwise grow without end. */
 const maxLogLines = 5_000;
