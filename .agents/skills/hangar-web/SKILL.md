@@ -1,6 +1,6 @@
 ---
 name: hangar-web
-description: How Hangar's page in web/ is built, from ADR 0002. Its layout (routes are the pages, _app.tsx and routes/-shell/ the shell, the wiring at src/, modules apart with api/, helpers/, hooks/, components/ and messages.ts), the query and mutation options on orval's, useEventFeed and useEventStream, QueryRegion and RenderRegion, createPage, Preferences, forms on TanStack Form with formErrorsOf, the optimistic rule, tests on orval's MSW handlers, the words in messages.ts, and no class made only of statics. Use it for any work under web/, the Rust server's Vite SPA - a page, a component, a hook, a query, a mutation, a route, a form, a test - and to review or plan such work.
+description: How Hangar's page in web/ is built, from ADR 0002. Its layout (routes are the pages, one folder per section, _app/route.tsx and _app/-shell/ the shell, the wiring at src/, modules apart with api/, helpers/, hooks/, components/ and messages.ts), the query and mutation options on orval's, useEventFeed and useEventStream, QueryRegion and RenderRegion, createPage, Preferences, forms on TanStack Form with formErrorsOf, the optimistic rule, tests on orval's MSW handlers, the words in messages.ts, and no class made only of statics. Use it for any work under web/, the Rust server's Vite SPA - a page, a component, a hook, a query, a mutation, a route, a form, a test - and to review or plan such work.
 ---
 
 # Hangar's page in `web/`
@@ -27,14 +27,14 @@ AGENTS.md says does not apply.
 ## The layout, and what each part may import
 
 TanStack Router's own layout (its examples `kitchen-sink-react-query-file-based`, `authenticated-routes`,
-`start-trellaux`), with modules kept apart, as #207 amended ADR 0002's decisions 1 and 6:
+`start-trellaux`), with modules kept apart, as #207 and #210 amended ADR 0002's decisions 1 and 6:
 
 ```
 src/main.tsx, page.ts, router.ts   the wiring: createPage, the router, the providers (app-providers.tsx,
                                    theme-effects.tsx); mock/page.tsx, the tests' page; no app/ folder
 src/routes/                        one file per route = its page: path, validateSearch, beforeLoad, loader, and the
-                                   component that composes the modules; _app.tsx is the shell, its pieces in -shell/;
-                                   a page's own pieces in -<page>/; the not-found and pending pages beside their routes
+                                   component that composes the modules; one folder per section under _app/, whose
+                                   route.tsx is the shell, its pieces in _app/-shell/ (below)
 src/modules/<d>/api/               query and mutation options on orval's, keys, what a change makes stale, Session
 src/modules/<d>/helpers/           the domain: pure functions, view models, search params, formats, labels, parsers
 src/modules/<d>/hooks/             compose queries, feeds and local state machines
@@ -57,7 +57,7 @@ src/libs/                          the API client, formats, preferences
   `useMutation(xMutations.z())`.
 - Modules by domain, pages by route. **A module never imports another**: the route files compose them. What two
   modules really share goes down into `common` (the compose vocabulary, the Docker changes feed), and only then.
-- No barrel. Tests sit next to their code; a page's beside its route file (`routes/_app/apps.test.tsx`).
+- No barrel. Tests sit next to their code; a page's beside its route file (`routes/_app/apps/index.test.tsx`).
 - No file sits directly under a module but `messages.ts` and its test, nor directly under `modules/`: ESLint refuses
   any other.
 - `libs/` holds what has no React and no page domain.
@@ -189,9 +189,9 @@ or invalidate a key, open a stream, or write a word chosen by a code or an enum.
 ### Routes: each file is its page
 
 ```tsx
-// routes/_app/apps.tsx
+// routes/_app/apps/index.tsx
 /** `/apps`, the installed apps, filtered by its search. */
-export const Route = createFileRoute("/_app/apps")({
+export const Route = createFileRoute("/_app/apps/")({
   validateSearch: validateAppsSearch,
   staticData: { searchable: true },
   component: AppsPage,
@@ -199,7 +199,7 @@ export const Route = createFileRoute("/_app/apps")({
 
 /** The installed apps, ... */
 function AppsPage() {
-  const search = useSearch({ from: "/_app/apps" });
+  const search = useSearch({ from: "/_app/apps/" });
   // ... reads the modules' queries and hooks, lays out their components
 }
 ```
@@ -221,26 +221,56 @@ loader: ({ context }) => {
   time (`defaultPreloadStaleTime: 0` runs the loader again). ADR 0002, rule 15, as #203 amended it.
 
 - One file per route under `web/src/routes/`, `export const Route = createFileRoute(...)`. The generator writes the
-  path from the file's name: rename the file, never the string. `_app.tsx` is the shell, a layout route with no path
-  of its own, whose `beforeLoad` requires the session for every page under `_app/`, and whose pieces are in
-  `routes/-shell/` (`app-layout`, `navbar`, `navbar-mobile`, `searchbar`, `user-menu`, `user-avatar`, `app-error-page`,
-  `navigations`, `use-current-path`).
-  `_app/$.tsx` is the not-found page of any other path, `_app/-not-found-page.tsx` its component.
-- A page beside another at a longer path is `x_.y.tsx` (`apps_.$project.tsx`, `store_.new.tsx`): `x.y.tsx` would be a
-  child of `x.tsx`, rendered in its `Outlet`, which a page has not.
+  path from the file's name: move the file, never edit the string. The tree, the maintainer's decision of 2026-11-27
+  (#210):
+
+  ```
+  routes/
+    __root.tsx
+    login.tsx                         /login, no shell and no guard
+    _app/
+      route.tsx                       the layout: the session guard and the shell
+      -shell/                         the shell's pieces
+      index.tsx  index.test.tsx       /
+      apps/
+        index.tsx  index.test.tsx     /apps
+        $project.tsx                  /apps/:project
+      store/
+        index.tsx  index.test.tsx     /store
+        new.tsx                       /store/new
+        $id.edit.tsx  $id.edit.test.tsx   /store/:id/edit
+      settings/
+        index.tsx  index.test.tsx     /settings
+      cluster/
+        index.tsx                     /cluster
+      $.tsx                           not-found, in the frame
+      -not-found-page.tsx  -pending-page.tsx
+  ```
+
+- One folder per section, always, even for a section with one page. No layout route inside a section (no
+  `apps/route.tsx`): its pages are siblings under `_app`, so no file name needs a `_` escape (`apps_.$project.tsx`).
+  `store/$id.edit.tsx` keeps its dot, for `/store/:id/edit`. A new page goes in its section's folder; a new section
+  gets its folder and its `index.tsx`.
+- `_app/route.tsx` is the shell, a layout route with no path of its own, whose `beforeLoad` requires the session for
+  every page under `_app/`. What it uses sits beside it in `_app/`, nothing of it at the routes' root: its pieces in
+  `_app/-shell/` (`app-layout`, `navbar`, `navbar-mobile`, `searchbar`, `user-menu`, `user-avatar`, `app-error-page`,
+  `navigations`, `use-current-path`), and `_app/$.tsx`, the not-found page of any other path, with
+  `_app/-not-found-page.tsx` its component.
 - A route file is its page: it defines its component, not exported, and composes the modules' components and hooks.
   `autoCodeSplitting` moves the component, and what only it uses, into a chunk of its own, loaded with the page. Only
   `validateSearch`, `beforeLoad`, `loader` and `staticData` stay in the entry. A route file exports `Route` alone.
-- A page's own pieces, which only it uses and which compose several modules, go in `routes/-<page>/`: a name that
-  starts with `-` is no route. Its tests sit beside it, `routes/_app/apps.test.tsx`, which `routeFileIgnorePattern`
-  in `tsr.config.json` keeps out of the routes.
-- A component reads its route by id: `useSearch({ from: "/_app/apps" })`, `useParams({ from: "/_app/apps_/$project" })`.
+- A page's own pieces, which only it uses and which compose several modules, go in `-<page>/` beside it: a name that
+  starts with `-` is no route. Its tests sit beside it, `routes/_app/apps/index.test.tsx`, which
+  `routeFileIgnorePattern` in `tsr.config.json` keeps out of the routes.
+- A component reads its route by id: `useSearch({ from: "/_app/apps/" })`, `useParams({ from: "/_app/apps/$project" })`.
+  An index page's id and full path end with `/`, so `useNavigate({ from: "/apps/" })`; a link still goes `to="/apps"`,
+  and the URL has no trailing slash.
 - `src/routeTree.gen.ts` is generated and gitignored. `src/router.ts` has `createPageRouter` and the `Register`
   declaration.
-- `_app.tsx` has an `errorComponent`, `AppErrorPage`, in the frame: a session the server could not read, or a page
+- `_app/route.tsx` has an `errorComponent`, `AppErrorPage`, in the frame: a session the server could not read, or a page
   that failed with no `errorComponent` of its own. Its retry calls `session.forgetFailure()`, then `router.invalidate()`.
 - The build fails when what a signed-in page loads before its own code passes `firstLoadBudgetKb` in
-  `vite.config.ts`: the entry, the component of `_app` (the frame), the chunks they import, and their CSS. A change
+  `vite.config.ts`: the entry, the component of `_app` (`_app/route.tsx`, the frame), the chunks they import, and their CSS. A change
   that passes it loads what it added from a route's component, or raises the budget and says why.
 - The router has `defaultPreload: "intent"` and `defaultPreloadStaleTime: 0`: Query alone decides freshness.
 - A loader only warms, with `prefetchQuery`, as above.

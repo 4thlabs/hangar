@@ -6,9 +6,9 @@ import { defineConfig, type Plugin, type Rolldown } from "vite";
 
 /**
  * What a signed-in page loads before its own code, by the module each chunk starts from: the entry, which `index.html`
- * loads, and the component of `_app`, the frame every signed-in page is shown in. `/login` loads less.
+ * loads, and the component of `_app` (`_app/route.tsx`), the frame every signed-in page is shown in. `/login` loads less.
  */
-const firstLoad = ["index.html", "src/routes/_app.tsx?tsr-split=component"];
+const firstLoad = ["index.html", "src/routes/_app/route.tsx?tsr-split=component"];
 
 /**
  * The most `firstLoad` may weigh, minified, in kB as Vite prints them: their chunks, the chunks these import, and their

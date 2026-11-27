@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "#modules/common/ui/dropdown-menu.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
-import { UserAvatar } from "#routes/-shell/user-avatar.tsx";
+import { UserAvatar } from "#routes/_app/-shell/user-avatar.tsx";
 
 /** The signed-in user, and signing out. Its user settings and its language come with the issue of `/user/settings`. */
 export function UserMenu() {

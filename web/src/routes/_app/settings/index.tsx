@@ -8,7 +8,7 @@ import { StoreSettingsCard } from "#modules/settings/components/store-settings-c
 import { parseSettingsTab, settingsTabs, type SettingsTabId } from "#modules/settings/helpers/settings-tab.ts";
 
 /** `/settings`, its tab in the hash. */
-export const Route = createFileRoute("/_app/settings")({
+export const Route = createFileRoute("/_app/settings/")({
   // Warmed, not waited for: each card shows its own skeleton and failure. Their options keep a warmed read fresh for a
   // second, so that the card that mounts reads nothing again. The edited files are not warmed: each is read as its tab
   // opens, and shown from that read alone.

@@ -168,7 +168,7 @@ Clarity beats cleverness and brevity.
 - Its setup is visible in the test: what the server answers, the clock, the route. A shared fixture is a plain value
   or a function the test calls, not a `beforeEach` that hides what the test depends on.
 - The domain's `helpers/` are tested directly, without rendering. A page's tests sit beside its route file
-  (`routes/_app/apps.test.tsx`), which the route generator ignores (`routeFileIgnorePattern` in `tsr.config.json`).
+  (`routes/_app/apps/index.test.tsx`), which the route generator ignores (`routeFileIgnorePattern` in `tsr.config.json`).
 - The API is answered at the network, by orval's MSW handlers, as the ADR's decision 13 says: a call no handler
   answers fails the test. Until they come, tests use `mock/page.tsx`'s `serve`, which is not extended.
 - The clock is the fake timers' (`vi.useFakeTimers({ now })`), not a prop added for the test.

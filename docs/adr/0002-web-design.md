@@ -168,13 +168,15 @@ before/after below is written in the baseline's form.
 Amended by #207 on 2026-11-26, to follow TanStack Router's own examples (`kitchen-sink-react-query-file-based`,
 `authenticated-routes`, `start-trellaux`) and keep the modules apart: the route file is the page, the shell is the
 layout route `_app.tsx`, the wiring is a few files at `src/`, and the domain `.ts` of a module is in its `helpers/`.
+Amended again by #210 on 2026-11-27: the routes are in one folder per section, and the layout is `_app/route.tsx`
+(decision 6).
 
 ```
 src/main.tsx, page.ts, router.ts   the wiring: createPage (QueryClient, Session, Preferences, router), the router,
                                    the providers (app-providers.tsx, theme-effects.tsx); no app/ folder
 src/routes/                        one file per route = its page: path, validateSearch, beforeLoad, loader, and the
-                                   component that composes the modules; _app.tsx is the shell, its pieces in -shell/;
-                                   a page's own pieces in -<page>/; the not-found and pending pages beside their routes
+                                   component that composes the modules; one folder per section under _app/, whose
+                                   route.tsx is the shell, its pieces in _app/-shell/ (decision 6)
 src/modules/<d>/api/               query and mutation options on orval's, keys, staleness maps, services (Session)
 src/modules/<d>/helpers/           the domain: pure functions, view models, search params, formats, labels, parsers
 src/modules/<d>/hooks/             compose queries, feeds and local state machines (useComposeCommand, useStoreSync)
@@ -196,7 +198,7 @@ src/libs/                          the API client, formats, preferences
 Every one of these is a lint rule (decision 10), checked on probe files and on the violations it finds in the code.
 A module goes down into `common` only when two modules really use it: the compose vocabulary (`compose-actions.ts`,
 which the bell words) and the Docker changes feed (`use-docker-changes.ts`, which the Docker card follows) did. The
-bell is composed by the shell, in `routes/-shell/`.
+bell is composed by the shell, in `routes/_app/-shell/`.
 
 **Where computations live.** In `helpers/` functions, tested without rendering. **A page component may** read the
 route (`useSearch`, `useParams`), call its module's hooks and `useQuery(xQueries.y())`, hold UI state it owns (the
@@ -311,15 +313,56 @@ This partly reverses the 2026-11-24 line "its text is written in English in its 
 
 Amended by #207 on 2026-11-26: TanStack Router's layout, and modules kept apart, as decision 1 now says.
 
+Amended by #210 on 2026-11-27, on the maintainer's decision: the routes are in one folder per section under `_app/`,
+with no `_` escape, and the layout moves into its folder as `_app/route.tsx`. #186 had chosen TanStack's flat naming
+(`apps_.$project.tsx`, `store_.$id.edit.tsx`) without that decision. Paths, search params and behaviour did not
+change.
+
+```
+routes/
+  __root.tsx
+  login.tsx                         /login, no shell and no guard
+  _app/
+    route.tsx                       the layout: the session guard and the shell
+    -shell/                         the shell's pieces
+    index.tsx  index.test.tsx       /
+    apps/
+      index.tsx  index.test.tsx     /apps
+      $project.tsx                  /apps/:project
+    store/
+      index.tsx  index.test.tsx     /store
+      new.tsx                       /store/new
+      $id.edit.tsx  $id.edit.test.tsx   /store/:id/edit
+    settings/
+      index.tsx  index.test.tsx     /settings
+    cluster/
+      index.tsx                     /cluster
+    $.tsx                           not-found, in the frame
+    -not-found-page.tsx  -pending-page.tsx
+```
+
+- **One folder per section, always**, even for a section with one page: `apps/`, `store/`, `settings/`, `cluster/`.
+  A section's list is its `index.tsx`, its other pages sit beside it.
+- **No layout route inside a section.** There is no `apps/route.tsx`, so `apps/index.tsx` and `apps/$project.tsx` are
+  sibling pages under `_app`, and no file name needs a `_` escape (`apps_.$project.tsx`).
+- **`store/$id.edit.tsx` keeps its dot**, for `/store/:id/edit`: there is no `/store/:id` page, so no `$id/` folder.
+- **The layout sits in its folder**: `_app/route.tsx`, with what it uses beside it in `_app/` (`-shell/`, the
+  not-found and pending pages). Nothing of `_app` stays at the routes' root.
+- **A page's tests sit beside it** (`apps/index.test.tsx`), which `routeFileIgnorePattern` keeps out of the routes. A
+  page's own pieces go in `-<page>/` beside it: a name that starts with `-` is no route.
+- **An index page's route id ends with `/`**: `useSearch({ from: "/_app/apps/" })`, and `useNavigate({ from: "/apps/" })`
+  takes its full path. Links still go `to="/apps"`, and the URL has no trailing slash.
+
 - **By domain, and the pages by route.** The modules stay by domain, and import only `common` and `libs`. A page is
   its route file in `routes/`, the one place that composes modules: its component, its `validateSearch` from its
   module's `helpers/`, its loader, which calls `context.queryClient.ensureQueryData(appsQueries.projects())`. Its
-  tests sit beside it (`routes/_app/apps.test.tsx`), which the route generator ignores (`routeFileIgnorePattern`), and
-  `autoCodeSplitting` still loads its component with the page. What only a page uses and composes from several
-  modules goes in `routes/-<page>/`, which the generator ignores as it does any name starting with `-`.
-- **The shell** is `_app.tsx`, the layout route around every page but `/login`, with its pieces in `routes/-shell/`:
-  `app-layout`, `navbar`, `navbar-mobile`, `searchbar`, `user-menu`, `user-avatar`, `app-error-page`, the
-  `navigations` they list and `use-current-path`, which only the shell uses.
+  tests sit beside it (`routes/_app/apps/index.test.tsx`), which the route generator ignores
+  (`routeFileIgnorePattern`), and `autoCodeSplitting` still loads its component with the page. What only a page uses
+  and composes from several modules goes in `-<page>/` beside it, which the generator ignores as it does any name
+  starting with `-`.
+- **The shell** is `_app/route.tsx`, the layout route around every page but `/login`, with its pieces in
+  `routes/_app/-shell/`: `app-layout`, `navbar`, `navbar-mobile`, `searchbar`, `user-menu`, `user-avatar`,
+  `app-error-page`, the `navigations` they list and `use-current-path`, which only the shell uses.
   The not-found and pending pages sit beside the routes that show them, as `routes/_app/-not-found-page.tsx`.
 - **The wiring** is at `src/`, with no `app/` folder: `main.tsx`, `page.ts` (`createPage`), `router.ts`
   (`createPageRouter`), `app-providers.tsx` and `theme-effects.tsx`, `routeTree.gen.ts`, and `mock/page.tsx`, the

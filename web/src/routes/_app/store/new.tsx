@@ -11,9 +11,10 @@ import { Input } from "#modules/common/ui/input.tsx";
 import { storeMutations, storeQueries } from "#modules/store/api/store-queries.ts";
 
 /**
- * `/store/new`, a new app of the store. `store_`: a page of its own beside `/store`, not a child rendered inside it.
+ * `/store/new`, a new app of the store. A page of its own beside `/store`, not a child rendered inside it: the
+ * section has no layout route.
  */
-export const Route = createFileRoute("/_app/store_/new")({
+export const Route = createFileRoute("/_app/store/new")({
   // Warmed, not waited for: the page shows the template once read, and why it was not. The template does not change
   // while the server runs, so the page reads it from the cache.
   loader: ({ context }) => void context.queryClient.prefetchQuery(storeQueries.newApp()),

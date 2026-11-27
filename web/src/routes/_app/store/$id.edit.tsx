@@ -7,16 +7,16 @@ import { AppEditor } from "#modules/store/components/app-editor.tsx";
 import { composeFileName } from "#modules/store/helpers/compose-file.ts";
 
 /**
- * `/store/$id/edit`, the editor of an app of the store. `store_`: a page of its own beside `/store`, not a child
- * rendered inside it.
+ * `/store/$id/edit`, the editor of an app of the store. A page of its own beside `/store`, not a child rendered
+ * inside it: the section has no layout route.
  */
-export const Route = createFileRoute("/_app/store_/$id/edit")({
+export const Route = createFileRoute("/_app/store/$id/edit")({
   component: EditAppPage,
 });
 
 /** `/store/$id/edit`: every file of a store app, its `compose.yml` open first. */
 function EditAppPage() {
-  const { id } = useParams({ from: "/_app/store_/$id/edit" });
+  const { id } = useParams({ from: "/_app/store/$id/edit" });
   // Shown from this mount's reads alone: a sync or an install may have changed the files since a page read them. Not
   // warmed by a loader, for the same reason.
   const opened = useQuery(storeQueries.files(id));

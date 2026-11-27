@@ -31,7 +31,7 @@ import { Button } from "#modules/common/ui/button.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#modules/common/ui/empty.tsx";
 
 /** `/apps`, the installed apps, filtered by its search. */
-export const Route = createFileRoute("/_app/apps")({
+export const Route = createFileRoute("/_app/apps/")({
   validateSearch: validateAppsSearch,
   staticData: { searchable: true },
   component: AppsPage,
@@ -101,8 +101,8 @@ function NoApps({ isInstalled }: { isInstalled: boolean }) {
  * server says the daemon changed them, and their usage live.
  */
 function AppsPage() {
-  const search = useSearch({ from: "/_app/apps" });
-  const navigate = useNavigate({ from: "/apps" });
+  const search = useSearch({ from: "/_app/apps/" });
+  const navigate = useNavigate({ from: "/apps/" });
   const { data, error, isPending, refetch, isRefetching } = useQuery(dockerQueries.projects());
   const projects = data ?? [];
   const sort = parseAppsSort(search.sort);
