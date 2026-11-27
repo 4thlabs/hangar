@@ -1,5 +1,5 @@
 import type { ProjectContainer, ProjectStatus } from "#libs/api";
-import { appsMessages } from "#modules/apps/messages.ts";
+import { appsLabels } from "#modules/apps/helpers/apps-labels.ts";
 
 // How the page shows how an app, a service or a container runs.
 
@@ -18,7 +18,7 @@ export function statusBadgeVariant(status: ProjectStatus) {
 
 /** What a container's badge says: its healthcheck when it has one, its state otherwise. */
 export function containerStatusLabel(container: ProjectContainer): string {
-  return container.health ? appsMessages.health[container.health] : appsMessages.containerState[container.state];
+  return container.health ? appsLabels.health[container.health]() : appsLabels.containerState[container.state]();
 }
 
 /** Whether a container's badge is destructive: an unhealthy or dead container. */

@@ -1,7 +1,6 @@
 import { FileTextIcon } from "lucide-react";
 import { getDockerLogsUrl, type ProjectContainer } from "#libs/api";
 import { LogsPanel } from "#modules/apps/components/logs-panel.tsx";
-import { appsMessages } from "#modules/apps/messages.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   Sheet,
@@ -11,8 +10,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "#modules/common/ui/sheet.tsx";
-
-const words = appsMessages.logs;
+import { m } from "#paraglide/messages.js";
 
 type LogsSheetProps = {
   project: string;
@@ -28,9 +26,9 @@ export function LogsSheet({ project, container }: LogsSheetProps) {
     <Sheet>
       <SheetTrigger
         render={
-          <Button variant="outline" size="xs" aria-label={words.open({ name: container.name })}>
+          <Button variant="outline" size="xs" aria-label={m.apps_logs_open({ name: container.name })}>
             <FileTextIcon data-icon="inline-start" />
-            {words.button}
+            {m.apps_logs_button()}
           </Button>
         }
       />
@@ -38,9 +36,9 @@ export function LogsSheet({ project, container }: LogsSheetProps) {
           sheet's own, which a bare `sm:max-w-*` would not override. */}
       <SheetContent className="data-[side=right]:w-full data-[side=right]:sm:w-[90vw] data-[side=right]:sm:max-w-7xl">
         <SheetHeader>
-          <SheetTitle className="pr-8">{words.title({ name: container.name })}</SheetTitle>
+          <SheetTitle className="pr-8">{m.apps_logs_title({ name: container.name })}</SheetTitle>
           <SheetDescription>
-            {project} · {container.id.slice(0, 12)} · {words.tail}
+            {project} · {container.id.slice(0, 12)} · {m.apps_logs_tail()}
           </SheetDescription>
         </SheetHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4">

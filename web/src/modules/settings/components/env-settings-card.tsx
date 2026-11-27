@@ -19,9 +19,7 @@ import {
   withVariable,
   type EnvVariable,
 } from "#modules/settings/helpers/env-variables.ts";
-import { settingsMessages } from "#modules/settings/messages.ts";
-
-const words = settingsMessages.env;
+import { m } from "#paraglide/messages.js";
 
 /** A secret for a variable, of the shape of `openssl rand -hex 32`. */
 function randomSecret(): string {
@@ -41,13 +39,13 @@ export function EnvSettingsCard() {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>{words.title}</CardTitle>
+        <CardTitle>{m.settings_env_title()}</CardTitle>
         <CardDescription>
           The variables every stack shares, written to <code>.env.global</code>. Variables added by hand outside this
           page are kept.
         </CardDescription>
       </CardHeader>
-      <QueryRegion query={env} readAfter={cachedAt} failure={words.showFailed}>
+      <QueryRegion query={env} readAfter={cachedAt} failure={m.settings_env_show_failed()}>
         {read => (
           <>
             {env.error && (
@@ -95,7 +93,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
 
       try {
         await save.mutateAsync({ data: envChanges(variables, value.variables) });
-        toastSuccess(words.saved, words.savedDescription);
+        toastSuccess(m.settings_env_saved(), m.settings_env_saved_description());
       } catch (failure) {
         const { form: formError, fields } = formErrorsOf(failure, fieldsByCode(value.variables));
 
@@ -195,7 +193,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                             autoComplete="off"
                             spellCheck={false}
                             value={field.state.value}
-                            placeholder={words.valuePlaceholder}
+                            placeholder={m.settings_env_value_placeholder()}
                             aria-invalid={error !== undefined}
                             aria-describedby={error === undefined ? undefined : `${id}-error`}
                             onChange={event => change(event.target.value)}
@@ -207,7 +205,9 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                           variant="ghost"
                           size="icon"
                           aria-label={
-                            isShown ? words.hideValue({ name: variable.key }) : words.showValue({ name: variable.key })
+                            isShown
+                              ? m.settings_env_hide_value({ name: variable.key })
+                              : m.settings_env_show_value({ name: variable.key })
                           }
                           aria-pressed={isShown}
                           onClick={() => toggleShown(variable.key)}
@@ -218,7 +218,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                           type="button"
                           variant="ghost"
                           size="icon"
-                          aria-label={words.generate({ name: variable.key })}
+                          aria-label={m.settings_env_generate({ name: variable.key })}
                           onClick={() => change(randomSecret())}
                         >
                           <KeyRoundIcon />
@@ -227,7 +227,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                           type="button"
                           variant="ghost"
                           size="icon"
-                          aria-label={words.remove({ name: variable.key })}
+                          aria-label={m.settings_env_remove({ name: variable.key })}
                           // Staged, not written: a variable only disappears once the save goes through. By its name,
                           // so that a second click removes nothing more.
                           onClick={() => {
@@ -262,8 +262,8 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                   <div className="flex w-72 shrink-0 flex-col gap-1">
                     <Input
                       value={field.state.value}
-                      placeholder={words.newNamePlaceholder}
-                      aria-label={words.newName}
+                      placeholder={m.settings_env_new_name_placeholder()}
+                      aria-label={m.settings_env_new_name()}
                       aria-invalid={error !== undefined}
                       aria-describedby={error === undefined ? undefined : "env-new-name-error"}
                       className="font-mono text-xs"
@@ -284,7 +284,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                     disabled={field.state.value.trim().length === 0}
                   >
                     <PlusIcon data-icon="inline-start" />
-                    {words.add}
+                    {m.settings_env_add()}
                   </Button>
                 </Field>
               );
@@ -297,7 +297,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
               return (
                 removed.length > 0 && (
                   <FieldDescription>
-                    {words.toRemove} <span className="font-mono">{removed.join(", ")}</span>
+                    {m.settings_env_to_remove()} <span className="font-mono">{removed.join(", ")}</span>
                   </FieldDescription>
                 )
               );
@@ -312,10 +312,10 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
         <PendingButton
           type="submit"
           pending={save.isPending}
-          pendingLabel={settingsMessages.saving}
+          pendingLabel={m.settings_form_saving()}
           icon={<SaveIcon data-icon="inline-start" />}
         >
-          {settingsMessages.save}
+          {m.settings_form_save()}
         </PendingButton>
       </CardFooter>
     </form>

@@ -11,9 +11,7 @@ import {
   WidgetMetadata,
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { widgetsMessages } from "#modules/widgets/messages.ts";
-
-const words = widgetsMessages.beszel;
+import { m } from "#paraglide/messages.js";
 
 /** The usage past which a bar is the thing on the card to look at. */
 const hotUsage = 85;
@@ -60,14 +58,14 @@ export function BeszelCard({ stats: { systems }, link }: BeszelCardProps) {
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{widgetsMessages.counts.servers({ count: systems.length })}</span>
-            {down > 0 && <span className="text-destructive">{words.down({ count: down })}</span>}
+            <span>{m.widgets_counts_servers({ count: systems.length })}</span>
+            {down > 0 && <span className="text-destructive">{m.widgets_beszel_down({ count: down })}</span>}
           </WidgetMetadata>
         }
       />
 
       <WidgetContent>
-        <WidgetList empty={words.empty}>
+        <WidgetList empty={m.widgets_beszel_empty()}>
           {systems.map(system => (
             <WidgetListItem key={system.id} className="flex-col items-stretch gap-1">
               <div className="flex min-w-0 items-center gap-2">
@@ -80,7 +78,9 @@ export function BeszelCard({ stats: { systems }, link }: BeszelCardProps) {
                 <p className="shrink-0 text-xs text-muted-foreground">
                   <WidgetMetadata>
                     {system.up && system.uptime !== null && (
-                      <span>{words.up({ since: compactRelativeTime(now - system.uptime * 1_000, now) })}</span>
+                      <span>
+                        {m.widgets_beszel_up({ since: compactRelativeTime(now - system.uptime * 1_000, now) })}
+                      </span>
                     )}
                     {system.temperature !== null && (
                       <span className={system.temperature >= hotTemperature ? "text-destructive" : undefined}>
@@ -96,9 +96,9 @@ export function BeszelCard({ stats: { systems }, link }: BeszelCardProps) {
                   dead server is at 4% CPU. */}
               {system.up && (
                 <div className="flex gap-3" title={system.cpuModel ?? undefined}>
-                  <Gauge label={words.cpu} value={system.cpu} />
-                  <Gauge label={words.memory} value={system.memory} />
-                  <Gauge label={words.disk} value={system.disk} />
+                  <Gauge label={m.widgets_beszel_cpu()} value={system.cpu} />
+                  <Gauge label={m.widgets_beszel_memory()} value={system.memory} />
+                  <Gauge label={m.widgets_beszel_disk()} value={system.disk} />
                 </div>
               )}
             </WidgetListItem>

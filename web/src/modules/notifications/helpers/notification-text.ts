@@ -1,8 +1,6 @@
 import type { NotificationMessage } from "#libs/api";
 import { composeActionOfNotification, composeLabel, composeOutcome } from "#modules/common/helpers/compose-actions.ts";
-import { notificationsMessages } from "#modules/notifications/messages.ts";
-
-const words = notificationsMessages;
+import { m } from "#paraglide/messages.js";
 
 /** What a notification says once worded. */
 export type NotificationWords = { title: string; description?: string };
@@ -18,50 +16,65 @@ type Words = { [Key in NotificationKey]: (message: Extract<NotificationMessage, 
 // catalog will word in another language. A key this page does not know, from a server newer than it, reads as a plain
 // notification.
 
-/** What a notification of a key this page does not know says. */
-export const unknownNotification: NotificationWords = { title: words.unknown };
-
 /** The words of each key. */
 const wordsByKey: Words = {
-  storeInstalled: () => words.storeInstalled,
-  storeUpdated: () => words.storeUpdated,
-  storeInstallFailed: () => words.storeInstallFailed,
-  storeUpdateFailed: () => words.storeUpdateFailed,
+  storeInstalled: () => ({
+    title: m.notifications_store_installed_title(),
+    description: m.notifications_store_installed_description(),
+  }),
+  storeUpdated: () => ({
+    title: m.notifications_store_updated_title(),
+    description: m.notifications_store_updated_description(),
+  }),
+  storeInstallFailed: () => ({
+    title: m.notifications_store_install_failed_title(),
+    description: m.notifications_store_install_failed_description(),
+  }),
+  storeUpdateFailed: () => ({
+    title: m.notifications_store_update_failed_title(),
+    description: m.notifications_store_update_failed_description(),
+  }),
   composeSucceeded: ({ params: { project, operation, flags } }) => {
     const action = composeActionOfNotification(operation, flags);
 
     if (action === null) {
       return {
-        title: words.composeSucceeded.plainTitle,
-        description: words.composeSucceeded.plainDescription({ project }),
+        title: m.notifications_compose_succeeded_plain_title(),
+        description: m.notifications_compose_succeeded_plain_description({ project }),
       };
     }
 
     return {
-      title: words.composeSucceeded.title({ label: composeLabel(action) }),
+      title: m.notifications_compose_succeeded_title({ label: composeLabel(action) }),
       description: composeOutcome(action, project),
     };
   },
   composeFailed: ({ params: { project, operation, flags } }) => {
     const action = composeActionOfNotification(operation, flags);
-    const label = action === null ? words.composeFailed.plainLabel : composeLabel(action);
+    const label = action === null ? m.notifications_compose_failed_plain_label() : composeLabel(action);
 
-    return { title: words.composeFailed.title({ label }), description: words.composeFailed.description({ project }) };
+    return {
+      title: m.notifications_compose_failed_title({ label }),
+      description: m.notifications_compose_failed_description({ project }),
+    };
   },
   updatesAvailable: ({ params: { count } }) => ({
-    title: words.updatesAvailable.title,
-    description: words.updatesAvailable.description({ count }),
+    title: m.notifications_updates_available_title(),
+    description: m.notifications_updates_available_description({ count }),
   }),
   autoUpdate: ({ params: { updated, failed } }) => ({
-    title: words.autoUpdate.title,
-    description: words.autoUpdate.description({ updated, failed }),
+    title: m.notifications_auto_update_title(),
+    description: failed
+      ? m.notifications_auto_update_failed_description({ updated, failed })
+      : m.notifications_auto_update_description({ updated }),
   }),
 };
 
 /** What `message` says. */
 export function describeNotification(message: NotificationMessage): NotificationWords {
+  // A key this page does not know reads as a plain notification.
   if (!Object.hasOwn(wordsByKey, message.key)) {
-    return unknownNotification;
+    return { title: m.notifications_unknown_title() };
   }
 
   const words = wordsByKey[message.key] as (message: NotificationMessage) => NotificationWords;

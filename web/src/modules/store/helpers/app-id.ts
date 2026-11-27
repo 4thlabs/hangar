@@ -1,4 +1,4 @@
-import { storeMessages } from "#modules/store/messages.ts";
+import { m } from "#paraglide/messages.js";
 
 /**
  * An app id, as the core checks it (`AppId::regex()` in `crates/core/src/store/app_id.rs`): a folder name under
@@ -9,5 +9,5 @@ const appId = /^[a-z0-9][a-z0-9._-]*$/;
 
 /** Why `id` cannot be a new app's id, or `undefined` when it can. */
 export function appIdError(id: string): string | undefined {
-  return appId.test(id) ? undefined : storeMessages.newApp.invalidId({ id });
+  return appId.test(id) ? undefined : m.store_new_app_invalid_id({ id });
 }

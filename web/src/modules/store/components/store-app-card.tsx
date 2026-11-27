@@ -5,7 +5,7 @@ import { Badge } from "#modules/common/ui/badge.tsx";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardTitle } from "#modules/common/ui/card.tsx";
 import { StoreAppButton } from "#modules/store/components/store-app-button.tsx";
-import { storeMessages } from "#modules/store/messages.ts";
+import { m } from "#paraglide/messages.js";
 
 type StoreAppCardProps = {
   app: StoreApp;
@@ -18,7 +18,7 @@ export function StoreAppCard({ app }: StoreAppCardProps) {
       <Link
         to="/store/$id/edit"
         params={{ id: app.id }}
-        aria-label={storeMessages.card.edit({ name: app.name })}
+        aria-label={m.store_card_edit({ name: app.name })}
         className={buttonVariants({
           variant: "ghost",
           size: "icon-xs",
@@ -35,8 +35,8 @@ export function StoreAppCard({ app }: StoreAppCardProps) {
         )}
         <CardTitle className="line-clamp-2 text-base leading-tight">{app.name}</CardTitle>
         {app.swarmReady && (
-          <Badge variant="outline" title={storeMessages.card.swarmHint}>
-            {storeMessages.card.swarm}
+          <Badge variant="outline" title={m.store_card_swarm_hint()}>
+            {m.store_card_swarm()}
           </Badge>
         )}
       </CardContent>

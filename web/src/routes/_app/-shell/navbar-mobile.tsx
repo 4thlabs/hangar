@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { cn } from "cn";
 import { BoxesIcon, LayoutDashboardIcon, NetworkIcon, SettingsIcon, StoreIcon, type LucideIcon } from "lucide-react";
-import { commonMessages } from "#modules/common/messages.ts";
+import { m } from "#paraglide/messages.js";
 import { isNavigationActive, navigationCategories, type NavigationPath } from "#routes/_app/-shell/navigations.ts";
 import { useCurrentPath } from "#routes/_app/-shell/use-current-path.ts";
 
@@ -25,7 +25,7 @@ export function MobileTabBar() {
   return (
     <nav
       className="sticky bottom-0 z-40 flex h-16 shrink-0 border-t border-sidebar-border bg-sidebar text-sidebar-foreground sm:hidden"
-      aria-label={commonMessages.shell.mainNavigation}
+      aria-label={m.common_shell_main_navigation()}
     >
       {items.map(item => {
         const active = isNavigationActive(path, item.href);
@@ -46,7 +46,7 @@ export function MobileTabBar() {
             )}
           >
             <Icon className="size-5" />
-            {item.label}
+            {item.label()}
           </Link>
         );
       })}

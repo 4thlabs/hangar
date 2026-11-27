@@ -1,15 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import type { ProjectSummary } from "#libs/api";
+import { appsLabels } from "#modules/apps/helpers/apps-labels.ts";
 import type { AppSortColumn, AppsSort } from "#modules/apps/helpers/apps-search.ts";
 import { categoryBadgeClasses } from "#modules/apps/helpers/category-badge.ts";
 import { statusBadgeVariant } from "#modules/apps/helpers/project-status.ts";
-import { appsMessages } from "#modules/apps/messages.ts";
 import { SortableHead } from "#modules/common/components/sortable-head.tsx";
 import { toggledSet } from "#modules/common/helpers/toggled-set.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
-
-const words = appsMessages.table;
+import { m } from "#paraglide/messages.js";
 
 type AppsTableProps = {
   projects: readonly ProjectSummary[];
@@ -36,19 +35,19 @@ export function AppsTable({ projects, sort, onSort, selection, onSelectionChange
             <input
               type="checkbox"
               className="size-4 accent-primary"
-              aria-label={words.selectAll}
+              aria-label={m.apps_table_select_all()}
               checked={isAllSelected}
               onChange={event =>
                 onSelectionChange(event.target.checked ? new Set(projects.map(project => project.name)) : new Set())
               }
             />
           </TableHead>
-          <SortableHead column="name" label={words.app} sort={sort} onSort={onSort} />
-          <SortableHead column="category" label={words.category} sort={sort} onSort={onSort} />
-          <SortableHead column="status" label={words.status} sort={sort} onSort={onSort} />
-          <SortableHead column="services" label={words.services} sort={sort} onSort={onSort} />
-          <SortableHead column="containers" label={words.containers} sort={sort} onSort={onSort} />
-          <SortableHead column="unhealthy" label={words.unhealthy} sort={sort} onSort={onSort} />
+          <SortableHead column="name" label={m.apps_table_app()} sort={sort} onSort={onSort} />
+          <SortableHead column="category" label={m.apps_table_category()} sort={sort} onSort={onSort} />
+          <SortableHead column="status" label={m.apps_table_status()} sort={sort} onSort={onSort} />
+          <SortableHead column="services" label={m.apps_table_services()} sort={sort} onSort={onSort} />
+          <SortableHead column="containers" label={m.apps_table_containers()} sort={sort} onSort={onSort} />
+          <SortableHead column="unhealthy" label={m.apps_table_unhealthy()} sort={sort} onSort={onSort} />
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -58,7 +57,7 @@ export function AppsTable({ projects, sort, onSort, selection, onSelectionChange
               <input
                 type="checkbox"
                 className="size-4 accent-primary"
-                aria-label={words.select({ name: project.name })}
+                aria-label={m.apps_table_select({ name: project.name })}
                 checked={selection.has(project.name)}
                 onChange={event => toggle(project.name, event.target.checked)}
               />
@@ -69,7 +68,7 @@ export function AppsTable({ projects, sort, onSort, selection, onSelectionChange
                 <Link to="/apps/$project" params={{ project: project.name }} className="hover:underline">
                   {project.name}
                 </Link>
-                {project.updateAvailable && <Badge variant="outline">{words.update}</Badge>}
+                {project.updateAvailable && <Badge variant="outline">{m.apps_table_update()}</Badge>}
               </div>
             </TableCell>
             <TableCell>
@@ -82,7 +81,7 @@ export function AppsTable({ projects, sort, onSort, selection, onSelectionChange
               )}
             </TableCell>
             <TableCell>
-              <Badge variant={statusBadgeVariant(project.status)}>{appsMessages.status[project.status]}</Badge>
+              <Badge variant={statusBadgeVariant(project.status)}>{appsLabels.status[project.status]()}</Badge>
             </TableCell>
             <TableCell className="tabular-nums">{project.serviceCount}</TableCell>
             <TableCell className="tabular-nums">

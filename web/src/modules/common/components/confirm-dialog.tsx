@@ -1,4 +1,3 @@
-import { commonMessages } from "#modules/common/messages.ts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -9,6 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "#modules/common/ui/alert-dialog.tsx";
+import { m } from "#paraglide/messages.js";
 
 type ConfirmDialogProps = {
   open: boolean;
@@ -27,7 +27,7 @@ export function ConfirmDialog({
   open,
   title,
   description,
-  confirmLabel = commonMessages.confirm,
+  confirmLabel = m.common_actions_confirm(),
   destructive = false,
   onConfirm,
   onCancel,
@@ -40,7 +40,7 @@ export function ConfirmDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{commonMessages.cancel}</AlertDialogCancel>
+          <AlertDialogCancel>{m.common_actions_cancel()}</AlertDialogCancel>
           <AlertDialogAction variant={destructive ? "destructive" : "default"} onClick={onConfirm}>
             {confirmLabel}
           </AlertDialogAction>

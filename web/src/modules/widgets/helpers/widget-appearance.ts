@@ -1,5 +1,5 @@
 import type { WidgetType } from "#libs/api";
-import { widgetsMessages } from "#modules/widgets/messages.ts";
+import { widgetsLabels } from "#modules/widgets/helpers/widgets-labels.ts";
 
 /** A widget's icon, as image URLs, and the variant drawn on a dark theme for one the dark background would swallow. */
 export class WidgetIcon {
@@ -34,71 +34,56 @@ export type WidgetLook = {
   className?: string;
 };
 
-const words = widgetsMessages.looks;
-
-/** How each widget looks before and whatever it loads. */
-const looksByType: Readonly<Record<WidgetType, WidgetLook>> = {
+/** How each widget looks before and whatever it loads, but its words, which are `widgetsLabels.looks`. */
+const looksByType: Readonly<Record<WidgetType, Omit<WidgetLook, "title" | "errorDescription">>> = {
   // Dashboard Icons draws apps, not a plain clock: Fluent Emoji's alarm clock (MIT), served by Hangar itself.
   clock: {
-    ...words.clock,
     icon: new WidgetIcon("/images/widgets/clock.svg"),
     className: "h-20",
   },
   "docker-general-stats": {
-    ...words["docker-general-stats"],
     icon: WidgetIcon.dashboard("docker"),
     className: "@container min-h-64",
   },
   "arcane-general-stats": {
-    ...words["arcane-general-stats"],
     icon: WidgetIcon.dashboard("arcane"),
     className: "@container min-h-64",
   },
   "backrest-summary": {
-    ...words["backrest-summary"],
     icon: WidgetIcon.dashboard("backrest"),
     className: "min-h-40",
   },
   "beszel-server-stats": {
-    ...words["beszel-server-stats"],
     icon: WidgetIcon.dashboard("beszel", "beszel-light"),
     className: "min-h-40",
   },
   "forgejo-ci": {
-    ...words["forgejo-ci"],
     icon: WidgetIcon.dashboard("forgejo"),
     className: "min-h-40",
   },
   "frigate-events": {
-    ...words["frigate-events"],
     icon: WidgetIcon.dashboard("frigate", "frigate-light"),
     className: "min-h-88",
   },
   "gluetun-vpn-status": {
-    ...words["gluetun-vpn-status"],
     icon: WidgetIcon.dashboard("gluetun"),
     className: "min-h-32",
   },
   "miniflux-entries": {
-    ...words["miniflux-entries"],
     icon: WidgetIcon.dashboard("miniflux", "miniflux-light"),
   },
   "jellyfin-latest": {
-    ...words["jellyfin-latest"],
     icon: WidgetIcon.dashboard("jellyfin"),
     className: "min-h-64",
   },
   "tcg-collector-cards": {
-    ...words["tcg-collector-cards"],
     icon: new WidgetIcon("/images/widgets/tcg-collector.svg"),
     className: "min-h-48",
   },
   "github-releases": {
-    ...words["github-releases"],
     icon: WidgetIcon.dashboard("github", "github-light"),
   },
   "stock-prices": {
-    ...words["stock-prices"],
     icon: new WidgetIcon("/images/widgets/stock.svg"),
     className: "min-h-64",
   },
@@ -106,5 +91,7 @@ const looksByType: Readonly<Record<WidgetType, WidgetLook>> = {
 
 /** How a widget of `type` looks. */
 export function widgetLook(type: WidgetType): WidgetLook {
-  return looksByType[type];
+  const labels = widgetsLabels.looks[type];
+
+  return { ...looksByType[type], title: labels.title(), errorDescription: labels.errorDescription() };
 }

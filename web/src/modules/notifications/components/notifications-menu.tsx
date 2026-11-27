@@ -9,9 +9,7 @@ import { ToastIcon } from "#modules/common/ui/toast.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
 import { describeNotification } from "#modules/notifications/helpers/notification-text.ts";
 import { useNotifications } from "#modules/notifications/hooks/use-notifications.ts";
-import { notificationsMessages } from "#modules/notifications/messages.ts";
-
-const words = notificationsMessages.menu;
+import { m } from "#paraglide/messages.js";
 
 type NotificationItemProps = {
   notification: Notification;
@@ -32,7 +30,10 @@ function NotificationItem({ notification, now, onFollow }: NotificationItemProps
         <span className="flex items-baseline gap-2">
           <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
           {!notification.read && (
-            <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-label={words.unreadMark} />
+            <span
+              className="size-1.5 shrink-0 rounded-full bg-primary"
+              aria-label={m.notifications_menu_unread_mark()}
+            />
           )}
         </span>
         {description && <span className="text-muted-foreground">{description}</span>}
@@ -102,7 +103,9 @@ export function NotificationsMenu() {
                   variant="ghost"
                   size="icon"
                   className="relative"
-                  aria-label={unread > 0 ? words.unreadLabel({ count: unread }) : words.title}
+                  aria-label={
+                    unread > 0 ? m.notifications_menu_unread_label({ count: unread }) : m.notifications_menu_title()
+                  }
                 >
                   <BellIcon />
                   {unread > 0 && (
@@ -115,13 +118,15 @@ export function NotificationsMenu() {
             />
           }
         />
-        <TooltipContent>{words.title}</TooltipContent>
+        <TooltipContent>{m.notifications_menu_title()}</TooltipContent>
       </Tooltip>
 
       <PopoverContent align="end" sideOffset={6} className="w-80 gap-0 p-0">
         <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-          <span className="text-sm font-medium">{words.title}</span>
-          {unread > 0 && <span className="text-xs text-muted-foreground">{words.unread({ count: unread })}</span>}
+          <span className="text-sm font-medium">{m.notifications_menu_title()}</span>
+          {unread > 0 && (
+            <span className="text-xs text-muted-foreground">{m.notifications_menu_unread({ count: unread })}</span>
+          )}
         </div>
 
         {notifications.length === 0 ? (
@@ -130,8 +135,8 @@ export function NotificationsMenu() {
               <EmptyMedia variant="icon">
                 <BellIcon />
               </EmptyMedia>
-              <EmptyTitle>{words.empty}</EmptyTitle>
-              <EmptyDescription>{words.emptyDescription}</EmptyDescription>
+              <EmptyTitle>{m.notifications_menu_empty()}</EmptyTitle>
+              <EmptyDescription>{m.notifications_menu_empty_description()}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (

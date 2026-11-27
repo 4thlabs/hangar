@@ -10,9 +10,7 @@ import { describeError } from "#modules/common/helpers/error-message.ts";
 import { errorText, formErrorsOf, submitAfterRefusal, type FieldsByCode } from "#modules/common/helpers/form-errors.ts";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { settingsMutations, settingsQueries } from "#modules/settings/api/settings-queries.ts";
-import { settingsMessages } from "#modules/settings/messages.ts";
-
-const words = settingsMessages.config;
+import { m } from "#paraglide/messages.js";
 
 /** `hangar.yml`, edited as it is written, and checked by the server before it is saved. */
 export function ConfigSettingsCard() {
@@ -24,13 +22,13 @@ export function ConfigSettingsCard() {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>{words.title}</CardTitle>
+        <CardTitle>{m.settings_config_title()}</CardTitle>
         <CardDescription>
           The store's <code>hangar.yml</code> file: categories, shared files and dashboard widgets. It is validated
           before it is written.
         </CardDescription>
       </CardHeader>
-      <QueryRegion query={config} readAfter={cachedAt} failure={words.showFailed}>
+      <QueryRegion query={config} readAfter={cachedAt} failure={m.settings_config_show_failed()}>
         {read => (
           <>
             {config.error && (
@@ -64,7 +62,7 @@ function ConfigEditor({ source }: { source: string }) {
     onSubmit: async ({ value, formApi }) => {
       try {
         await save.mutateAsync({ data: { source: value.source } });
-        toastSuccess(words.saved, words.savedDescription);
+        toastSuccess(m.settings_config_saved(), m.settings_config_saved_description());
       } catch (failure) {
         formApi.setErrorMap({ onSubmit: formErrorsOf(failure, fieldsByCode) });
       }
@@ -99,10 +97,10 @@ function ConfigEditor({ source }: { source: string }) {
         <PendingButton
           type="submit"
           pending={save.isPending}
-          pendingLabel={settingsMessages.saving}
+          pendingLabel={m.settings_form_saving()}
           icon={<SaveIcon data-icon="inline-start" />}
         >
-          {settingsMessages.save}
+          {m.settings_form_save()}
         </PendingButton>
       </CardFooter>
     </form>

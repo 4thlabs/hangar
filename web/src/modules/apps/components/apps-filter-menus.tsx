@@ -1,5 +1,6 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { ProjectSummary } from "#libs/api";
+import { appsLabels } from "#modules/apps/helpers/apps-labels.ts";
 import {
   appStatuses,
   appUpdates,
@@ -9,8 +10,8 @@ import {
   parseAppUpdates,
 } from "#modules/apps/helpers/apps-search.ts";
 import { countBy, updateSideOf } from "#modules/apps/helpers/project-filter.ts";
-import { appsMessages } from "#modules/apps/messages.ts";
 import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
+import { m } from "#paraglide/messages.js";
 
 type AppsFilterMenusProps = {
   /** Every installed app, which the counts beside each checkbox are taken from. */
@@ -36,7 +37,7 @@ export function AppsFilterMenus({ projects }: AppsFilterMenusProps) {
     <>
       {categories.length > 0 && (
         <CheckboxFilterMenu
-          label={appsMessages.filters.category}
+          label={m.apps_filters_category()}
           options={categories.map(category => ({
             value: category,
             label: category,
@@ -47,20 +48,20 @@ export function AppsFilterMenus({ projects }: AppsFilterMenusProps) {
         />
       )}
       <CheckboxFilterMenu
-        label={appsMessages.filters.status}
+        label={m.apps_filters_status()}
         options={appStatuses.map(status => ({
           value: status,
-          label: appsMessages.status[status],
+          label: appsLabels.status[status](),
           count: statusCounts.get(status) ?? 0,
         }))}
         selected={parseAppStatuses(search.status)}
         onChange={selected => write("status", selected)}
       />
       <CheckboxFilterMenu
-        label={appsMessages.filters.update}
+        label={m.apps_filters_update()}
         options={appUpdates.map(update => ({
           value: update,
-          label: appsMessages.update[update],
+          label: appsLabels.update[update](),
           count: updateCounts.get(update) ?? 0,
         }))}
         selected={parseAppUpdates(search.update)}

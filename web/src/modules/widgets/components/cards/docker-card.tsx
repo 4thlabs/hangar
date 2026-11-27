@@ -13,7 +13,7 @@ import {
   WidgetMetadata,
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { widgetsMessages } from "#modules/widgets/messages.ts";
+import { m } from "#paraglide/messages.js";
 import { HostMetrics } from "./host-metrics.tsx";
 
 /**
@@ -62,8 +62,8 @@ function DockerHost({ overview, projects }: DockerHostProps) {
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{widgetsMessages.docker.version({ version: overview.version })}</span>
-            <span>{widgetsMessages.counts.containers({ count: overview.containers.total })}</span>
+            <span>{m.widgets_docker_version({ version: overview.version })}</span>
+            <span>{m.widgets_counts_containers({ count: overview.containers.total })}</span>
           </WidgetMetadata>
         }
       />
@@ -73,7 +73,7 @@ function DockerHost({ overview, projects }: DockerHostProps) {
       </WidgetContent>
 
       {outdated.length > 0 && (
-        <WidgetFooter title={widgetsMessages.docker.updatesAvailable}>
+        <WidgetFooter title={m.widgets_docker_updates_available()}>
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             {outdated.map(project => (
               <li key={project}>

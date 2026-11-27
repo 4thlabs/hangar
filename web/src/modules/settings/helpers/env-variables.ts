@@ -1,7 +1,5 @@
 import type { EnvChanges } from "#libs/api";
-import { settingsMessages } from "#modules/settings/messages.ts";
-
-const words = settingsMessages.env;
+import { m } from "#paraglide/messages.js";
 
 /** A variable of the env form: its name, and the value being written. */
 export type EnvVariable = { key: string; value: string };
@@ -51,11 +49,11 @@ export function envChanges(read: Record<string, string>, variables: readonly Env
 /** Why `name` cannot be added to `variables`: a name compose does not take, or one a row holds already. */
 export function newVariableError(name: string, variables: readonly EnvVariable[]): string | undefined {
   if (!variableName.test(name)) {
-    return words.invalidName({ name });
+    return m.settings_env_invalid_name({ name });
   }
 
   if (variables.some(variable => variable.key === name)) {
-    return words.exists({ name });
+    return m.settings_env_exists({ name });
   }
 
   return undefined;

@@ -3,7 +3,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronDownIcon, LogOutIcon } from "lucide-react";
 import { useState } from "react";
 import { authMutations, authQueries } from "#modules/auth/api/auth-queries.ts";
-import { commonMessages } from "#modules/common/messages.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   DropdownMenu,
@@ -15,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "#modules/common/ui/dropdown-menu.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
+import { m } from "#paraglide/messages.js";
 import { UserAvatar } from "#routes/_app/-shell/user-avatar.tsx";
 
 /** The signed-in user, and signing out. Its user settings and its language come with the issue of `/user/settings`. */
@@ -53,7 +53,7 @@ export function UserMenu() {
             className="cursor-pointer lg:h-9 lg:w-auto lg:gap-1.5 lg:px-2.5"
             variant="ghost"
             size="icon"
-            aria-label={commonMessages.shell.userMenu({ name: user.name })}
+            aria-label={m.common_shell_user_menu({ name: user.name })}
           />
         }
       >
@@ -82,11 +82,11 @@ export function UserMenu() {
             onClick={() => void handleSignOut()}
           >
             {logout.isPending ? <Spinner /> : <LogOutIcon />}
-            <span>{logout.isPending ? commonMessages.shell.signingOut : commonMessages.shell.signOut}</span>
+            <span>{logout.isPending ? m.common_shell_signing_out() : m.common_shell_sign_out()}</span>
           </DropdownMenuItem>
           {failed && (
             <p role="alert" className="px-2 py-1.5 text-xs text-destructive">
-              {commonMessages.shell.signOutFailed}
+              {m.common_shell_sign_out_failed()}
             </p>
           )}
         </DropdownMenuGroup>

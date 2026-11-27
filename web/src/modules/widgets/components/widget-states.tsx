@@ -4,7 +4,7 @@ import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
 import type { WidgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { widgetsMessages } from "#modules/widgets/messages.ts";
+import { m } from "#paraglide/messages.js";
 import { WidgetCard, WidgetContent, WidgetHeader } from "./widget.tsx";
 
 /** The card of a widget whose data is not in yet, of the size it will have. */
@@ -12,7 +12,7 @@ export function WidgetSkeleton({ look }: { look: WidgetLook }) {
   return (
     <WidgetCard
       className={look.className}
-      aria-label={widgetsMessages.states.loading({ title: look.title })}
+      aria-label={m.widgets_states_loading({ title: look.title })}
       aria-busy="true"
     >
       <WidgetHeader icon={look.icon} title={look.title} />
@@ -38,7 +38,7 @@ export function WidgetError({ look, reason, retry }: WidgetErrorProps) {
       <WidgetContent className="flex flex-1 items-center">
         <Alert variant="destructive">
           <CircleAlertIcon aria-hidden="true" />
-          <AlertTitle>{widgetsMessages.states.unavailable({ title: look.title })}</AlertTitle>
+          <AlertTitle>{m.widgets_states_unavailable({ title: look.title })}</AlertTitle>
           <AlertDescription>
             {look.errorDescription}
             {reason && <span className="block">{reason}</span>}
@@ -56,7 +56,7 @@ export function WidgetError({ look, reason, retry }: WidgetErrorProps) {
 
 /** The card of a widget that threw as it rendered, on data its service gave in a shape it does not expect. */
 export function WidgetCardFailure({ look, retry }: { look: WidgetLook; retry: () => void }) {
-  return <WidgetError look={look} reason={widgetsMessages.states.cardFailed} retry={retry} />;
+  return <WidgetError look={look} reason={m.widgets_states_card_failed()} retry={retry} />;
 }
 
 /** What a widget's region shows once it failed: its service did not answer, or its card threw on the answer. */

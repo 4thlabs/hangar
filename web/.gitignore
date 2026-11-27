@@ -3,6 +3,8 @@
 /src/libs/api/generated.msw.ts
 /dist
 /node_modules
+# Written by Paraglide from messages/, by `paraglide-js compile` or the Vite plugin.
+/src/paraglide/
 # Written by TanStack Router from src/routes/, by `tsr generate` or the Vite plugin.
 /src/routeTree.gen.ts
 # Where it was until #207, which a checkout built before it keeps: drop this line after #181.

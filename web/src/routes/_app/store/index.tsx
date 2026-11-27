@@ -8,9 +8,7 @@ import { storeQueries } from "#modules/store/api/store-queries.ts";
 import { StoreAppCard } from "#modules/store/components/store-app-card.tsx";
 import { StoreFilterMenu } from "#modules/store/components/store-filter-menu.tsx";
 import { parseStoreFilters, validateStoreSearch } from "#modules/store/helpers/store-search.ts";
-import { storeMessages } from "#modules/store/messages.ts";
-
-const words = storeMessages.list;
+import { m } from "#paraglide/messages.js";
 
 /** `/store`, the store's apps, filtered by its search. */
 export const Route = createFileRoute("/_app/store/")({
@@ -29,14 +27,14 @@ function StorePage() {
 
   return (
     <main>
-      <title>{words.documentTitle}</title>
+      <title>{m.store_list_document_title()}</title>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{words.title}</h1>
+        <h1 className="text-2xl font-semibold">{m.store_list_title()}</h1>
         <div className="flex items-center gap-2">
           <StoreFilterMenu counts={data?.counts} />
           <Link to="/store/new" className={buttonVariants({ variant: "outline" })}>
             <PlusIcon data-icon="inline-start" />
-            {words.newApp}
+            {m.store_list_new_app()}
           </Link>
         </div>
       </div>
@@ -49,9 +47,11 @@ function StorePage() {
         </div>
       )}
       {data && apps.length === 0 && (
-        <p className="text-sm text-muted-foreground">{total === 0 ? words.empty : words.noResults}</p>
+        <p className="text-sm text-muted-foreground">
+          {total === 0 ? m.store_list_empty() : m.store_list_no_results()}
+        </p>
       )}
-      {isPending && <p className="text-sm text-muted-foreground">{words.loading}</p>}
+      {isPending && <p className="text-sm text-muted-foreground">{m.store_list_loading()}</p>}
     </main>
   );
 }

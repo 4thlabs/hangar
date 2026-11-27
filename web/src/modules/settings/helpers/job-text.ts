@@ -1,8 +1,7 @@
 import type { Job, JobRun, JobState } from "#libs/api";
 import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
-import { settingsMessages } from "#modules/settings/messages.ts";
-
-const words = settingsMessages.jobs;
+import { settingsLabels } from "#modules/settings/helpers/settings-labels.ts";
+import { m } from "#paraglide/messages.js";
 
 // What the jobs' card says of the server's jobs and their runs.
 
@@ -25,12 +24,12 @@ const runTimeFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeS
 
 /** The name of `job`; the one the server gives for a job this page does not know, from a newer server. */
 export function jobName(job: string): string {
-  return Object.hasOwn(words.names, job) ? words.names[job as Job] : job;
+  return Object.hasOwn(settingsLabels.jobNames, job) ? settingsLabels.jobNames[job as Job]() : job;
 }
 
 /** The label of `state`; the one the server gives for a state this page does not know. */
 export function jobStateLabel(state: string): string {
-  return Object.hasOwn(words.states, state) ? words.states[state as JobState] : state;
+  return Object.hasOwn(settingsLabels.jobStates, state) ? settingsLabels.jobStates[state as JobState]() : state;
 }
 
 /** Whether `run` still waits or runs, which a cancel stops. */
@@ -52,5 +51,5 @@ export function runFailure(run: JobRun): string | undefined {
 export function askedAgainText(asked: JobRun): string {
   const job = jobName(asked.job);
 
-  return asked.state === "running" ? words.runs({ job }) : words.waits({ job });
+  return asked.state === "running" ? m.settings_jobs_runs({ job }) : m.settings_jobs_waits({ job });
 }

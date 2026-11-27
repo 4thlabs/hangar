@@ -12,9 +12,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "#modules/common
 import { Input } from "#modules/common/ui/input.tsx";
 import { storeMutations, storeQueries } from "#modules/store/api/store-queries.ts";
 import { appIdError } from "#modules/store/helpers/app-id.ts";
-import { storeMessages } from "#modules/store/messages.ts";
-
-const words = storeMessages.newApp;
+import { m } from "#paraglide/messages.js";
 
 /**
  * `/store/new`, a new app of the store. A page of its own beside `/store`, not a child rendered inside it: the
@@ -33,8 +31,8 @@ function NewAppPage() {
 
   return (
     <main>
-      <title>{words.documentTitle}</title>
-      <h1 className="text-2xl font-semibold">{words.title}</h1>
+      <title>{m.store_new_app_document_title()}</title>
+      <h1 className="text-2xl font-semibold">{m.store_new_app_title()}</h1>
       {error && <p className="text-sm text-destructive">{describeError(error)}</p>}
       {template && <NewAppEditor source={template.compose} />}
     </main>
@@ -71,7 +69,7 @@ function NewAppEditor({ source }: { source: string }) {
         return;
       }
 
-      toastSuccess(words.saved, words.savedDescription({ id: app.id }));
+      toastSuccess(m.store_new_app_saved(), m.store_new_app_saved_description({ id: app.id }));
       // The new app gets its own editor, so that a second save edits it rather than create it again.
       await navigate({ to: "/store/$id/edit", params: { id: app.id } });
     },
@@ -91,17 +89,17 @@ function NewAppEditor({ source }: { source: string }) {
 
           return (
             <Field className="max-w-sm" data-invalid={error !== undefined}>
-              <FieldLabel htmlFor="app-id">{words.identifier}</FieldLabel>
+              <FieldLabel htmlFor="app-id">{m.store_new_app_identifier()}</FieldLabel>
               <Input
                 id="app-id"
                 value={field.state.value}
-                placeholder={words.identifierPlaceholder}
+                placeholder={m.store_new_app_identifier_placeholder()}
                 className="font-mono"
                 aria-invalid={error !== undefined}
                 aria-describedby={error === undefined ? "app-id-description" : "app-id-error"}
                 onChange={event => field.handleChange(event.target.value.toLowerCase())}
               />
-              <FieldDescription id="app-id-description">{words.identifierDescription}</FieldDescription>
+              <FieldDescription id="app-id-description">{m.store_new_app_identifier_description()}</FieldDescription>
               {error !== undefined && <FieldError id="app-id-error">{error}</FieldError>}
             </Field>
           );
@@ -127,11 +125,11 @@ function NewAppEditor({ source }: { source: string }) {
             type="submit"
             className="self-start"
             pending={create.isPending}
-            pendingLabel={storeMessages.editor.validating}
+            pendingLabel={m.store_editor_validating()}
             icon={<SaveIcon data-icon="inline-start" />}
             disabled={isIdEmpty}
           >
-            {storeMessages.editor.save}
+            {m.store_editor_save()}
           </PendingButton>
         )}
       </form.Subscribe>
