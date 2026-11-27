@@ -16,7 +16,7 @@ import {
   envChanges,
   envFormValues,
   newVariableError,
-  newVariableIndex,
+  withVariable,
   type EnvVariable,
 } from "#modules/settings/helpers/env-variables.ts";
 import { settingsMessages } from "#modules/settings/messages.ts";
@@ -64,42 +64,63 @@ export function EnvSettingsCard() {
   );
 }
 
-/** The field of the value of a row of the env form, by its index: never by its name, which may hold a `.`. */
-type ValueField = `variables[${number}].value`;
-
-/** Where the server's codes go: a variable's under the value of its row, any other under the form. */
-function fieldsByCode(variables: readonly EnvVariable[]): FieldsByCode<ValueField> {
-  const valueOf = (name: string): ValueField | undefined => {
-    const index = variables.findIndex(variable => variable.key === name);
-
-    return index === -1 ? undefined : `variables[${index}].value`;
-  };
+/**
+ * Where the server's codes go: a variable's under its row, by its name, any other under the form. By name, not by row:
+ * the rows move as variables are added or removed, and a refusal stays with its variable.
+ */
+function fieldsByCode(variables: readonly EnvVariable[]): FieldsByCode<string> {
+  const rowOf = (name: string) => (variables.some(variable => variable.key === name) ? name : undefined);
 
   return {
-    "env.invalid_name": ({ name }) => valueOf(name),
-    "env.line_break": ({ name }) => valueOf(name),
-    "env.unwritable_value": ({ name }) => valueOf(name),
-    "env.updated_and_removed": ({ name }) => valueOf(name),
+    "env.invalid_name": ({ name }) => rowOf(name),
+    "env.line_break": ({ name }) => rowOf(name),
+    "env.unwritable_value": ({ name }) => rowOf(name),
+    "env.updated_and_removed": ({ name }) => rowOf(name),
   };
 }
 
 /** The variables as they are being changed. */
 function EnvForm({ variables }: { variables: Record<string, string> }) {
   const [shown, setShown] = useState<ReadonlySet<string>>(new Set());
+  // The server's refusal of a variable, by its name: it belongs to the variable, not to the row it sits in, which
+  // moves. Kept until that variable's value changes, or it is removed.
+  const [refusals, setRefusals] = useState<ReadonlyMap<string, string>>(new Map());
   const save = useMutation(settingsMutations.saveEnv());
 
   const form = useForm({
     defaultValues: envFormValues(variables),
     // Awaited, as the file a save writes starts a new form, keyed by its read: this one would go with its callbacks.
     onSubmit: async ({ value, formApi }) => {
+      setRefusals(new Map());
+
       try {
         await save.mutateAsync({ data: envChanges(variables, value.variables) });
         toastSuccess(words.saved, words.savedDescription);
       } catch (failure) {
-        formApi.setErrorMap({ onSubmit: formErrorsOf(failure, fieldsByCode(value.variables)) });
+        const { form: formError, fields } = formErrorsOf(failure, fieldsByCode(value.variables));
+
+        setRefusals(
+          new Map(Object.entries(fields).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+        );
+
+        formApi.setErrorMap({ onSubmit: { form: formError, fields: {} } });
       }
     },
   });
+
+  /** Forgets the server's refusal of `name`, once its value changes or it is removed. */
+  const forgetRefusal = (name: string) =>
+    setRefusals(previous => {
+      if (!previous.has(name)) {
+        return previous;
+      }
+
+      const next = new Map(previous);
+
+      next.delete(name);
+
+      return next;
+    });
 
   const toggleShown = (key: string) =>
     setShown(previous => {
@@ -112,10 +133,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
       return next;
     });
 
-  /**
-   * Adds the new name typed in, once it is one compose takes and no row holds; else says why, under it. Nothing for no
-   * name. Inserted in its place, not validated: the rows' meta moves with them, so a refusal stays with its variable.
-   */
+  /** Adds the new name typed in, in its place by name, once it is one compose takes and no row holds; else says why. */
   const add = () => {
     const name = form.getFieldValue("newKey").trim();
     const rows = form.getFieldValue("variables");
@@ -132,14 +150,8 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
       return;
     }
 
-    void form.insertFieldValue(
-      "variables",
-      newVariableIndex(rows, name),
-      { key: name, value: "" },
-      { dontValidate: true },
-    );
-
-    form.setFieldValue("newKey", "", { dontValidate: true });
+    form.setFieldValue("variables", withVariable(rows, name));
+    form.setFieldValue("newKey", "");
     setShown(previous => new Set(previous).add(name));
   };
 
@@ -157,12 +169,18 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
           <form.Field name="variables" mode="array">
             {rows =>
               rows.state.value.map((variable, index) => (
-                // Keyed by index, as the field is named: TanStack Form moves the meta of the rows, a refusal included,
-                // as they move.
-                <form.Field key={index} name={`variables[${index}].value`}>
+                // Keyed by the variable, which the row shows; the field is named by its place, never by the name, which
+                // may hold a `.`.
+                <form.Field key={variable.key} name={`variables[${index}].value`}>
                   {field => {
                     const id = `env-${variable.key}`;
-                    const error = errorText(field.state.meta.errors);
+                    const error = refusals.get(variable.key);
+
+                    const change = (value: string) => {
+                      field.handleChange(value);
+                      forgetRefusal(variable.key);
+                    };
+
                     const isShown = shown.has(variable.key);
 
                     return (
@@ -180,7 +198,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                             placeholder={words.valuePlaceholder}
                             aria-invalid={error !== undefined}
                             aria-describedby={error === undefined ? undefined : `${id}-error`}
-                            onChange={event => field.handleChange(event.target.value)}
+                            onChange={event => change(event.target.value)}
                           />
                           {error !== undefined && <FieldError id={`${id}-error`}>{error}</FieldError>}
                         </div>
@@ -201,7 +219,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                           variant="ghost"
                           size="icon"
                           aria-label={words.generate({ name: variable.key })}
-                          onClick={() => field.handleChange(randomSecret())}
+                          onClick={() => change(randomSecret())}
                         >
                           <KeyRoundIcon />
                         </Button>
@@ -210,9 +228,12 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                           variant="ghost"
                           size="icon"
                           aria-label={words.remove({ name: variable.key })}
-                          // Staged, not written: a variable only disappears once the save goes through.
-                          // Not validated: a validation would clear the refusals of the rows after it.
-                          onClick={() => rows.removeValue(index, { dontValidate: true })}
+                          // Staged, not written: a variable only disappears once the save goes through. By its name,
+                          // so that a second click removes nothing more.
+                          onClick={() => {
+                            rows.handleChange(current => current.filter(row => row.key !== variable.key));
+                            forgetRefusal(variable.key);
+                          }}
                         >
                           <Trash2Icon />
                         </Button>

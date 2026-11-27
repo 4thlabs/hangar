@@ -12,11 +12,20 @@ export type EnvFormValues = { variables: EnvVariable[]; newKey: string };
 /** The variables compose takes: letters, digits and `_`, not starting with a digit, as the server checks them. */
 const variableName = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/** Two variables in the order of their names' UTF-16 code units, as `Array.sort` orders strings: no locale's. */
+function byName(a: EnvVariable, b: EnvVariable): number {
+  if (a.key === b.key) {
+    return 0;
+  }
+
+  return a.key < b.key ? -1 : 1;
+}
+
 /** The form of the variables `read`, sorted by name, and no new name yet. */
 export function envFormValues(read: Record<string, string>): EnvFormValues {
   const variables = Object.entries(read)
     .map(([key, value]) => ({ key, value }))
-    .sort((a, b) => a.key.localeCompare(b.key));
+    .sort(byName);
 
   return { variables, newKey: "" };
 }
@@ -52,9 +61,7 @@ export function newVariableError(name: string, variables: readonly EnvVariable[]
   return undefined;
 }
 
-/** Where `name` goes among `variables`, which are sorted by name: the index of the first that sorts after it. */
-export function newVariableIndex(variables: readonly EnvVariable[], name: string): number {
-  const after = variables.findIndex(variable => variable.key.localeCompare(name) > 0);
-
-  return after === -1 ? variables.length : after;
+/** `variables` with `name` added, empty, in its place by name. */
+export function withVariable(variables: readonly EnvVariable[], name: string): EnvVariable[] {
+  return [...variables, { key: name, value: "" }].sort(byName);
 }
