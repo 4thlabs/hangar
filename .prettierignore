@@ -19,6 +19,7 @@ web/src/libs/api/generated.msw.ts
 web/src/paraglide
 web/project.inlang/*
 !web/project.inlang/settings.json
+!web/project.inlang/paraglide.config.ts
 # TanStack Router's tree of web/src/routes/
 web/src/routeTree.gen.ts
 # Where it was until #207, which a checkout built before it keeps: drop this line after #181.

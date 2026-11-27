@@ -22,5 +22,5 @@
       "#paraglide/*": ["./src/paraglide/*"]
     }
   },
-  "include": ["src", "*.config.ts"]
+  "include": ["src", "*.config.ts", "project.inlang/paraglide.config.ts"]
 }

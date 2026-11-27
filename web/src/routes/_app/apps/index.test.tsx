@@ -615,6 +615,30 @@ describe("compose commands", () => {
     expect(await screen.findByText("The output was cut short: the command goes on on the server.")).toBeDefined();
   });
 
+  it("names Up's confirmation after the options ticked in its menu", async () => {
+    appsPages();
+    renderAt("/apps/alpha");
+
+    /** Ticks or unticks `option` in Up's menu, asks for Up, and gives the confirmation's title, closing it. */
+    async function confirmationWith(option: RegExp): Promise<string | null> {
+      fireEvent.click(await screen.findByRole("button", { name: "Up options" }));
+      fireEvent.click(await screen.findByRole("menuitemcheckbox", { name: option }));
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+      fireEvent.click(await screen.findByRole("button", { name: /^Up: docker compose up -d / }));
+
+      const title = (await screen.findByRole("alertdialog")).querySelector("h2")?.textContent ?? null;
+
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+
+      return title;
+    }
+
+    expect(await confirmationWith(/Update the images/)).toBe("Update alpha?");
+    expect(await confirmationWith(/Force recreation/)).toBe("Update and recreate alpha?");
+    expect(await confirmationWith(/Update the images/)).toBe("Recreate alpha?");
+  });
+
   it("closes a confirmation whose selection was emptied", async () => {
     let listed = projects;
     const { changes } = appsPages();

@@ -198,12 +198,8 @@
   "common_actions_cancel": "Cancel",
   "common_actions_retry": "Retry",
   "common_pull_label": "Update the images",
-  "common_pull_verb": "Update",
-  "common_pull_outcome": "updated from its registry",
   "common_pull_consequence": "The images will be pulled from the registry and the containers recreated.",
   "common_force_recreate_label": "Force recreation",
-  "common_force_recreate_verb": "Recreate",
-  "common_force_recreate_outcome": "recreated",
   "common_force_recreate_consequence": [
     {
       "declarations": ["input count", "local countExact = count", "local countPlural = count: plural"],
@@ -218,10 +214,31 @@
   "common_operations_up": "Up",
   "common_operations_restart": "Restart",
   "common_operations_down": "Down",
-  "common_outcomes_up": "started or updated",
-  "common_outcomes_restart": "restarted",
-  "common_outcomes_down": "stopped and removed",
-  "common_compose_outcome": "{project} was {outcomes}.",
+  "common_compose_outcome": [
+    {
+      "declarations": ["input project", "input operation", "input pull", "input forceRecreate"],
+      "selectors": ["operation", "pull", "forceRecreate"],
+      "match": {
+        "operation=up, pull=false, forceRecreate=false": "{project} was started or updated.",
+        "operation=up, pull=true, forceRecreate=false": "{project} was updated from its registry.",
+        "operation=up, pull=false, forceRecreate=true": "{project} was recreated.",
+        "operation=up, pull=true, forceRecreate=true": "{project} was updated from its registry and recreated.",
+        "operation=restart, pull=false, forceRecreate=false": "{project} was restarted.",
+        "operation=down, pull=false, forceRecreate=false": "{project} was stopped and removed."
+      }
+    }
+  ],
+  "common_compose_combined_label": [
+    {
+      "declarations": ["input pull", "input forceRecreate"],
+      "selectors": ["pull", "forceRecreate"],
+      "match": {
+        "pull=true, forceRecreate=false": "Update",
+        "pull=false, forceRecreate=true": "Recreate",
+        "pull=true, forceRecreate=true": "Update and recreate"
+      }
+    }
+  ],
   "common_compose_app_count": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],

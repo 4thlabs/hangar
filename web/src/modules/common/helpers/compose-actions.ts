@@ -13,10 +13,6 @@ type UpFlagSpec = {
   arguments: readonly string[];
   /** The checkbox in Up's menu. */
   label: () => string;
-  /** What the run is called with this option, as a verb. */
-  verb: () => string;
-  /** What it did to an app, completing "<app> was …". */
-  outcome: () => string;
   /** What confirming commits to, about `count` apps. */
   consequence: (params: { count: number }) => string;
 };
@@ -32,21 +28,14 @@ export const upFlagSpecs: Readonly<Record<UpFlag, UpFlagSpec>> = {
   pull: {
     arguments: ["--pull", "always"],
     label: m.common_pull_label,
-    verb: m.common_pull_verb,
-    outcome: m.common_pull_outcome,
     consequence: m.common_pull_consequence,
   },
   forceRecreate: {
     arguments: ["--force-recreate"],
     label: m.common_force_recreate_label,
-    verb: m.common_force_recreate_verb,
-    outcome: m.common_force_recreate_outcome,
     consequence: m.common_force_recreate_consequence,
   },
 };
-
-/** A list of words joined as English joins them: "updated from its registry and recreated". */
-const conjunction = new Intl.ListFormat("en", { type: "conjunction" });
 
 const operationArguments: Readonly<Record<ComposeOperation, readonly string[]>> = {
   up: ["up", "-d"],
@@ -81,12 +70,17 @@ export function composeActionOfNotification(operation: string, flags: string): C
 
 /** What `action` did to `project`, as "jellyfin was updated from its registry and recreated.". */
 export function composeOutcome(action: ComposeAction, project: string): string {
-  const flags = actionFlags(action);
+  return m.common_compose_outcome({ project, operation: action.operation, ...flagVariants(action) });
+}
 
-  const outcomes =
-    flags.length === 0 ? [commonLabels.outcomes[action.operation]()] : flags.map(flag => upFlagSpecs[flag].outcome());
+/**
+ * The options of `action` as the variants of a compose message match them: `"true"` or `"false"` for each, both
+ * `"false"` for Restart and Down. Paraglide matches a variant's value as text.
+ */
+function flagVariants(action: ComposeAction): { pull: `${boolean}`; forceRecreate: `${boolean}` } {
+  const flags = new Set(actionFlags(action));
 
-  return m.common_compose_outcome({ project, outcomes: conjunction.format(outcomes) });
+  return { pull: flags.has("pull") ? "true" : "false", forceRecreate: flags.has("forceRecreate") ? "true" : "false" };
 }
 
 /** The options `action` carries, in their order. */
@@ -110,20 +104,13 @@ export function needsConfirmation(action: ComposeAction): boolean {
   return action.operation !== "up" || actionFlags(action).length > 0;
 }
 
-/** "Up", "Update", "Update and recreate", "Restart"…: the options' verbs when there are some. */
+/** "Up", "Update", "Update and recreate", "Restart"…: the operation's name, or what its options do when it has some. */
 export function composeLabel(action: ComposeAction): string {
-  const flags = actionFlags(action);
-
-  if (flags.length === 0) {
+  if (actionFlags(action).length === 0) {
     return commonLabels.operations[action.operation]();
   }
 
-  return capitalized(conjunction.format(flags.map(flag => upFlagSpecs[flag].verb().toLowerCase())));
-}
-
-/** `text` with a capital first letter. */
-function capitalized(text: string): string {
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+  return m.common_compose_combined_label(flagVariants(action));
 }
 
 /** How a confirmation or the output names `apps`: the app's name for one, else how many, as "3 apps". */
