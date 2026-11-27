@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use crate::RunError;
+use crate::{RunError, StoreError};
 
 use super::ComposeCommand;
 
@@ -49,6 +49,14 @@ pub enum ComposeError {
     NotUtf8 {
         /// The path.
         path: PathBuf,
+    },
+
+    /// `.env.global`, which every compose call reads, is not there and could not be created.
+    #[error(".env.global could not be created")]
+    Env {
+        /// Why it could not.
+        #[source]
+        source: Box<StoreError>,
     },
 
     /// `docker compose` failed on the app.

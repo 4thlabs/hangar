@@ -11,11 +11,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
+use hangar_core::Dotenv;
 use nix::sys::signal::{Signal, killpg};
 use nix::unistd::Pid;
 use tempfile::TempDir;
 
-/// The fake `docker`: it logs its arguments, one call per line, and its environment, then prints `<project> done`. With
+/// The fake `docker`: it logs its arguments, one call per line, and its environment, copies the file of `--env-file`
+/// beside the log, failing as compose does when it is not there, then prints `<project> done`. With
 /// `HANGAR_TEST_NO_COMPOSE` set, it has no `compose` command, and with `HANGAR_TEST_NO_DAEMON` no daemon answers it: it
 /// fails every call as docker does. It fails with code 3 on the project `HANGAR_TEST_FAIL` names, prints its stdin on
 /// `HANGAR_TEST_STDIN`'s, and prints `<project> started` then sleeps on `HANGAR_TEST_HANG`'s, on
@@ -30,6 +32,10 @@ project=""
 previous=""
 for arg in "$@"; do
   if [ "$previous" = "-p" ]; then project="$arg"; fi
+  if [ "$previous" = "--env-file" ]; then
+    if [ ! -e "$arg" ]; then echo "couldn't find env file: $arg" >&2; exit 1; fi
+    cp "$arg" "$HANGAR_TEST_LOG.env-global"
+  fi
   previous="$arg"
 done
 case "$project" in
@@ -53,7 +59,8 @@ categories:
   - { name: Media, color: purple, stacks: [traefik, jellyfin] }
 ";
 
-/// A data directory with the apps of [`CONFIG`] installed, the fake `docker`, and the log of its calls.
+/// A data directory with the apps of [`CONFIG`] installed and no `.env.global`, as a fresh one, the fake `docker`, and
+/// the log of its calls.
 struct Fixture {
     dir: TempDir,
     data: PathBuf,
@@ -180,6 +187,30 @@ fn brings_every_listed_app_up_in_order_and_prints_their_output() {
         stdout(&output),
         "traefik done\ngluetun done\njellyfin done\n"
     );
+}
+
+#[test]
+fn creates_env_global_before_the_first_up_on_a_fresh_data_directory() {
+    let fixture = Fixture::new();
+
+    let output = run(&mut fixture.hangar(&["store", "up"]));
+
+    assert!(output.status.success(), "{}", stderr(&output));
+
+    let read = fs::read_to_string(fixture.dir.path().join("docker.log.env-global"))
+        .expect("docker read .env.global");
+    let app_data = fixture.data.join("app-data").display().to_string();
+    let mode = fs::metadata(fixture.data.join(".env.global"))
+        .expect("created")
+        .permissions()
+        .mode();
+
+    assert_eq!(
+        Dotenv::parse(&read).get("APP_DATA_DIR"),
+        Some(&app_data),
+        "created before compose ran"
+    );
+    assert_eq!(mode & 0o777, 0o600);
 }
 
 #[test]

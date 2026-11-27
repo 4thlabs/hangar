@@ -2,7 +2,8 @@
 //! the check of a compose file before it is saved.
 //!
 //! The calls are the Waku version's, so that both run the same projects on one data directory: an app's project is
-//! its id, `-p <app>`, its file `app-installed/<app>/compose.yml`, and every call reads `.env.global`:
+//! its id, `-p <app>`, its file `app-installed/<app>/compose.yml`, and every call reads `.env.global`, which is
+//! created first when it is not there, as on a fresh data directory:
 //!
 //! ```text
 //! docker compose --env-file <data>/.env.global -p <app> -f <data>/app-installed/<app>/compose.yml up -d
@@ -55,7 +56,7 @@ pub use command::{ComposeCommand, UpOptions};
 pub use error::ComposeError;
 
 use crate::store::Disk;
-use crate::{Command, CommandRunner, Config, DataDir, Output, RunError, StoreApp};
+use crate::{Command, CommandRunner, Config, DataDir, GlobalEnv, Output, RunError, StoreApp};
 use batch::BatchRecorder;
 use command::Order;
 use project::ProjectName;
@@ -63,17 +64,23 @@ use project::ProjectName;
 /// The compose commands of a data directory's installed apps, run by a [`CommandRunner`].
 ///
 /// Each call checks the app anew, so that an app installed or uninstalled meanwhile, by another process or the Waku
-/// version, is seen.
+/// version, is seen; and creates `.env.global` when it is not there, as [`GlobalEnv::ensure_exists`] does, as compose
+/// refuses to run without it.
 #[derive(Debug, Clone)]
 pub struct Compose<R> {
     data_dir: DataDir,
+    env: GlobalEnv,
     runner: R,
 }
 
 impl<R: CommandRunner> Compose<R> {
     /// The compose commands of `data_dir`'s apps, run by `runner`.
     pub fn new(data_dir: DataDir, runner: R) -> Self {
-        Self { data_dir, runner }
+        Self {
+            env: GlobalEnv::new(&data_dir),
+            data_dir,
+            runner,
+        }
     }
 
     /// Whether compose takes `name` as a project, which Hangar gives an app's: lowercase letters, digits, `_` and `-`,
@@ -95,8 +102,9 @@ impl<R: CommandRunner> Compose<R> {
     ///
     /// Returns [`ComposeError::OptionBeforeCommand`] for a command passed as its arguments that does not start with its
     /// name, [`ComposeError::InvalidProject`] when compose cannot take `app` as a project name,
-    /// [`ComposeError::NotInstalled`] when it is not installed, neither running anything, and
-    /// [`ComposeError::Failed`] when compose fails.
+    /// [`ComposeError::NotInstalled`] when it is not installed, neither running anything,
+    /// [`ComposeError::Env`] when `.env.global` is not there and cannot be created, and [`ComposeError::Failed`] when
+    /// compose fails.
     pub async fn run(
         &self,
         app: &str,
@@ -106,6 +114,9 @@ impl<R: CommandRunner> Compose<R> {
         Self::check(&command)?;
 
         let file = self.installed_file(app).await?;
+
+        self.ensure_env().await?;
+
         // `-p` pins the project to the app: compose would derive it from the file's top-level `name`, a display
         // label ("Home Assistant"), and its containers would no longer match the installed app.
         let run = Command::new("docker")
@@ -130,14 +141,18 @@ impl<R: CommandRunner> Compose<R> {
     /// # Errors
     ///
     /// Returns [`ComposeError::Invalid`], with compose's complaint, when compose rejects the file,
-    /// [`ComposeError::Unchecked`] when it could not check it, as when docker does not start, and
-    /// [`ComposeError::NotUtf8`] when its path is not UTF-8.
+    /// [`ComposeError::Unchecked`] when it could not check it, as when docker does not start,
+    /// [`ComposeError::NotUtf8`] when its path is not UTF-8, and [`ComposeError::Env`] when `.env.global` is not
+    /// there and cannot be created.
     pub async fn validate(&self, file: &Path) -> Result<(), ComposeError> {
         let Some(path) = file.to_str() else {
             return Err(ComposeError::NotUtf8 {
                 path: file.to_owned(),
             });
         };
+
+        self.ensure_env().await?;
+
         // No `-p`: compose takes some folder names for no project (`llama.cpp`), and a check needs none.
         let check = Command::new("docker").args([
             "compose",
@@ -235,6 +250,16 @@ impl<R: CommandRunner> Compose<R> {
         Ok(file)
     }
 
+    /// Creates `.env.global` when it is not there: compose fails on an `--env-file` it cannot find.
+    async fn ensure_env(&self) -> Result<(), ComposeError> {
+        self.env
+            .ensure_exists()
+            .await
+            .map_err(|source| ComposeError::Env {
+                source: Box::new(source),
+            })
+    }
+
     /// `.env.global`, as an argument.
     fn env_file(&self) -> &str {
         Self::arg(self.data_dir.env_file())
@@ -267,7 +292,7 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
     /// Returns [`ComposeError::OptionBeforeCommand`] as [`run`](Self::run) does, [`ComposeError::EmptyBatch`] when
     /// `apps` is empty, [`ComposeError::AttachedBatch`] for an `up` that is
     /// not detached on several apps, and the errors of [`run`](Self::run) that come before compose runs, for the first
-    /// app that has one.
+    /// app that has one, then [`ComposeError::Env`] when `.env.global` is not there and cannot be created.
     ///
     /// # Panics
     ///
@@ -290,6 +315,8 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
         for app in &apps {
             self.installed_file(app).await?;
         }
+
+        self.ensure_env().await?;
 
         let (batch, recorder) = ComposeBatch::new(command.clone(), apps.clone());
         let compose = self.clone();
@@ -427,7 +454,7 @@ impl<R: CommandRunner + Clone + 'static> Compose<R> {
 mod tests {
     use std::collections::BTreeMap;
     use std::path::Path;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use futures::StreamExt;
     use tempfile::TempDir;
@@ -438,7 +465,7 @@ mod tests {
         UpOptions,
     };
     use crate::runtime::fake::{FakeRunner, Reply};
-    use crate::{Command, CommandRunner, Config, DataDir, Output, RunError};
+    use crate::{Command, CommandRunner, Config, DataDir, Dotenv, Output, RunError};
 
     /// The categories of the store: `beta-app` in both, to check that it runs once.
     const CATEGORIES: &str = "
@@ -599,6 +626,108 @@ categories:
         async fn capture(&self, command: &Command) -> Result<String, RunError> {
             self.fake.capture(command).await
         }
+    }
+
+    /// A runner that reads the file given as `--env-file` as each command starts, and fails as compose does when it
+    /// is not there: `couldn't find env file`.
+    #[derive(Debug, Clone, Default)]
+    struct ReadsEnv {
+        /// What each command read, in order.
+        read: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl ReadsEnv {
+        fn read(&self) -> Vec<String> {
+            self.read
+                .lock()
+                .expect("no test panics with the lock")
+                .clone()
+        }
+    }
+
+    impl CommandRunner for ReadsEnv {
+        async fn run(&self, command: &Command, _output: Output) -> Result<(), RunError> {
+            let at = command
+                .args
+                .iter()
+                .position(|arg| arg == "--env-file")
+                .expect("a compose call passes the env file");
+            let file = &command.args[at + 1];
+            let contents = tokio::fs::read_to_string(file)
+                .await
+                .map_err(|_| RunError::Failed {
+                    program: command.program.clone(),
+                    code: 1,
+                    stderr: format!("couldn't find env file: {file}"),
+                })?;
+
+            self.read
+                .lock()
+                .expect("no test panics with the lock")
+                .push(contents);
+
+            Ok(())
+        }
+
+        async fn capture(&self, command: &Command) -> Result<String, RunError> {
+            self.run(command, Output::Inherit)
+                .await
+                .map(|()| String::new())
+        }
+    }
+
+    #[tokio::test]
+    async fn creates_env_global_with_app_data_dir_before_compose_runs_on_a_fresh_data_directory() {
+        let (_dir, data_dir) = installed(&["alpha-app"]);
+        let compose = Compose::new(data_dir.clone(), ReadsEnv::default());
+        let app_data = data_dir.app_data().to_string_lossy().into_owned();
+
+        compose
+            .run("alpha-app", ComposeCommand::Restart, Output::Inherit)
+            .await
+            .expect("compose finds its env file");
+        // Each call creates it anew.
+        std::fs::remove_file(data_dir.env_file()).expect("the file was created");
+
+        let batch = compose
+            .batch(
+                ComposeCommand::Pull,
+                &["alpha-app"],
+                &config(),
+                OnFailure::Stop,
+            )
+            .await
+            .expect("the app is installed");
+        let report = batch.finished().await;
+
+        std::fs::remove_file(data_dir.env_file()).expect("the file was created");
+        compose
+            .validate(&data_dir.installed().join("alpha-app/compose.yml"))
+            .await
+            .expect("compose finds its env file");
+
+        let read = compose.runner.read();
+
+        assert_eq!(statuses(&report), ["alpha-app succeeded"]);
+        assert_eq!(read.len(), 3);
+        assert!(
+            read.iter()
+                .all(|env| Dotenv::parse(env).get("APP_DATA_DIR") == Some(&app_data)),
+            "{read:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn creates_no_env_global_for_a_run_it_refuses() {
+        let (_dir, data_dir) = installed(&[]);
+        let compose = Compose::new(data_dir.clone(), ReadsEnv::default());
+
+        compose
+            .run("missing-app", ComposeCommand::Restart, Output::Inherit)
+            .await
+            .expect_err("the app is not installed");
+
+        assert!(!data_dir.env_file().exists());
     }
 
     #[tokio::test]

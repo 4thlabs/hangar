@@ -3,6 +3,7 @@
 
 #![cfg(unix)]
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -21,7 +22,7 @@ use hangar_api::{
     Api, ApiClient, ComposeAction, ComposeBatch, ComposeEvent, ComposeOutcome, ComposeRequest,
     ComposeStatus, ErrorCode, ErrorDetail,
 };
-use hangar_core::{Docker, PasswordHash, Runtime};
+use hangar_core::{Docker, Dotenv, PasswordHash, Runtime};
 use hangar_server::{App, Settings};
 use http::StatusCode;
 use http::header::{COOKIE, ORIGIN, SET_COOKIE};
@@ -32,8 +33,8 @@ const URL: &str = "https://hangar.example.com";
 /// How long a test waits for what it checks before it fails.
 const PATIENCE: Duration = Duration::from_secs(30);
 
-/// The fake `docker`: it logs its arguments, one call per line, and prints two lines on stderr, where compose writes its
-/// progress. Between them, it holds the project that `HANGAR_TEST_HOLD` names until the file `HANGAR_TEST_RELEASE`
+/// The fake `docker`: it logs its arguments, one call per line, copies the file of `--env-file` beside the log, failing
+/// as compose does when it is not there, and prints two lines on stderr, where compose writes its progress. Between them, it holds the project that `HANGAR_TEST_HOLD` names until the file `HANGAR_TEST_RELEASE`
 /// exists, its child's wait and not the test's, and fails with code 1 on the one `HANGAR_TEST_FAIL` names. Given
 /// `HANGAR_TEST_SECRET`, it echoes it first, in a URL's credentials and alone, as a pull from a registry may.
 const FAKE_DOCKER: &str = r#"#!/bin/sh
@@ -42,6 +43,10 @@ project=""
 previous=""
 for arg in "$@"; do
   if [ "$previous" = "-p" ]; then project="$arg"; fi
+  if [ "$previous" = "--env-file" ]; then
+    if [ ! -e "$arg" ]; then echo "couldn't find env file: $arg" >&2; exit 1; fi
+    cp "$arg" "$HANGAR_TEST_LOG.env-global"
+  fi
   previous="$arg"
 done
 if [ -n "$HANGAR_TEST_SECRET" ]; then
@@ -184,6 +189,13 @@ impl Fixture {
             .lines()
             .map(str::to_owned)
             .collect()
+    }
+
+    /// The variables of `.env.global` as the last call of the fake `docker` read it.
+    fn env_read_by_docker(&self) -> BTreeMap<String, String> {
+        let copy = self.dir.path().join("docker.log.env-global");
+
+        Dotenv::parse(&fs::read_to_string(copy).expect("docker read .env.global"))
     }
 
     /// The project of each call of the fake `docker`, in order.
@@ -477,6 +489,52 @@ async fn runs_up_on_each_app_in_the_order_of_hangar_yml_and_ends_with_the_report
         fixture.docker_calls()[0].ends_with("up -d --pull always"),
         "{:?}",
         fixture.docker_calls()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn installs_then_brings_an_app_up_on_a_data_directory_without_env_global() -> quoll::Result<()>
+{
+    let fixture = Fixture::new();
+    let env_file = fixture.data.join(".env.global");
+
+    fs::remove_file(&env_file).expect("removed");
+
+    let (_, docker_host) = FakeDaemon::serve().await;
+    let server = fixture.serve(&docker_host, Behaviour::default()).await;
+    let (status, _) = server.post("/api/store/apps/beta/install").await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let (_, events) = output(
+        server
+            .api()
+            .compose()
+            .run(&request(update(), &["beta"]))
+            .await?,
+    )
+    .await;
+    let app_data = fixture.data.join("app-data").display().to_string();
+
+    assert_eq!(
+        events.last(),
+        Some(&ComposeEvent::End(hangar_api::ComposeReport {
+            apps: vec![succeeded("beta")],
+        }))
+    );
+    assert_eq!(
+        fixture.env_read_by_docker().get("APP_DATA_DIR"),
+        Some(&app_data),
+        "created before compose ran"
+    );
+    assert_eq!(
+        fs::metadata(&env_file)
+            .expect("created")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600
     );
     Ok(())
 }
