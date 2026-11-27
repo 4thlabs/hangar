@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { CircleAlertIcon } from "lucide-react";
 import type { WidgetPlacement } from "#libs/api";
-import { Region } from "#modules/common/components/region.tsx";
+import { RenderRegion } from "#modules/common/components/region.tsx";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
@@ -21,7 +21,7 @@ import { MinifluxCard } from "#modules/widgets/components/cards/miniflux-card.ts
 import { StockCard } from "#modules/widgets/components/cards/stock-card.tsx";
 import { TcgCollectorCard } from "#modules/widgets/components/cards/tcg-collector-card.tsx";
 import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
-import { WidgetCardFailure, WidgetSkeleton } from "#modules/widgets/components/widget-states.tsx";
+import { WidgetCardFailure } from "#modules/widgets/components/widget-states.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 
 /** `/`, the dashboard. */
@@ -117,17 +117,17 @@ function PlacedWidget({ placement }: { placement: WidgetPlacement }) {
   }
 }
 
-/** A widget in its own region: a card that throws as it renders fails alone, and the rest of the dashboard stands. */
+/**
+ * A widget in its own region: a card that throws as it renders, as the clock, fails alone, and the rest of the
+ * dashboard stands. A widget that reads has a region of its own around what it read, which catches first.
+ */
 function PlacedRegion({ placement }: { placement: WidgetPlacement }) {
   const look = widgetLook(placement.type);
 
   return (
-    <Region
-      fallback={<WidgetSkeleton look={look} />}
-      failure={({ retry }) => <WidgetCardFailure look={look} retry={retry} />}
-    >
+    <RenderRegion failure={({ retry }) => <WidgetCardFailure look={look} retry={retry} />}>
       <PlacedWidget placement={placement} />
-    </Region>
+    </RenderRegion>
   );
 }
 

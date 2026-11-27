@@ -8,9 +8,10 @@
   layout route, the wiring at `src/`), and modules that import only `common` and `libs`. What this record says of a
   module's root `.ts` applies to its `helpers/`. By #203 on 2026-11-27, [decisions 3](#decision-3-one-model-for-quoll-events),
   [4](#decision-4-errors-and-feedback) and [10](#decision-10-the-migration), and
-  [rule 15](#rule-15-route-preloading): loaders that warm with `prefetchQuery` and wait for nothing, the edited files
-  read with `useQuery` inside their region, how a failed region comes back, the suspense reads built on `queryOptions`,
-  and the bell's feed closed while the tab is hidden.
+  [rule 15](#rule-15-route-preloading): loaders that warm with `prefetchQuery` and wait for nothing, and the bell's
+  feed closed while the tab is hidden. On the maintainer's decision of 2026-11-27, also by #203, decision 4's regions
+  and rule 15: `QueryRegion` over the caller's `useQuery` and `RenderRegion`, with no `Suspense`, and a warmed read
+  that keeps a `staleTime` at least the warm one.
 - **Deciders:** Thomas
 - **Study:** read-only, on `origin/main` at `d4eeec5` (#176 merged since, at `e37fd06`), and the web changes of
   `4thlabs/issue-176` and `4thlabs/issue-178`. The rewrite of two modules was made in a scratch worktree. Its patch
@@ -99,7 +100,7 @@ module, and "a module may import another".
 | `*Snapshot.load()` in a server component                     | `useQuery(xQueries.y())`, warmed by a route loader's `ensureQueryData` (#186)      |
 | `router.reload()`, `AutoReload` every 30 s                   | the query cache, invalidated by mutations and by the `Events` feeds                |
 | `ActionResult.message`, in the reader's language             | an `ApiError` with a code and params, worded by the page (`describeError`)         |
-| `Suspense` over a marked promise ([ADR 0001](0001-cache.md)) | `Suspense` over `useSuspenseQuery`, in a region with its own error boundary        |
+| `Suspense` over a marked promise ([ADR 0001](0001-cache.md)) | `useQuery`, shown by a region with its own error boundary (amended by #203)        |
 | `use-stream-text` (text chunks)                              | typed `Events` items: one hook for feeds that do not end, one for streams that end |
 | `ServerTranslation` / `useTranslation`                       | none for now: `messages.ts` is a plain object, English only                        |
 | `searchCodec`                                                | the route's `validateSearch`, on functions of the module's root `.ts`              |
@@ -261,28 +262,32 @@ useEventStream<T, S>(initial, { fold, isEnd, requiresEnd?, onOpen?, onEnd? })
 - **Toasts.** `toastSuccess(title, description)` and `toastFailure(title, error)`, in `common/components`, are called
   from the mutation's own `onSuccess` and `onError`, with words from the module's messages. No global toast on every
   failure: some failures show inline, as the config editor's refusal.
-- **Regions.** `<Region failure fallback>` is `Suspense`, TanStack Router's `CatchBoundary` and
-  `QueryErrorResetBoundary`. With it, a card or a widget fails alone, and its retry asks its failed queries again.
-  Checked by `region.test.tsx`: a render error leaves its sibling, and a retried `useSuspenseQuery` shows its data.
-  It needs no class component of ours, and it replaces #178's `WidgetBoundary` class and ends #150's family. A page's
-  own failure is its route's `errorComponent` (#186). A query inside a region uses `useSuspenseQuery`, warmed by its
-  route's loader.
-  - Behaviour change, accepted: a failed refetch then keeps the stale data, as suspense queries throw only without
-    data, where `/apps` shows the error alone today.
-  - **Amended by #203 on 2026-11-27.** The edited files (env, config) are read with `useQuery` inside their region,
-    not `useSuspenseQuery`: one that suspends reads the file, then `refetchOnMount: "always"` reads it again as it
-    mounts. Their region still catches what their card throws as it renders.
-  - **A failed region comes back, as a query in a component would** (amended by #203). A failed query has no
-    observer while its region shows its failure, and a fresh `QueryErrorResetBoundary` has a suspense query throw its
-    cached error with no read. So the region resets its boundary as it mounts, before its children render, and a
-    region opened again reads its failed queries again. While it shows its failure, it keeps an observer on the query
-    that failed, found by its error, which reads nothing as it subscribes: an invalidation (a feed's, a mutation's) or
-    a focus reads it again, and its success renders the region again. It also renders again when the window gets the
-    focus back, and on the Retry its failure view offers. A failed query cannot be found by a cache event: a failure
-    already marks it invalidated, so `invalidateQueries` dispatches nothing for it.
-  - A read a suspense query or a loader takes is built with TanStack's `queryOptions` on orval's key and fetcher:
-    orval's options type their function as possibly `skipToken`, which `useSuspenseQuery` and `prefetchQuery` refuse
-    under `exactOptionalPropertyTypes`.
+- **Regions, amended by #203 on the maintainer's decision of 2026-11-27.** A card or a widget fails alone, and the
+  rest of the page stands. The component that renders the card reads with `useQuery`, and
+  `<QueryRegion query failure fallback>{data => ...}</QueryRegion>` shows the result, in TanStack's order: the data
+  once there is some, even when a later read failed; else the read's failure, with a Retry that reads again,
+  `refetch({ cancelRefetch: false })`, joining a read in flight; else the fallback. What the data renders sits in
+  TanStack Router's `CatchBoundary`, below the observer, reset when the query's `dataUpdatedAt` changes: a card that
+  threw on one answer renders the next. The failure is told `cause`, `read` or `render`, as a widget says either that
+  its service did not answer or that its card could not show the answer. A card that reads nothing, as the clock,
+  sits in `<RenderRegion failure resetKey>`, the boundary alone. No `Suspense` and no `QueryErrorResetBoundary`. It
+  needs no class component of ours, and it replaces #178's `WidgetBoundary` class and ends #150's family. A page's
+  own failure is its route's `errorComponent` (#186).
+  - **Why not suspense.** The record first chose `Region`, `Suspense` with `CatchBoundary` and
+    `QueryErrorResetBoundary`, and `useSuspenseQuery` inside. Two reviews of #203 found the same family of bugs: a
+    failed region does not come back as a query does. A reader that throws to a boundary is unmounted by it, and its
+    observer with it. With no observer, query-core takes the query as inactive: an invalidation or a focus reads
+    nothing, and when the last observer goes during a read that took the signal, the read is cancelled. Each patch
+    (an observer kept by the failure view, found by its error; a reset of the boundary as it mounts; a subscription
+    to the focus) re-created what the boundary had just destroyed, and two cases stayed open: a parent that renders
+    during the read left the region failed after a 200, and the Retry and the focus sent a cancelled read then a
+    second one. `useQuery({ throwOnError })` puts the reader below the boundary too. With the observer above it, in a
+    component that no failure unmounts, invalidation, focus, remount and polling are query-core's own, as on main, and
+    the region holds no state. The study is `hangar-region-design.md`, outside the repository. Its eleven cases are in
+    `region.test.tsx`, with a `queryFn` that takes the signal; run on the suspense `Region`, six of them fail.
+  - Behaviour change, accepted: a failed refetch keeps the stale data, where `/apps` shows the error alone today.
+  - `useSuspenseQuery` stays for a page's critical data, awaited by its loader and failed by its route's
+    `errorComponent`. None has any today.
 - **401.** The `QueryCache` and `MutationCache` `onError` call `session.signedOut(router)`. The route's `beforeLoad`
   calls `context.session.require()`, which redirects. The behaviour is the same as today. The instance comes from
   decision 7.
@@ -607,7 +612,7 @@ Accepted by the maintainer on 2026-11-26, as recommended:
 - orval's `shouldSplitQueryKey: true`, keys by path segment
 - `meta.invalidates` on mutations, run by the query client
 - `useEventFeed` and `useEventStream` as the only ways to read `Events` on the page
-- `Region` (Suspense, CatchBoundary, QueryErrorResetBoundary) per card and widget, with `useSuspenseQuery`, and stale data kept on a failed refetch
+- `Region` (Suspense, CatchBoundary, QueryErrorResetBoundary) per card and widget, with `useSuspenseQuery`, and stale data kept on a failed refetch (amended by #203 on the maintainer's decision of 2026-11-27: `QueryRegion` over the caller's `useQuery`, and `RenderRegion`, with no `Suspense`)
 - `messages.ts` per module, English only, partly reversing 2026-11-24
 - `createPage` in `page.ts` (`app/page.ts` until #207) as the one place the `QueryClient`, the `Session` and the router are created
 - The closure corollary: a helper of one hook that needs the hook's values is a closure, not a class (amended by #195
@@ -619,7 +624,7 @@ Accepted by the maintainer on 2026-11-26, as recommended:
 
 - Route loaders with `ensureQueryData`, and `useSuspenseQuery` inside the settings cards: their
   `refetchOnMount: "always"` and the `key={dataUpdatedAt}` form may need `gcTime` care under suspense. Only `Region`
-  itself was tested. Checked by #203: see the amendments of decision 4 and rule 15.
+  itself was tested. Checked by #203, and left: see the amendments of decision 4 and rule 15.
 - Porting `use-notifications` to `useEventFeed`. Done by #203: see decision 3.
 - Paraglide's actual import of a `messages.ts`: the shape matches its message functions, but it was not run.
 - The bundle size against #186's budget: `vite build` passes, and the size was not compared.
@@ -1043,18 +1048,18 @@ decides freshness, and the region's `useSuspenseQuery` (decision 4) finds its da
 
 Not checked: preloading was not run in this study.
 
-**Amended by #203 on 2026-11-27.** A loader warms with `void context.queryClient.prefetchQuery(...)`, given a
-`staleTime` of a second, and waits for nothing. Today only `/settings` (the store's status and the jobs) and
-`/store/new` (the template) have one:
+**Amended by #203 on 2026-11-27, the last point on the maintainer's decision of 2026-11-27.** A loader warms with
+`void context.queryClient.prefetchQuery(...)` and waits for nothing. Today only `/settings` (the store's status and
+the jobs) and `/store/new` (the template) have one:
 
 - **Not `ensureQueryData`.** Its failure would be the route's, the whole page down through `errorComponent` where a
   card or an alert says why, and the navigation would wait for the retries of a server that answers 502.
-- **The `staleTime`.** `defaultPreloadStaleTime: 0` runs the loader again on the click that follows a hover, and a
-  prefetch with the options' `staleTime: 0` would read again what the hover just read. A second covers it, as long as
-  a suspense read takes its data as fresh.
-- **Only before a suspense read, or a read with a long `staleTime`.** A `useQuery` read with `staleTime: 0` would be
-  read twice, by the loader, then again as the page mounts: the dashboard's placements and the store's apps have no
-  loader.
+- **A warmed read keeps a `staleTime` at least the warm one,** in its options, so that the loader and the card's
+  `useQuery` both take it: a second for the store's status and the jobs, `Infinity` for the template. With a
+  `staleTime` of 0 the read is made twice, by the loader, then again as the card mounts, and a third time on the
+  click that follows a hover, as `defaultPreloadStaleTime: 0` runs the loader again (counted by `settings.test.tsx`).
+  `useSuspenseQuery` hid it: it takes a read as fresh for a second at least. The dashboard's placements and the
+  store's apps have no loader.
 
 ### Rule 16: client global state
 
@@ -1092,7 +1097,7 @@ Accepted by the maintainer on 2026-11-26, as recommended:
 - The `// @ts-nocheck` hook on orval's mocks until orval fixes TS2698
 - `eventsource` as the tests' `EventSource`, and `FakeEventSource` kept only for reconnection tests
 - No virtualization until a list can pass a thousand rows uncapped; then TanStack Virtual in a leaf component
-- `defaultPreload: "intent"`, `defaultPreloadStaleTime: 0`, loaders of `ensureQueryData` only, the edited files and feeds left out (amended by #203: loaders of `prefetchQuery` with a `staleTime` of a second, only before a suspense read or a long-lived one)
+- `defaultPreload: "intent"`, `defaultPreloadStaleTime: 0`, loaders of `ensureQueryData` only, the edited files and feeds left out (amended by #203: loaders of `prefetchQuery`, on reads whose options keep a `staleTime` at least the warm one, a second or more)
 - No client store library (jotai removed): preferences in a `Preferences` instance created by `createPage`, read with `useSyncExternalStore`
 
 Left open, with no recommendation: a `pattern` in the contract for the rules the server holds (the app id), or not. It

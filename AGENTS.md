@@ -51,6 +51,10 @@ modules/common/                what two modules or more share: ui/, components/,
 libs/                          the API client, formats, preferences
 ```
 
+A card or a widget reads with `useQuery`, in the component that renders it, and shows the result through
+`QueryRegion`, or `RenderRegion` when it reads nothing: ADR 0002's decision 4, as #203 amended it on the maintainer's
+decision of 2026-11-27. No suspense read in a card.
+
 A module imports only `common`, `#libs/...` and its own files, and `common` no other module: the routes compose the
 modules. ESLint holds it, with `#modules/...` imports and no `..` segment, along with rule 4 on `helpers/` and
 `messages.ts` (no React, no TanStack, only types from `api/`, `hooks/`, `components/`, `ui/`) and no other file directly

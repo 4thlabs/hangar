@@ -1,11 +1,10 @@
-import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import type { ProjectSummary } from "#libs/api";
+import type { DockerOverview, ProjectSummary } from "#libs/api";
 import { dockerQueries } from "#modules/common/api/docker-queries.ts";
-import { Region } from "#modules/common/components/region.tsx";
-import { describeError } from "#modules/common/helpers/error-message.ts";
+import { QueryRegion } from "#modules/common/components/region.tsx";
 import { useDockerChanges } from "#modules/common/hooks/use-docker-changes.ts";
-import { WidgetError, WidgetSkeleton } from "#modules/widgets/components/widget-states.tsx";
+import { WidgetFailure, WidgetSkeleton } from "#modules/widgets/components/widget-states.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -24,27 +23,32 @@ import { HostMetrics } from "./host-metrics.tsx";
  */
 export function DockerCard() {
   const look = widgetLook("docker-general-stats");
-  // Read here, beside the host's suspense read rather than after it: a query in a component that suspends starts once
-  // it mounts. The updates show once read, and none while they are not.
+  // Read together, above the region: the updates show once read, and none while they are not.
+  const overview = useQuery(dockerQueries.overview());
   const { data: projects } = useQuery(dockerQueries.projects());
 
   // Followed while the host is read too, or failed: a change meanwhile reads it again.
   useDockerChanges();
 
   return (
-    <Region
+    <QueryRegion
+      query={overview}
       fallback={<WidgetSkeleton look={look} />}
-      failure={({ error, retry }) => <WidgetError look={look} reason={describeError(error)} retry={retry} />}
+      failure={failure => <WidgetFailure look={look} {...failure} />}
     >
-      <DockerHost projects={projects ?? []} />
-    </Region>
+      {host => <DockerHost overview={host} projects={projects ?? []} />}
+    </QueryRegion>
   );
 }
 
+type DockerHostProps = {
+  overview: DockerOverview;
+  projects: readonly ProjectSummary[];
+};
+
 /** The card, once the host is read, and the installed apps the image check found an update for. */
-function DockerHost({ projects }: { projects: readonly ProjectSummary[] }) {
+function DockerHost({ overview, projects }: DockerHostProps) {
   const look = widgetLook("docker-general-stats");
-  const { data: overview } = useSuspenseQuery(dockerQueries.overview());
 
   const outdated = projects
     .filter(project => project.updateAvailable)

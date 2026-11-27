@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { EyeIcon, EyeOffIcon, KeyRoundIcon, PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
-import { Region } from "#modules/common/components/region.tsx";
+import { QueryRegion } from "#modules/common/components/region.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -22,6 +22,9 @@ function randomSecret(): string {
  * and new ones to add. A save merges into the file as it is on disk: a variable added by hand meanwhile is kept.
  */
 export function EnvSettingsCard() {
+  // Shown from the read of this mount alone (`isFetchedAfterMount`): one cached from an earlier visit may be old.
+  const env = useQuery(settingsQueries.env());
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -31,30 +34,20 @@ export function EnvSettingsCard() {
           page are kept.
         </CardDescription>
       </CardHeader>
-      <Region failure="Could not show the environment">
-        <EnvContent />
-      </Region>
+      <QueryRegion query={env} failure="Could not show the environment">
+        {read => (
+          <>
+            {env.error && (
+              <CardContent>
+                <p className="text-sm text-destructive">{describeError(env.error)}</p>
+              </CardContent>
+            )}
+            {/* Keyed by the read: a save, which gives the file as written, starts the form again from it. */}
+            {env.isFetchedAfterMount && <EnvForm key={env.dataUpdatedAt} variables={read.variables} />}
+          </>
+        )}
+      </QueryRegion>
     </Card>
-  );
-}
-
-/**
- * The variables, read anew each time the tab opens and shown from that read alone. Read with `useQuery`, not a
- * suspense query: one that suspends reads the file, then `refetchOnMount: "always"` reads it again as it mounts.
- */
-function EnvContent() {
-  const { data, dataUpdatedAt, isFetchedAfterMount, error } = useQuery(settingsQueries.env());
-
-  return (
-    <>
-      {error && (
-        <CardContent>
-          <p className="text-sm text-destructive">{describeError(error)}</p>
-        </CardContent>
-      )}
-      {/* Keyed by the read: a save, which gives the file as written, starts the form again from it. */}
-      {data && isFetchedAfterMount && <EnvForm key={dataUpdatedAt} variables={data.variables} />}
-    </>
   );
 }
 

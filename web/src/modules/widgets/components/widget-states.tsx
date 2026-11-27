@@ -1,5 +1,6 @@
 import { CircleAlertIcon } from "lucide-react";
-import { RetryButton } from "#modules/common/components/region.tsx";
+import { RetryButton, type RegionFailure } from "#modules/common/components/region.tsx";
+import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
 import type { WidgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
@@ -51,4 +52,13 @@ export function WidgetError({ look, reason, retry }: WidgetErrorProps) {
 /** The card of a widget that threw as it rendered, on data its service gave in a shape it does not expect. */
 export function WidgetCardFailure({ look, retry }: { look: WidgetLook; retry: () => void }) {
   return <WidgetError look={look} reason="The card could not show what its service answered." retry={retry} />;
+}
+
+/** What a widget's region shows once it failed: its service did not answer, or its card threw on the answer. */
+export function WidgetFailure({ look, cause, error, retry }: RegionFailure & { look: WidgetLook }) {
+  if (cause === "render") {
+    return <WidgetCardFailure look={look} retry={retry} />;
+  }
+
+  return <WidgetError look={look} reason={describeError(error)} retry={retry} />;
 }

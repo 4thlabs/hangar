@@ -127,6 +127,10 @@ As decided with ADR 0002 (decision 7), reversing the "Classes" section of AGENTS
   render: never in a condition, a loop, a callback or after an early return.
 - **An effect lists what it reads** (`exhaustive-deps`). A handler it calls without reconnecting when the handler
   changes is a `useEffectEvent`.
+- **A card's read sits above its region.** The component that renders a card or a widget calls `useQuery` and shows
+  it through `QueryRegion`; a card that reads nothing sits in a `RenderRegion` (ADR 0002, decision 4, as #203 amended
+  it). No `useSuspenseQuery` and no `throwOnError` in a card: a reader that throws to a boundary is unmounted with its
+  observer, and the card no longer comes back on an invalidation or a focus.
 - One tree, never one per breakpoint: AGENTS.md's "Responsive layouts".
 
 ## Readability

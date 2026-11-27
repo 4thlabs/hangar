@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { SaveIcon } from "lucide-react";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
-import { Region } from "#modules/common/components/region.tsx";
+import { QueryRegion } from "#modules/common/components/region.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { useYamlEditor } from "#modules/common/hooks/use-yaml-editor.tsx";
@@ -10,6 +10,9 @@ import { settingsMutations, settingsQueries } from "#modules/settings/api/settin
 
 /** `hangar.yml`, edited as it is written, and checked by the server before it is saved. */
 export function ConfigSettingsCard() {
+  // Shown from the read of this mount alone (`isFetchedAfterMount`): one cached from an earlier visit may be old.
+  const config = useQuery(settingsQueries.config());
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -19,29 +22,20 @@ export function ConfigSettingsCard() {
           before it is written.
         </CardDescription>
       </CardHeader>
-      <Region failure="Could not show the configuration">
-        <ConfigContent />
-      </Region>
+      <QueryRegion query={config} failure="Could not show the configuration">
+        {read => (
+          <>
+            {config.error && (
+              <CardContent>
+                <p className="text-sm text-destructive">{describeError(config.error)}</p>
+              </CardContent>
+            )}
+            {/* Keyed by the read: a save, which reads the file again, opens the editor on what was saved. */}
+            {config.isFetchedAfterMount && <ConfigEditor key={config.dataUpdatedAt} source={read.source} />}
+          </>
+        )}
+      </QueryRegion>
     </Card>
-  );
-}
-
-/**
- * The file, read anew each time the tab opens and shown from that read alone. Read with `useQuery`, not a suspense
- * query: one that suspends reads the file, then `refetchOnMount: "always"` reads it again as it mounts.
- */
-function ConfigContent() {
-  const { data, dataUpdatedAt, isFetchedAfterMount, error } = useQuery(settingsQueries.config());
-
-  return (
-    <>
-      {error && (
-        <CardContent>
-          <p className="text-sm text-destructive">{describeError(error)}</p>
-        </CardContent>
-      )}
-      {data && isFetchedAfterMount && <ConfigEditor key={dataUpdatedAt} source={data.source} />}
-    </>
   );
 }
 

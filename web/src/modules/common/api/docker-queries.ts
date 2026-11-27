@@ -1,8 +1,8 @@
-import { queryOptions, type QueryKey } from "@tanstack/react-query";
+import type { QueryKey } from "@tanstack/react-query";
 import {
-  dockerOverview,
   getComposeBatchesQueryKey,
   getDockerOverviewQueryKey,
+  getDockerOverviewQueryOptions,
   getDockerProjectQueryOptions,
   getDockerProjectsQueryKey,
   getDockerProjectsQueryOptions,
@@ -15,13 +15,8 @@ export const dockerQueries = {
   projects: () => getDockerProjectsQueryOptions(),
   /** One installed app, its services and containers; a 404 for one that is not installed. */
   project: (project: string) => getDockerProjectQueryOptions(project),
-  /**
-   * The daemon's version, its containers, images and volumes, and the host's memory; read in the dashboard's region.
-   * Built on orval's key and fetcher, as orval's options type their function as possibly `skipToken`, which a suspense
-   * query refuses under `exactOptionalPropertyTypes`.
-   */
-  overview: () =>
-    queryOptions({ queryKey: getDockerOverviewQueryKey(), queryFn: ({ signal }) => dockerOverview({ signal }) }),
+  /** The daemon's version, its containers, images and volumes, and the host's memory. */
+  overview: () => getDockerOverviewQueryOptions(),
 };
 
 /** Every read of the Docker routes, the compose batches included: the start of their keys. */
