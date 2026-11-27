@@ -166,6 +166,64 @@ describe("the notifications' bell", () => {
     expect(await screen.findByRole("button", { name: "Notifications, 1 unread" })).toBeDefined();
   });
 
+  it("shows the list read as the bell closes, before the server answers, and reads nothing again once it does", async () => {
+    let answerRead: () => void = () => {};
+    const calls = countCalls();
+
+    bell(() => recent);
+    network.use(getNotificationsReadMockHandler(() => new Promise<void>(resolve => (answerRead = resolve))));
+    renderAt("/apps");
+
+    const button = await screen.findByRole("button", { name: "Notifications, 1 unread" });
+
+    fireEvent.click(button);
+    await screen.findByText("Store: installation finished");
+    fireEvent.click(button);
+
+    // The mark is sent, and not answered yet: the bell already says the list is read.
+    await waitFor(() => expect(calls("POST /api/notifications/read")).toBe(1));
+    expect(await screen.findByRole("button", { name: "Notifications" })).toBeDefined();
+
+    // Answered, then a tick, in which a read of the list would start: the stream keeps the list, none does.
+    await act(async () => {
+      answerRead();
+      await new Promise(resolve => setTimeout(resolve, 10));
+    });
+
+    expect(calls("GET /api/notifications")).toBe(1);
+    expect(screen.getByRole("button", { name: "Notifications" })).toBeDefined();
+  });
+
+  it("keeps unread what the stream brings while the list is being marked read", async () => {
+    let answerRead: () => void = () => {};
+    const calls = countCalls();
+    const { stream } = bell(() => recent);
+
+    network.use(getNotificationsReadMockHandler(() => new Promise<void>(resolve => (answerRead = resolve))));
+    renderAt("/apps");
+    await waitFor(() => expect(stream.urls).toEqual(["/api/notifications/events?since=2&epoch=first"]));
+
+    const button = await screen.findByRole("button", { name: "Notifications, 1 unread" });
+
+    fireEvent.click(button);
+    await screen.findByText("Store: installation finished");
+    fireEvent.click(button);
+    await waitFor(() => expect(calls("POST /api/notifications/read")).toBe(1));
+    expect(await screen.findByRole("button", { name: "Notifications" })).toBeDefined();
+
+    // Filed while the mark waits for its answer: after the mark, so not read by it.
+    stream.send({ kind: "filed", notification: notification(3, { key: "storeUpdated" }) });
+
+    expect(await screen.findByRole("button", { name: "Notifications, 1 unread" })).toBeDefined();
+
+    await act(async () => {
+      answerRead();
+      await new Promise(resolve => setTimeout(resolve, 10));
+    });
+
+    expect(screen.getByRole("button", { name: "Notifications, 1 unread" })).toBeDefined();
+  });
+
   it("keeps what the stream brought over a read of the list that was in flight", async () => {
     let reads = 0;
     let answerLate: (list: RecentNotifications) => void = () => {};
