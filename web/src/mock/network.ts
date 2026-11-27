@@ -1,4 +1,11 @@
-import { sse, type PathParams, type ServerSentEventResolverExtras } from "msw";
+import {
+  isCommonAssetRequest,
+  RequestHandler,
+  sse,
+  type AnyHandler,
+  type PathParams,
+  type ServerSentEventResolverExtras,
+} from "msw";
 import { setupServer } from "msw/node";
 import { onTestFinished } from "vitest";
 import type { ErrorDetail } from "#libs/api";
@@ -25,82 +32,62 @@ const shell = [
  */
 export const network = setupServer(...shell);
 
-/** The header the tests' `fetch` names each call by, which msw's events then name it by too. */
-const callHeader = "x-hangar-test-call";
-
-/** The calls the page made that msw has not seen yet, and that have not settled either, by id. */
-const calls = new Map<string, string>();
-
-/** Each call no handler answered, as `METHOD /path?query`, since they were last taken. */
-const unhandled: string[] = [];
-
-let lastCall = 0;
-
-network.events.on("request:start", ({ request }) => {
-  calls.delete(request.headers.get(callHeader) ?? "");
-});
-
-// msw names a call unhandled once it looked up the handlers, before it rejects it: no handler of the list matched.
-network.events.on("request:unhandled", ({ request }) => {
-  const url = new URL(request.url);
-
-  unhandled.push(`${request.method} ${url.pathname}${url.search}`);
-});
+/** The calls the page made since the last check, each with whether a handler matched it, as `METHOD /path?query`. */
+const calls: Promise<string | null>[] = [];
 
 /**
- * `fetch`, each of whose calls is kept from the moment the page makes it until msw sees it, or it settles (as one the
- * page aborts before it is sent), so that `unhandledCalls` waits for it.
+ * Whether no handler of `handlers` answers `request`, as msw picks one: by each handler's own `test`, msw's public
+ * check of a request against a handler. A request `bypass()` marked goes past msw, and a common asset (a font, an
+ * image) is let through by msw's `"error"`: neither fails a test. The one rule of msw's left out is `{ once: true }`,
+ * which no test uses.
+ *
+ * @returns The call, `METHOD /path?query`, when no handler answers it, else `null`.
+ */
+async function unmatched(request: Request, handlers: readonly AnyHandler[]): Promise<string | null> {
+  const isBypassed = request.headers.get("accept")?.includes("msw/passthrough") === true;
+
+  if (isBypassed || isCommonAssetRequest(request)) {
+    return null;
+  }
+
+  for (const handler of handlers) {
+    if (handler instanceof RequestHandler && (await handler.test({ request }))) {
+      return null;
+    }
+  }
+
+  const url = new URL(request.url);
+
+  return `${request.method} ${url.pathname}${url.search}`;
+}
+
+/**
+ * `fetch`, each of whose calls is checked against the network's handlers at the moment the page makes it, before
+ * anything can abort it or msw sees it: the check needs no network, and `unhandledCalls` awaits it.
  */
 export function trackedFetch(fetch: typeof globalThis.fetch): typeof globalThis.fetch {
   return (input, init) => {
-    lastCall += 1;
+    let request: Request;
 
-    const id = String(lastCall);
-    const isRequest = input instanceof Request;
-    const headers = new Headers(init?.headers ?? (isRequest ? input.headers : undefined));
-    const method = init?.method ?? (isRequest ? input.method : "GET");
+    try {
+      // A copy: the page's own request, and its body, go to `fetch` untouched.
+      request = new Request(input instanceof Request ? input.clone() : input, init);
+    } catch {
+      // No request can be made of it: `fetch` rejects it, and nothing reaches a handler.
+      return fetch(input, init);
+    }
 
-    headers.set(callHeader, id);
-    calls.set(id, `${method} ${isRequest ? input.url : String(input)}`);
+    calls.push(unmatched(request, network.listHandlers()));
 
-    const answer = fetch(input, { ...init, headers });
-    const settled = () => calls.delete(id);
-
-    answer.then(settled, settled);
-
-    return answer;
+    return fetch(input, init);
   };
 }
 
-/** The next turn of the event loop, after every microtask queued before it. */
-function nextTurn(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0));
-}
-
-/** How long a call may take to reach msw before `unhandledCalls` gives up on it. */
-const reachWithinMs = 5_000;
-
-/**
- * The calls no handler answered since the last time, which are then forgotten: once every call made so far reached
- * msw, or settled, and msw looked up its handlers. A lookup awaits only the handlers' own checks, no I/O: the turn after
- * the last call reached msw holds its verdict. A handler that never answers, and a stream left open, do not hold it up.
- *
- * @throws When a call has not reached msw nor settled within 5 seconds, naming it.
- */
+/** The calls made since the last time that no handler answered, as `METHOD /path?query`, which are then forgotten. */
 export async function unhandledCalls(): Promise<string[]> {
-  const deadline = Date.now() + reachWithinMs;
+  const checked = await Promise.all(calls.splice(0));
 
-  while (calls.size > 0) {
-    if (Date.now() > deadline) {
-      throw new Error(`these calls reached no handler and did not settle: ${[...calls.values()].join(", ")}`);
-    }
-
-    await nextTurn();
-  }
-
-  await nextTurn();
-
-  return unhandled.splice(0);
+  return checked.filter(call => call !== null);
 }
 
 /** A problem of `status`, as the server answers an error, with `detail`: thrown from a handler, which sends it. */

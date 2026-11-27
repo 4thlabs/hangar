@@ -3,32 +3,54 @@ import { createVitest } from "vitest/node";
 import { getHealthCheckMockHandler } from "#libs/api/mock";
 import { network } from "#mock/network.ts";
 
-/** How each test of the Vitest file `path` ended, by name, run with the suite's own config and setup. */
-async function outcomes(path: string): Promise<Record<string, string | undefined>> {
-  const vitest = await createVitest("test", { watch: false, include: [path], reporters: [], silent: true });
+/**
+ * How the Vitest file `path` ended, run with the suite's own config and setup: each test by name, then the errors of the
+ * file itself, as of its `afterAll`.
+ */
+async function outcomes(path: string) {
+  const vitest = await createVitest("test", {
+    watch: false,
+    include: [path],
+    reporters: [],
+    silent: true,
+    provide: { isUnhandledCallsFixture: true },
+  });
 
   try {
     await vitest.start([path]);
 
-    return Object.fromEntries(
-      vitest.state
-        .getFiles()
-        .flatMap(file => file.tasks)
-        .map(task => [task.name, task.result?.state]),
-    );
+    const files = vitest.state.getFiles();
+
+    return {
+      tests: Object.fromEntries(files.flatMap(file => file.tasks).map(task => [task.name, task.result?.state])),
+      fileErrors: files.flatMap(file => file.result?.errors ?? []).map(error => error.message),
+    };
   } finally {
     await vitest.close();
   }
 }
 
 describe("the tests' network", () => {
-  it("fails the test that made a call no handler answers, awaited or not, the last of its file included", async () => {
-    expect(await outcomes("src/mock/unhandled-calls.fixture.ts")).toEqual({
+  // A call is checked at the first check after it is made: its own test's, then the next test's, then the file's.
+  it("fails the first check after a call no handler answers: its test's, the next test's, or its file's", async () => {
+    const { tests, fileErrors } = await outcomes("src/mock/unhandled-calls.fixture.ts");
+
+    expect(tests).toEqual({
       "awaits a call no handler answers, whose failure it catches": "fail",
       "makes a call no handler answers as its last line": "fail",
       "makes a call a handler answers": "pass",
+      "reads with a query no handler answers, which its unmount aborts": "fail",
+      // A timer's call comes after its test's check: the next test's fails.
+      "starts a timer of 0 ms whose call no handler answers": "pass",
+      "waits 1 ms after that timer": "fail",
+      "starts a timer of 30 ms whose call no handler answers": "pass",
+      "waits 50 ms after that timer": "fail",
       "makes a call no handler answers as its last line, the last test of its file": "fail",
     });
+
+    expect(fileErrors).toEqual([
+      "no handler answered 1 call(s) after the last test's check: GET /api/health?after=all",
+    ]);
   }, 60_000);
 
   it("answers a call a test adds a handler for", async () => {
