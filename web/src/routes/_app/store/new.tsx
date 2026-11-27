@@ -7,7 +7,7 @@ import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { toastSuccess } from "#modules/common/components/toast.ts";
 import { YamlEditor } from "#modules/common/components/yaml-editor.tsx";
 import { describeError } from "#modules/common/helpers/error-message.ts";
-import { errorText, formErrorsOf, type FieldsByCode } from "#modules/common/helpers/form-errors.ts";
+import { errorText, formErrorsOf, submitAfterRefusal, type FieldsByCode } from "#modules/common/helpers/form-errors.ts";
 import { Field, FieldDescription, FieldError, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
 import { storeMutations, storeQueries } from "#modules/store/api/store-queries.ts";
@@ -82,7 +82,7 @@ function NewAppEditor({ source }: { source: string }) {
       className="flex flex-col gap-3"
       onSubmit={event => {
         event.preventDefault();
-        void form.handleSubmit();
+        void submitAfterRefusal(form);
       }}
     >
       <form.Field name="id" validators={{ onSubmit: ({ value }) => appIdError(value) }}>

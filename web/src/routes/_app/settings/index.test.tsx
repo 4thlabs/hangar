@@ -169,6 +169,83 @@ describe("/settings#env, its refusals", () => {
     expect(kept.getAttribute("aria-invalid")).toBe("false");
   });
 
+  it("keeps a refusal with its variable when a row is added before it, or an earlier one removed", async () => {
+    settingsPage();
+    network.use(
+      getEnvReadMockHandler({ variables: { KEPT: "1", SAME: "2", ZED: "3" } }),
+      getEnvSaveMockHandler(() => {
+        throw coded(400, { code: "env.line_break", params: { name: "SAME" }, message: "line break" });
+      }),
+    );
+
+    renderAt("/settings#env");
+
+    await screen.findByLabelText("SAME");
+
+    const refusal = "The value of SAME cannot contain a line break.";
+    // Read again each time: the rows' inputs are their places, which the variables move through.
+    const describedBySame = () => screen.getByLabelText("SAME").getAttribute("aria-describedby");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(refusal)).toBeDefined();
+
+    // Added before it, by name.
+    fireEvent.change(screen.getByLabelText("Name of a new variable"), { target: { value: "AAA" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await screen.findByLabelText("AAA");
+
+    expect(screen.getByText(refusal).id).toBe(describedBySame());
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove KEPT" }));
+    await waitFor(() => expect(screen.queryByLabelText("KEPT")).toBeNull());
+
+    expect(screen.getByText(refusal).id).toBe(describedBySame());
+    expect(screen.getByLabelText("AAA").getAttribute("aria-invalid")).toBe("false");
+    expect(screen.getByLabelText("ZED").getAttribute("aria-invalid")).toBe("false");
+  });
+
+  it("adds nothing, and says nothing, for an Enter with no name", async () => {
+    settingsPage();
+    network.use(getEnvReadMockHandler({ variables: { KEPT: "1" } }));
+    renderAt("/settings#env");
+
+    const name = await screen.findByLabelText<HTMLInputElement>("Name of a new variable");
+
+    fireEvent.keyDown(name, { key: "Enter" });
+
+    expect(name.getAttribute("aria-invalid")).toBe("false");
+    expect(screen.queryByText(/Invalid variable name/)).toBeNull();
+  });
+
+  it("retries a save the server refused, with nothing changed", async () => {
+    let isDown = true;
+    const calls = countCalls();
+
+    settingsPage();
+    network.use(
+      getEnvReadMockHandler({ variables: { KEPT: "1" } }),
+      getEnvSaveMockHandler(() => {
+        if (isDown) {
+          throw problem(500, "the disk is full");
+        }
+
+        return { variables: { KEPT: "one" } };
+      }),
+    );
+
+    renderAt("/settings#env");
+
+    fireEvent.change(await screen.findByLabelText("KEPT"), { target: { value: "one" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("The disk is full.")).toBeDefined();
+
+    isDown = false;
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("The global environment was saved.")).toBeDefined();
+    expect(calls("PUT /api/env")).toBe(2);
+  });
+
   it("refuses a new name compose does not take, before any save", async () => {
     const calls = countCalls();
 
@@ -292,6 +369,35 @@ describe("/settings#config", () => {
 
     expect(refusal.tagName).toBe("PRE");
     expect(screen.getAllByText("Invalid hangar.yml: categories[0].color: required.")).toHaveLength(1);
+  });
+
+  it("retries a save of hangar.yml the server refused, with nothing changed", async () => {
+    let isDown = true;
+    const calls = countCalls();
+
+    settingsPage();
+    network.use(
+      getConfigReadMockHandler({ source: "categories: []\n" }),
+      getConfigSaveMockHandler(() => {
+        if (isDown) {
+          throw problem(500, "the disk is full");
+        }
+      }),
+      // What a save makes stale, read again once it succeeds.
+      getStoreAppsMockHandler(),
+    );
+
+    renderAt("/settings#config");
+
+    await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("categories: []"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("The disk is full.")).toBeDefined();
+
+    isDown = false;
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("The configuration was saved.")).toBeDefined();
+    expect(calls("PUT /api/config")).toBe(2);
   });
 
   it("shows a code of hangar.yml's under the editor, until the file changes", async () => {

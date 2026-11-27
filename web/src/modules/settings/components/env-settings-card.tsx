@@ -6,7 +6,7 @@ import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { QueryRegion } from "#modules/common/components/region.tsx";
 import { toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
-import { errorText, formErrorsOf, type FieldsByCode } from "#modules/common/helpers/form-errors.ts";
+import { errorText, formErrorsOf, submitAfterRefusal, type FieldsByCode } from "#modules/common/helpers/form-errors.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "#modules/common/ui/field.tsx";
@@ -16,7 +16,7 @@ import {
   envChanges,
   envFormValues,
   newVariableError,
-  withVariable,
+  newVariableIndex,
   type EnvVariable,
 } from "#modules/settings/helpers/env-variables.ts";
 import { settingsMessages } from "#modules/settings/messages.ts";
@@ -112,10 +112,18 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
       return next;
     });
 
-  /** Adds the new name typed in, once it is one compose takes and no row holds; else says why, under it. */
+  /**
+   * Adds the new name typed in, once it is one compose takes and no row holds; else says why, under it. Nothing for no
+   * name. Inserted in its place, not validated: the rows' meta moves with them, so a refusal stays with its variable.
+   */
   const add = () => {
     const name = form.getFieldValue("newKey").trim();
     const rows = form.getFieldValue("variables");
+
+    if (name.length === 0) {
+      return;
+    }
+
     const error = newVariableError(name, rows);
 
     if (error !== undefined) {
@@ -124,8 +132,14 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
       return;
     }
 
-    form.setFieldValue("variables", withVariable(rows, name));
-    form.setFieldValue("newKey", "");
+    void form.insertFieldValue(
+      "variables",
+      newVariableIndex(rows, name),
+      { key: name, value: "" },
+      { dontValidate: true },
+    );
+
+    form.setFieldValue("newKey", "", { dontValidate: true });
     setShown(previous => new Set(previous).add(name));
   };
 
@@ -133,7 +147,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
     <form
       onSubmit={event => {
         event.preventDefault();
-        void form.handleSubmit();
+        void submitAfterRefusal(form);
       }}
     >
       {/* Inert while the save runs: the form starts again from the file written, which would drop what is typed
@@ -143,7 +157,9 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
           <form.Field name="variables" mode="array">
             {rows =>
               rows.state.value.map((variable, index) => (
-                <form.Field key={variable.key} name={`variables[${index}].value`}>
+                // Keyed by index, as the field is named: TanStack Form moves the meta of the rows, a refusal included,
+                // as they move.
+                <form.Field key={index} name={`variables[${index}].value`}>
                   {field => {
                     const id = `env-${variable.key}`;
                     const error = errorText(field.state.meta.errors);
@@ -195,7 +211,8 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                           size="icon"
                           aria-label={words.remove({ name: variable.key })}
                           // Staged, not written: a variable only disappears once the save goes through.
-                          onClick={() => rows.removeValue(index)}
+                          // Not validated: a validation would clear the refusals of the rows after it.
+                          onClick={() => rows.removeValue(index, { dontValidate: true })}
                         >
                           <Trash2Icon />
                         </Button>

@@ -54,3 +54,20 @@ export function errorText(errors: readonly unknown[]): string | undefined {
 
   return texts.length > 0 ? texts.join(" ") : undefined;
 }
+
+/** What `submitAfterRefusal` needs of a TanStack form: its error map, and its submit. */
+type SubmittableForm = {
+  setErrorMap: (errorMap: { onSubmit: { fields: Record<string, never> } }) => void;
+  handleSubmit: () => Promise<void>;
+};
+
+/**
+ * Submits `form`, the server's last refusal cleared first: TanStack Form keeps it in the form's `onSubmit` errors,
+ * which a form with no validator of its own never clears, and would refuse every submit after it, a retry after a 500
+ * included. The client checks are the fields' `onSubmit` validators, which the submit runs again.
+ */
+export function submitAfterRefusal(form: SubmittableForm): Promise<void> {
+  form.setErrorMap({ onSubmit: { fields: {} } });
+
+  return form.handleSubmit();
+}

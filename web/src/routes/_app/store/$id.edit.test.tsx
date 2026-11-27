@@ -101,7 +101,7 @@ describe("/store/$id/edit", () => {
     expect(saved).toEqual([{ path: "compose.yml", body: { source: "services:\n  alpha: {}\n" } }]);
   });
 
-  it("shows a refusal of the server under the file its code names", async () => {
+  it("shows a refusal of the server under the file saved, as an alert, and none under another", async () => {
     editor();
     network.use(
       getEditorWriteMockHandler(({ request }) => {
@@ -119,9 +119,10 @@ describe("/store/$id/edit", () => {
     await waitFor(() => expect(editorText()).toContain("level: debug"));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    const refusal = await screen.findByText("config/settings.yml is not valid: mapping values are not allowed here.");
+    const refusal = await screen.findByRole("alert");
 
     expect(refusal.tagName).toBe("PRE");
+    expect(refusal.textContent).toBe("config/settings.yml is not valid: mapping values are not allowed here.");
 
     // Not the compose file's: it shows none.
     fireEvent.click(screen.getByRole("button", { name: "compose.yml" }));
@@ -156,6 +157,36 @@ describe("/store/$id/edit", () => {
     fireEvent.change(path, { target: { value: "notes.md" } });
 
     expect(screen.queryByText(".secret leads to a hidden file.")).toBeNull();
+  });
+
+  it("sends one create for a path submitted twice while it runs", async () => {
+    let answer: () => void = () => {};
+    const created: string[] = [];
+
+    editor();
+    network.use(
+      getEditorCreateMockHandler(async ({ request }) => {
+        created.push(pathOf(request));
+        await new Promise<void>(resolve => (answer = resolve));
+
+        return { path: pathOf(request), source: "" };
+      }),
+    );
+
+    renderAt("/store/alpha/edit");
+    await waitFor(() => expect(editorText()).toContain("alpha: {}"));
+    fireEvent.click(screen.getByRole("button", { name: "New file" }));
+
+    const path = screen.getByLabelText("Path of the new file");
+
+    fireEvent.change(path, { target: { value: "notes.md" } });
+    fireEvent.submit(path.closest("form")!);
+    await waitFor(() => expect(created).toEqual(["notes.md"]));
+    fireEvent.submit(path.closest("form")!);
+    answer();
+
+    expect(await screen.findByText("notes.md", { selector: "p" })).toBeDefined();
+    expect(created).toEqual(["notes.md"]);
   });
 
   it("creates a file, then opens it", async () => {
