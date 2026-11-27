@@ -1,16 +1,26 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "#libs/api";
-import { coded } from "#mock/page.tsx";
+import { coded, network } from "#mock/network.ts";
 import { useEventStream, type StreamOptions } from "#modules/common/hooks/use-event-stream.ts";
 
 type Item = { kind: "line"; line: string } | { kind: "end" };
 
-/** A stream the test writes: its items, a problem, its close. */
+/**
+ * A stream the test writes: its items, a problem, its close. It opens with an empty comment, sent with the head, as
+ * quoll's server does, which a proxy or msw would otherwise hold until the first item.
+ */
 function stream() {
   const encoder = new TextEncoder();
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
-  const body = new ReadableStream<Uint8Array>({ start: started => void (controller = started) });
+
+  const body = new ReadableStream<Uint8Array>({
+    start: started => {
+      controller = started;
+      started.enqueue(encoder.encode(":\n\n"));
+    },
+  });
 
   return {
     response: new Response(body, { headers: { "Content-Type": "text/event-stream" } }),
@@ -21,13 +31,22 @@ function stream() {
   };
 }
 
-/** Answers every `fetch` with `response`, and keeps the calls. */
-function answer(response: Response) {
-  const fetch = vi.fn(async (_url: string, _init?: RequestInit) => response);
+/**
+ * Answers the calls to `path` with `responses`, one each, in order, and keeps the requests. The hook reads any stream
+ * that ends, of any route: these are not the contract's.
+ */
+function answer(path: string, ...responses: Response[]) {
+  const requests: Request[] = [];
 
-  vi.stubGlobal("fetch", fetch);
+  network.use(
+    http.all(`*${path}`, ({ request }) => {
+      requests.push(request);
 
-  return fetch;
+      return responses.shift() ?? new Response(null, { status: 410 });
+    }),
+  );
+
+  return requests;
 }
 
 /** The lines of the items, kept in the order they came. */
@@ -38,13 +57,12 @@ const lines: StreamOptions<Item, readonly string[]> = {
 
 afterEach(() => {
   cleanup();
-  vi.unstubAllGlobals();
 });
 
 describe("useEventStream", () => {
   it("folds the items into the state, and ends on the end item", async () => {
     const written = stream();
-    const fetch = answer(written.response);
+    const requests = answer("/log", written.response);
     const onEnd = vi.fn();
     const { result } = renderHook(() => useEventStream<Item, readonly string[]>([], { ...lines, onEnd }));
 
@@ -65,13 +83,13 @@ describe("useEventStream", () => {
     act(() => written.close());
     await waitFor(() => expect(result.current.status).toBe("ended"));
     expect(result.current.failure).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(requests).toHaveLength(1);
   });
 
   it("folds the next items into a state set during the read, as a log cleared while it is followed", async () => {
     const written = stream();
 
-    answer(written.response);
+    answer("/log", written.response);
 
     const { result } = renderHook(() => useEventStream<Item, readonly string[]>([], lines));
 
@@ -92,7 +110,7 @@ describe("useEventStream", () => {
   it("fails a stream closed before an end it requires, with no failure, and keeps what it folded", async () => {
     const written = stream();
 
-    answer(written.response);
+    answer("/output", written.response);
 
     const { result } = renderHook(() => useEventStream<Item, readonly string[]>([], { ...lines, requiresEnd: true }));
 
@@ -110,7 +128,7 @@ describe("useEventStream", () => {
   it("ends a stream closed before an end it does not require", async () => {
     const written = stream();
 
-    answer(written.response);
+    answer("/log", written.response);
 
     const { result } = renderHook(() => useEventStream<Item, readonly string[]>([], lines));
 
@@ -121,7 +139,15 @@ describe("useEventStream", () => {
   });
 
   it("says why a stream failed: its refusal, or its problem after the 200", async () => {
-    answer(coded(404, "docker.unknown_container", "no such container.", { container: "web" }));
+    const written = stream();
+
+    const refusal = coded(404, {
+      code: "docker.unknown_container",
+      params: { project: "alpha", container: "web" },
+      message: "no such container.",
+    });
+
+    answer("/log", refusal, written.response);
 
     const { result } = renderHook(() => useEventStream<Item, readonly string[]>([], lines));
 
@@ -129,9 +155,6 @@ describe("useEventStream", () => {
     await waitFor(() => expect(result.current.status).toBe("error"));
     expect(result.current.failure).toBeInstanceOf(ApiError);
 
-    const written = stream();
-
-    answer(written.response);
     act(() => result.current.read("/log", []));
     await waitFor(() => expect(result.current.status).toBe("connected"));
     expect(result.current.failure).toBeNull();
@@ -144,9 +167,8 @@ describe("useEventStream", () => {
   it("starts each read again from its seed, the last one closed", async () => {
     const first = stream();
     const second = stream();
-    const fetch = vi.fn().mockResolvedValueOnce(first.response).mockResolvedValueOnce(second.response);
 
-    vi.stubGlobal("fetch", fetch);
+    answer("/log", first.response, second.response);
 
     const { result } = renderHook(() => useEventStream<Item, readonly string[]>([], lines));
 
@@ -164,13 +186,14 @@ describe("useEventStream", () => {
   });
 
   it("sends the request it is given, as a POST whose answer is the stream", async () => {
-    const fetch = answer(stream().response);
+    const requests = answer("/run", stream().response);
     const { result } = renderHook(() => useEventStream<Item, readonly string[]>([], lines));
 
     act(() => result.current.read("/run", [], { method: "POST", body: "{}" }));
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-    expect(fetch.mock.calls[0]?.[0]).toBe("/run");
-    expect(fetch.mock.calls[0]?.[1]).toMatchObject({ method: "POST", body: "{}" });
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(new URL(requests[0]?.url ?? "").pathname).toBe("/run");
+    expect(requests[0]?.method).toBe("POST");
+    expect(await requests[0]?.text()).toBe("{}");
   });
 });

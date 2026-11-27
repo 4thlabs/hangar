@@ -1,7 +1,9 @@
 import { QueryClient } from "@tanstack/react-query";
 import { isRedirect } from "@tanstack/react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getAuthSessionQueryKey } from "#libs/api";
+import { getAuthSessionMockHandler } from "#libs/api/mock";
+import { network, problem, unauthorized } from "#mock/network.ts";
 import { Session } from "./session.ts";
 
 /** A router at `pathname`, whose navigations are recorded. */
@@ -14,31 +16,18 @@ function queryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-/** Answers `GET /api/auth/session` with `response`. */
-function answerSession(response: () => Response) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => response()),
-  );
-}
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
 describe("Session.require", () => {
   it("gives the signed-in user", async () => {
-    answerSession(() => Response.json({ name: "Ana", email: "ana@example.com" }));
+    network.use(getAuthSessionMockHandler({ name: "Ana", email: "ana@example.com" }));
 
     await expect(new Session(queryClient()).require()).resolves.toEqual({ name: "Ana", email: "ana@example.com" });
   });
 
   it("sends a page whose session the server refuses with a 401 to /login", async () => {
-    answerSession(() =>
-      Response.json(
-        { type: "about:blank", title: "Unauthorized", status: 401, detail: "no session" },
-        { status: 401, headers: { "Content-Type": "application/problem+json" } },
-      ),
+    network.use(
+      getAuthSessionMockHandler(() => {
+        throw unauthorized();
+      }),
     );
 
     const refusal = await new Session(queryClient()).require().catch((error: unknown) => error);
@@ -73,13 +62,18 @@ describe("Session.forgetFailure", () => {
     const client = queryClient();
     const session = new Session(client);
 
-    answerSession(() => Response.json({ type: "about:blank", title: "Error", status: 500 }, { status: 500 }));
+    network.use(
+      getAuthSessionMockHandler(() => {
+        throw problem(500, "the database is locked");
+      }),
+    );
+
     await expect(session.require()).rejects.toMatchObject({ status: 500 });
     session.forgetFailure();
 
     expect(client.getQueryState(getAuthSessionQueryKey())).toBeUndefined();
 
-    answerSession(() => Response.json({ name: "Ana", email: "ana@example.com" }));
+    network.use(getAuthSessionMockHandler({ name: "Ana", email: "ana@example.com" }));
 
     await expect(session.require()).resolves.toEqual({ name: "Ana", email: "ana@example.com" });
   });

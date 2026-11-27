@@ -1,7 +1,20 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { JobRun, StoreStatus, StoreSync } from "#libs/api";
-import { coded, problem, renderAt, serve } from "#mock/page.tsx";
+import type { EnvChanges, JobRun, StoreStatus, StoreSync } from "#libs/api";
+import {
+  getConfigReadMockHandler,
+  getConfigSaveMockHandler,
+  getEnvReadMockHandler,
+  getEnvSaveMockHandler,
+  getJobsCancelMockHandler,
+  getJobsListMockHandler,
+  getJobsRunMockHandler,
+  getStoreAppsMockHandler,
+  getStoreStatusMockHandler,
+  getStoreSyncMockHandler,
+} from "#libs/api/mock";
+import { coded, countCalls, network, problem } from "#mock/network.ts";
+import { renderAt } from "#mock/page.tsx";
 
 const running: StoreSync = {
   operation: "update",
@@ -11,46 +24,51 @@ const running: StoreSync = {
   error: null,
 };
 
+/** A store cloned from its URL, no sync running. */
+const cloned: StoreStatus = { url: "https://example.com/store.git", installed: true, sync: null };
+
+/** What `/settings` reads whatever its tab: the store's status, `cloned`, and no job run. A test's own handlers win. */
+function settingsPage() {
+  network.use(getStoreStatusMockHandler(cloned), getJobsListMockHandler([]));
+}
+
 afterEach(() => {
   cleanup();
-  vi.unstubAllGlobals();
 });
 
 describe("/settings", () => {
   it("reads its cards once when its link is hovered, then followed", async () => {
-    const fetch = serve({
-      "GET /api/store": () => Response.json({ url: "https://example.com/store.git", installed: true, sync: null }),
-      "GET /api/jobs": () => Response.json([]),
-    });
+    const reads = countCalls();
 
-    const reads = (url: string) => fetch.mock.calls.filter(([called]) => called === url).length;
-
+    settingsPage();
+    network.use(getStoreAppsMockHandler({ apps: [], counts: { installed: 0, available: 0 } }));
     renderAt("/store");
 
     const link = (await screen.findAllByRole("link", { name: "Settings" }))[0]!;
 
     fireEvent.mouseEnter(link);
-    await waitFor(() => expect(reads("/api/store")).toBe(1));
+    await waitFor(() => expect(reads("GET /api/store")).toBe(1));
     fireEvent.click(link);
 
     expect(await screen.findByRole("button", { name: "Update" })).toBeDefined();
-    expect(reads("/api/store")).toBe(1);
-    expect(reads("/api/jobs")).toBe(1);
+    expect(reads("GET /api/store")).toBe(1);
+    expect(reads("GET /api/jobs")).toBe(1);
   });
 });
 
 describe("/settings#store", () => {
   it("starts a sync, and says it runs until it ends", async () => {
-    let status: StoreStatus = { url: "https://example.com/store.git", installed: true, sync: null };
+    let status: StoreStatus = cloned;
 
-    serve({
-      "GET /api/store": () => Response.json(status),
-      "POST /api/store/sync": () => {
+    settingsPage();
+    network.use(
+      getStoreStatusMockHandler(() => status),
+      getStoreSyncMockHandler(() => {
         status = { ...status, sync: running };
 
-        return Response.json(running, { status: 202 });
-      },
-    });
+        return running;
+      }),
+    );
 
     renderAt("/settings#store");
 
@@ -79,7 +97,8 @@ describe("/settings#store", () => {
 
 describe("/settings#env", () => {
   it("hides each value until shown", async () => {
-    serve({ "GET /api/env": () => Response.json({ variables: { JELLYFIN_API_KEY: "secret" } }) });
+    settingsPage();
+    network.use(getEnvReadMockHandler({ variables: { JELLYFIN_API_KEY: "secret" } }));
     renderAt("/settings#env");
 
     const value = await screen.findByLabelText<HTMLInputElement>("JELLYFIN_API_KEY");
@@ -90,16 +109,17 @@ describe("/settings#env", () => {
   });
 
   it("saves only what changed since the read, and says why a save is refused", async () => {
-    const saved: unknown[] = [];
+    const saved: EnvChanges[] = [];
 
-    serve({
-      "GET /api/env": () => Response.json({ variables: { KEPT: "1", SAME: "2", OLD: "3" } }),
-      "PUT /api/env": body => {
-        saved.push(body);
+    settingsPage();
+    network.use(
+      getEnvReadMockHandler({ variables: { KEPT: "1", SAME: "2", OLD: "3" } }),
+      getEnvSaveMockHandler(async ({ request }) => {
+        saved.push(await request.json());
 
-        return problem(400, "invalid variable name: 1BAD");
-      },
-    });
+        throw problem(400, "invalid variable name: 1BAD");
+      }),
+    );
 
     renderAt("/settings#env");
 
@@ -119,10 +139,8 @@ describe("/settings tabs", () => {
   it("read their file anew each time they open, as a sync may have changed it", async () => {
     let source = "categories: []\n";
 
-    serve({
-      "GET /api/config": () => Response.json({ source }),
-      "GET /api/store": () => Response.json({ url: "u", installed: true, sync: null }),
-    });
+    settingsPage();
+    network.use(getConfigReadMockHandler(() => ({ source })));
 
     renderAt("/settings#config");
 
@@ -139,12 +157,20 @@ describe("/settings tabs", () => {
     let isDown = false;
     let source = "categories: []\n";
 
-    serve({
-      "GET /api/env": () =>
-        isDown ? problem(404, "the store is not cloned yet") : Response.json({ variables: { OLD: "1" } }),
-      "GET /api/config": () => (isDown ? problem(404, "the store is not cloned yet") : Response.json({ source })),
-      "GET /api/store": () => Response.json({ url: "u", installed: true, sync: null }),
-    });
+    /** `read`, or the store's refusal while it is down. */
+    const unlessDown = <T,>(read: () => T) => {
+      if (isDown) {
+        throw problem(404, "the store is not cloned yet");
+      }
+
+      return read();
+    };
+
+    settingsPage();
+    network.use(
+      getEnvReadMockHandler(() => unlessDown(() => ({ variables: { OLD: "1" } }))),
+      getConfigReadMockHandler(() => unlessDown(() => ({ source }))),
+    );
 
     renderAt("/settings#env");
     expect(await screen.findByLabelText("OLD")).toBeDefined();
@@ -173,12 +199,15 @@ describe("/settings tabs", () => {
 
 describe("/settings#config", () => {
   it("takes no typing while a save runs", async () => {
-    let answer: (response: Response) => void = () => {};
+    let answer: () => void = () => {};
 
-    serve({
-      "GET /api/config": () => Response.json({ source: "categories: []\n" }),
-      "PUT /api/config": () => new Promise<Response>(resolve => (answer = resolve)),
-    });
+    settingsPage();
+    network.use(
+      getConfigReadMockHandler({ source: "categories: []\n" }),
+      getConfigSaveMockHandler(() => new Promise<void>(resolve => (answer = resolve))),
+      // What a save makes stale, read again once it succeeds.
+      getStoreAppsMockHandler(),
+    );
 
     renderAt("/settings#config");
 
@@ -186,15 +215,18 @@ describe("/settings#config", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(document.querySelector(".cm-editor")?.closest("[inert]")).not.toBeNull());
-    answer(new Response(null, { status: 204 }));
+    answer();
     await waitFor(() => expect(document.querySelector(".cm-editor")?.closest("[inert]")).toBeNull());
   });
 
   it("shows why hangar.yml was refused under the editor", async () => {
-    serve({
-      "GET /api/config": () => Response.json({ source: "categories: []\n" }),
-      "PUT /api/config": () => problem(400, "invalid hangar.yml: categories[0].color: required"),
-    });
+    settingsPage();
+    network.use(
+      getConfigReadMockHandler({ source: "categories: []\n" }),
+      getConfigSaveMockHandler(() => {
+        throw problem(400, "invalid hangar.yml: categories[0].color: required");
+      }),
+    );
 
     renderAt("/settings#config");
 
@@ -231,7 +263,8 @@ describe("/settings#jobs", () => {
   });
 
   it("lists the runs, the newest first, and says why one failed", async () => {
-    serve({ "GET /api/jobs": () => Response.json([update, check]) });
+    settingsPage();
+    network.use(getJobsListMockHandler([update, check]));
     renderAt("/settings#jobs");
 
     await screen.findByText("Update of the apps");
@@ -248,7 +281,8 @@ describe("/settings#jobs", () => {
 
     let runs = [update];
 
-    serve({ "GET /api/jobs": () => Response.json(runs) });
+    settingsPage();
+    network.use(getJobsListMockHandler(() => runs));
     renderAt("/settings#jobs");
 
     await screen.findByText("Update of the apps");
@@ -262,7 +296,8 @@ describe("/settings#jobs", () => {
   it("names a job it does not know as the server does", async () => {
     const newer = { ...check, job: "backup" } as unknown as JobRun;
 
-    serve({ "GET /api/jobs": () => Response.json([newer]) });
+    settingsPage();
+    network.use(getJobsListMockHandler([newer]));
     renderAt("/settings#jobs");
 
     expect(await screen.findByText("backup")).toBeDefined();
@@ -276,19 +311,24 @@ describe("/settings#jobs", () => {
     let runs = [update, check];
     const waiting: JobRun = { ...check, id: 3, state: "waiting", startedAt: null, endedAt: null, error: null };
 
-    serve({
-      "GET /api/jobs": () => Response.json(runs),
-      "POST /api/jobs/1/run": () => {
+    const asked: string[] = [];
+
+    settingsPage();
+    network.use(
+      getJobsListMockHandler(() => runs),
+      getJobsRunMockHandler(({ params }) => {
+        asked.push(`run ${params.id}`);
         runs = [waiting, ...runs];
 
-        return Response.json(waiting);
-      },
-      "POST /api/jobs/3/cancel": () => {
+        return waiting;
+      }),
+      getJobsCancelMockHandler(({ params }) => {
+        asked.push(`cancel ${params.id}`);
         runs = runs.map(run => (run.id === 3 ? { ...run, state: "canceled" } : run));
 
-        return Response.json(runs[0]);
-      },
-    });
+        return { ...waiting, state: "canceled" };
+      }),
+    );
 
     renderAt("/settings#jobs");
 
@@ -302,6 +342,7 @@ describe("/settings#jobs", () => {
 
     expect(await screen.findByText("Image check stops.")).toBeDefined();
     expect(await screen.findByText("Canceled")).toBeDefined();
+    expect(asked).toEqual(["run 1", "cancel 3"]);
   });
 
   it("says why a cancel was refused, and reads the runs again", async () => {
@@ -309,14 +350,15 @@ describe("/settings#jobs", () => {
 
     let runs: JobRun[] = [{ ...update, state: "running", endedAt: null }];
 
-    serve({
-      "GET /api/jobs": () => Response.json(runs),
-      "POST /api/jobs/2/cancel": () => {
+    settingsPage();
+    network.use(
+      getJobsListMockHandler(() => runs),
+      getJobsCancelMockHandler(() => {
         runs = [update];
 
-        return coded(409, "jobs.ended", "the run 2 of a job has ended already", { run: 2 });
-      },
-    });
+        throw coded(409, { code: "jobs.ended", params: { run: 2 }, message: "the run 2 of a job has ended already" });
+      }),
+    );
 
     renderAt("/settings#jobs");
 

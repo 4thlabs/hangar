@@ -1,8 +1,11 @@
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { renderAt, serve } from "#mock/page.tsx";
+import { afterEach, describe, expect, it } from "vitest";
+import { getJobsListMockHandler, getStoreAppsMockHandler, getStoreStatusMockHandler } from "#libs/api/mock";
+import { network } from "#mock/network.ts";
+import { renderAt } from "#mock/page.tsx";
 
-const listing = { apps: [], counts: { installed: 0, available: 0 } };
+/** The store, with no app. */
+const emptyStore = getStoreAppsMockHandler({ apps: [], counts: { installed: 0, available: 0 } });
 
 /** The navbar's search field. */
 function field(): HTMLInputElement {
@@ -16,12 +19,11 @@ function query(router: ReturnType<typeof renderAt>): unknown {
 
 afterEach(() => {
   cleanup();
-  vi.unstubAllGlobals();
 });
 
 describe("the navbar's search", () => {
   it("is one field, the magnifier only showing it below md", async () => {
-    serve({ "GET /api/store/apps": () => Response.json(listing) });
+    network.use(emptyStore);
     renderAt("/store");
 
     fireEvent.click(await screen.findByRole("button", { name: "Open search" }));
@@ -31,7 +33,7 @@ describe("the navbar's search", () => {
   });
 
   it("puts what is typed in ?q=, and follows a ?q= changed from elsewhere", async () => {
-    serve({ "GET /api/store/apps": () => Response.json(listing) });
+    network.use(emptyStore);
 
     const router = renderAt("/store?q=mini");
 
@@ -53,7 +55,7 @@ describe("the navbar's search", () => {
   });
 
   it("follows a ?q= from elsewhere that is one the field sent before", async () => {
-    serve({ "GET /api/store/apps": () => Response.json(listing) });
+    network.use(emptyStore);
 
     const router = renderAt("/store");
 
@@ -72,7 +74,7 @@ describe("the navbar's search", () => {
   });
 
   it("is disabled on a page with no search", async () => {
-    serve({ "GET /api/store": () => Response.json({ url: "u", installed: false, sync: null }) });
+    network.use(getStoreStatusMockHandler({ url: "u", installed: false, sync: null }), getJobsListMockHandler([]));
     renderAt("/settings");
 
     await waitFor(() => expect(field().disabled).toBe(true));

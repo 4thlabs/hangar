@@ -1,37 +1,44 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import {
+  getAuthLoginMockHandler,
+  getDockerLogsMockHandler,
+  getHealthCheckMockHandler,
+  getNotificationsReadMockHandler,
+} from "#libs/api/mock";
+import { network } from "#mock/network.ts";
 import { ApiError, apiFetch } from "./api-fetch.ts";
 
-/** Answers every `fetch` with `response`. */
-function answer(response: Response) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => response),
-  );
+/** The answer of an error, `problem`, as `application/problem+json`, with `headers`. */
+function problemOf(problem: object & { status: number }, headers: Record<string, string> = {}): Response {
+  return Response.json(problem, {
+    status: problem.status,
+    headers: { "Content-Type": "application/problem+json", ...headers },
+  });
 }
 
 describe("apiFetch", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("returns the body of an answer", async () => {
-    answer(Response.json({ version: "0.1.0" }));
+    network.use(getHealthCheckMockHandler({ version: "0.1.0" }));
 
     await expect(apiFetch("/api/health", {})).resolves.toEqual({ version: "0.1.0" });
   });
 
   it("returns null for an answer with no body", async () => {
-    answer(new Response(null, { status: 204 }));
+    network.use(getNotificationsReadMockHandler());
 
-    await expect(apiFetch("/api/nothing", {})).resolves.toBeNull();
+    await expect(apiFetch("/api/notifications/read", { method: "POST" })).resolves.toBeNull();
   });
 
   it("throws the problem of an error, its detail as the message", async () => {
     const problem = { type: "about:blank", title: "Not Found", status: 404, detail: "no such app" };
 
-    answer(Response.json(problem, { status: 404, headers: { "Content-Type": "application/problem+json" } }));
+    network.use(
+      getHealthCheckMockHandler(() => {
+        throw problemOf(problem);
+      }),
+    );
 
-    const error = await apiFetch("/api/apps/alpha", {}).catch((error: unknown) => error);
+    const error = await apiFetch("/api/health", {}).catch((error: unknown) => error);
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status: 404, message: "no such app", problem });
@@ -47,7 +54,11 @@ describe("apiFetch", () => {
       container: "web",
     };
 
-    answer(Response.json(problem, { status: 404, headers: { "Content-Type": "application/problem+json" } }));
+    network.use(
+      getDockerLogsMockHandler(() => {
+        throw problemOf(problem);
+      }),
+    );
 
     const error = await apiFetch("/api/docker/apps/alpha/containers/web/logs", {}).catch((error: unknown) => error);
 
@@ -64,20 +75,27 @@ describe("apiFetch", () => {
   it("reads no code from a problem quoll answers itself", async () => {
     const problem = { type: "about:blank", title: "Payload Too Large", status: 413, detail: "the body is too large" };
 
-    answer(Response.json(problem, { status: 413, headers: { "Content-Type": "application/problem+json" } }));
+    network.use(
+      getAuthLoginMockHandler(() => {
+        throw problemOf(problem);
+      }),
+    );
 
-    const error = await apiFetch("/api/auth/login", {}).catch((error: unknown) => error);
+    const error = await apiFetch("/api/auth/login", { method: "POST" }).catch((error: unknown) => error);
 
     expect(error).toMatchObject({ status: 413, detail: undefined });
   });
 
   it("reads the wait of a Retry-After in seconds", async () => {
     const problem = { type: "/problems/auth.too_many_sign_ins", status: 429, detail: "too many failed sign-ins" };
-    const headers = { "Content-Type": "application/problem+json", "Retry-After": "840" };
 
-    answer(Response.json(problem, { status: 429, headers }));
+    network.use(
+      getAuthLoginMockHandler(() => {
+        throw problemOf(problem, { "Retry-After": "840" });
+      }),
+    );
 
-    const error = await apiFetch("/api/auth/login", {}).catch((error: unknown) => error);
+    const error = await apiFetch("/api/auth/login", { method: "POST" }).catch((error: unknown) => error);
 
     expect(error).toMatchObject({
       status: 429,
@@ -87,9 +105,14 @@ describe("apiFetch", () => {
   });
 
   it("reads no wait from a Retry-After that is a date", async () => {
-    const headers = { "Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT" };
-
-    answer(new Response("Service Unavailable", { status: 503, headers }));
+    network.use(
+      getHealthCheckMockHandler(() => {
+        throw new Response("Service Unavailable", {
+          status: 503,
+          headers: { "Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT" },
+        });
+      }),
+    );
 
     const error = await apiFetch("/api/health", {}).catch((error: unknown) => error);
 
@@ -97,7 +120,11 @@ describe("apiFetch", () => {
   });
 
   it("throws the status alone when a proxy answers with no problem", async () => {
-    answer(new Response("Bad Gateway", { status: 502 }));
+    network.use(
+      getHealthCheckMockHandler(() => {
+        throw new Response("Bad Gateway", { status: 502 });
+      }),
+    );
 
     const error = await apiFetch("/api/health", {}).catch((error: unknown) => error);
 

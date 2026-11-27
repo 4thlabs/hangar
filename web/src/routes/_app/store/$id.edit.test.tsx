@@ -1,33 +1,58 @@
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AppFileList } from "#libs/api";
-import { problem, renderAt, serve } from "#mock/page.tsx";
+import { afterEach, describe, expect, it } from "vitest";
+import type { AppFile, AppFileList, FileSource } from "#libs/api";
+import {
+  getEditorCreateMockHandler,
+  getEditorFilesMockHandler,
+  getEditorReadMockHandler,
+  getEditorWriteMockHandler,
+} from "#libs/api/mock";
+import { network, problem } from "#mock/network.ts";
+import { renderAt } from "#mock/page.tsx";
 
 const alpha: AppFileList = {
   app: { id: "alpha", name: "Alpha", icon: null, installed: true, swarmReady: false },
   files: ["compose.yml", "config/settings.yml"],
 };
 
-/** The answers of alpha's editor, its compose file and its settings. */
-const answers = {
-  "GET /api/store/apps/alpha/files": () => Response.json(alpha),
-  "GET /api/store/apps/alpha/file?path=compose.yml": () =>
-    Response.json({ path: "compose.yml", source: "services:\n  alpha: {}\n" }),
-  "GET /api/store/apps/alpha/file?path=config%2Fsettings.yml": () =>
-    Response.json({ path: "config/settings.yml", source: "level: debug\n" }),
+/** The files of alpha, by path: its compose file and its settings. */
+const files: Record<string, string> = {
+  "compose.yml": "services:\n  alpha: {}\n",
+  "config/settings.yml": "level: debug\n",
 };
+
+/** The `path` a call to a file of the editor names in its query. */
+function pathOf(request: Request): string {
+  return new URL(request.url).searchParams.get("path") ?? "";
+}
+
+/** What alpha's editor reads: its file list, `list`, and each of `sources`, by path. */
+function editor({ list = alpha, sources = files }: { list?: AppFileList; sources?: Record<string, string> } = {}) {
+  network.use(
+    getEditorFilesMockHandler(list),
+    getEditorReadMockHandler(({ request }): AppFile => {
+      const path = pathOf(request);
+      const source = sources[path];
+
+      if (source === undefined) {
+        throw problem(404, `the app alpha has no file ${path}`);
+      }
+
+      return { path, source };
+    }),
+  );
+}
 
 /** The text of the open file. */
 const editorText = () => document.querySelector(".cm-content")?.textContent ?? "";
 
 afterEach(() => {
   cleanup();
-  vi.unstubAllGlobals();
 });
 
 describe("/store/$id/edit", () => {
   it("opens the app on its compose file, and another file from the tree", async () => {
-    serve(answers);
+    editor();
     renderAt("/store/alpha/edit");
 
     expect(await screen.findByRole("heading", { name: "Alpha" })).toBeDefined();
@@ -40,11 +65,9 @@ describe("/store/$id/edit", () => {
   });
 
   it("opens a file whatever its name, `constructor` included", async () => {
-    serve({
-      ...answers,
-      "GET /api/store/apps/alpha/files": () => Response.json({ ...alpha, files: ["compose.yml", "constructor"] }),
-      "GET /api/store/apps/alpha/file?path=constructor": () =>
-        Response.json({ path: "constructor", source: "built\n" }),
+    editor({
+      list: { ...alpha, files: ["compose.yml", "constructor"] },
+      sources: { ...files, constructor: "built\n" },
     });
 
     renderAt("/store/alpha/edit");
@@ -56,16 +79,16 @@ describe("/store/$id/edit", () => {
   });
 
   it("saves the open file, and shows why compose refused it under the editor", async () => {
-    const saved: unknown[] = [];
+    const saved: { path: string; body: FileSource }[] = [];
 
-    serve({
-      ...answers,
-      "PUT /api/store/apps/alpha/file?path=compose.yml": body => {
-        saved.push(body);
+    editor();
+    network.use(
+      getEditorWriteMockHandler(async ({ request }) => {
+        saved.push({ path: pathOf(request), body: await request.json() });
 
-        return problem(400, "docker rejects compose.yml:\nservices.alpha.image must be a string");
-      },
-    });
+        throw problem(400, "docker rejects compose.yml:\nservices.alpha.image must be a string");
+      }),
+    );
 
     renderAt("/store/alpha/edit");
     await waitFor(() => expect(editorText()).toContain("alpha: {}"));
@@ -74,20 +97,20 @@ describe("/store/$id/edit", () => {
     const refusals = await screen.findAllByText(/services\.alpha\.image must be a string/);
 
     expect(refusals.some(refusal => refusal.tagName === "PRE")).toBe(true);
-    expect(saved).toEqual([{ source: "services:\n  alpha: {}\n" }]);
+    expect(saved).toEqual([{ path: "compose.yml", body: { source: "services:\n  alpha: {}\n" } }]);
   });
 
   it("creates a file, then opens it", async () => {
     const created: string[] = [];
 
-    serve({
-      ...answers,
-      "POST /api/store/apps/alpha/file?path=notes.md": () => {
-        created.push("notes.md");
+    editor();
+    network.use(
+      getEditorCreateMockHandler(({ request }) => {
+        created.push(pathOf(request));
 
-        return Response.json({ path: "notes.md", source: "" }, { status: 201 });
-      },
-    });
+        return { path: pathOf(request), source: "" };
+      }),
+    );
 
     renderAt("/store/alpha/edit");
     await waitFor(() => expect(editorText()).toContain("alpha: {}"));
@@ -105,10 +128,12 @@ describe("/store/$id/edit", () => {
   });
 
   it("says why an app cannot be edited rather than open its compose file", async () => {
-    serve({
-      ...answers,
-      "GET /api/store/apps/alpha/file?path=compose.yml": () => problem(400, "compose.yml leads outside the app alpha"),
-    });
+    editor();
+    network.use(
+      getEditorReadMockHandler(() => {
+        throw problem(400, "compose.yml leads outside the app alpha");
+      }),
+    );
 
     renderAt("/store/alpha/edit");
 
@@ -118,10 +143,11 @@ describe("/store/$id/edit", () => {
   });
 
   it("says the store has no such app", async () => {
-    serve({
-      "GET /api/store/apps/delta/files": () => problem(404, "the store has no app delta"),
-      "GET /api/store/apps/delta/file?path=compose.yml": () => problem(404, "the store has no app delta"),
-    });
+    const noDelta = () => {
+      throw problem(404, "the store has no app delta");
+    };
+
+    network.use(getEditorFilesMockHandler(noDelta), getEditorReadMockHandler(noDelta));
 
     renderAt("/store/delta/edit");
 

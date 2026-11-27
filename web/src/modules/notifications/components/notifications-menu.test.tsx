@@ -1,8 +1,22 @@
 import { focusManager } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Notification, NotificationMessage, RecentNotifications } from "#libs/api";
-import { FakeEventSource, problem, renderAt, serve, type Answers } from "#mock/page.tsx";
+import type {
+  Notification,
+  NotificationEvent,
+  NotificationMessage,
+  RecentNotifications,
+  SeenNotifications,
+} from "#libs/api";
+import {
+  getComposeBatchesMockHandler,
+  getDockerProjectsMockHandler,
+  getNotificationsListMockHandler,
+  getNotificationsReadMockHandler,
+  getNotificationsSeenMockHandler,
+} from "#libs/api/mock";
+import { countCalls, feed, network, problem } from "#mock/network.ts";
+import { renderAt } from "#mock/page.tsx";
 
 /** A notification of the store, `id`, neither seen nor read unless `marks` says so. */
 function notification(id: number, message: NotificationMessage, marks: Partial<Notification> = {}): Notification {
@@ -28,32 +42,33 @@ const recent: RecentNotifications = {
   ],
 };
 
-/** The server's answers to the bell, the list being `list`, and an empty `/apps` around it. */
-function answers(list: () => Response | Promise<Response>): Answers {
-  return {
-    "GET /api/docker/apps": () => Response.json([]),
-    "GET /api/notifications": list,
-    "POST /api/notifications/seen": () => new Response(null, { status: 204 }),
-    "POST /api/notifications/read": () => new Response(null, { status: 204 }),
-  };
-}
+/**
+ * What the bell calls, the list being `list`, its marks recorded in `seen`, and an empty `/apps` around it: its
+ * stream, `stream`, the test sends on.
+ */
+function bell(list: () => RecentNotifications | Promise<RecentNotifications>) {
+  const stream = feed<NotificationEvent>("/api/notifications/events");
+  const seen: SeenNotifications[] = [];
 
-/** The source of `url` the page holds open, once it does. */
-async function source(url: string): Promise<FakeEventSource> {
-  let found: FakeEventSource | undefined;
+  network.use(
+    getNotificationsListMockHandler(list),
+    getNotificationsSeenMockHandler(async ({ request }) => {
+      seen.push(await request.json());
+    }),
+    getNotificationsReadMockHandler(),
+    stream.handler,
+    getDockerProjectsMockHandler([]),
+    getComposeBatchesMockHandler([]),
+    feed("/api/docker/changes").handler,
+  );
 
-  await waitFor(() => {
-    found = FakeEventSource.of(url);
-    expect(found).toBeDefined();
-  });
-
-  return found as FakeEventSource;
+  return { stream, seen };
 }
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   focusManager.setFocused(undefined);
 });
 
@@ -64,7 +79,7 @@ describe("the notifications' bell", () => {
     const filed = notification(1, { key: "storeInstalled" }, { seen: true, read: true, createdAt });
 
     vi.useFakeTimers({ now: filedAt + 5 * 60_000, toFake: ["Date", "setInterval", "clearInterval"] });
-    serve(answers(() => Response.json({ epoch: "first", notifications: [filed] })));
+    bell(() => ({ epoch: "first", notifications: [filed] }));
     renderAt("/apps");
     fireEvent.click(await screen.findByRole("button", { name: "Notifications" }));
 
@@ -78,18 +93,15 @@ describe("the notifications' bell", () => {
   });
 
   it("toasts the unseen once, follows the stream from the newest, and reads them all on close", async () => {
-    const fetch = serve(answers(() => Response.json(recent)));
+    const calls = countCalls();
+    const { stream, seen } = bell(() => recent);
 
     renderAt("/apps");
 
     expect(await screen.findByText("The update of the store failed. See the server's log.")).toBeDefined();
-    await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith("/api/notifications/seen", expect.objectContaining({ body: '{"ids":[2]}' })),
-    );
+    await waitFor(() => expect(seen).toEqual([{ ids: [2] }]));
+    await waitFor(() => expect(stream.urls).toEqual(["/api/notifications/events?since=2&epoch=first"]));
 
-    const stream = await source("/api/notifications/events?since=2&epoch=first");
-
-    stream.open();
     stream.send({ kind: "opened", epoch: "first" });
     stream.send({ kind: "filed", notification: notification(3, { key: "storeUpdated" }) });
     // Given again, as a stream opened again does: the list holds it once.
@@ -104,16 +116,16 @@ describe("the notifications' bell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Notifications, 2 unread" }));
 
-    await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith("/api/notifications/read", expect.objectContaining({ method: "POST" })),
-    );
+    await waitFor(() => expect(calls("POST /api/notifications/read")).toBe(1));
 
     expect(screen.getByRole("button", { name: "Notifications" })).toBeDefined();
   });
 
   it("reads the list when a notification's link is followed, by a call that outlives the page", async () => {
-    const fetch = serve(answers(() => Response.json(recent)));
+    // msw's request loses `keepalive`: the call is read where the page makes it.
+    const fetch = vi.spyOn(globalThis, "fetch");
 
+    bell(() => recent);
     renderAt("/apps");
     fireEvent.click(await screen.findByRole("button", { name: "Notifications, 1 unread" }));
     fireEvent.click(await screen.findByRole("link", { name: /Store: installation finished/ }));
@@ -129,22 +141,25 @@ describe("the notifications' bell", () => {
   it("reads the list again when marking it read fails, so that the bell says what the server holds", async () => {
     let reads = 0;
 
-    serve({
-      ...answers(() => {
-        reads += 1;
+    bell(() => {
+      reads += 1;
 
-        return Response.json(recent);
-      }),
-      "POST /api/notifications/read": () => problem(503, "unavailable"),
+      return recent;
     });
+
+    network.use(
+      getNotificationsReadMockHandler(() => {
+        throw problem(503, "unavailable");
+      }),
+    );
 
     renderAt("/apps");
 
-    const bell = await screen.findByRole("button", { name: "Notifications, 1 unread" });
+    const button = await screen.findByRole("button", { name: "Notifications, 1 unread" });
 
-    fireEvent.click(bell);
+    fireEvent.click(button);
     await screen.findByText("Store: installation finished");
-    fireEvent.click(bell);
+    fireEvent.click(button);
 
     await waitFor(() => expect(reads).toBe(2));
 
@@ -153,19 +168,16 @@ describe("the notifications' bell", () => {
 
   it("keeps what the stream brought over a read of the list that was in flight", async () => {
     let reads = 0;
-    let answerLate: (response: Response) => void = () => {};
+    let answerLate: (list: RecentNotifications) => void = () => {};
 
-    serve(
-      answers(() => {
-        reads += 1;
+    const { stream } = bell(() => {
+      reads += 1;
 
-        return reads === 1 ? Response.json(recent) : new Promise<Response>(resolve => (answerLate = resolve));
-      }),
-    );
+      return reads === 1 ? recent : new Promise<RecentNotifications>(resolve => (answerLate = resolve));
+    });
 
     renderAt("/apps");
-
-    const stream = await source("/api/notifications/events?since=2&epoch=first");
+    await waitFor(() => expect(stream.urls).toEqual(["/api/notifications/events?since=2&epoch=first"]));
 
     // The tab comes back: the list is read again, and its answer, read before what the stream brings, comes after.
     act(() => {
@@ -181,7 +193,7 @@ describe("the notifications' bell", () => {
 
     // Answered, then a tick, in which the query client hands its answer to the page.
     await act(async () => {
-      answerLate(Response.json(recent));
+      answerLate(recent);
       await new Promise(resolve => setTimeout(resolve, 10));
     });
 
@@ -189,10 +201,11 @@ describe("the notifications' bell", () => {
   });
 
   it("drops the list it holds when the stream opens in another epoch, and shows the server's", async () => {
-    serve(answers(() => Response.json({ epoch: "first", notifications: [recent.notifications[1]] })));
-    renderAt("/apps");
+    const seenAndRead = notification(1, { key: "storeInstalled" }, { seen: true, read: true });
+    const { stream } = bell(() => ({ epoch: "first", notifications: [seenAndRead] }));
 
-    const stream = await source("/api/notifications/events?since=1&epoch=first");
+    renderAt("/apps");
+    await waitFor(() => expect(stream.urls).toEqual(["/api/notifications/events?since=1&epoch=first"]));
 
     stream.send({ kind: "opened", epoch: "second" });
     // Id 1 again, but of the new epoch: a notification of its own.
