@@ -1180,6 +1180,18 @@ Accepted by the maintainer on 2026-11-26, as recommended:
 Left open, with no recommendation: a `pattern` in the contract for the rules the server holds (the app id), or not. It
 is decided when the new app's form is ported.
 
+**Decided with the maintainer on 2026-11-27, as the forms were ported (#205):**
+
+- **No `pattern` in the contract.** The new app's id gets a client check, `appIdError` in `store/helpers/app-id.ts`,
+  which copies the core's rule (`AppId::regex()`), as the env form's `newVariableError` copies the variable name's. The
+  server's `editor.invalid_app_id` and `editor.app_exists` still land under the id's field.
+- **The app editor is no form.** Its drafts stay as they are, and nothing of it moves to TanStack Form. A save's refusal
+  shows under the editor of the file its code names, placed by `formErrorsOf` with a `FieldsByCode` by path, with no
+  toast. A refused new file shows why under its path's input, which stays open, in plain local state.
+- **The login form is not ported** in #205, whose text names the other four.
+- The YAML editor of the configuration and of the new app is a component, `YamlEditor`
+  (`common/components/yaml-editor.tsx`), whose value the form holds: `useYamlEditor`, which held it, is gone.
+
 ### Not checked
 
 - `useOptimistic` failing to show the marks before the answer: the cause was not traced.
