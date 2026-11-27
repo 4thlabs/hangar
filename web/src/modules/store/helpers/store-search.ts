@@ -11,12 +11,6 @@ export type StoreSearch = { q?: string | undefined; filter?: string | undefined 
 /** Both filters, in the order the filter menu lists them. */
 export const storeFilters: readonly AppFilter[] = [AppFilter.installed, AppFilter.available];
 
-/** What each filter is called in the menu. */
-export const storeFilterLabels: Readonly<Record<AppFilter, string>> = {
-  installed: "Installed",
-  available: "Not installed",
-};
-
 /** The search of a URL: a value of another type left out, and an unknown filter dropped, so that a hand-edited URL is no error. */
 export function validateStoreSearch(search: Record<string, unknown>): StoreSearch {
   const q = typeof search.q === "string" && search.q !== "" ? search.q : undefined;

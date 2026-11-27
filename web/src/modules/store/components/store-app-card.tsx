@@ -5,6 +5,7 @@ import { Badge } from "#modules/common/ui/badge.tsx";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardTitle } from "#modules/common/ui/card.tsx";
 import { StoreAppButton } from "#modules/store/components/store-app-button.tsx";
+import { storeMessages } from "#modules/store/messages.ts";
 
 type StoreAppCardProps = {
   app: StoreApp;
@@ -17,7 +18,7 @@ export function StoreAppCard({ app }: StoreAppCardProps) {
       <Link
         to="/store/$id/edit"
         params={{ id: app.id }}
-        aria-label={`Edit ${app.name}`}
+        aria-label={storeMessages.card.edit({ name: app.name })}
         className={buttonVariants({
           variant: "ghost",
           size: "icon-xs",
@@ -34,8 +35,8 @@ export function StoreAppCard({ app }: StoreAppCardProps) {
         )}
         <CardTitle className="line-clamp-2 text-base leading-tight">{app.name}</CardTitle>
         {app.swarmReady && (
-          <Badge variant="outline" title="Has a compose.swarm.yml: once installed, it deploys from the Cluster page">
-            Swarm
+          <Badge variant="outline" title={storeMessages.card.swarmHint}>
+            {storeMessages.card.swarm}
           </Badge>
         )}
       </CardContent>

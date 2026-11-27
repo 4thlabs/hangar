@@ -4,6 +4,9 @@ import type { AppFile } from "#libs/api";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { storeMutations, storeQueries } from "#modules/store/api/store-queries.ts";
+import { storeMessages } from "#modules/store/messages.ts";
+
+const words = storeMessages.editor;
 
 export type AppFilesOptions = {
   id: string;
@@ -74,11 +77,11 @@ export function useAppFiles({ id, files, initialFile }: AppFilesOptions) {
         onSuccess: () => {
           setError(path, null);
           setSavedSources(current => new Map(current).set(path, source));
-          toastSuccess("File saved", `${path} was saved.`);
+          toastSuccess(words.fileSaved, words.fileSavedDescription({ path }));
         },
         onError: error => {
           setError(path, describeError(error));
-          toastFailure("File rejected", error);
+          toastFailure(words.fileRejected, error);
         },
       },
     );
@@ -103,11 +106,11 @@ export function useAppFiles({ id, files, initialFile }: AppFilesOptions) {
           setPaths(current => [...current, path].sort());
           remember(path, "");
           setSelectedPath(path);
-          toastSuccess("File created", `${path} was created.`);
+          toastSuccess(words.fileCreated, words.fileCreatedDescription({ path }));
         },
         onError: error => {
           setError(openPath, describeError(error));
-          toastFailure("File rejected", error);
+          toastFailure(words.fileRejected, error);
         },
       },
     );

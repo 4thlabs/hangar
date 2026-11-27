@@ -7,6 +7,9 @@ import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts"
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 import { storeMutations } from "#modules/store/api/store-queries.ts";
+import { storeMessages } from "#modules/store/messages.ts";
+
+const words = storeMessages.install;
 
 type StoreAppButtonProps = {
   app: StoreApp;
@@ -15,14 +18,18 @@ type StoreAppButtonProps = {
 /** What the button of a card says in each state. Uninstalling keeps its wording and only spins. */
 function buttonFace(app: StoreApp, isPending: boolean) {
   if (app.installed) {
-    return { title: "Uninstall", label: `Uninstall ${app.name}`, icon: isPending ? <Spinner /> : <Trash2Icon /> };
+    return {
+      title: words.uninstall,
+      label: words.uninstallApp({ name: app.name }),
+      icon: isPending ? <Spinner /> : <Trash2Icon />,
+    };
   }
 
   if (isPending) {
-    return { title: "Installing…", label: `Installing ${app.name}`, icon: <Spinner /> };
+    return { title: words.installing, label: words.installingApp({ name: app.name }), icon: <Spinner /> };
   }
 
-  return { title: "Install", label: `Install ${app.name}`, icon: <DownloadIcon /> };
+  return { title: words.install, label: words.installApp({ name: app.name }), icon: <DownloadIcon /> };
 }
 
 /** A card's install or uninstall, the latter confirmed first: it takes the app's containers down. */
@@ -33,14 +40,14 @@ export function StoreAppButton({ app }: StoreAppButtonProps) {
   // `mutate`, so that they show even when the list read again leaves this card out.
   const install = useMutation({
     ...storeMutations.install(),
-    onSuccess: () => toastSuccess("App installed", `${app.name} was installed.`),
-    onError: error => toastFailure("Installation failed", error),
+    onSuccess: () => toastSuccess(words.installed, words.installedDescription({ name: app.name })),
+    onError: error => toastFailure(words.installFailed, error),
   });
 
   const uninstall = useMutation({
     ...storeMutations.uninstall(),
-    onSuccess: () => toastSuccess("App uninstalled", `${app.name} was uninstalled.`),
-    onError: error => toastFailure("Uninstallation failed", error),
+    onSuccess: () => toastSuccess(words.uninstalled, words.uninstalledDescription({ name: app.name })),
+    onError: error => toastFailure(words.uninstallFailed, error),
   });
 
   const isPending = install.isPending || uninstall.isPending;
@@ -67,9 +74,9 @@ export function StoreAppButton({ app }: StoreAppButtonProps) {
       </Button>
       <ConfirmDialog
         open={confirming}
-        title={`Uninstall ${app.name}?`}
-        description="The app's containers are stopped and removed, then the app is taken off the installed apps. The volumes are kept."
-        confirmLabel="Uninstall"
+        title={words.confirmTitle({ name: app.name })}
+        description={words.confirmDescription}
+        confirmLabel={words.uninstall}
         destructive
         onConfirm={confirmUninstall}
         onCancel={() => setConfirming(false)}
