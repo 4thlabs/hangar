@@ -540,16 +540,19 @@ bell.send({ kind: "filed", notification });
 
 ## The words: Paraglide, in English
 
-Every word is a message of Paraglide JS 2 in `web/messages/en.json`, flat, English only, compiled into `src/paraglide/`
-(ADR 0002, decision 5, as #214 amended it). There is no `t()`, no locale switch and no cookie: the one strategy is the
-base locale.
+Every word is a message of Paraglide JS 3 in `web/messages/en.json`, flat, English only, in Paraglide's typical Vite
+setup with its defaults (ADR 0002, decision 5, as #214 amended it). There is no `t()` and no locale switch.
 
 ```
 web/
-  project.inlang/settings.json   Paraglide's project: base locale en, locales [en], the inlang message format plugin
-  messages/en.json               every message, flat
-  src/paraglide/                 what Paraglide compiles: generated and gitignored, like orval's generated.ts
+  project.inlang/settings.json         base locale en, locales [en], the message format plugin from node_modules
+  project.inlang/paraglide.config.ts   Paraglide's options: outdir alone, which its Vite plugin has no default for
+  messages/en.json                     every message, flat
+  src/paraglide/                       what Paraglide compiles: generated and gitignored, like orval's generated.ts
 ```
+
+`paraglide-js init` writes the jsDelivr URL; Hangar loads the plugin from `node_modules`, pinned by the lockfile, so
+that builds and the Docker image work offline.
 
 ```json
 {
@@ -588,9 +591,12 @@ export const appsLabels = {
   no group nests in another; a message with no group gets one (`common_actions_retry`). The shell's are `common_`, a
   page's its section's module's.
 - **Calls**: `m.<id>()` where the words are shown. No alias of a group (`const words = …`), no call at a module's top
-  level: a table holds `m`'s functions.
-- **Params**: one object. No message is built from another's words; a standalone label, a name or a whole sentence
-  may be a param. A list is joined by the caller with `Intl.ListFormat`.
+  level: a table holds `m`'s functions. No `m[key]()`: `tsc` refuses it (TS7053), and every message would ship.
+- **Params**: one object. No message is built from another's words: a compose outcome is one variant of
+  `common_compose_outcome` on the operation and its two options, not fragments joined. A standalone label, a name or a
+  whole sentence may be a param. A list of names is joined by the caller with `Intl.ListFormat`.
+- **Types**: `tsc` checks the ids, the params' names and the missing ones, and types a selector of exact variants by
+  them (`pull: "false" | "true"`). Any other param is `NonNullable<unknown>`: a wrong type compiles.
 - **Plurals**: a message that counts takes the number; its forms are variants on it (`countPlural=one`, `=other`),
   and an exact `countExact=0` variant where English says 0 apart. No caller picks a form. A grouped number is
   `{count: number maximumFractionDigits=0}`.
@@ -598,8 +604,11 @@ export const appsLabels = {
   tables keyed by code keep their place and call `m`: `error-message.ts` by `ErrorCode`, `notification-text.ts` by
   key, `upFlagSpecs`, `widgetLook`.
 - **Adding one**: write it in `messages/en.json` beside its module's, then call it. The Vite plugin compiles it in
-  `vite` and the tests; `typecheck`, `lint` and `build` run `paraglide-js compile` first, so a missing id or param
-  is a `tsc` error. Nothing imports `messages/en.json` itself: ESLint refuses it.
+  `vite` and the tests, as virtual modules; `typecheck`, `lint` and `build` run `paraglide-js compile` first, to disk,
+  so a missing id or param is a `tsc` error. Nothing imports `messages/en.json` itself: ESLint refuses it.
+- **Options**: Paraglide's defaults, none written at its default value. The default strategy gives `en` and writes the
+  cookie `PARAGLIDE_LOCALE`. An empty catalog (a plugin that does not load) fails `npm run build` at its `tsc`.
+- **A second locale** keeps `setLocale`'s reload of the page: the React compiler caches what `m.x()` returned.
 - Prose with markup (a description with `<code>`) may stay in its JSX until translation comes.
 
 ## Classes: none made only of statics
