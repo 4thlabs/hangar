@@ -1,6 +1,6 @@
 ---
 name: hangar-web
-description: How Hangar's page in web/ is built, from ADR 0002. Its layout (routes are the pages, one folder per section, _app/route.tsx and _app/-shell/ the shell, the wiring at src/, modules apart with api/, helpers/, hooks/, components/ and messages.ts), the query and mutation options on orval's, useEventFeed and useEventStream, QueryRegion and RenderRegion, createPage, Preferences, forms on TanStack Form with formErrorsOf, the optimistic rule, tests on orval's MSW handlers, the words in messages.ts, and no class made only of statics. Use it for any work under web/, the Rust server's Vite SPA - a page, a component, a hook, a query, a mutation, a route, a form, a test - and to review or plan such work.
+description: How Hangar's page in web/ is built, from ADR 0002. Its layout (routes are the pages, one folder per section, _app/route.tsx and _app/-shell/ the shell, the wiring at src/, modules apart with api/, helpers/, hooks/ and components/), the query and mutation options on orval's, useEventFeed and useEventStream, QueryRegion and RenderRegion, createPage, Preferences, forms on TanStack Form with formErrorsOf, the optimistic rule, tests on orval's MSW handlers, the words in Paraglide's messages/en.json called as m.<id>(), and no class made only of statics. Use it for any work under web/, the Rust server's Vite SPA - a page, a component, a hook, a query, a mutation, a route, a form, a test - and to review or plan such work.
 ---
 
 # Hangar's page in `web/`
@@ -12,7 +12,7 @@ gives the why, the options weighed and the measures.
 
 **The code is moving to it.** The ADR lands in four PRs: #195 (no class made only of statics, `createPage`,
 `Session`), #186 (file routes), #203 (the data layer, the two stream hooks and the regions), then #204 (the words in
-`messages.ts`).
+`messages.ts`), which #214 moved to Paraglide's `messages/en.json`.
 
 - Write new code in this shape with the pieces that exist.
 - Do not port code an issue is not about: AGENTS.md's scope rule holds.
@@ -36,30 +36,30 @@ src/routes/                        one file per route = its page: path, validate
                                    component that composes the modules; one folder per section under _app/, whose
                                    route.tsx is the shell, its pieces in _app/-shell/ (below)
 src/modules/<d>/api/               query and mutation options on orval's, keys, what a change makes stale, Session
-src/modules/<d>/helpers/           the domain: pure functions, view models, search params, formats, labels, parsers
+src/modules/<d>/helpers/           the domain: pure functions, view models, search params, formats, parsers;
+                                   <d>-labels.ts, the labels of its enums, which call m
 src/modules/<d>/hooks/             compose queries, feeds and local state machines
 src/modules/<d>/components/        the pieces the pages are made of
-src/modules/<d>/messages.ts        the module's words, the one file at a module's root
 src/modules/common/                what two modules or more share: ui/, components/, hooks/, api/, helpers/
 src/libs/                          the API client, formats, preferences
+src/paraglide/                     what Paraglide compiles from messages/en.json: generated and gitignored
 ```
 
-| Layer                     | May import                                                         | Must not import                                                                                                |
-| ------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| `helpers/`, `messages.ts` | types and enums of `#libs/api`, `helpers/` of its own and `common` | React, `@tanstack/*`, orval's hooks, keys and fetchers, `api/`, `hooks/`, `components/`, `ui/` (types allowed) |
-| `api/`                    | `#libs/api` options, keys, URLs; `helpers/`                        | React, orval's `use*` hooks, `hooks/`, `components/`                                                           |
-| `hooks/`                  | `api/`, `helpers/`, `common/hooks`                                 | orval's `use*` hooks                                                                                           |
-| `components/`             | everything above, `ui/`                                            | orval's `use*` hooks                                                                                           |
-| a module, any layer       | its own folders, `common`, `#libs/...`                             | another module, `#routes/`, the wiring; `common` imports no other module                                       |
-| `routes/`                 | every module, the wiring's types                                   | orval's `use*` hooks                                                                                           |
+| Layer               | May import                                                                        | Must not import                                                                                                |
+| ------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `helpers/`          | types and enums of `#libs/api`, `helpers/` of its own and `common`, `#paraglide/` | React, `@tanstack/*`, orval's hooks, keys and fetchers, `api/`, `hooks/`, `components/`, `ui/` (types allowed) |
+| `api/`              | `#libs/api` options, keys, URLs; `helpers/`                                       | React, orval's `use*` hooks, `hooks/`, `components/`                                                           |
+| `hooks/`            | `api/`, `helpers/`, `common/hooks`                                                | orval's `use*` hooks                                                                                           |
+| `components/`       | everything above, `ui/`                                                           | orval's `use*` hooks                                                                                           |
+| a module, any layer | its own folders, `common`, `#libs/...`, `#paraglide/...`                          | another module, `#routes/`, the wiring; `common` imports no other module                                       |
+| `routes/`           | every module, the wiring's types                                                  | orval's `use*` hooks                                                                                           |
 
 - orval's `use*` hooks are never imported outside `#libs/api`. Call `useQuery(xQueries.y())` and
   `useMutation(xMutations.z())`.
 - Modules by domain, pages by route. **A module never imports another**: the route files compose them. What two
   modules really share goes down into `common` (the compose vocabulary, the Docker changes feed), and only then.
 - No barrel. Tests sit next to their code; a page's beside its route file (`routes/_app/apps/index.test.tsx`).
-- No file sits directly under a module but `messages.ts` and its test, nor directly under `modules/`: ESLint refuses
-  any other.
+- No file sits directly under a module, nor directly under `modules/`: ESLint refuses them.
 - `libs/` holds what has no React and no page domain.
 - A file is named after its main export: `apps-view.ts` exports `appsView`.
 - The ADR's lint rules, which come with its PRs, are core ESLint (`no-restricted-syntax`, `no-restricted-imports`):
@@ -122,7 +122,8 @@ export const settingsMutations = {
 };
 ```
 
-- `xQueries` and `xMutations` are the one object of functions allowed: TanStack's factory idiom.
+- `xQueries` and `xMutations` are the one object of functions allowed as a namespace: TanStack's factory idiom. A
+  table keyed by a code or an enum, as `wordsByCode` or `appsLabels.status`, is data, not a namespace.
 - A mutation whose answer is the new state writes it with `setQueryData`, in its options, instead of `invalidates`.
 - `meta.invalidates` is for success only. "Read again whatever the outcome" (install, run, cancel) goes in that
   mutation's own `onSettled`. A key is a prefix: `getStoreAppsQueryKey()` covers the editor's reads of each app,
@@ -179,8 +180,7 @@ const { data, error, isPending } = useQuery(dockerQueries.projects());
 const { isReconnecting } = useDockerChanges();
 const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
 const view = appsView(data ?? [], search, selection);
-const words = appsMessages.list;
-// ... {view.selected.length === 0 ? words.noSelection : words.selected({ count: view.selected.length })}
+// ... {view.selected.length === 0 ? m.apps_list_no_selection() : m.apps_list_selected({ count: view.selected.length })}
 ```
 
 A page component **may** read the route (`useSearch`, `useParams`), call its module's hooks and queries, hold the UI
@@ -356,7 +356,7 @@ const stream = useEventStream<ComposeEvent, ComposeOutputState>(() => emptyCompo
 - `describeError(error)` and `describeErrorDetail(detail)` (`common/helpers/error-message.ts`) are the one table that
   words a server code. A code with no words is a type error.
 - `toastSuccess(title, description)` and `toastFailure(title, error)` are called from the mutation's own `onSuccess`
-  and `onError`, with words from the module's messages. No global toast on every failure.
+  and `onError`, with words from `m`. No global toast on every failure.
 - A 401 goes through the caches' `onError` to `session.signedOut(router)`.
 - **Regions** (`common/components/region.tsx`) wrap each card and widget, so that it fails alone. The component that
   renders the card reads with `useQuery`, above the region, and `<QueryRegion query failure fallback>` shows it: the
@@ -382,7 +382,7 @@ export function JobsSettingsCard() {
   const jobs = useQuery(settingsQueries.jobs());
 
   return (
-    <QueryRegion query={jobs} failure="Could not read the jobs" fallback={<Skeleton className="h-24 w-full" />}>
+    <QueryRegion query={jobs} failure={m.settings_jobs_read_failed()} fallback={<Skeleton className="h-24 w-full" />}>
       {runs => <JobRuns runs={runs} error={jobs.error} />}
     </QueryRegion>
   );
@@ -538,33 +538,69 @@ bell.send({ kind: "filed", notification });
 - Faker's answers are random: use them only for bodies the test never reads.
 - Test the domain's `helpers/` directly, without rendering. Name a test after the behaviour it checks.
 
-## The words: `messages.ts`, in English
+## The words: Paraglide, in English
 
-Each module's words are in its `messages.ts`, a plain `as const` object, English only. There is no `t()`, no locale
-and no hook:
+Every word is a message of Paraglide JS 2 in `web/messages/en.json`, flat, English only, compiled into `src/paraglide/`
+(ADR 0002, decision 5, as #214 amended it). There is no `t()`, no locale switch and no cookie: the one strategy is the
+base locale.
 
-```ts
-export const appsMessages = {
-  status: {
-    running: "Running",
-    partial: "Partial",
-    stopped: "Stopped",
-    unhealthy: "Degraded",
-  } satisfies Record<ProjectStatus, string>,
-  list: {
-    title: "Apps",
-    noSelection: "No selection",
-    selected: ({ count }: { count: number }) => `${commonMessages.compose.appCount({ count })} selected`,
-  },
-} as const;
+```
+web/
+  project.inlang/settings.json   Paraglide's project: base locale en, locales [en], the inlang message format plugin
+  messages/en.json               every message, flat
+  src/paraglide/                 what Paraglide compiles: generated and gitignored, like orval's generated.ts
 ```
 
-- A label of an enum is typed by the contract, so a new value is a type error.
-- The tables keyed by code stay where they are: `error-message.ts` by `ErrorCode`, `notification-text.ts` by key,
-  each entry calling its message.
+```json
+{
+  "apps_list_title": "Apps",
+  "apps_logs_title": "Logs of {name}",
+  "apps_list_selected": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{count} app selected", "countPlural=other": "{count} apps selected" }
+    }
+  ]
+}
+```
+
+```ts
+import { m } from "#paraglide/messages.js";
+
+m.apps_list_title();
+m.apps_list_selected({ count: view.selected.length });
+
+// apps/helpers/apps-labels.ts: an enum's labels, typed by the contract
+export const appsLabels = {
+  status: {
+    running: m.apps_status_running,
+    partial: m.apps_status_partial,
+    stopped: m.apps_status_stopped,
+    unhealthy: m.apps_status_unhealthy,
+  } satisfies Record<ProjectStatus, () => string>,
+};
+// <Badge>{appsLabels.status[project.status]()}</Badge>
+```
+
+- **Ids**: `<module>_<group>_<message>`, `snake_case`, three parts, the module whose pages show it first:
+  `apps_logs_reconnect`, `common_shell_home_link`. A part may take several words (`apps_totals_running_containers`);
+  no group nests in another; a message with no group gets one (`common_actions_retry`). The shell's are `common_`, a
+  page's its section's module's.
+- **Calls**: `m.<id>()` where the words are shown. No alias of a group (`const words = …`), no call at a module's top
+  level: a table holds `m`'s functions.
+- **Params**: one object. No message is built from another's words; a standalone label, a name or a whole sentence
+  may be a param. A list is joined by the caller with `Intl.ListFormat`.
+- **Plurals**: a message that counts takes the number; its forms are variants on it (`countPlural=one`, `=other`),
+  and an exact `countExact=0` variant where English says 0 apart. No caller picks a form. A grouped number is
+  `{count: number maximumFractionDigits=0}`.
+- **Tables**: an enum's labels in the module's `helpers/<d>-labels.ts`, `satisfies Record<Enum, () => string>`. The
+  tables keyed by code keep their place and call `m`: `error-message.ts` by `ErrorCode`, `notification-text.ts` by
+  key, `upFlagSpecs`, `widgetLook`.
+- **Adding one**: write it in `messages/en.json` beside its module's, then call it. The Vite plugin compiles it in
+  `vite` and the tests; `typecheck`, `lint` and `build` run `paraglide-js compile` first, so a missing id or param
+  is a `tsc` error. Nothing imports `messages/en.json` itself: ESLint refuses it.
 - Prose with markup (a description with `<code>`) may stay in its JSX until translation comes.
-- A page's words are in its section's module (`/apps` in `appsMessages`, the dashboard in `widgetsMessages`), the
-  shell's in `commonMessages.shell`.
 
 ## Classes: none made only of statics
 
@@ -578,7 +614,7 @@ export const appsMessages = {
 - `static` stays only for a real factory or constant of a class with instances: `Preferences.fromCookies`.
 - `ApiError extends Error` and test doubles with instances are classes as before.
 - ESLint's `no-restricted-syntax` flags a class made only of statics, and `no-restricted-imports` what a module's
-  `helpers/` and `messages.ts` may not import (ADR rules 1 and 4), and any import of another module.
+  `helpers/` may not import (ADR rules 1 and 4), any import of another module, and any of `messages/en.json`.
 
 ## Lists
 

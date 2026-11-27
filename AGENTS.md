@@ -46,11 +46,30 @@ modules/<d>/
   components/                  the pieces the pages are made of
   hooks/
   api/                         query and mutation options, keys, invalidation, services such as Session
-  helpers/                     plain functions and consts, no React: search params, filters, formats, labels
-  messages.ts                  the module's words, the one file at a module's root
+  helpers/                     plain functions and consts, no React: search params, filters, formats; <d>-labels.ts,
+                               the labels of its enums, which call m
 modules/common/                what two modules or more share: ui/, components/, hooks/, api/, helpers/
 libs/                          the API client, formats, preferences
+paraglide/                     what Paraglide compiles from web/messages/en.json: generated and gitignored
 ```
+
+The words are Paraglide's, beside `src/`, as the maintainer decided on 2026-11-27 (#214):
+
+```
+web/
+  project.inlang/settings.json   Paraglide's project: base locale en, locales [en], the inlang message format plugin
+  messages/en.json               every message, flat
+  src/paraglide/                 what Paraglide compiles: generated and gitignored, like orval's generated.ts
+```
+
+A message's id is `<module>_<group>_<message>`, in `snake_case`: the module whose pages show it, one group, then the
+message, as `apps_logs_reconnect` and `common_shell_home_link`. A group or a message may take several words
+(`apps_totals_running_containers`), and a message with no group of its own gets one (`common_actions_retry`). The code
+calls it as `m.apps_logs_reconnect()`, `import { m } from "#paraglide/messages.js"`, where the words are shown: no
+alias of a group, and no call at a module's top level. A message that counts takes the number, and its forms are
+Paraglide variants on it (`countPlural=one`, `countPlural=other`): no caller picks a plural. The labels of an enum are a
+table of `m`'s functions in the module's `helpers/<d>-labels.ts`, `satisfies Record<ProjectStatus, () => string>`. The
+rules, and how to add a message, are in [`docs/web/CODING_RULES.md`](docs/web/CODING_RULES.md#words).
 
 The routes, as the maintainer decided on 2026-11-27 (#210):
 
@@ -86,10 +105,10 @@ A card or a widget reads with `useQuery`, in the component that renders it, and 
 `QueryRegion`, or `RenderRegion` when it reads nothing: ADR 0002's decision 4, as #203 amended it on the maintainer's
 decision of 2026-11-27. No suspense read in a card.
 
-A module imports only `common`, `#libs/...` and its own files, and `common` no other module: the routes compose the
-modules. ESLint holds it, with `#modules/...` imports and no `..` segment, along with rule 4 on `helpers/` and
-`messages.ts` (no React, no TanStack, only types from `api/`, `hooks/`, `components/`, `ui/`) and no other file directly
-under a module than `messages.ts` and its test.
+A module imports only `common`, `#libs/...`, `#paraglide/...` and its own files, and `common` no other module: the
+routes compose the modules. ESLint holds it, with `#modules/...` imports and no `..` segment, along with rule 4 on
+`helpers/` (no React, no TanStack, only types from `api/`, `hooks/`, `components/`, `ui/`; `#paraglide/` allowed), no
+import of `messages/en.json` anywhere, and no file directly under a module.
 
 ## Import mapping
 
@@ -103,7 +122,8 @@ For `src/` and `web/`, which has the same.
 ```
 
 Two rules, and they are not meant to grow: when a specifier does not resolve, add the missing
-`index.ts`, never a per-library line. `tsconfig.json` mirrors them.
+`index.ts`, never a per-library line. `tsconfig.json` mirrors them. `web/` has a third, `"#paraglide/*":
+"./src/paraglide/*"`, for what Paraglide compiles (#214), mirrored in its `tsconfig.json` too.
 
 Do not retry these, all verified here:
 
@@ -248,17 +268,19 @@ takes from `src/` what a page it moves needs, copied: the Waku version keeps its
 `src/libs/api/generated.ts`, its MSW handlers `generated.msw.ts`, and `web/openapi.json` are written by
 `cargo quoll gen`, never committed. Its `src/routeTree.gen.ts` is not committed either: TanStack Router writes it from
 the route files of `src/routes/`, by its Vite plugin in `vite` and the tests, and by `tsr generate` at the start of
-the `build`, `typecheck` and `lint` scripts, which run `tsc` and oxlint before Vite. Its design is
+the `build`, `typecheck` and `lint` scripts, which run `tsc` and oxlint before Vite. Nor is its `src/paraglide/`:
+Paraglide compiles it from `messages/en.json`, by its Vite plugin in `vite` and the tests, and by `paraglide-js compile`
+first in the same three scripts. Its design is
 [ADR 0002](docs/adr/0002-web-design.md), accepted on 2026-11-26, and the `hangar-web` skill gives its rules in short.
 Where the ADR and the sections for `src/` differ, `web/` follows the ADR: no class made only of statics, and its words
-in a plain `messages.ts` per module.
+in Paraglide's `messages/en.json`.
 
 The page is English only, decided with the maintainer on 2026-11-24: the Translations section above is the Waku
-version's alone, until the switch. `web/` has no translation helper, no `t()`, no language cookie or switch. Its words
-are written in English, in each module's `messages.ts`, a plain object (ADR 0002, decision 5, which partly reverses
-the 2026-11-24 line "in its components"), and `Intl` formats dates and numbers in English. A page's words are in its
-section's module, the shell's in `common/messages.ts` (#204). A page moved from `src/` takes the English words of its
-`messages.ts`, without the French.
+version's alone, until the switch. `web/` has no `t()`, no language cookie or switch: Paraglide has one locale, `en`,
+and its one strategy is the base locale, so it reads no cookie. Its words are written in English in
+`web/messages/en.json`, Paraglide's catalog (ADR 0002, decision 5, as #214 amended it on 2026-11-27), and `Intl`
+formats dates and numbers in English. A page's words carry its section's module as their prefix, the shell's
+`common_` (#204). A page moved from `src/` takes the English words of its `messages.ts`, without the French.
 
 The Rust server runs its jobs in its own process, in memory (`crates/server/src/jobs.rs`): a scheduler, its crons
 read by the core's `CronSchedule`, and queues of one job at a time. The Sidequest worker and its composition root,
@@ -290,10 +312,10 @@ builds text for the user alone: what it says to the page is a code and its param
 - **Web.** `ApiError.detail` reads a problem's code and params into the `ErrorDetail` a body carries. The page says
   why a call failed through `describeError(error)`, and words an `ErrorDetail` through
   `describeErrorDetail(detail)` (`web/src/modules/common/helpers/error-message.ts`): the one place that keys the words
-  by the code, typed by the codes of the contract, so that a code without words is a type error, and that a catalog
-  will word in another language. A code the page does not know, from a server newer than it, shows the server's
-  message; a problem of no code, one quoll answers itself, its detail. The page's own words stay in its components,
-  in English.
+  by the code, typed by the codes of the contract, so that a code without words is a type error, each calling its
+  message of `messages/en.json`, which another locale's catalog will word in its language. A code the page does not
+  know, from a server newer than it, shows the server's message; a problem of no code, one quoll answers itself, its
+  detail. The page's own words are in `messages/en.json` too, in English.
 
 What CI's `rust` job runs, warnings as errors:
 

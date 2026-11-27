@@ -43,19 +43,22 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
     define.
 - The ADR's own rules come with the PRs that make the code pass them (decision 10), in ESLint's core rules:
   - rule 1, `no-restricted-syntax`, on `web/src`: no class made only of static members;
-  - rule 4, `no-restricted-imports`, on a module's `helpers/` and its `messages.ts` (`modules/*/helpers/**` and
-    `modules/*/messages.ts`, tests excepted): no React and no package of React's (`react-*`, `lucide-react`,
-    `@base-ui/`, each with its subpaths), no `@tanstack/`, from `#libs/api` only the names that start with a capital
-    (its types, enums and `ApiError`: orval's hooks, fetchers and keys and the transport's functions start with a
-    lowercase letter), and only types from `api/`, `hooks/`, `components/` or `ui/`, by `#modules/...` or `./`; and
-    `no-restricted-syntax`, on the same files, refuses an `import()` of those folders;
+  - rule 4, `no-restricted-imports`, on a module's `helpers/` (`modules/*/helpers/**`, tests excepted): no React and
+    no package of React's (`react-*`, `lucide-react`, `@base-ui/`, each with its subpaths), no `@tanstack/`, from
+    `#libs/api` only the names that start with a capital (its types, enums and `ApiError`: orval's hooks, fetchers and
+    keys and the transport's functions start with a lowercase letter), and only types from `api/`, `hooks/`,
+    `components/` or `ui/`, by `#modules/...` or `./`; and `no-restricted-syntax`, on the same files, refuses an
+    `import()` of those folders. Paraglide's `m`, from `#paraglide/messages.js`, is allowed (#214);
   - #207's isolation, `no-restricted-imports` on each `modules/<a>/`, its blocks written from the folders of
-    `web/src/modules`: no `#...` import but `#libs/`, `#modules/common/` and `#modules/<a>/` (`#mock/` too in a test),
+    `web/src/modules`: no `#...` import but `#libs/`, `#paraglide/`, `#modules/common/` and `#modules/<a>/` (`#mock/`
+    too in a test),
     so no other module, no `#routes/` and none of the wiring, and no `..` segment anywhere (`../`, `./../`,
     `#modules/a/../b/`), so that every import names its module; `no-restricted-syntax` does the same for `import()`,
     of a string or of a template with no expression;
   - #207's loose files, `no-restricted-syntax` on `modules/*.{ts,tsx}` and `modules/*/*.{ts,tsx}`: no file directly
-    under `modules/`, and none directly under a module but `messages.ts` and `messages.test.ts`;
+    under `modules/` or directly under a module;
+  - #214's catalog, `no-restricted-imports` on every file of `web/src`: no import of `messages/en.json`, whose ids
+    `tsc` does not check, so that the words are read through `m`;
   - rule 2, `no-restricted-imports` on `modules/`, `routes/` and the wiring at `src/`: no name of `#libs/api` that
     starts with `use` and a capital, orval's hooks, so that a component calls `useQuery` and `useMutation` on its
     module's `api/` options; and no `..` segment in `routes/` and the wiring either;
@@ -105,6 +108,61 @@ As decided with ADR 0002 (decision 7), reversing the "Classes" section of AGENTS
   `WidgetIcon.dashboard`.
 - `ApiError extends Error` and the test doubles with instances are classes as before.
 - The layers, what each may import, and where the code of a page goes are the ADR's decision 1.
+
+## Words
+
+The page is English only, and its words are [Paraglide JS](https://paraglidejs.com)'s, version 2, pinned in
+`web/package.json` (ADR 0002, decision 5, as #214 amended it on 2026-11-27):
+
+```
+web/
+  project.inlang/settings.json   Paraglide's project: base locale en, locales [en], the inlang message format plugin
+  messages/en.json               every message, flat
+  src/paraglide/                 what Paraglide compiles: generated and gitignored, like orval's generated.ts
+```
+
+- **Ids.** `<module>_<group>_<message>`, in `snake_case`: the module whose pages show the words, one group, then the
+  message, as `apps_logs_reconnect`, `settings_install_running` and `common_shell_home_link`. A group or a message
+  may take several words (`apps_totals_running_containers`, `widgets_docker_general_stats_title`). No group nests in
+  another: a message of `list` and `totals` is in `totals`. A message with no group of its own gets one
+  (`common_actions_retry`, `apps_feed_reconnecting`). The module's prefix keeps #204's ownership: the shell's words
+  are `common_`, a page's those of its section's module.
+- **Calls.** `import { m } from "#paraglide/messages.js"`, then `m.apps_list_title()`, where the words are shown. No
+  alias of a group (`const words = …`), and no call at a module's top level, whose `const` would keep the words of the
+  locale it was loaded in: a table holds `m`'s functions, called where they are read.
+- **Params.** A message that interpolates takes one params object: `m.apps_list_selected({ count })`. No message is
+  built from another message's words: each says its whole text, as `apps_list_selected` says "1 app selected" on its
+  own. A standalone label, a name or a whole sentence may be a param, as a confirmation's `{ label, subject }`. A list
+  is joined by the caller with `Intl.ListFormat`, as `composeOutcome` joins its outcomes.
+- **Plurals.** A message that counts takes the number, and its forms are Paraglide's variants on it. No caller picks a
+  form:
+
+  ```json
+  "apps_detail_services": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{count} service", "countPlural=other": "{count} services" }
+    }
+  ]
+  ```
+
+  A form English gives 0 apart takes an exact variant before the plural ones (`common_compose_down_description`:
+  `local countExact = count`, then `"countExact=0, countPlural=*"`). A number grouped as `formatInteger` groups it is
+  `{count: number maximumFractionDigits=0}`.
+
+- **Labels.** The labels of an enum are a table of `m`'s functions, one file per module in its `helpers/`,
+  `<module>-labels.ts`, typed by the contract so that a new value is a type error:
+  `appsLabels.status[status]()`, `satisfies Record<ProjectStatus, () => string>`. The tables keyed by a code keep
+  their place and call `m`: `describeError` by `ErrorCode`, `describeNotification` by key, `upFlagSpecs`,
+  `widgetLook`.
+- **Adding a message.** Write it in `messages/en.json`, beside its module's, then call `m.<id>()`. The Vite plugin
+  compiles the file in `vite` and the tests, again as it changes; `npm run typecheck --prefix web`, `lint` and `build`
+  compile it first with `paraglide-js compile`, so that `tsc` reads its types: an id the code calls and `en.json` does
+  not have, or a param it leaves out, is a type error.
+- **Paraglide's options**, the same in `vite.config.ts` and the scripts: `strategy: ["baseLocale"]`, so that it reads
+  no cookie, and `.d.ts` files beside its JavaScript (`emitTsDeclarations`), which TypeScript 7 reads without
+  `allowJs`. Prettier, ESLint and oxlint ignore `src/paraglide/`.
 
 ## React
 
