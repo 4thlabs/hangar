@@ -4,10 +4,10 @@ import { commonMessages } from "#modules/common/messages.ts";
 const words = commonMessages.errors;
 
 /** A code of the server's errors, as `store.unknown_app`. */
-type ErrorCode = ErrorDetail["code"];
+export type ErrorCode = ErrorDetail["code"];
 
 /** The params of `Code`, as `{ app: string }`; nothing for a code that has none. */
-type ParamsOf<Code extends ErrorCode> =
+export type ParamsOf<Code extends ErrorCode> =
   Extract<ErrorDetail, { code: Code }> extends { params: infer Params } ? Params : undefined;
 
 /** The words of each code, from its params, and the seconds its answer's `Retry-After` says to wait, if any. */

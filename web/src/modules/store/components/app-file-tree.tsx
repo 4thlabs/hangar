@@ -2,6 +2,7 @@ import { cn } from "cn";
 import { ChevronDownIcon, ChevronRightIcon, FileIcon, FolderIcon, PlusIcon } from "lucide-react";
 import { useState, type ComponentProps, type FormEvent, type ReactNode } from "react";
 import { Button } from "#modules/common/ui/button.tsx";
+import { FieldError } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
 import { buildFileTree, type FileTreeFolder, type FileTreeNode } from "#modules/store/helpers/file-tree.ts";
 import { storeMessages } from "#modules/store/messages.ts";
@@ -15,8 +16,11 @@ type AppFileTreeProps = {
   /** The files whose draft is not saved yet, marked with a dot */
   unsavedPaths: Set<string>;
   onSelect: (relativePath: string) => void;
-  /** Creates an empty file at a relative path, subfolders allowed */
-  onCreate: (relativePath: string) => void;
+  /**
+   * Creates an empty file at a relative path, subfolders allowed: resolves to why the server refused it, shown under
+   * the path, or to `undefined` once the file is there.
+   */
+  onCreate: (relativePath: string) => Promise<string | undefined>;
   isCreating: boolean;
 };
 
@@ -158,31 +162,41 @@ function UnsavedDot() {
   );
 }
 
-type NewFileFormProps = {
-  onCreate: (relativePath: string) => void;
-  isCreating: boolean;
-};
+type NewFileFormProps = Pick<AppFileTreeProps, "onCreate" | "isCreating">;
 
-/** "New file": a button, then a path input; Escape or an empty name puts the button back. */
+/**
+ * "New file": a button, then a path input; Escape or an empty name puts the button back. A refused path stays in the
+ * input, why under it, until it changes.
+ */
 function NewFileForm({ onCreate, isCreating }: NewFileFormProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [relativePath, setRelativePath] = useState("");
+  const [refusal, setRefusal] = useState<string | undefined>(undefined);
 
   const close = () => {
     setIsEditing(false);
     setRelativePath("");
+    setRefusal(undefined);
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const trimmed = relativePath.trim();
 
-    if (trimmed.length > 0) {
-      onCreate(trimmed);
+    if (trimmed.length === 0) {
+      close();
+
+      return;
     }
 
-    close();
+    const refused = await onCreate(trimmed);
+
+    if (refused === undefined) {
+      close();
+    } else {
+      setRefusal(refused);
+    }
   };
 
   if (!isEditing) {
@@ -202,20 +216,27 @@ function NewFileForm({ onCreate, isCreating }: NewFileFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form className="flex flex-col gap-1" onSubmit={event => void handleSubmit(event)}>
       <Input
         autoFocus
         aria-label={storeMessages.editor.newFilePath}
+        aria-invalid={refusal !== undefined}
+        aria-describedby={refusal === undefined ? undefined : "new-file-error"}
         value={relativePath}
         placeholder={storeMessages.editor.newFilePlaceholder}
         className="font-mono"
-        onChange={event => setRelativePath(event.target.value)}
+        readOnly={isCreating}
+        onChange={event => {
+          setRelativePath(event.target.value);
+          setRefusal(undefined);
+        }}
         onKeyDown={event => {
           if (event.key === "Escape") {
             close();
           }
         }}
       />
+      {refusal !== undefined && <FieldError id="new-file-error">{refusal}</FieldError>}
     </form>
   );
 }

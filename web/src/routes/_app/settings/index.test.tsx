@@ -135,6 +135,63 @@ describe("/settings#env", () => {
   });
 });
 
+describe("/settings#env, its refusals", () => {
+  it("shows a refusal of the server under the variable it names, until that value changes", async () => {
+    settingsPage();
+    network.use(
+      getEnvReadMockHandler({ variables: { KEPT: "1", SAME: "2" } }),
+      getEnvSaveMockHandler(() => {
+        throw coded(400, {
+          code: "env.line_break",
+          params: { name: "KEPT" },
+          message: "the value of KEPT holds a line break",
+        });
+      }),
+    );
+
+    renderAt("/settings#env");
+
+    const kept = await screen.findByLabelText<HTMLInputElement>("KEPT");
+
+    fireEvent.change(kept, { target: { value: "one" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const refusal = await screen.findByText("The value of KEPT cannot contain a line break.");
+
+    expect(kept.getAttribute("aria-invalid")).toBe("true");
+    expect(kept.getAttribute("aria-describedby")).toBe(refusal.id);
+    expect(screen.getAllByText("The value of KEPT cannot contain a line break.")).toHaveLength(1);
+    expect(screen.getByLabelText("SAME").getAttribute("aria-invalid")).toBe("false");
+
+    fireEvent.change(kept, { target: { value: "two" } });
+
+    await waitFor(() => expect(screen.queryByText("The value of KEPT cannot contain a line break.")).toBeNull());
+    expect(kept.getAttribute("aria-invalid")).toBe("false");
+  });
+
+  it("refuses a new name compose does not take, before any save", async () => {
+    const calls = countCalls();
+
+    settingsPage();
+    network.use(getEnvReadMockHandler({ variables: { KEPT: "1" } }), getEnvSaveMockHandler({ variables: {} }));
+    renderAt("/settings#env");
+
+    const name = await screen.findByLabelText<HTMLInputElement>("Name of a new variable");
+
+    fireEvent.change(name, { target: { value: "1bad" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(await screen.findByText("Invalid variable name: 1BAD.")).toBeDefined();
+    expect(name.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.queryByLabelText("1BAD")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(screen.getAllByText("Invalid variable name: 1BAD.")).toHaveLength(1));
+    expect(calls("PUT /api/env")).toBe(0);
+  });
+});
+
 describe("/settings tabs", () => {
   it("read their file anew each time they open, as a sync may have changed it", async () => {
     let source = "categories: []\n";
@@ -217,7 +274,7 @@ describe("/settings#config", () => {
     await waitFor(() => expect(document.querySelector(".cm-editor")?.closest("[inert]")).toBeNull());
   });
 
-  it("shows why hangar.yml was refused under the editor", async () => {
+  it("shows why hangar.yml was refused under the editor, and not in a toast", async () => {
     settingsPage();
     network.use(
       getConfigReadMockHandler({ source: "categories: []\n" }),
@@ -231,7 +288,34 @@ describe("/settings#config", () => {
     await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("categories: []"));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findAllByText("Invalid hangar.yml: categories[0].color: required.")).toHaveLength(2);
+    const refusal = await screen.findByText("Invalid hangar.yml: categories[0].color: required.");
+
+    expect(refusal.tagName).toBe("PRE");
+    expect(screen.getAllByText("Invalid hangar.yml: categories[0].color: required.")).toHaveLength(1);
+  });
+
+  it("shows a code of hangar.yml's under the editor, until the file changes", async () => {
+    settingsPage();
+    network.use(
+      getConfigReadMockHandler({ source: "categories: []\n" }),
+      getConfigSaveMockHandler(() => {
+        throw coded(400, {
+          code: "config.invalid",
+          params: { field: "categories[0].color", reason: "required" },
+          message: "invalid hangar.yml: categories[0].color: required",
+        });
+      }),
+    );
+
+    renderAt("/settings#config");
+
+    await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("categories: []"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const refusal = await screen.findByRole("alert");
+
+    expect(refusal.tagName).toBe("PRE");
+    expect(refusal.textContent).toContain("categories[0].color");
   });
 });
 

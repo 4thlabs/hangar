@@ -10,7 +10,7 @@ import {
   getStoreNewAppMockHandler,
   getStoreUninstallMockHandler,
 } from "#libs/api/mock";
-import { countCalls, network, problem } from "#mock/network.ts";
+import { coded, countCalls, network, problem } from "#mock/network.ts";
 import { renderAt } from "#mock/page.tsx";
 
 /** An app of the store. */
@@ -176,6 +176,49 @@ describe("/store/new", () => {
     expect(created).toEqual([{ id: "my-app", compose: "name: My app\nservices: {}\n" }]);
   });
 
+  it("refuses an id the store does not take under its field, before any call", async () => {
+    const calls = countCalls();
+
+    network.use(getStoreNewAppMockHandler({ compose: "services: {}\n" }));
+    renderAt("/store/new");
+
+    const id = await screen.findByLabelText<HTMLInputElement>("Identifier");
+
+    fireEvent.change(id, { target: { value: "../escape" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const refusal = await screen.findByText(/^\.\.\/escape is not an app id/);
+
+    expect(id.getAttribute("aria-invalid")).toBe("true");
+    expect(id.getAttribute("aria-describedby")).toBe(refusal.id);
+    expect(calls("POST /api/store/apps")).toBe(0);
+  });
+
+  it("shows the server's refusal of the id under its field, and not in a toast", async () => {
+    network.use(
+      getStoreNewAppMockHandler({ compose: "services: {}\n" }),
+      getEditorCreateAppMockHandler(() => {
+        throw coded(409, {
+          code: "editor.app_exists",
+          params: { app: "jellyfin" },
+          message: "the app jellyfin exists",
+        });
+      }),
+    );
+
+    renderAt("/store/new");
+
+    const id = await screen.findByLabelText<HTMLInputElement>("Identifier");
+
+    fireEvent.change(id, { target: { value: "jellyfin" } });
+    await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("services"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("The app jellyfin already exists.")).toBeDefined();
+    expect(id.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getAllByText("The app jellyfin already exists.")).toHaveLength(1);
+  });
+
   it("shows why compose refused the new app under the editor", async () => {
     network.use(
       getStoreNewAppMockHandler({ compose: "services: {}\n" }),
@@ -191,6 +234,7 @@ describe("/store/new", () => {
 
     const refusals = await screen.findAllByText(/services\.web must be a mapping/);
 
-    expect(refusals.some(refusal => refusal.tagName === "PRE")).toBe(true);
+    // Under the editor alone: a form's refusal is no toast.
+    expect(refusals.map(refusal => refusal.tagName)).toEqual(["PRE"]);
   });
 });

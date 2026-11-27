@@ -11,7 +11,7 @@ const renderTree = (selectedPath: string, unsavedPaths: string[]) =>
       selectedPath={selectedPath}
       unsavedPaths={new Set(unsavedPaths)}
       onSelect={() => {}}
-      onCreate={() => {}}
+      onCreate={async () => undefined}
       isCreating={false}
     />,
   );
