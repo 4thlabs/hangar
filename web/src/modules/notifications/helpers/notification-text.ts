@@ -1,5 +1,8 @@
 import type { NotificationMessage } from "#libs/api";
 import { composeActionOfNotification, composeLabel, composeOutcome } from "#modules/common/helpers/compose-actions.ts";
+import { notificationsMessages } from "#modules/notifications/messages.ts";
+
+const words = notificationsMessages;
 
 /** What a notification says once worded. */
 export type NotificationWords = { title: string; description?: string };
@@ -16,48 +19,42 @@ type Words = { [Key in NotificationKey]: (message: Extract<NotificationMessage, 
 // notification.
 
 /** What a notification of a key this page does not know says. */
-export const unknownNotification: NotificationWords = { title: "Notification" };
+export const unknownNotification: NotificationWords = { title: words.unknown };
 
 /** The words of each key. */
 const wordsByKey: Words = {
-  storeInstalled: () => ({ title: "Store: installation finished", description: "The store was installed." }),
-  storeUpdated: () => ({ title: "Store: update finished", description: "The store was updated." }),
-  storeInstallFailed: () => ({
-    title: "Store: installation failed",
-    description: "The installation of the store failed. See the server's log.",
-  }),
-  storeUpdateFailed: () => ({
-    title: "Store: update failed",
-    description: "The update of the store failed. See the server's log.",
-  }),
+  storeInstalled: () => words.storeInstalled,
+  storeUpdated: () => words.storeUpdated,
+  storeInstallFailed: () => words.storeInstallFailed,
+  storeUpdateFailed: () => words.storeUpdateFailed,
   composeSucceeded: ({ params: { project, operation, flags } }) => {
     const action = composeActionOfNotification(operation, flags);
 
     if (action === null) {
-      return { title: "Docker Compose finished", description: `The command succeeded for ${project}.` };
+      return {
+        title: words.composeSucceeded.plainTitle,
+        description: words.composeSucceeded.plainDescription({ project }),
+      };
     }
 
     return {
-      title: `${composeLabel(action)} finished`,
+      title: words.composeSucceeded.title({ label: composeLabel(action) }),
       description: composeOutcome(action, project),
     };
   },
   composeFailed: ({ params: { project, operation, flags } }) => {
     const action = composeActionOfNotification(operation, flags);
-    const label = action === null ? "Docker Compose" : composeLabel(action);
+    const label = action === null ? words.composeFailed.plainLabel : composeLabel(action);
 
-    return {
-      title: `${label} failed`,
-      description: `The Docker Compose command failed for ${project}. See the server's log.`,
-    };
+    return { title: words.composeFailed.title({ label }), description: words.composeFailed.description({ project }) };
   },
   updatesAvailable: ({ params: { count } }) => ({
-    title: "Updates available",
-    description: `${count} ${count === 1 ? "app has" : "apps have"} a newer image in the registry.`,
+    title: words.updatesAvailable.title,
+    description: words.updatesAvailable.description({ count }),
   }),
   autoUpdate: ({ params: { updated, failed } }) => ({
-    title: "Automatic update",
-    description: `${updated} ${updated === 1 ? "app was" : "apps were"} updated.${failed ? ` Failed for: ${failed}.` : ""}`,
+    title: words.autoUpdate.title,
+    description: words.autoUpdate.description({ updated, failed }),
   }),
 };
 

@@ -9,6 +9,9 @@ import { ToastIcon } from "#modules/common/ui/toast.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
 import { describeNotification } from "#modules/notifications/helpers/notification-text.ts";
 import { useNotifications } from "#modules/notifications/hooks/use-notifications.ts";
+import { notificationsMessages } from "#modules/notifications/messages.ts";
+
+const words = notificationsMessages.menu;
 
 type NotificationItemProps = {
   notification: Notification;
@@ -28,7 +31,9 @@ function NotificationItem({ notification, now, onFollow }: NotificationItemProps
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-baseline gap-2">
           <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
-          {!notification.read && <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-label="Unread" />}
+          {!notification.read && (
+            <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-label={words.unreadMark} />
+          )}
         </span>
         {description && <span className="text-muted-foreground">{description}</span>}
         <time className="text-xs text-muted-foreground" dateTime={notification.createdAt}>
@@ -97,7 +102,7 @@ export function NotificationsMenu() {
                   variant="ghost"
                   size="icon"
                   className="relative"
-                  aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
+                  aria-label={unread > 0 ? words.unreadLabel({ count: unread }) : words.title}
                 >
                   <BellIcon />
                   {unread > 0 && (
@@ -110,13 +115,13 @@ export function NotificationsMenu() {
             />
           }
         />
-        <TooltipContent>Notifications</TooltipContent>
+        <TooltipContent>{words.title}</TooltipContent>
       </Tooltip>
 
       <PopoverContent align="end" sideOffset={6} className="w-80 gap-0 p-0">
         <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-          <span className="text-sm font-medium">Notifications</span>
-          {unread > 0 && <span className="text-xs text-muted-foreground">{unread} unread</span>}
+          <span className="text-sm font-medium">{words.title}</span>
+          {unread > 0 && <span className="text-xs text-muted-foreground">{words.unread({ count: unread })}</span>}
         </div>
 
         {notifications.length === 0 ? (
@@ -125,8 +130,8 @@ export function NotificationsMenu() {
               <EmptyMedia variant="icon">
                 <BellIcon />
               </EmptyMedia>
-              <EmptyTitle>No notifications</EmptyTitle>
-              <EmptyDescription>Commands run in the background will land here.</EmptyDescription>
+              <EmptyTitle>{words.empty}</EmptyTitle>
+              <EmptyDescription>{words.emptyDescription}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
