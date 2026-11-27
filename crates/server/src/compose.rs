@@ -224,6 +224,8 @@ impl ComposeState {
             ComposeError::NotInstalled { app } => ErrorCode::UnknownProject {
                 project: app.clone(),
             },
+            // A fresh data directory's `.env.global`, which compose cannot run without, could not be created.
+            ComposeError::Env { .. } => return Failure::logged(ErrorCode::EnvSaveFailed, error),
             // The actions of the page are never attached, and start with their command's name: the server's own bug.
             other => {
                 return Failure::logged(
