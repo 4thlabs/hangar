@@ -3,8 +3,11 @@ import { ContainerStatus } from "#modules/apps/components/container-status.tsx";
 import { LogsSheet } from "#modules/apps/components/logs-sheet.tsx";
 import { formatBytes, formatPercent, noMetrics, noReading } from "#modules/apps/helpers/metric-format.ts";
 import type { ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
+import { appsMessages } from "#modules/apps/messages.ts";
 import { Progress } from "#modules/common/ui/progress.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
+
+const words = appsMessages.containers;
 
 type ContainerTableProps = { project: string; containers: readonly ProjectContainer[]; stats: ContainerStats };
 
@@ -14,16 +17,16 @@ export function ContainerTable({ project, containers, stats }: ContainerTablePro
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Container</TableHead>
-          <TableHead>State</TableHead>
-          <TableHead>Image</TableHead>
-          <TableHead>Ports</TableHead>
-          <TableHead>CPU</TableHead>
-          <TableHead>Memory</TableHead>
-          <TableHead>Network</TableHead>
-          <TableHead>Disk</TableHead>
-          <TableHead>Restarts</TableHead>
-          <TableHead>Logs</TableHead>
+          <TableHead>{words.container}</TableHead>
+          <TableHead>{words.state}</TableHead>
+          <TableHead>{words.image}</TableHead>
+          <TableHead>{words.ports}</TableHead>
+          <TableHead>{words.cpu}</TableHead>
+          <TableHead>{words.memory}</TableHead>
+          <TableHead>{words.network}</TableHead>
+          <TableHead>{words.disk}</TableHead>
+          <TableHead>{words.restarts}</TableHead>
+          <TableHead>{words.logs}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -63,7 +66,10 @@ function ContainerRow({ project, container, stats }: ContainerRowProps) {
         {metrics.memoryUsage === null ? (
           noReading
         ) : (
-          <Progress value={Math.min(metrics.memoryPercent ?? 0, 100)} aria-label={`Memory used by ${container.name}`}>
+          <Progress
+            value={Math.min(metrics.memoryPercent ?? 0, 100)}
+            aria-label={words.memoryUsedBy({ name: container.name })}
+          >
             <span className="ml-auto text-sm text-muted-foreground tabular-nums">
               {formatBytes(metrics.memoryUsage)} / {formatBytes(metrics.memoryLimit)}
             </span>

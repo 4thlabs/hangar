@@ -21,14 +21,19 @@ import { formatBytes, formatPercent } from "#modules/apps/helpers/metric-format.
 import { filterProjects } from "#modules/apps/helpers/project-filter.ts";
 import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
+import { appsMessages } from "#modules/apps/messages.ts";
 import { dockerQueries } from "#modules/common/api/docker-queries.ts";
 import { appCount, composeSubject } from "#modules/common/helpers/compose-actions.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { nextSort, serializeSort } from "#modules/common/helpers/table-sort.ts";
 import { useDockerChanges } from "#modules/common/hooks/use-docker-changes.ts";
+import { commonMessages } from "#modules/common/messages.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#modules/common/ui/empty.tsx";
+
+const words = appsMessages.list;
+const totals = appsMessages.list.totals;
 
 /** `/apps`, the installed apps, filtered by its search. */
 export const Route = createFileRoute("/_app/apps/")({
@@ -44,15 +49,15 @@ function LiveTotals({ containerIds }: { containerIds: readonly string[] }) {
   return (
     <>
       <StatCard
-        title="CPU"
+        title={totals.cpu}
         value={formatPercent(total(metrics => metrics.cpuPercent))}
-        detail="All apps combined"
+        detail={totals.allApps}
         icon={CpuIcon}
       />
       <StatCard
-        title="Memory"
+        title={totals.memory}
         value={formatBytes(total(metrics => metrics.memoryUsage))}
-        detail="All apps combined"
+        detail={totals.allApps}
         icon={MemoryStickIcon}
       />
     </>
@@ -66,11 +71,11 @@ function AppsTotals({ projects }: { projects: readonly ProjectSummary[] }) {
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-      <StatCard title="Apps" value={projects.length} icon={BoxesIcon} />
-      <StatCard title="Services" value={sum(project => project.serviceCount)} icon={LayersIcon} />
-      <StatCard title="Running containers" value={sum(project => project.runningCount)} icon={PlayIcon} />
+      <StatCard title={totals.apps} value={projects.length} icon={BoxesIcon} />
+      <StatCard title={totals.services} value={sum(project => project.serviceCount)} icon={LayersIcon} />
+      <StatCard title={totals.runningContainers} value={sum(project => project.runningCount)} icon={PlayIcon} />
       <StatCard
-        title="Not running"
+        title={totals.notRunning}
         value={sum(project => project.containerIds.length - project.runningCount)}
         icon={SquareIcon}
       />
@@ -87,10 +92,8 @@ function NoApps({ isInstalled }: { isInstalled: boolean }) {
         <EmptyMedia variant="icon">
           <PackageOpenIcon />
         </EmptyMedia>
-        <EmptyTitle>{isInstalled ? "No results" : "No apps installed"}</EmptyTitle>
-        <EmptyDescription>
-          {isInstalled ? "No app matches this search." : "Install an app from the store to find it here."}
-        </EmptyDescription>
+        <EmptyTitle>{isInstalled ? words.noResults : words.noApps}</EmptyTitle>
+        <EmptyDescription>{isInstalled ? words.noResultsDescription : words.noAppsDescription}</EmptyDescription>
       </EmptyHeader>
     </Empty>
   );
@@ -130,15 +133,17 @@ function AppsPage() {
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
   const selected = visible.map(project => project.name).filter(name => selection.has(name));
   const compose = useComposeCommand(selected);
-  const selectionLabel = selected.length === 0 ? "No selection" : `${appCount(selected.length)} selected`;
+
+  const selectionLabel =
+    selected.length === 0 ? words.noSelection : words.selected({ apps: appCount(selected.length) });
 
   return (
     <main>
-      <title>Apps | Hangar</title>
+      <title>{words.documentTitle}</title>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Apps</h1>
-          <p className="text-sm text-muted-foreground">Apps installed by Hangar and their Docker state.</p>
+          <h1 className="text-2xl font-semibold">{words.title}</h1>
+          <p className="text-sm text-muted-foreground">{words.description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <AppsFilterMenus projects={projects} />
@@ -147,11 +152,11 @@ function AppsPage() {
       <ReconnectingNotice isReconnecting={isReconnecting} />
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Could not read the apps</AlertTitle>
+          <AlertTitle>{words.readFailed}</AlertTitle>
           <AlertDescription>{describeError(error)}</AlertDescription>
           <AlertAction>
             <Button type="button" variant="outline" size="sm" disabled={isRefetching} onClick={() => void refetch()}>
-              Retry
+              {commonMessages.retry}
             </Button>
           </AlertAction>
         </Alert>
@@ -180,7 +185,7 @@ function AppsPage() {
           )}
         </>
       )}
-      {isPending && <p className="text-sm text-muted-foreground">Reading Docker…</p>}
+      {isPending && <p className="text-sm text-muted-foreground">{words.reading}</p>}
       <ComposeDialogs compose={compose} subject={composeSubject(selected)} count={selected.length} />
     </main>
   );

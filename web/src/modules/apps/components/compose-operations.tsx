@@ -10,6 +10,7 @@ import {
 import type { ComposeAction } from "#libs/api";
 import { ComposeOutputSheet } from "#modules/apps/components/compose-output-sheet.tsx";
 import type { ComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
+import { appsMessages } from "#modules/apps/messages.ts";
 import { ConfirmDialog } from "#modules/common/components/confirm-dialog.tsx";
 import {
   composeCommandLine,
@@ -21,6 +22,7 @@ import {
   type ComposeOperation,
   type UpFlag,
 } from "#modules/common/helpers/compose-actions.ts";
+import { commonMessages } from "#modules/common/messages.ts";
 import { ButtonGroup } from "#modules/common/ui/button-group.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
@@ -30,6 +32,8 @@ import {
   DropdownMenuTrigger,
 } from "#modules/common/ui/dropdown-menu.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
+
+const operations = commonMessages.compose.operations;
 
 /** How the operation buttons draw each option of Up. */
 const upFlagIcons: Readonly<Record<UpFlag, LucideIcon>> = {
@@ -65,10 +69,10 @@ export function ComposeOperationButtons({ compose, size }: ComposeOperationButto
           onClick={() => compose.request(up)}
           title={composeCommandLine(up)}
           // The count alone does not say which options: the name gives the whole command.
-          aria-label={`Up: ${composeCommandLine(up)}`}
+          aria-label={appsMessages.compose.upLabel({ commandLine: composeCommandLine(up) })}
         >
           {icon("up", PowerIcon)}
-          Up
+          {operations.up}
           {compose.flags.size > 0 && <span className="opacity-70">· {compose.flags.size}</span>}
         </Button>
         <DropdownMenu>
@@ -78,7 +82,7 @@ export function ComposeOperationButtons({ compose, size }: ComposeOperationButto
                 type="button"
                 size={size === "sm" ? "icon-sm" : "icon"}
                 disabled={compose.disabled}
-                aria-label="Up options"
+                aria-label={appsMessages.compose.upOptions}
               />
             }
           >
@@ -116,7 +120,7 @@ export function ComposeOperationButtons({ compose, size }: ComposeOperationButto
         title={composeCommandLine(restart)}
       >
         {icon("restart", RotateCwIcon)}
-        Restart
+        {operations.restart}
       </Button>
       <Button
         type="button"
@@ -127,7 +131,7 @@ export function ComposeOperationButtons({ compose, size }: ComposeOperationButto
         title={composeCommandLine(down)}
       >
         {icon("down", Trash2Icon)}
-        Down
+        {operations.down}
       </Button>
     </>
   );

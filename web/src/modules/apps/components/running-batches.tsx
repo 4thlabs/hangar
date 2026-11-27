@@ -1,5 +1,6 @@
 import { TerminalIcon } from "lucide-react";
 import type { ComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
+import { appsMessages } from "#modules/apps/messages.ts";
 import { composeLabel, composeSubject } from "#modules/common/helpers/compose-actions.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
@@ -27,12 +28,12 @@ export function RunningBatches({ compose, project }: RunningBatchesProps) {
         <li key={batch.id} className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm">
           <Spinner />
           <span>
-            {composeLabel(batch.action)} runs on {composeSubject(batch.apps)}:{" "}
+            {appsMessages.compose.runsOn({ label: composeLabel(batch.action), subject: composeSubject(batch.apps) })}{" "}
             <span className="font-mono text-muted-foreground">{batch.commandLine}</span>
           </span>
           <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={() => compose.show(batch)}>
             <TerminalIcon data-icon="inline-start" />
-            Show output
+            {appsMessages.compose.showOutput}
           </Button>
         </li>
       ))}

@@ -1,17 +1,12 @@
 import { EraserIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState, type UIEvent } from "react";
-import { useLogEvents, type LogStatus } from "#modules/apps/hooks/use-log-events.ts";
+import { useLogEvents } from "#modules/apps/hooks/use-log-events.ts";
+import { appsMessages } from "#modules/apps/messages.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 
-/** What the badge of each state of a followed log says. */
-const logStatusLabels: Readonly<Record<LogStatus, string>> = {
-  connecting: "Connecting…",
-  connected: "Live",
-  ended: "Stream ended",
-  error: "Error",
-};
+const words = appsMessages.logs;
 
 /** How close to the bottom the reader counts as there, in pixels. */
 const bottomSlack = 32;
@@ -50,7 +45,7 @@ export function LogsPanel({ url }: { url: string }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={status === "error" ? "destructive" : "secondary"}>{logStatusLabels[status]}</Badge>
+        <Badge variant={status === "error" ? "destructive" : "secondary"}>{words.status[status]}</Badge>
         <Button
           type="button"
           variant="outline"
@@ -64,22 +59,22 @@ export function LogsPanel({ url }: { url: string }) {
           }}
         >
           {status === "connecting" ? <Spinner /> : <RefreshCwIcon data-icon="inline-start" />}
-          Reconnect
+          {words.reconnect}
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={clear}>
           <EraserIcon data-icon="inline-start" />
-          Clear
+          {words.clear}
         </Button>
         {!following && (
           <Button type="button" variant="ghost" size="sm" onClick={() => setFollowing(true)}>
-            Resume following
+            {words.resume}
           </Button>
         )}
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div ref={viewport} onScroll={handleScroll} className="min-h-0 flex-1 overflow-auto rounded-lg bg-muted p-3">
         <pre className="font-mono text-xs whitespace-pre-wrap">
-          {lines.length > 0 ? lines.join("\n") : "Waiting for logs…"}
+          {lines.length > 0 ? lines.join("\n") : words.waiting}
         </pre>
       </div>
     </>
