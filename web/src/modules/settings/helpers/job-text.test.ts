@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { JobRun } from "#libs/api";
+import { Job, type JobRun } from "#libs/api";
 import {
   askedAgainText,
   formatRunTime,
@@ -9,6 +9,7 @@ import {
   jobStateLabel,
   runFailure,
 } from "#modules/settings/helpers/job-text.ts";
+import { m } from "#paraglide/messages.js";
 
 const run: JobRun = {
   id: 1,
@@ -60,5 +61,15 @@ describe("the jobs' words", () => {
   it("says whether the job asked for again waits or runs", () => {
     expect(askedAgainText(run)).toBe("Image check waits its turn.");
     expect(askedAgainText({ ...run, job: "auto_update", state: "running" })).toBe("Update of the apps runs.");
+  });
+});
+
+describe("the jobs' buttons", () => {
+  it("word the run-again and cancel of every job of the contract, not by its id", () => {
+    // `messages/en.json` names each job in these two variants: a job the contract adds falls back to its id, here.
+    for (const job of Object.values(Job)) {
+      expect(m.settings_jobs_run_again_label({ job })).not.toBe(`Run the ${job} again`);
+      expect(m.settings_jobs_cancel_label({ job })).not.toBe(`Cancel the ${job}`);
+    }
   });
 });

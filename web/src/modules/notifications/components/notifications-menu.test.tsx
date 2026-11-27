@@ -277,4 +277,41 @@ describe("the notifications' bell", () => {
     expect(await screen.findByText("at an unknown time")).toBeDefined();
     expect(screen.queryByText("Store: installation finished")).toBeNull();
   });
+
+  it("words each compose command's outcome as the server files it", async () => {
+    /** A run of `operation` with `flags` on jellyfin that succeeded, seen and read. */
+    const succeeded = (id: number, operation: string, flags: string) =>
+      notification(
+        id,
+        { key: "composeSucceeded", params: { project: "jellyfin", operation, flags } },
+        { seen: true, read: true },
+      );
+
+    bell(() => ({
+      epoch: "first",
+      notifications: [
+        succeeded(6, "up", ""),
+        succeeded(5, "up", "pull"),
+        succeeded(4, "up", "forceRecreate"),
+        succeeded(3, "up", "pull,forceRecreate"),
+        succeeded(2, "restart", ""),
+        succeeded(1, "down", ""),
+      ],
+    }));
+
+    renderAt("/apps");
+    fireEvent.click(await screen.findByRole("button", { name: "Notifications" }));
+
+    for (const [title, outcome] of [
+      ["Up finished", "jellyfin was started or updated."],
+      ["Update finished", "jellyfin was updated from its registry."],
+      ["Recreate finished", "jellyfin was recreated."],
+      ["Update and recreate finished", "jellyfin was updated from its registry and recreated."],
+      ["Restart finished", "jellyfin was restarted."],
+      ["Down finished", "jellyfin was stopped and removed."],
+    ] as const) {
+      expect(await screen.findByText(title)).toBeDefined();
+      expect(screen.getByText(outcome)).toBeDefined();
+    }
+  });
 });

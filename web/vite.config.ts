@@ -104,16 +104,12 @@ function firstLoadBudget(modules: readonly string[], limitKb: number): Plugin {
 
 export default defineConfig({
   plugins: [
-    // The messages of `messages/en.json`, compiled into `src/paraglide/` as the dev server, the build and the tests start,
-    // and again as they change. The same options as the `paraglide-js compile` of `package.json`'s scripts, which write
-    // the same files for `tsc` and oxlint: English is the one locale, so its base locale is the only strategy, and no
-    // cookie or other store of a locale is read.
-    paraglideVitePlugin({
-      project: "./project.inlang",
-      outdir: "./src/paraglide",
-      strategy: ["baseLocale"],
-      emitTsDeclarations: true,
-    }),
+    // The messages of `messages/en.json`, compiled as the dev server, the build and the tests start, and again as they
+    // change, with the options of `project.inlang/paraglide.config.ts`. In Vite they are virtual modules: only the
+    // entries `src/paraglide/messages.js` and `runtime.js` and their declarations are on disk, and each message is a
+    // module Vite serves, so a page's chunk holds only the messages it calls. `paraglide-js compile`, first in
+    // `package.json`'s scripts, writes every message to disk instead, for `tsc` and oxlint, with the same types.
+    paraglideVitePlugin({ project: "./project.inlang" }),
     // Before React's plugin, as the router's asks. `tsr.config.json` says where the routes and their tree are, for the
     // plugin and `tsr generate` alike. Each route's components load with their page, the rest stays in the entry. Not
     // in the tests, whose pages would each wait for the first import of their chunk, past Testing Library's second:

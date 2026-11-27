@@ -9,10 +9,4 @@ export const commonLabels = {
     restart: m.common_operations_restart,
     down: m.common_operations_down,
   } satisfies Record<ComposeOperation, () => string>,
-  /** What each run without options did to an app, completing "<app> was …". */
-  outcomes: {
-    up: m.common_outcomes_up,
-    restart: m.common_outcomes_restart,
-    down: m.common_outcomes_down,
-  } satisfies Record<ComposeOperation, () => string>,
 };
