@@ -62,22 +62,27 @@ export function useEventStream<T, S>(initial: S | (() => S), options: StreamOpti
     (url: string, seed: S, request: RequestInit = {}) => {
       stopCurrent.current();
 
-      let folded = seed;
       let waiting: T[] = [];
       let frame: number | undefined;
       let hasEnded = false;
 
+      // Folded into the state as it is, not into a copy of the read's own: a state set meanwhile, as a log cleared, is
+      // the one the next items join.
       const foldWaiting = () => {
-        if (waiting.length > 0) {
-          folded = latest.current.fold(folded, waiting);
-          waiting = [];
+        if (waiting.length === 0) {
+          return;
         }
+
+        const items = waiting;
+        const { fold } = latest.current;
+
+        waiting = [];
+        setState(current => fold(current, items));
       };
 
       const render = () => {
         frame = undefined;
         foldWaiting();
-        setState(folded);
       };
 
       const renderNow = () => {
