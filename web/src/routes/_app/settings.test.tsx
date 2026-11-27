@@ -134,6 +134,41 @@ describe("/settings tabs", () => {
 
     await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("categories: [pulled]"));
   });
+
+  it("show no copy cached by an earlier visit when their file cannot be read again, but why, and a Retry", async () => {
+    let isDown = false;
+    let source = "categories: []\n";
+
+    serve({
+      "GET /api/env": () =>
+        isDown ? problem(404, "the store is not cloned yet") : Response.json({ variables: { OLD: "1" } }),
+      "GET /api/config": () => (isDown ? problem(404, "the store is not cloned yet") : Response.json({ source })),
+      "GET /api/store": () => Response.json({ url: "u", installed: true, sync: null }),
+    });
+
+    renderAt("/settings#env");
+    expect(await screen.findByLabelText("OLD")).toBeDefined();
+    fireEvent.click(await screen.findByRole("tab", { name: "Configuration" }));
+    await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("categories: []"));
+
+    isDown = true;
+    fireEvent.click(screen.getByRole("tab", { name: "Environment" }));
+
+    expect(await screen.findByText("Could not show the environment")).toBeDefined();
+    expect(screen.getByText("The store is not cloned yet.")).toBeDefined();
+    expect(screen.queryByLabelText("OLD")).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Configuration" }));
+
+    expect(await screen.findByText("Could not show the configuration")).toBeDefined();
+    expect(document.querySelector(".cm-content")).toBeNull();
+
+    isDown = false;
+    source = "categories: [pulled]\n";
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("categories: [pulled]"));
+  });
 });
 
 describe("/settings#config", () => {

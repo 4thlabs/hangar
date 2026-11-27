@@ -1,7 +1,7 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { CatchBoundary } from "@tanstack/react-router";
 import { CircleAlertIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { createContext, use, type ReactNode } from "react";
 import { ApiError } from "#libs/api";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
@@ -25,6 +25,11 @@ type Failure = string | ((failure: RegionFailure) => ReactNode);
 type QueryRegionProps<TData> = {
   /** The caller's `useQuery`: its observer lives above the region, which no failure unmounts. */
   query: UseQueryResult<TData | undefined>;
+  /**
+   * Data read at this time or before, as `dataUpdatedAt` counts it, is not shown. An edited file passes the
+   * `dataUpdatedAt` its mount found, so that it shows the read of this mount alone, never an older copy from the cache.
+   */
+  readAfter?: number;
   failure: Failure;
   /** What it shows until the query has data or has failed. */
   fallback?: ReactNode;
@@ -41,11 +46,11 @@ type QueryRegionProps<TData> = {
  * The region holds no state: the query comes back as any `useQuery` does, when a feed or a mutation makes it stale,
  * when the window gets the focus back, when the card mounts again, and on the Retry.
  */
-export function QueryRegion<TData>({ query, failure, fallback = null, children }: QueryRegionProps<TData>) {
+export function QueryRegion<TData>({ query, readAfter, failure, fallback = null, children }: QueryRegionProps<TData>) {
   // Joins a read in flight rather than cancel it: a click during a focus read, or a second click, reads once.
   const readAgain = () => void query.refetch({ cancelRefetch: false });
 
-  if (query.data !== undefined) {
+  if (query.data !== undefined && (readAfter === undefined || query.dataUpdatedAt > readAfter)) {
     const data = query.data;
 
     return (
@@ -83,19 +88,31 @@ type CaughtProps = RenderRegionProps & {
   retry?: () => void;
 };
 
+/** What the failure of a boundary shows, and what its Retry does: given by context to its stable error component. */
+type CaughtContext = { failure: Failure; retry: (() => void) | undefined };
+
+const CaughtFailureContext = createContext<CaughtContext>({ failure: "", retry: undefined });
+
 /** TanStack Router's boundary, showing the region's failure in place of what threw. */
 function Caught({ failure, resetKey, retry, children }: CaughtProps) {
   return (
-    <CatchBoundary
-      getResetKey={() => resetKey}
-      // Stateless: a render of the parent that mounts it again loses nothing.
-      errorComponent={({ error, reset }) => (
-        <RegionFailureView cause="render" error={error} retry={retry ?? reset} failure={failure} />
-      )}
-    >
-      {children}
-    </CatchBoundary>
+    <CaughtFailureContext value={{ failure, retry }}>
+      <CatchBoundary getResetKey={() => resetKey} errorComponent={CaughtFailure}>
+        {children}
+      </CatchBoundary>
+    </CaughtFailureContext>
   );
+}
+
+/**
+ * The failure a boundary caught. A component of the module, never an arrow written in `Caught`: the boundary creates
+ * its element from it, and a new function at each render of the parent would be a new type, which mounts the failure
+ * again, and its Retry loses the focus.
+ */
+function CaughtFailure({ error, reset }: { error: unknown; reset: () => void }) {
+  const { failure, retry } = use(CaughtFailureContext);
+
+  return <RegionFailureView cause="render" error={error} retry={retry ?? reset} failure={failure} />;
 }
 
 /** Calls `render` inside the boundary, so that a `children` function that throws is caught too. */

@@ -244,8 +244,11 @@ loader: ({ context }) => {
   that passes it loads what it added from a route's component, or raises the budget and says why.
 - The router has `defaultPreload: "intent"` and `defaultPreloadStaleTime: 0`: Query alone decides freshness.
 - A loader only warms, with `prefetchQuery`, as above.
-- The edited files (env, config, an app's file) are read with `refetchOnMount: "always"`, shown once
-  `isFetchedAfterMount`, and their routes do not preload them.
+- The edited files (env, config, an app's file) are read with `refetchOnMount: "always"`, shown from a read of this
+  mount alone, and their routes do not preload them. A settings card keeps the `dataUpdatedAt` its mount found, in
+  `useState`, and gives it to its `QueryRegion` as `readAfter`: a copy cached by an earlier visit shows neither while
+  the file is read nor when that read fails, which shows the failure and its Retry instead. Not `isFetchedAfterMount`,
+  which a failed read sets too.
 - Feeds and streams open in components, never in loaders.
 - A page's own failure is its route's `errorComponent`.
 

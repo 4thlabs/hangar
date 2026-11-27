@@ -97,7 +97,7 @@ module, and "a module may import another".
 | Waku                                                         | SPA                                                                                |
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
 | `actions/` (server code the page calls)                      | `api/`: query and mutation options on orval's, keys, what each change makes stale  |
-| `*Snapshot.load()` in a server component                     | `useQuery(xQueries.y())`, warmed by a route loader's `ensureQueryData` (#186)      |
+| `*Snapshot.load()` in a server component                     | `useQuery(xQueries.y())`, warmed by a route loader's `prefetchQuery` (rule 15)     |
 | `router.reload()`, `AutoReload` every 30 s                   | the query cache, invalidated by mutations and by the `Events` feeds                |
 | `ActionResult.message`, in the reader's language             | an `ApiError` with a code and params, worded by the page (`describeError`)         |
 | `Suspense` over a marked promise ([ADR 0001](0001-cache.md)) | `useQuery`, shown by a region with its own error boundary (amended by #203)        |

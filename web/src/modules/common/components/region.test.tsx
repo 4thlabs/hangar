@@ -272,6 +272,23 @@ describe("QueryRegion", () => {
     expect(service.counts).toEqual([2, 0]);
   });
 
+  it("keeps the Retry of a card that threw, and its focus, when the page renders again", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const { rerender } = render(page(<Card service={service} tick={0} show={text => <Shown text={text} />} />));
+
+    await service.answer("bad");
+
+    const retry = await screen.findByRole("button", { name: "Retry" });
+
+    retry.focus();
+    // As the Docker card renders again once its apps are read.
+    rerender(page(<Card service={service} tick={1} show={text => <Shown text={text} />} />));
+
+    expect(screen.getByRole("button", { name: "Retry" })).toBe(retry);
+    expect(document.activeElement).toBe(retry);
+  });
+
   it("catches a children function that throws", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     render(

@@ -239,8 +239,6 @@ describe("/", () => {
     expect(await screen.findByText("Stocks is unavailable")).toBeDefined();
 
     isBroken = false;
-    // A suspense query is fresh for a second after its read: the focus comes back after it.
-    vi.setSystemTime(Date.now() + 1_000);
     act(() => {
       focusManager.setFocused(false);
       focusManager.setFocused(true);
@@ -261,8 +259,6 @@ describe("/", () => {
     await screen.findByText("Your VPN is connected!");
 
     isGluetunDown = true;
-    // A suspense query is fresh for a second after its read: the focus comes back after it.
-    vi.setSystemTime(Date.now() + 1_000);
     act(() => {
       focusManager.setFocused(false);
       focusManager.setFocused(true);
