@@ -53,13 +53,15 @@ libs/                          the API client, formats, preferences
 paraglide/                     what Paraglide compiles from web/messages/en.json: generated and gitignored
 ```
 
-The words are Paraglide's, beside `src/`, as the maintainer decided on 2026-11-27 (#214):
+The words are Paraglide 3's, in its typical Vite setup with its defaults, beside `src/`, as the maintainer decided on
+2026-11-27 (#214):
 
 ```
 web/
-  project.inlang/settings.json   Paraglide's project: base locale en, locales [en], the inlang message format plugin
-  messages/en.json               every message, flat
-  src/paraglide/                 what Paraglide compiles: generated and gitignored, like orval's generated.ts
+  project.inlang/settings.json         base locale en, locales [en], the message format plugin from node_modules
+  project.inlang/paraglide.config.ts   Paraglide's options: outdir alone, which its Vite plugin has no default for
+  messages/en.json                     every message, flat
+  src/paraglide/                       what Paraglide compiles: generated and gitignored, like orval's generated.ts
 ```
 
 A message's id is `<module>_<group>_<message>`, in `snake_case`: the module whose pages show it, one group, then the
@@ -269,15 +271,16 @@ takes from `src/` what a page it moves needs, copied: the Waku version keeps its
 `cargo quoll gen`, never committed. Its `src/routeTree.gen.ts` is not committed either: TanStack Router writes it from
 the route files of `src/routes/`, by its Vite plugin in `vite` and the tests, and by `tsr generate` at the start of
 the `build`, `typecheck` and `lint` scripts, which run `tsc` and oxlint before Vite. Nor is its `src/paraglide/`:
-Paraglide compiles it from `messages/en.json`, by its Vite plugin in `vite` and the tests, and by `paraglide-js compile`
-first in the same three scripts. Its design is
+Paraglide compiles it from `messages/en.json`, by its Vite plugin in `vite` and the tests, as virtual modules but for
+its entries, and by `paraglide-js compile` first in the same three scripts, to disk, for `tsc` and oxlint. Its design is
 [ADR 0002](docs/adr/0002-web-design.md), accepted on 2026-11-26, and the `hangar-web` skill gives its rules in short.
 Where the ADR and the sections for `src/` differ, `web/` follows the ADR: no class made only of statics, and its words
 in Paraglide's `messages/en.json`.
 
 The page is English only, decided with the maintainer on 2026-11-24: the Translations section above is the Waku
-version's alone, until the switch. `web/` has no `t()`, no language cookie or switch: Paraglide has one locale, `en`,
-and its one strategy is the base locale, so it reads no cookie. Its words are written in English in
+version's alone, until the switch. `web/` has no `t()` and no language switch: Paraglide has one locale, `en`, which
+its default strategy gives, writing it in the cookie `PARAGLIDE_LOCALE`. A second locale will keep `setLocale`'s
+reload of the page, as the React compiler caches what `m.x()` returned. Its words are written in English in
 `web/messages/en.json`, Paraglide's catalog (ADR 0002, decision 5, as #214 amended it on 2026-11-27), and `Intl`
 formats dates and numbers in English. A page's words carry its section's module as their prefix, the shell's
 `common_` (#204). A page moved from `src/` takes the English words of its `messages.ts`, without the French.

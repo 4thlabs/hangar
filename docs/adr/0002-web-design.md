@@ -184,7 +184,7 @@ src/modules/<d>/hooks/             compose queries, feeds and local state machin
 src/modules/<d>/components/        the pieces the pages are made of
 src/modules/common/                what two modules or more share: ui/, components/, hooks/, api/, helpers/
 src/libs/                          the API client, formats, preferences
-src/paraglide/                     what Paraglide compiles from messages/en.json (decision 5): generated, gitignored
+src/paraglide/                     Paraglide's entries, compiled from messages/en.json (decision 5): gitignored
 ```
 
 | Layer               | May import                                                                        | Must not import                                                                                           |
@@ -322,40 +322,63 @@ of their pages, their logs and their four cards, 166 and 112.
 
 **Amended by #214, on the maintainer's decision of 2026-11-27.** The words move to Paraglide JS now, English only,
 rather than when translation comes: #204's nested `as const` objects with TypeScript functions are not the format of
-a translation library. Paraglide's own format and defaults are taken:
+a translation library. After a study of Paraglide 3 against i18next, react-intl, use-intl and Lingui, on this
+toolchain, the maintainer chose Paraglide 3 in its typical Vite setup, with its defaults:
 
 ```
 web/
-  project.inlang/settings.json   Paraglide's project: base locale en, locales [en], the inlang message format plugin
-  messages/en.json               every message, flat
-  src/paraglide/                 what Paraglide compiles: generated and gitignored, like orval's generated.ts
+  project.inlang/settings.json         base locale en, locales [en], the message format plugin from node_modules
+  project.inlang/paraglide.config.ts   Paraglide's options: outdir alone, which its Vite plugin has no default for
+  messages/en.json                     every message, flat
+  src/paraglide/                       what Paraglide compiles: generated and gitignored, like orval's generated.ts
 ```
 
+- **Versions.** `@inlang/paraglide-js` 3.2.2 and `@inlang/plugin-message-format` 4.6.2, exact, in `web/`'s
+  devDependencies. `paraglide-js init` writes the jsDelivr URL; Hangar loads the plugin from `node_modules`, pinned by
+  the lockfile, so that builds and the Docker image work offline.
+- **Options.** Paraglide's defaults, and no option written at its default value. `paraglide.config.ts`, which the CLI
+  and the Vite plugin both read, holds `outdir` alone: the CLI defaults it to `./src/paraglide`, the Vite plugin
+  requires it. The strategy is the default one (`cookie`, `globalVariable`, `baseLocale`): with `en` the one locale,
+  each gives `en`. The first message the page calls writes the cookie `PARAGLIDE_LOCALE=en`, kept 400 days, as that
+  strategy does: a second locale will read it.
+- **Layout.** In Vite, the dev server, the build and the tests, Paraglide's default `virtual-modules`: only the entries
+  of `src/paraglide/` and their declarations are on disk, each message is a module Vite serves, and a chunk holds
+  only the messages it calls. The `build`, `typecheck` and `lint` scripts run `paraglide-js compile` first, as
+  `tsr generate`, for `tsc` and oxlint, as Paraglide's build workflow says: it writes every message to disk, with the
+  same types. CI's `web` job needs no change: `cargo quoll build` runs the `build` script, `npm run lint --prefix web`
+  its `lint`, and the tests the plugin, through `vitest.config.ts`, which merges `vite.config.ts`.
+- **An empty catalog.** A plugin that fails to load, from a wrong path or a URL with no network, makes Paraglide warn
+  and compile no message, and exit 0. `npm run build`, which CI and the Dockerfile run, fails all the same: its `tsc`
+  runs before `vite build`, and refuses every import of `m` (TS2305).
 - **Ids.** `<module>_<group>_<message>`, in `snake_case`, as `apps_logs_reconnect`, `settings_install_running` and
   `common_shell_home_link`. The module's prefix keeps #204's ownership in one file. Three parts, decided with the
   maintainer as the code moved: a nested group is flattened to its innermost (`list.totals.runningContainers` is
   `apps_totals_running_containers`), and a message with no group of its own gets one (`common_actions_retry`).
+  Paraglide's random keys for new messages are not taken.
 - **Import.** `import { m } from "#paraglide/messages.js"`, through `#paraglide/*` in the import mapping and in
-  `tsconfig.json`, as `#libs`. The code calls `m.<id>()` where the words are shown: no alias of a group, and no call
-  at a module's top level.
+  `tsconfig.json`, as `#libs`. The code calls `m.<id>()` where the words are shown: no alias of a group, no call at a
+  module's top level, and no `m[key]()`, which `tsc` refuses with a string key (TS7053) and which would keep every
+  message in the bundle.
 - **Plurals.** A message that counts takes the number, and its forms are Paraglide variants on `count`
   (`countPlural=one`, `countPlural=other`), picked with `Intl.PluralRules`. No caller picks a plural. A form English
   gives 0 apart, as "this app" for 0 and 1, takes an exact variant before the plural ones.
 - **Params.** One params object. No message is built from another's words: "1 app selected" is one message, no longer
-  `appCount` and " selected". A standalone label, a name or a whole sentence may still be a param, as a
-  confirmation's `{ label, subject }`, decided with the maintainer as the code moved. A list is joined by the caller
-  with `Intl.ListFormat`.
+  `appCount` and " selected", and each outcome and combined label of a compose command is a message of its own, with
+  variants on the operation and its two options. A standalone label, a name or a whole sentence may still be a param,
+  as a confirmation's `{ label, subject }`, decided with the maintainer as the code moved. A list of names is joined by
+  the caller with `Intl.ListFormat`.
+- **Types.** `tsc` refuses an id `en.json` does not have, a param a message does not take and a missing one. A
+  selector of exact variants with no `*` is typed by them (`pull: "false" | "true"`). Any other param is
+  `NonNullable<unknown>`: a number or a string where the other is meant compiles.
 - **Tables.** The tables keyed by a code keep their shape and call `m`: `describeError` by `ErrorCode`, the
   notifications by key, `upFlagSpecs` and the widget looks. The labels of an enum, which were groups of a module's
   `messages.ts`, are a table of `m`'s functions in one file per module, `helpers/<d>-labels.ts`, decided with the
   maintainer as the code moved: `appsLabels.status[status]()`, `satisfies Record<ProjectStatus, () => string>`, so
   that a new value of the contract is still a type error.
-- **Build.** Paraglide's Vite plugin compiles in `vite`, the build and the tests; the `build`, `typecheck` and `lint`
-  scripts run its CLI's `compile` first, as `tsr generate`. Both use the base locale as their one strategy, so that no
-  cookie is read, and write `.d.ts` files, which TypeScript 7 reads. CI's `web` job needs no change: `cargo quoll
-build` runs the `build` script, `npm run lint --prefix web` its `lint`, and the tests the plugin.
 - **Lint.** Rule 4 allows `#paraglide/` in `helpers/`, and the isolation allows it in every layer. Nothing imports
   `messages/en.json`, whose ids `tsc` would not check. No file stays directly under a module.
+- **A second locale, later.** `setLocale` keeps its default, a reload of the page: the React compiler caches what
+  `m.x()` returned in each component, which a locale changed in place would leave stale.
 
 Every word the page shows is the same, with its plurals at 0, 1 and 2 and its formats: a comparison, run once and not
 committed, rendered every message of the old `messages.ts` and of `m` with the same params, and the page's wording

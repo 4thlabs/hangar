@@ -111,15 +111,20 @@ As decided with ADR 0002 (decision 7), reversing the "Classes" section of AGENTS
 
 ## Words
 
-The page is English only, and its words are [Paraglide JS](https://paraglidejs.com)'s, version 2, pinned in
-`web/package.json` (ADR 0002, decision 5, as #214 amended it on 2026-11-27):
+The page is English only, and its words are [Paraglide JS](https://paraglidejs.com) 3's, in its typical Vite setup
+with its defaults (ADR 0002, decision 5, as #214 amended it on 2026-11-27):
 
 ```
 web/
-  project.inlang/settings.json   Paraglide's project: base locale en, locales [en], the inlang message format plugin
-  messages/en.json               every message, flat
-  src/paraglide/                 what Paraglide compiles: generated and gitignored, like orval's generated.ts
+  project.inlang/settings.json         base locale en, locales [en], the message format plugin from node_modules
+  project.inlang/paraglide.config.ts   Paraglide's options: outdir alone, which its Vite plugin has no default for
+  messages/en.json                     every message, flat
+  src/paraglide/                       what Paraglide compiles: generated and gitignored, like orval's generated.ts
 ```
+
+`@inlang/paraglide-js` and `@inlang/plugin-message-format` are pinned exactly in `web/package.json`. `paraglide-js
+init` writes the jsDelivr URL; Hangar loads the plugin from `node_modules`, pinned by the lockfile, so that builds and
+the Docker image work offline.
 
 - **Ids.** `<module>_<group>_<message>`, in `snake_case`: the module whose pages show the words, one group, then the
   message, as `apps_logs_reconnect`, `settings_install_running` and `common_shell_home_link`. A group or a message
@@ -129,11 +134,14 @@ web/
   are `common_`, a page's those of its section's module.
 - **Calls.** `import { m } from "#paraglide/messages.js"`, then `m.apps_list_title()`, where the words are shown. No
   alias of a group (`const words = …`), and no call at a module's top level, whose `const` would keep the words of the
-  locale it was loaded in: a table holds `m`'s functions, called where they are read.
+  locale it was loaded in: a table holds `m`'s functions, called where they are read. No `m[key]()`: `tsc` refuses a
+  string key (TS7053), and the bundle would keep every message.
 - **Params.** A message that interpolates takes one params object: `m.apps_list_selected({ count })`. No message is
   built from another message's words: each says its whole text, as `apps_list_selected` says "1 app selected" on its
-  own. A standalone label, a name or a whole sentence may be a param, as a confirmation's `{ label, subject }`. A list
-  is joined by the caller with `Intl.ListFormat`, as `composeOutcome` joins its outcomes.
+  own, and each outcome of a compose command, "jellyfin was updated from its registry and recreated.", is one variant
+  of `common_compose_outcome` on the operation and its two options. A standalone label, a name or a whole sentence may
+  be a param, as a confirmation's `{ label, subject }`. A list of names is joined by the caller with
+  `Intl.ListFormat`, as `store.batch_running`'s apps.
 - **Plurals.** A message that counts takes the number, and its forms are Paraglide's variants on it. No caller picks a
   form:
 
@@ -156,13 +164,25 @@ web/
   `appsLabels.status[status]()`, `satisfies Record<ProjectStatus, () => string>`. The tables keyed by a code keep
   their place and call `m`: `describeError` by `ErrorCode`, `describeNotification` by key, `upFlagSpecs`,
   `widgetLook`.
+- **Types.** `tsc` refuses an id `en.json` does not have, a param a message does not take, and a missing one. A
+  selector whose variants are all exact, with no `*`, is typed by them: `common_compose_outcome` takes
+  `pull: "false" | "true"`. Any other param is `NonNullable<unknown>`: `null` is refused, but a string where a count is
+  meant compiles, so the caller's types are the check.
 - **Adding a message.** Write it in `messages/en.json`, beside its module's, then call `m.<id>()`. The Vite plugin
   compiles the file in `vite` and the tests, again as it changes; `npm run typecheck --prefix web`, `lint` and `build`
-  compile it first with `paraglide-js compile`, so that `tsc` reads its types: an id the code calls and `en.json` does
-  not have, or a param it leaves out, is a type error.
-- **Paraglide's options**, the same in `vite.config.ts` and the scripts: `strategy: ["baseLocale"]`, so that it reads
-  no cookie, and `.d.ts` files beside its JavaScript (`emitTsDeclarations`), which TypeScript 7 reads without
-  `allowJs`. Prettier, ESLint and oxlint ignore `src/paraglide/`.
+  compile it first with `paraglide-js compile`, so that `tsc` reads its types.
+- **Paraglide's options** are its defaults, and none is written at its default value. `paraglide.config.ts`, read by
+  the CLI and the Vite plugin, holds `outdir` alone: the CLI defaults it to `./src/paraglide`, the Vite plugin requires
+  it. In Vite (the dev server, the build and the tests) the messages are virtual modules: only the entries of
+  `src/paraglide/` and their declarations are on disk, and a chunk holds only the messages it calls. The CLI writes
+  every message to disk instead, for `tsc` and oxlint, with the same types. The default strategy (`cookie`,
+  `globalVariable`, `baseLocale`) gives `en`, and the first message called writes the cookie `PARAGLIDE_LOCALE=en`.
+  Prettier, ESLint and oxlint ignore `src/paraglide/`.
+- **An empty catalog fails the build.** A plugin Paraglide cannot load (a wrong path, or a URL with no network) makes
+  it warn, compile no message and exit 0; `npm run build` then fails at its `tsc`, before `vite build`, on every import
+  of `m` (TS2305).
+- **A second locale, later**, keeps `setLocale`'s default, a reload of the page: the React compiler caches what
+  `m.x()` returned in each component, which a locale changed in place would leave stale.
 
 ## React
 
