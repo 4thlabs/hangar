@@ -1,6 +1,6 @@
 ---
 name: hangar-web
-description: How Hangar's page in web/ is built, from ADR 0002. Its layout (routes are the pages, _app.tsx and routes/-shell/ the shell, the wiring at src/, modules apart with api/, helpers/, hooks/, components/ and messages.ts), the query and mutation options on orval's, useEventFeed and useEventStream, Region, createPage, Preferences, forms on TanStack Form with formErrorsOf, the optimistic rule, tests on orval's MSW handlers, the words in messages.ts, and no class made only of statics. Use it for any work under web/, the Rust server's Vite SPA - a page, a component, a hook, a query, a mutation, a route, a form, a test - and to review or plan such work.
+description: How Hangar's page in web/ is built, from ADR 0002. Its layout (routes are the pages, _app.tsx and routes/-shell/ the shell, the wiring at src/, modules apart with api/, helpers/, hooks/, components/ and messages.ts), the query and mutation options on orval's, useEventFeed and useEventStream, QueryRegion and RenderRegion, createPage, Preferences, forms on TanStack Form with formErrorsOf, the optimistic rule, tests on orval's MSW handlers, the words in messages.ts, and no class made only of statics. Use it for any work under web/, the Rust server's Vite SPA - a page, a component, a hook, a query, a mutation, a route, a form, a test - and to review or plan such work.
 ---
 
 # Hangar's page in `web/`
@@ -11,7 +11,7 @@ from the server's OpenAPI document, quoll `Events` streams, and shadcn component
 gives the why, the options weighed and the measures.
 
 **The code is moving to it.** The ADR lands in four PRs: #195 (no class made only of statics, `createPage`,
-`Session`), #186 (file routes), #203 (the data layer, the two stream hooks and `Region`), then the words in
+`Session`), #186 (file routes), #203 (the data layer, the two stream hooks and the regions), then the words in
 `messages.ts`. Until they merge, some names below do not exist yet (`formErrorsOf`, the MSW handlers...).
 
 - Write new code in this shape with the pieces that exist.
@@ -101,8 +101,7 @@ site:
 export const dockerQueries = {
   projects: () => getDockerProjectsQueryOptions(),
   project: (project: string) => getDockerProjectQueryOptions(project),
-  // read in a region: see below
-  overview: () => queryOptions({ queryKey: getDockerOverviewQueryKey(), queryFn: ({ signal }) => dockerOverview({ signal }) }),
+  overview: () => getDockerOverviewQueryOptions(),
 };
 export const allDockerQueries: QueryKey = ["api", "docker"];
 export const staleAfterDockerChange: Readonly<Record<DockerChange, readonly QueryKey[]>> = {
@@ -111,6 +110,10 @@ export const staleAfterDockerChange: Readonly<Record<DockerChange, readonly Quer
 };
 
 // settings/api/settings-queries.ts
+export const settingsQueries = {
+  // warmed by the route's loader: a staleTime at least the warm one (see the loaders below)
+  jobs: () => getJobsListQueryOptions({ query: { staleTime: warmedFor, refetchInterval: query => jobsPollDelay(query.state.data ?? []) } }),
+};
 export const settingsMutations = {
   saveConfig: () =>
     getConfigSaveMutationOptions({
@@ -124,9 +127,10 @@ export const settingsMutations = {
 - `meta.invalidates` is for success only. "Read again whatever the outcome" (install, run, cancel) goes in that
   mutation's own `onSettled`. A key is a prefix: `getStoreAppsQueryKey()` covers the editor's reads of each app,
   under `["api", "store", "apps", id]`.
-- A read that a `useSuspenseQuery` or a loader takes is built with TanStack's `queryOptions` on orval's key and
-  fetcher: orval's options type their function as possibly `skipToken`, which `useSuspenseQuery`, `prefetchQuery` and
-  `ensureQueryData` refuse under `exactOptionalPropertyTypes`.
+- Every read is orval's options, which `useQuery`, `prefetchQuery` and `ensureQueryData` take. Only
+  `useSuspenseQuery` refuses them under `exactOptionalPropertyTypes`, as they type their function as possibly
+  `skipToken`: a page's critical read, if one ever comes, is built with TanStack's `queryOptions` on orval's key and
+  fetcher.
 - A component adds its toasts beside the options' callbacks, never over one of them:
   `useMutation({ ...storeMutations.install(), onSuccess, onError })` when the options set only `onSettled`. When the
   options' own `onSuccess` or `meta.invalidates` remounts the component (a form keyed by its read), it awaits
@@ -200,22 +204,21 @@ function AppsPage() {
 }
 ```
 
-A route's loader only warms what its page reads in a region with `useSuspenseQuery`, or a read with a long
-`staleTime`, and waits for none of it: the page shows its own skeletons and failures.
+A route's loader only warms, and waits for none of it: the page shows its own skeletons and failures.
 
 ```ts
 loader: ({ context }) => {
-  void context.queryClient.prefetchQuery({ ...settingsQueries.storeStatus(), staleTime: warmedFor });
-  void context.queryClient.prefetchQuery({ ...settingsQueries.jobs(), staleTime: warmedFor });
+  void context.queryClient.prefetchQuery(settingsQueries.storeStatus());
+  void context.queryClient.prefetchQuery(settingsQueries.jobs());
 },
 ```
 
 - Not `ensureQueryData`: its failure would be the route's, the whole page down where a card or an alert says why,
   and the navigation would wait for the retries of a server that answers 502.
-- Not a `useQuery` read with `staleTime: 0`: it would be read twice, by the loader, then again as the page mounts. A
-  suspense query is fresh for a second after its read, which covers the mount.
-- `warmedFor`, a second: a hover then a click runs the loader twice (`defaultPreloadStaleTime: 0`), and the prefetch
-  of the click reads nothing again. ADR 0002, rule 15, as #203 amended it.
+- A warmed read keeps a `staleTime` at least the warm one, in its options, so that the loader and the card's
+  `useQuery` both take it: `warmedFor`, a second, in `settings-queries.ts`, or `Infinity` for a read that does not
+  change. With 0, the card reads again what the loader just read, and the click that follows a hover reads it a third
+  time (`defaultPreloadStaleTime: 0` runs the loader again). ADR 0002, rule 15, as #203 amended it.
 
 - One file per route under `web/src/routes/`, `export const Route = createFileRoute(...)`. The generator writes the
   path from the file's name: rename the file, never the string. `_app.tsx` is the shell, a layout route with no path
@@ -241,9 +244,8 @@ loader: ({ context }) => {
   that passes it loads what it added from a route's component, or raises the budget and says why.
 - The router has `defaultPreload: "intent"` and `defaultPreloadStaleTime: 0`: Query alone decides freshness.
 - A loader only warms, with `prefetchQuery`, as above.
-- The edited files (env, config, an app's file) are read with `useQuery` and `refetchOnMount: "always"`, shown once
-  `isFetchedAfterMount`, and their routes do not preload them. Not with `useSuspenseQuery`, even in a region: one that
-  suspends reads the file, then `refetchOnMount: "always"` reads it again as it mounts.
+- The edited files (env, config, an app's file) are read with `refetchOnMount: "always"`, shown once
+  `isFetchedAfterMount`, and their routes do not preload them.
 - Feeds and streams open in components, never in loaders.
 - A page's own failure is its route's `errorComponent`.
 
@@ -322,30 +324,53 @@ const stream = useEventStream<ComposeEvent, ComposeOutputState>(() => emptyCompo
 - `toastSuccess(title, description)` and `toastFailure(title, error)` are called from the mutation's own `onSuccess`
   and `onError`, with words from the module's messages. No global toast on every failure.
 - A 401 goes through the caches' `onError` to `session.signedOut(router)`.
-- **`Region`** (`common/components/region.tsx`) wraps each card and widget. It combines `Suspense`, TanStack
-  Router's `CatchBoundary` and `QueryErrorResetBoundary`. It fails alone, and its retry asks its failed queries again. A
-  query inside a region uses `useSuspenseQuery`, warmed by the route's loader. A failed refetch keeps the stale data on
-  screen.
-- A failed region comes back as a query would: opened again, it reads its failed queries again; while it shows its
-  failure, an invalidation of the failed query (a feed's, a mutation's) or a focus reads it again, and its success
-  renders the region; it renders again on a focus, and on its Retry.
+- **Regions** (`common/components/region.tsx`) wrap each card and widget, so that it fails alone. The component that
+  renders the card reads with `useQuery`, above the region, and `<QueryRegion query failure fallback>` shows it: the
+  data once there is some, even when a later read failed; else the read's failure, with a Retry; else the fallback.
+  What the data renders sits in TanStack Router's `CatchBoundary`, reset when the query's `dataUpdatedAt` changes: a
+  card that threw on one answer renders the next. A card that reads nothing, as the clock, sits in
+  `<RenderRegion failure resetKey>`. ADR 0002, decision 4, as #203 amended it.
+- No `Suspense`, no `useSuspenseQuery`, no `throwOnError` and no `QueryErrorResetBoundary` in a region: a reader that
+  throws to a boundary is unmounted by it, and its observer with it, so an invalidation or a focus would read nothing
+  and the region would not come back. With the observer above the region, the query comes back as any `useQuery`
+  does: a feed's or a mutation's invalidation, a focus, a remount, polling, and the Retry, which reads again with
+  `refetch({ cancelRefetch: false })`.
 - `failure` is the title of an alert with a Retry, which says why only for the server's `ApiError`, or a render of its
-  own, `({ error, retry }) => ...`, with a `RetryButton`. `resetKey` renders a failed region again once it changes, as a card's
-  `dataUpdatedAt`: a card that threw on one answer renders the next.
-- Where the failure is said depends on where it is caught: a region around the read says why the service failed, one
-  around the card (inside the read) that the card could not show its answer.
+  own, `({ cause, error, retry }) => ...`, with a `RetryButton`. `cause` is `read` when the query failed with no data,
+  `render` when the card threw: a widget says either that its service did not answer or that its card could not show
+  the answer (`WidgetFailure`).
+- A read again that fails keeps the data on screen. A card that says so reads `query.error` beside its data.
+- `useSuspenseQuery` stays for a page's critical data, awaited by its loader and failed by its route's
+  `errorComponent`. None has any today.
 
 ```tsx
-<Region failure="Could not read the jobs" fallback={<Skeleton className="h-24 w-full" />}>
-  <JobRuns />
-</Region>
+export function JobsSettingsCard() {
+  const jobs = useQuery(settingsQueries.jobs());
 
-<Region
-  fallback={<WidgetSkeleton look={look} />}
-  failure={({ error, retry }) => <WidgetError look={look} reason={describeError(error)} retry={retry} />}
->
-  <LoadedCard ... />
-</Region>
+  return (
+    <QueryRegion query={jobs} failure="Could not read the jobs" fallback={<Skeleton className="h-24 w-full" />}>
+      {runs => <JobRuns runs={runs} error={jobs.error} />}
+    </QueryRegion>
+  );
+}
+
+export function DockerCard() {
+  const look = widgetLook("docker-general-stats");
+  const overview = useQuery(dockerQueries.overview());
+  const { data: projects } = useQuery(dockerQueries.projects());
+
+  useDockerChanges();
+
+  return (
+    <QueryRegion
+      query={overview}
+      fallback={<WidgetSkeleton look={look} />}
+      failure={failure => <WidgetFailure look={look} {...failure} />}
+    >
+      {host => <DockerHost overview={host} projects={projects ?? []} />}
+    </QueryRegion>
+  );
+}
 ```
 
 ## Forms: TanStack Form, and `formErrorsOf`

@@ -7,19 +7,14 @@ import { JobsSettingsCard } from "#modules/settings/components/jobs-settings-car
 import { StoreSettingsCard } from "#modules/settings/components/store-settings-card.tsx";
 import { parseSettingsTab, settingsTabs, type SettingsTabId } from "#modules/settings/helpers/settings-tab.ts";
 
-/**
- * How long a read the loader warmed is taken as it is, in milliseconds: a hover then a click runs the loader twice, and
- * the second reads nothing again. A suspense read takes it as fresh as long.
- */
-const warmedFor = 1_000;
-
 /** `/settings`, its tab in the hash. */
 export const Route = createFileRoute("/_app/settings")({
-  // Warmed, not waited for: each card shows its own skeleton and failure. The edited files are not: each is read as
-  // its tab opens, and shown from that read alone.
+  // Warmed, not waited for: each card shows its own skeleton and failure. Their options keep a warmed read fresh for a
+  // second, so that the card that mounts reads nothing again. The edited files are not warmed: each is read as its tab
+  // opens, and shown from that read alone.
   loader: ({ context }) => {
-    void context.queryClient.prefetchQuery({ ...settingsQueries.storeStatus(), staleTime: warmedFor });
-    void context.queryClient.prefetchQuery({ ...settingsQueries.jobs(), staleTime: warmedFor });
+    void context.queryClient.prefetchQuery(settingsQueries.storeStatus());
+    void context.queryClient.prefetchQuery(settingsQueries.jobs());
   },
   component: SettingsPage,
 });

@@ -1,7 +1,7 @@
-import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { RotateCcwIcon, XIcon } from "lucide-react";
 import type { JobRun } from "#libs/api";
-import { Region } from "#modules/common/components/region.tsx";
+import { QueryRegion } from "#modules/common/components/region.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
@@ -26,6 +26,8 @@ import {
  * otherwise, so that a run a cron asks for shows.
  */
 export function JobsSettingsCard() {
+  const jobs = useQuery(settingsQueries.jobs());
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -36,18 +38,22 @@ export function JobsSettingsCard() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Region failure="Could not read the jobs" fallback={<Skeleton className="h-24 w-full" />}>
-          <JobRuns />
-        </Region>
+        <QueryRegion query={jobs} failure="Could not read the jobs" fallback={<Skeleton className="h-24 w-full" />}>
+          {runs => <JobRuns runs={runs} error={jobs.error} />}
+        </QueryRegion>
       </CardContent>
     </Card>
   );
 }
 
-/** The runs, once read, and their buttons; a read again that fails says so above the runs as they were. */
-function JobRuns() {
-  const { data: runs, error } = useSuspenseQuery(settingsQueries.jobs());
+type JobRunsProps = {
+  runs: readonly JobRun[];
+  /** Why the last read failed, when the runs shown are those of an earlier one. */
+  error: Error | null;
+};
 
+/** The runs, once read, and their buttons; a read again that fails says so above the runs as they were. */
+function JobRuns({ runs, error }: JobRunsProps) {
   // The options read the runs again whatever the outcome; the toasts are this card's.
   const runAgain = useMutation({
     ...settingsMutations.runJob(),

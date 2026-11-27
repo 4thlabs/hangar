@@ -1,4 +1,4 @@
-import { queryOptions, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import {
   getConfigReadQueryKey,
   getConfigReadQueryOptions,
@@ -8,12 +8,12 @@ import {
   getEnvSaveMutationOptions,
   getJobsCancelMutationOptions,
   getJobsListQueryKey,
+  getJobsListQueryOptions,
   getJobsRunMutationOptions,
   getStoreAppsQueryKey,
   getStoreStatusQueryKey,
+  getStoreStatusQueryOptions,
   getStoreSyncMutationOptions,
-  jobsList,
-  storeStatus,
   type StoreStatus,
 } from "#libs/api";
 import { jobsPollDelay } from "#modules/settings/helpers/job-text.ts";
@@ -26,29 +26,33 @@ import { syncPollMs } from "#modules/settings/helpers/store-sync.ts";
  */
 const editedFile = { staleTime: Infinity, refetchOnMount: "always", refetchOnWindowFocus: false } as const;
 
+/**
+ * How long a read the route's loader warmed is taken as it is, in milliseconds: the card that mounts after it reads
+ * nothing again, and neither does the click that follows a hover, which runs the loader again (ADR 0002, rule 15).
+ */
+const warmedFor = 1_000;
+
 /** The reads of the settings' cards. */
 export const settingsQueries = {
   /** `.env.global`, edited. */
   env: () => getEnvReadQueryOptions({ query: editedFile }),
   /** `hangar.yml`, edited. */
   config: () => getConfigReadQueryOptions({ query: editedFile }),
-  // The two below are read in their cards' regions, and warmed by the route's loader: they are built on orval's key and
-  // fetcher, as orval's options type their function as possibly `skipToken`, which a suspense query and
-  // `prefetchQuery` refuse under `exactOptionalPropertyTypes`.
-
-  /** The store's URL, whether it is cloned, and its sync: read again each second while a sync runs. */
+  /** The store's URL, whether it is cloned, and its sync: read again each second while a sync runs. Warmed. */
   storeStatus: () =>
-    queryOptions({
-      queryKey: getStoreStatusQueryKey(),
-      queryFn: ({ signal }) => storeStatus({ signal }),
-      refetchInterval: query => (query.state.data?.sync?.state === "running" ? syncPollMs : false),
+    getStoreStatusQueryOptions({
+      query: {
+        staleTime: warmedFor,
+        refetchInterval: query => (query.state.data?.sync?.state === "running" ? syncPollMs : false),
+      },
     }),
-  /** The runs of the server's jobs: read again each second while one waits or runs, and every 30 seconds otherwise. */
+  /**
+   * The runs of the server's jobs: read again each second while one waits or runs, and every 30 seconds otherwise.
+   * Warmed.
+   */
   jobs: () =>
-    queryOptions({
-      queryKey: getJobsListQueryKey(),
-      queryFn: ({ signal }) => jobsList({ signal }),
-      refetchInterval: query => jobsPollDelay(query.state.data ?? []),
+    getJobsListQueryOptions({
+      query: { staleTime: warmedFor, refetchInterval: query => jobsPollDelay(query.state.data ?? []) },
     }),
 };
 

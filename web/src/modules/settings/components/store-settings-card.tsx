@@ -1,7 +1,8 @@
-import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { DownloadIcon, RefreshCwIcon } from "lucide-react";
+import type { StoreStatus } from "#libs/api";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
-import { Region } from "#modules/common/components/region.tsx";
+import { QueryRegion } from "#modules/common/components/region.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
@@ -17,13 +18,16 @@ import { useSyncEnd } from "#modules/settings/hooks/use-sync-end.ts";
  * read again until it ends, by this page or another that comes back to it.
  */
 export function StoreSettingsCard() {
+  const status = useQuery(settingsQueries.storeStatus());
+
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
         <CardTitle>STORE</CardTitle>
         <CardDescription>See the configured repository and synchronize its local copy.</CardDescription>
       </CardHeader>
-      <Region
+      <QueryRegion
+        query={status}
         failure="Could not read the store"
         fallback={
           <CardContent>
@@ -31,15 +35,20 @@ export function StoreSettingsCard() {
           </CardContent>
         }
       >
-        <StoreStatusContent />
-      </Region>
+        {read => <StoreStatusContent status={read} error={status.error} />}
+      </QueryRegion>
     </Card>
   );
 }
 
+type StoreStatusContentProps = {
+  status: StoreStatus;
+  /** Why the last read failed, when the status shown is that of an earlier one. */
+  error: Error | null;
+};
+
 /** The store as the server last said, and its sync; a read again that fails says why under the URL. */
-function StoreStatusContent() {
-  const { data: status, error } = useSuspenseQuery(settingsQueries.storeStatus());
+function StoreStatusContent({ status, error }: StoreStatusContentProps) {
   const sync = useMutation(settingsMutations.syncStore());
   const isRunning = status.sync?.state === "running";
 
