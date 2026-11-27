@@ -1,4 +1,5 @@
 import type { WidgetType } from "#libs/api";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
 
 /** A widget's icon, as image URLs, and the variant drawn on a dark theme for one the dark background would swallow. */
 export class WidgetIcon {
@@ -33,82 +34,71 @@ export type WidgetLook = {
   className?: string;
 };
 
+const words = widgetsMessages.looks;
+
 /** How each widget looks before and whatever it loads. */
 const looksByType: Readonly<Record<WidgetType, WidgetLook>> = {
   // Dashboard Icons draws apps, not a plain clock: Fluent Emoji's alarm clock (MIT), served by Hangar itself.
   clock: {
-    title: "Clock",
-    errorDescription: "The clock could not be rendered.",
+    ...words.clock,
     icon: new WidgetIcon("/images/widgets/clock.svg"),
     className: "h-20",
   },
   "docker-general-stats": {
-    title: "Local",
-    errorDescription: "The local Docker statistics could not be loaded.",
+    ...words["docker-general-stats"],
     icon: WidgetIcon.dashboard("docker"),
     className: "@container min-h-64",
   },
   "arcane-general-stats": {
-    title: "Arcane",
-    errorDescription: "The general statistics could not be loaded.",
+    ...words["arcane-general-stats"],
     icon: WidgetIcon.dashboard("arcane"),
     className: "@container min-h-64",
   },
   "backrest-summary": {
-    title: "Backrest",
-    errorDescription: "The backup status could not be loaded.",
+    ...words["backrest-summary"],
     icon: WidgetIcon.dashboard("backrest"),
     className: "min-h-40",
   },
   "beszel-server-stats": {
-    title: "Beszel",
-    errorDescription: "The server stats could not be loaded.",
+    ...words["beszel-server-stats"],
     icon: WidgetIcon.dashboard("beszel", "beszel-light"),
     className: "min-h-40",
   },
   "forgejo-ci": {
-    title: "Forgejo",
-    errorDescription: "The Forgejo Actions runs could not be loaded.",
+    ...words["forgejo-ci"],
     icon: WidgetIcon.dashboard("forgejo"),
     className: "min-h-40",
   },
   "frigate-events": {
-    title: "Frigate",
-    errorDescription: "The camera events could not be loaded.",
+    ...words["frigate-events"],
     icon: WidgetIcon.dashboard("frigate", "frigate-light"),
     className: "min-h-88",
   },
   "gluetun-vpn-status": {
-    title: "Gluetun",
-    errorDescription: "The VPN status could not be read.",
+    ...words["gluetun-vpn-status"],
     icon: WidgetIcon.dashboard("gluetun"),
     className: "min-h-32",
   },
   "miniflux-entries": {
-    title: "Miniflux",
-    errorDescription: "The feed entries could not be loaded.",
+    ...words["miniflux-entries"],
     icon: WidgetIcon.dashboard("miniflux", "miniflux-light"),
   },
   "jellyfin-latest": {
-    title: "Jellyfin",
-    errorDescription: "The Jellyfin library could not be loaded.",
+    ...words["jellyfin-latest"],
     icon: WidgetIcon.dashboard("jellyfin"),
     className: "min-h-64",
   },
   "tcg-collector-cards": {
-    title: "TCG Collector",
-    errorDescription: "The card prices could not be loaded.",
+    ...words["tcg-collector-cards"],
     icon: new WidgetIcon("/images/widgets/tcg-collector.svg"),
     className: "min-h-48",
   },
   "github-releases": {
-    title: "Releases",
-    errorDescription: "The GitHub releases could not be loaded.",
+    ...words["github-releases"],
     icon: WidgetIcon.dashboard("github", "github-light"),
   },
   "stock-prices": {
-    title: "Stocks",
-    errorDescription: "The stock prices could not be loaded.",
+    ...words["stock-prices"],
     icon: new WidgetIcon("/images/widgets/stock.svg"),
     className: "min-h-64",
   },

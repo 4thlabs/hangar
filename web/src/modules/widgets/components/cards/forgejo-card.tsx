@@ -12,7 +12,9 @@ import {
   WidgetTime,
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
+
+const words = widgetsMessages.forgejo;
 
 type ForgejoCardProps = {
   ci: ForgejoCi;
@@ -34,15 +36,15 @@ export function ForgejoCard({ ci: { repositoryCount, activeRuns, recentRepositor
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{formatCount(repositoryCount, "repo", "repos")}</span>
-            {running > 0 && <span className="font-medium text-chart-4">{formatInteger(running)} running</span>}
-            {queued > 0 && <span>{formatInteger(queued)} queued</span>}
+            <span>{widgetsMessages.counts.repos({ count: repositoryCount })}</span>
+            {running > 0 && <span className="font-medium text-chart-4">{words.running({ count: running })}</span>}
+            {queued > 0 && <span>{words.queued({ count: queued })}</span>}
           </WidgetMetadata>
         }
       />
 
       <WidgetContent>
-        <WidgetList empty="Nothing running.">
+        <WidgetList empty={words.empty}>
           {activeRuns.map(run => (
             <WidgetListItem
               key={`${run.repository}-${run.id}`}
@@ -81,7 +83,7 @@ export function ForgejoCard({ ci: { repositoryCount, activeRuns, recentRepositor
       </WidgetContent>
 
       {recentRepositories.length > 0 && (
-        <WidgetFooter title="Recently updated">
+        <WidgetFooter title={words.recentlyUpdated}>
           <WidgetList className="w-full gap-2">
             {recentRepositories.map(repository => (
               <WidgetListItem

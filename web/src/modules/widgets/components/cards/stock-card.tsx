@@ -9,7 +9,9 @@ import {
   WidgetMetricGrid,
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
+
+const words = widgetsMessages.stocks;
 
 // How the card writes prices and their changes.
 
@@ -73,7 +75,7 @@ function ClosesSparkline({ stock }: { stock: Stock }) {
   const from = formatPrice(first, stock.currency);
   const to = formatPrice(last, stock.currency);
 
-  return <WidgetSparkline prices={stock.closes} label={`Closes over the last month: from ${from} to ${to}`} />;
+  return <WidgetSparkline prices={stock.closes} label={words.closes({ from, to })} />;
 }
 
 /** One stock: what it is, what it is worth, and how that moved today. */
@@ -97,9 +99,9 @@ function StockTile({ stock }: { stock: Stock }) {
       </div>
       <p className="text-xs text-muted-foreground">
         <WidgetMetadata>
-          <span>H {formatAmount(stock.high)}</span>
-          <span>L {formatAmount(stock.low)}</span>
-          <span>O {formatAmount(stock.open)}</span>
+          <span>{words.high({ amount: formatAmount(stock.high) })}</span>
+          <span>{words.low({ amount: formatAmount(stock.low) })}</span>
+          <span>{words.open({ amount: formatAmount(stock.open) })}</span>
         </WidgetMetadata>
       </p>
     </div>
@@ -124,18 +126,18 @@ function StockMetrics({ stocks }: { stocks: Stock[] }) {
   return (
     <WidgetMetricGrid>
       <WidgetMetric
-        label="Best"
+        label={words.best}
         value={formatChange(best.changePercent)}
         detail={best.symbol}
         tone={best.changePercent < 0 ? "destructive" : "default"}
       />
       <WidgetMetric
-        label="Worst"
+        label={words.worst}
         value={formatChange(worst.changePercent)}
         detail={worst.symbol}
         tone={worst.changePercent < 0 ? "destructive" : "default"}
       />
-      <WidgetMetric label="Rising" value={rising} detail={`of ${formatInteger(stocks.length)}`} />
+      <WidgetMetric label={words.rising} value={rising} detail={words.risingOf({ count: stocks.length })} />
     </WidgetMetricGrid>
   );
 }
@@ -151,7 +153,7 @@ export function StockCard({ prices: { stocks } }: { prices: StockPrices }) {
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{formatCount(stocks.length, "ticker", "tickers")}</span>
+            <span>{widgetsMessages.counts.tickers({ count: stocks.length })}</span>
           </WidgetMetadata>
         }
       />

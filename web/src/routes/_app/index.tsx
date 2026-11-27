@@ -23,6 +23,7 @@ import { TcgCollectorCard } from "#modules/widgets/components/cards/tcg-collecto
 import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
 import { WidgetCardFailure } from "#modules/widgets/components/widget-states.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
 
 /** `/`, the dashboard. */
 export const Route = createFileRoute("/_app/")({
@@ -139,7 +140,7 @@ function PlacedRegion({ placement }: { placement: WidgetPlacement }) {
 function DashboardPage() {
   const { data: placements, error } = useQuery(widgetsQueries.placements());
 
-  const title = <title>Dashboard | Hangar</title>;
+  const title = <title>{widgetsMessages.dashboard.documentTitle}</title>;
 
   if (error) {
     return (
@@ -147,7 +148,7 @@ function DashboardPage() {
         {title}
         <Alert variant="destructive">
           <CircleAlertIcon aria-hidden="true" />
-          <AlertTitle>Could not read the dashboard</AlertTitle>
+          <AlertTitle>{widgetsMessages.dashboard.readFailed}</AlertTitle>
           <AlertDescription>{describeError(error)}</AlertDescription>
         </Alert>
       </main>

@@ -2,6 +2,7 @@ import { cn } from "cn";
 import type { GluetunVpnStatus } from "#libs/api";
 import { WidgetCard, WidgetContent, WidgetHeader } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
 
 /** Whether gluetun's tunnel is up, and where it comes out. No link: gluetun has no web page. */
 export function GluetunCard({ status: { publicIp, city, country } }: { status: GluetunVpnStatus }) {
@@ -17,7 +18,7 @@ export function GluetunCard({ status: { publicIp, city, country } }: { status: G
       <WidgetContent className="flex flex-col gap-1">
         <p className="flex items-center gap-2 font-medium">
           <span className={cn(!isConnected && "text-destructive")}>
-            {isConnected ? "Your VPN is connected!" : "Your VPN is not connected!"}
+            {isConnected ? widgetsMessages.gluetun.connected : widgetsMessages.gluetun.disconnected}
           </span>
           {/* Decorative: the sentence says the same. */}
           <span

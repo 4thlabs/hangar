@@ -7,7 +7,8 @@ import {
   WidgetMetadata,
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { formatCount, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
+import { formatInteger } from "#modules/widgets/helpers/widget-format.ts";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
 import { HostMetrics } from "./host-metrics.tsx";
 
 /** The color of an item that needs attention, by how pressing it is. */
@@ -65,7 +66,7 @@ export function ArcaneCard({ stats: { version, containers, images, volumes, acti
         description={
           <WidgetMetadata>
             <VersionLabel version={version} />
-            <span>{formatCount(containers.total, "container", "containers")}</span>
+            <span>{widgetsMessages.counts.containers({ count: containers.total })}</span>
           </WidgetMetadata>
         }
       />
@@ -75,7 +76,7 @@ export function ArcaneCard({ stats: { version, containers, images, volumes, acti
       </WidgetContent>
 
       {actionItems.length > 0 && (
-        <WidgetFooter title="Needs attention">
+        <WidgetFooter title={widgetsMessages.arcane.needsAttention}>
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             {actionItems.map(action => (
               <li key={`${action.kind}-${action.severity}`} className={severityClassName(action.severity)}>

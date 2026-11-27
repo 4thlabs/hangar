@@ -1,6 +1,9 @@
 import type { ContainerCounts, ImageCounts, VolumeCounts } from "#libs/api";
 import { WidgetMetric, WidgetMetricGrid } from "#modules/widgets/components/widget.tsx";
-import { formatBytes, formatInteger } from "#modules/widgets/helpers/widget-format.ts";
+import { formatBytes } from "#modules/widgets/helpers/widget-format.ts";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
+
+const words = widgetsMessages.host;
 
 type HostMetricsProps = {
   containers: ContainerCounts;
@@ -12,21 +15,21 @@ type HostMetricsProps = {
 export function HostMetrics({ containers, images, volumes }: HostMetricsProps) {
   return (
     <WidgetMetricGrid>
-      <WidgetMetric label="Running" value={containers.running} />
+      <WidgetMetric label={words.running} value={containers.running} />
       <WidgetMetric
-        label="Stopped"
+        label={words.stopped}
         value={containers.stopped}
         tone={containers.stopped > 0 ? "destructive" : "default"}
       />
       <WidgetMetric
-        label="Images"
+        label={words.images}
         value={images.total}
-        detail={`${formatInteger(images.unused)} unused · ${formatBytes(images.size)}`}
+        detail={words.imagesDetail({ unused: images.unused, size: formatBytes(images.size) })}
       />
       <WidgetMetric
-        label="Volumes"
+        label={words.volumes}
         value={volumes.total}
-        detail={`${formatInteger(volumes.inUse)} in use · ${formatInteger(volumes.unused)} unused`}
+        detail={words.volumesDetail({ inUse: volumes.inUse, unused: volumes.unused })}
       />
     </WidgetMetricGrid>
   );

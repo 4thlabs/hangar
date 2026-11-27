@@ -10,8 +10,10 @@ import {
   WidgetMetadata,
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { formatCount } from "#modules/widgets/helpers/widget-format.ts";
 import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
+
+const words = widgetsMessages.tcg;
 
 // How the card writes prices and days.
 
@@ -57,8 +59,8 @@ const millisecondsPerDay = 86_400_000;
 
 /** The games tcg-collector collects, by Cardmarket's game id. */
 const gameNames: ReadonlyMap<number, string> = new Map([
-  [1, "Magic"],
-  [21, "Star Wars Unlimited"],
+  [1, words.games.magic],
+  [21, words.games.starWarsUnlimited],
 ]);
 
 /**
@@ -78,19 +80,19 @@ export function priceSeries(history: readonly TcgDailyPrices[], { days, lastDay 
     }
   }
 
-  return { label: hasTrend ? "Trend" : "Low", prices };
+  return { label: hasTrend ? words.trend : words.low, prices };
 }
 
 /** What the curve shows, for a screen reader: `Trend over 30 days: from €1.20 to €1.45`. */
 export function describePriceSeries({ label, prices }: PriceSeries) {
   const known = prices.filter(price => price !== null);
-  const period = `${label} over ${formatCount(prices.length, "day", "days")}`;
+  const period = words.series({ label, days: prices.length });
 
   if (known.length === 1) {
-    return `${period}: ${formatEuros(known[0]!)}`;
+    return words.seriesAt({ period, price: formatEuros(known[0]!) });
   }
 
-  return `${period}: from ${formatEuros(known[0] ?? null)} to ${formatEuros(known.at(-1) ?? null)}`;
+  return words.seriesFromTo({ period, from: formatEuros(known[0] ?? null), to: formatEuros(known.at(-1) ?? null) });
 }
 
 /** The latest day any card has a price for, `YYYY-MM-DD`; `undefined` when none has one. */
@@ -104,7 +106,7 @@ export function latestPriceDay(cards: readonly TcgFollowedCard[]) {
 
 /** A game's name, or its id for a game the card does not know by name. */
 export function gameName(game: number) {
-  return gameNames.get(game) ?? `Game ${game}`;
+  return gameNames.get(game) ?? words.game({ game });
 }
 
 /** A `YYYY-MM-DD` day as a count of days, so that two days subtract to the days between them. */
@@ -138,9 +140,9 @@ function CardRow({ followed, priceWindow, link, placementKey }: CardRowProps) {
   if (!card) {
     return (
       <WidgetListItem media={<span className={thumbnailClassName} />}>
-        <p className="truncate font-medium text-muted-foreground">Card not found</p>
+        <p className="truncate font-medium text-muted-foreground">{words.notFound}</p>
         <p className="truncate text-xs text-muted-foreground">
-          {gameName(followed.game)} · product {followed.product}
+          {gameName(followed.game)} · {words.product({ product: followed.product })}
         </p>
       </WidgetListItem>
     );
@@ -180,18 +182,18 @@ function CardRow({ followed, priceWindow, link, placementKey }: CardRowProps) {
         >
           {card.name}
         </a>
-        {card.version !== null && <Badge variant="outline">V.{card.version}</Badge>}
+        {card.version !== null && <Badge variant="outline">{words.version({ version: card.version })}</Badge>}
       </div>
       {card.expansion && <p className="truncate text-xs text-muted-foreground">{card.expansion}</p>}
       <p className="flex items-baseline gap-x-2 overflow-hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground">
         <span className="text-sm font-semibold text-primary">
-          <span className="sr-only">Trend </span>
+          <span className="sr-only">{words.trend} </span>
           {formatEuros(card.trend)}
         </span>
         <WidgetMetadata>
-          <span>Low {formatEuros(card.low)}</span>
+          <span>{words.lowPrice({ price: formatEuros(card.low) })}</span>
           {/* Most cards have no foil printing: a dash there would read as a missing price. */}
-          {card.trendFoil !== null && <span>Foil {formatEuros(card.trendFoil)}</span>}
+          {card.trendFoil !== null && <span>{words.foilPrice({ price: formatEuros(card.trendFoil) })}</span>}
         </WidgetMetadata>
       </p>
     </WidgetListItem>
@@ -219,9 +221,9 @@ export function TcgCollectorCard({ cards: { days, cards }, placementKey, link }:
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{formatCount(cards.length, "card", "cards")}</span>
-            <span>{formatCount(days, "day", "days")}</span>
-            {latestDay && <span>as of {formatDay(latestDay)}</span>}
+            <span>{widgetsMessages.counts.cards({ count: cards.length })}</span>
+            <span>{widgetsMessages.counts.days({ count: days })}</span>
+            {latestDay && <span>{words.asOf({ day: formatDay(latestDay) })}</span>}
           </WidgetMetadata>
         }
       />
