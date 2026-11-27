@@ -19,6 +19,9 @@ import {
   jobStateLabel,
   runFailure,
 } from "#modules/settings/helpers/job-text.ts";
+import { settingsMessages } from "#modules/settings/messages.ts";
+
+const words = settingsMessages.jobs;
 
 /**
  * The runs of the server's jobs, the last 50 it keeps in memory, the newest first: each can be run again, and one that
@@ -31,14 +34,11 @@ export function JobsSettingsCard() {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>JOBS</CardTitle>
-        <CardDescription>
-          The last 50 runs of the server's jobs: the image check, every four hours and as the server starts, and the
-          update of the apps, every night.
-        </CardDescription>
+        <CardTitle>{words.title}</CardTitle>
+        <CardDescription>{words.description}</CardDescription>
       </CardHeader>
       <CardContent>
-        <QueryRegion query={jobs} failure="Could not read the jobs" fallback={<Skeleton className="h-24 w-full" />}>
+        <QueryRegion query={jobs} failure={words.readFailed} fallback={<Skeleton className="h-24 w-full" />}>
           {runs => <JobRuns runs={runs} error={jobs.error} />}
         </QueryRegion>
       </CardContent>
@@ -57,14 +57,14 @@ function JobRuns({ runs, error }: JobRunsProps) {
   // The options read the runs again whatever the outcome; the toasts are this card's.
   const runAgain = useMutation({
     ...settingsMutations.runJob(),
-    onSuccess: asked => toastSuccess("Job asked for again", askedAgainText(asked)),
-    onError: failure => toastFailure("Run again failed", failure),
+    onSuccess: asked => toastSuccess(words.askedAgain, askedAgainText(asked)),
+    onError: failure => toastFailure(words.runAgainFailed, failure),
   });
 
   const cancel = useMutation({
     ...settingsMutations.cancelJob(),
-    onSuccess: canceled => toastSuccess("Job canceled", `${jobName(canceled.job)} stops.`),
-    onError: failure => toastFailure("Cancel failed", failure),
+    onSuccess: canceled => toastSuccess(words.canceled, words.stops({ job: jobName(canceled.job) })),
+    onError: failure => toastFailure(words.cancelFailed, failure),
   });
 
   const isPending = runAgain.isPending || cancel.isPending;
@@ -75,8 +75,8 @@ function JobRuns({ runs, error }: JobRunsProps) {
       {runs.length === 0 && (
         <Empty>
           <EmptyHeader>
-            <EmptyTitle>No jobs</EmptyTitle>
-            <EmptyDescription>No job has run since the server started.</EmptyDescription>
+            <EmptyTitle>{words.empty}</EmptyTitle>
+            <EmptyDescription>{words.emptyDescription}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       )}
@@ -84,12 +84,12 @@ function JobRuns({ runs, error }: JobRunsProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Job</TableHead>
-              <TableHead>Queue</TableHead>
-              <TableHead>State</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead>Ended</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>{words.columns.job}</TableHead>
+              <TableHead>{words.columns.queue}</TableHead>
+              <TableHead>{words.columns.state}</TableHead>
+              <TableHead>{words.columns.created}</TableHead>
+              <TableHead>{words.columns.ended}</TableHead>
+              <TableHead>{words.columns.actions}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -140,8 +140,8 @@ function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
             type="button"
             size="icon-sm"
             variant="outline"
-            title="Run again"
-            aria-label={`Run the ${name.toLowerCase()} again`}
+            title={words.runAgain}
+            aria-label={words.runAgainLabel({ job: name })}
             disabled={isPending}
             onClick={onRunAgain}
           >
@@ -152,8 +152,8 @@ function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
               type="button"
               size="icon-sm"
               variant="ghost"
-              title="Cancel"
-              aria-label={`Cancel the ${name.toLowerCase()}`}
+              title={words.cancel}
+              aria-label={words.cancelLabel({ job: name })}
               disabled={isPending}
               onClick={onCancel}
             >
