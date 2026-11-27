@@ -1,8 +1,24 @@
 import { focusManager } from "@tanstack/react-query";
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getWidgetsDataQueryKey, type DockerOverview, type WidgetData, type WidgetPlacement } from "#libs/api";
-import { coded, FakeEventSource, renderAt, serve } from "#mock/page.tsx";
+import {
+  getWidgetsDataQueryKey,
+  type DockerChange,
+  type DockerOverview,
+  type ProjectSummary,
+  type WidgetData,
+  type WidgetPlacement,
+} from "#libs/api";
+import {
+  getDockerOverviewMockHandler,
+  getDockerProjectsMockHandler,
+  getJobsListMockHandler,
+  getStoreStatusMockHandler,
+  getWidgetsDataMockHandler,
+  getWidgetsPlacementsMockHandler,
+} from "#libs/api/mock";
+import { coded, countCalls, feed, network } from "#mock/network.ts";
+import { renderAt } from "#mock/page.tsx";
 
 const placements: WidgetPlacement[] = [
   { key: "clock-1", type: "clock", column: 1, link: null },
@@ -43,26 +59,80 @@ const overview: DockerOverview = {
   volumes: { total: 8, inUse: 6, unused: 2 },
 };
 
-/** The server of the dashboard of `placements`, Miniflux's service failing, and gluetun's when `isGluetunDown` says. */
-function serveDashboard({
+/** The stocks' data: Apple's, or, when `isBroken`, a body the contract allows but the card does not take. */
+function stocks({ isBroken }: { isBroken: boolean }): WidgetData {
+  if (isBroken) {
+    // Cast: the contract refuses this body, which a server newer or older than the page may send, and the card must
+    // fail on it alone.
+    return { type: "stock-prices", data: {} } as WidgetData;
+  }
+
+  return {
+    type: "stock-prices",
+    data: {
+      stocks: [
+        {
+          symbol: "AAPL",
+          name: "Apple Inc",
+          currency: "USD",
+          price: 190.5,
+          changePercent: 1.06,
+          high: 191,
+          low: 187,
+          open: 188,
+          closes: [],
+        },
+      ],
+    },
+  };
+}
+
+/** The widgets' data, by key: Miniflux's service failing, and gluetun's when `isGluetunDown` says. */
+function widgetData(key: string, isGluetunDown: boolean): WidgetData {
+  switch (key) {
+    case "gluetun-vpn-status-1":
+      if (isGluetunDown) {
+        throw coded(502, {
+          code: "widgets.unavailable",
+          params: { widget: "gluetun-vpn-status" },
+          message: "the gluetun-vpn-status widget could not be loaded.",
+        });
+      }
+
+      return gluetun;
+    case "frigate-events-1":
+      return frigate;
+    case "miniflux-entries-1":
+      throw coded(502, {
+        code: "widgets.unavailable",
+        params: { widget: "miniflux-entries" },
+        message: "the miniflux-entries widget could not be loaded. See the server's log.",
+      });
+    default:
+      throw new Error(`no data for the widget ${key}`);
+  }
+}
+
+/**
+ * What the dashboard of `shown` calls: its widgets' data, Docker's host and its apps, none installed, and the Docker
+ * changes feed, `changes`.
+ */
+function dashboard({
   shown = placements,
   isGluetunDown = () => false,
-}: { shown?: WidgetPlacement[]; isGluetunDown?: () => boolean } = {}) {
-  return serve({
-    "GET /api/widgets": () => Response.json(shown),
-    "GET /api/widgets/gluetun-vpn-status-1": () =>
-      isGluetunDown()
-        ? coded(502, "widgets.unavailable", "the gluetun-vpn-status widget could not be loaded.", {
-            widget: "gluetun-vpn-status",
-          })
-        : Response.json(gluetun),
-    "GET /api/widgets/frigate-events-1": () => Response.json(frigate),
-    "GET /api/widgets/miniflux-entries-1": () =>
-      coded(502, "widgets.unavailable", "the miniflux-entries widget could not be loaded. See the server's log.", {
-        widget: "miniflux-entries",
-      }),
-    "GET /api/docker/overview": () => Response.json(overview),
-  });
+  apps = [],
+}: { shown?: WidgetPlacement[]; isGluetunDown?: () => boolean; apps?: ProjectSummary[] } = {}) {
+  const changes = feed<DockerChange>("/api/docker/changes");
+
+  network.use(
+    getWidgetsPlacementsMockHandler(shown),
+    getWidgetsDataMockHandler(({ params }) => widgetData(params.key, isGluetunDown())),
+    getDockerOverviewMockHandler(overview),
+    getDockerProjectsMockHandler(apps),
+    changes.handler,
+  );
+
+  return { changes };
 }
 
 /** The card whose header says `title`, once loaded: its skeleton says the same. */
@@ -79,20 +149,14 @@ async function card(title: string): Promise<HTMLElement> {
   });
 }
 
-/** How many times the page called `url`. */
-function calls(fetch: ReturnType<typeof serve>, url: string) {
-  return fetch.mock.calls.filter(([called]) => called === url).length;
-}
-
 afterEach(() => {
   cleanup();
-  vi.unstubAllGlobals();
-  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("/", () => {
   it("places each widget in its column, in the order of hangar.yml", async () => {
-    serveDashboard();
+    dashboard();
     renderAt("/");
 
     await card("Frigate");
@@ -110,7 +174,7 @@ describe("/", () => {
   });
 
   it("shows what each widget loaded, its link to its service and its images relayed by the server", async () => {
-    serveDashboard();
+    dashboard();
     renderAt("/");
 
     const frigateCard = await card("Frigate");
@@ -135,7 +199,7 @@ describe("/", () => {
   });
 
   it("shows Docker's host from the Docker routes", async () => {
-    serveDashboard();
+    dashboard();
     renderAt("/");
 
     const docker = await card("Local");
@@ -145,7 +209,7 @@ describe("/", () => {
   });
 
   it("lists the installed apps the image check found an update for, each linked to its page", async () => {
-    const app = (name: string, updateAvailable: boolean) => ({
+    const app = (name: string, updateAvailable: boolean): ProjectSummary => ({
       name,
       icon: null,
       category: null,
@@ -157,11 +221,9 @@ describe("/", () => {
       updateAvailable,
     });
 
-    serve({
-      "GET /api/widgets": () => Response.json([placements[1]]),
-      "GET /api/docker/overview": () => Response.json(overview),
-      "GET /api/docker/apps": () =>
-        Response.json([app("miniflux", true), app("frigate", false), app("jellyfin", true)]),
+    dashboard({
+      shown: placements.filter(placement => placement.type === "docker-general-stats"),
+      apps: [app("miniflux", true), app("frigate", false), app("jellyfin", true)],
     });
 
     renderAt("/");
@@ -177,23 +239,28 @@ describe("/", () => {
   });
 
   it("shows a widget whose service failed as unavailable, at once, beside the others", async () => {
-    const fetch = serveDashboard();
+    const calls = countCalls();
 
+    dashboard();
     renderAt("/");
 
     expect(await screen.findByText("Miniflux is unavailable")).toBeDefined();
     expect(screen.getByText("Its service did not answer. See the server's log.")).toBeDefined();
-    expect(fetch.mock.calls.filter(([url]) => url === "/api/widgets/miniflux-entries-1")).toHaveLength(1);
+    expect(calls("GET /api/widgets/miniflux-entries-1")).toBe(1);
     expect(screen.getByText("Your VPN is connected!")).toBeDefined();
   });
 
   it("shows a card that cannot render what its service answered as unavailable, beside the others", async () => {
-    serve({
-      "GET /api/widgets": () =>
-        Response.json([placements[2], { key: "stock-prices-1", type: "stock-prices", column: 3, link: null }]),
-      "GET /api/widgets/gluetun-vpn-status-1": () => Response.json(gluetun),
-      "GET /api/widgets/stock-prices-1": () => Response.json({ type: "stock-prices", data: {} }),
-    });
+    network.use(
+      getWidgetsPlacementsMockHandler([
+        { key: "gluetun-vpn-status-1", type: "gluetun-vpn-status", column: 2, link: null },
+        { key: "stock-prices-1", type: "stock-prices", column: 3, link: null },
+      ]),
+      // A body the contract allows, but the card does not take: no stocks.
+      getWidgetsDataMockHandler(({ params }) =>
+        params.key === "stock-prices-1" ? stocks({ isBroken: true }) : widgetData(params.key, false),
+      ),
+    );
 
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     renderAt("/");
@@ -206,32 +273,10 @@ describe("/", () => {
   it("shows a card that threw once again, when its data is read again and renders", async () => {
     let isBroken = true;
 
-    serve({
-      "GET /api/widgets": () => Response.json([{ key: "stock-prices-1", type: "stock-prices", column: 3, link: null }]),
-      "GET /api/widgets/stock-prices-1": () =>
-        Response.json(
-          isBroken
-            ? { type: "stock-prices", data: {} }
-            : {
-                type: "stock-prices",
-                data: {
-                  stocks: [
-                    {
-                      symbol: "AAPL",
-                      name: "Apple Inc",
-                      currency: "USD",
-                      price: 190.5,
-                      changePercent: 1.06,
-                      high: 191,
-                      low: 187,
-                      open: 188,
-                      closes: [],
-                    },
-                  ],
-                },
-              },
-        ),
-    });
+    network.use(
+      getWidgetsPlacementsMockHandler([{ key: "stock-prices-1", type: "stock-prices", column: 3, link: null }]),
+      getWidgetsDataMockHandler(() => stocks({ isBroken })),
+    );
 
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     renderAt("/");
@@ -251,7 +296,9 @@ describe("/", () => {
 
   it("keeps a card's data when reading it again fails", async () => {
     let isGluetunDown = false;
-    const fetch = serveDashboard({ isGluetunDown: () => isGluetunDown });
+    const calls = countCalls();
+
+    dashboard({ isGluetunDown: () => isGluetunDown });
 
     const router = renderAt("/");
     const { queryClient } = router.options.context;
@@ -264,7 +311,7 @@ describe("/", () => {
       focusManager.setFocused(true);
     });
 
-    await waitFor(() => expect(calls(fetch, "/api/widgets/gluetun-vpn-status-1")).toBe(2));
+    await waitFor(() => expect(calls("GET /api/widgets/gluetun-vpn-status-1")).toBe(2));
     await waitFor(() =>
       expect(queryClient.getQueryState(getWidgetsDataQueryKey("gluetun-vpn-status-1"))?.status).toBe("error"),
     );
@@ -275,94 +322,105 @@ describe("/", () => {
   });
 
   it("reads Docker's host again as the daemon's changes come", async () => {
-    const fetch = serveDashboard();
+    const calls = countCalls();
+    const { changes } = dashboard();
 
     renderAt("/");
     await card("Local");
+    await waitFor(() => expect(changes.urls).toHaveLength(1));
 
-    const changes = await waitFor(() => {
-      const source = FakeEventSource.of("/api/docker/changes");
-
-      expect(source).toBeDefined();
-
-      return source as FakeEventSource;
-    });
-
-    const read = calls(fetch, "/api/docker/overview");
+    const read = calls("GET /api/docker/overview");
 
     act(() => changes.send("overview"));
 
-    await waitFor(() => expect(calls(fetch, "/api/docker/overview")).toBeGreaterThan(read));
+    await waitFor(() => expect(calls("GET /api/docker/overview")).toBeGreaterThan(read));
   });
 
   it("shows the Docker card again once the daemon's changes say its host changed, after it failed", async () => {
     let isDaemonDown = true;
+    // Opened once the page asks for it: the test holds it until the first read of the host failed.
+    let openFeed: () => void = () => {};
+    const isOpened = new Promise<void>(resolve => (openFeed = resolve));
+    const changes = feed<DockerChange>("/api/docker/changes", isOpened);
+    const calls = countCalls();
 
-    const fetch = serve({
-      "GET /api/widgets": () => Response.json([placements[1]]),
+    network.use(
+      getWidgetsPlacementsMockHandler(placements.filter(placement => placement.type === "docker-general-stats")),
       // A refusal that is not tried again, so that the test waits for no retry.
-      "GET /api/docker/overview": () =>
-        isDaemonDown
-          ? coded(409, "docker.unavailable", "the Docker daemon is not reachable.")
-          : Response.json(overview),
-    });
+      getDockerOverviewMockHandler(() => {
+        if (isDaemonDown) {
+          throw coded(409, { code: "docker.unavailable", message: "the Docker daemon is not reachable." });
+        }
+
+        return overview;
+      }),
+      getDockerProjectsMockHandler([]),
+      changes.handler,
+    );
 
     renderAt("/");
 
     expect(await screen.findByText("Local is unavailable")).toBeDefined();
 
-    const changes = await waitFor(() => {
-      const source = FakeEventSource.of("/api/docker/changes");
-
-      expect(source).toBeDefined();
-
-      return source as FakeEventSource;
-    });
-
     // The feed opens while the daemon is still down: its catch-up read fails again.
-    act(() => changes.open());
-    await waitFor(() => expect(calls(fetch, "/api/docker/overview")).toBe(2));
+    openFeed();
+    await waitFor(() => expect(calls("GET /api/docker/overview")).toBe(2));
 
     isDaemonDown = false;
     act(() => changes.send("overview"));
 
     expect(await screen.findByText("Docker 29.0.1")).toBeDefined();
-    expect(calls(fetch, "/api/docker/overview")).toBe(3);
+    expect(calls("GET /api/docker/overview")).toBe(3);
   });
 
   it("reads the installed apps of the Docker card along with its host, not after it", async () => {
-    const fetch = serve({
-      "GET /api/widgets": () => Response.json([placements[1]]),
-      "GET /api/docker/overview": () => new Promise<Response>(() => {}),
-      "GET /api/docker/apps": () => Response.json([]),
-    });
+    const calls = countCalls();
+
+    network.use(
+      getWidgetsPlacementsMockHandler(placements.filter(placement => placement.type === "docker-general-stats")),
+      // Never answered.
+      getDockerOverviewMockHandler(() => new Promise<DockerOverview>(() => {})),
+      getDockerProjectsMockHandler([]),
+      feed<DockerChange>("/api/docker/changes").handler,
+    );
 
     renderAt("/");
 
-    await waitFor(() => expect(calls(fetch, "/api/docker/overview")).toBe(1));
-    await waitFor(() => expect(calls(fetch, "/api/docker/apps")).toBe(1));
+    await waitFor(() => expect(calls("GET /api/docker/overview")).toBe(1));
+    await waitFor(() => expect(calls("GET /api/docker/apps")).toBe(1));
   });
 
   it("reads a widget that failed again when the dashboard is opened again", async () => {
-    const fetch = serveDashboard();
+    const calls = countCalls();
+
+    dashboard();
+    // What `/settings` reads, on the way.
+    network.use(getStoreStatusMockHandler({ url: "u", installed: false, sync: null }), getJobsListMockHandler([]));
+
     const router = renderAt("/");
 
     expect(await screen.findByText("Miniflux is unavailable")).toBeDefined();
-    expect(calls(fetch, "/api/widgets/miniflux-entries-1")).toBe(1);
+    expect(calls("GET /api/widgets/miniflux-entries-1")).toBe(1);
 
     await act(() => router.navigate({ to: "/settings" }));
     await act(() => router.navigate({ to: "/" }));
 
     expect(await screen.findByText("Miniflux is unavailable")).toBeDefined();
-    await waitFor(() => expect(calls(fetch, "/api/widgets/miniflux-entries-1")).toBe(2));
+    await waitFor(() => expect(calls("GET /api/widgets/miniflux-entries-1")).toBe(2));
   });
 
   it("follows no change of the daemon without a Docker card", async () => {
-    serveDashboard({ shown: placements.filter(placement => placement.type !== "docker-general-stats") });
+    const calls = countCalls();
+
+    const { changes } = dashboard({
+      shown: placements.filter(placement => placement.type !== "docker-general-stats"),
+    });
+
     renderAt("/");
 
     await card("Frigate");
 
-    expect(FakeEventSource.sources.map(source => source.url)).not.toContain("/api/docker/changes");
+    expect(changes.urls).toEqual([]);
+    expect(calls("GET /api/docker/overview")).toBe(0);
   });
 });

@@ -1,7 +1,31 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ComposeAction, ComposeReport, ProjectDetail, ProjectStatus, ProjectSummary } from "#libs/api";
-import { coded, events, FakeEventSource, problem, renderAt, serve } from "#mock/page.tsx";
+import type {
+  ComposeAction,
+  ComposeBatch,
+  ComposeEvent,
+  ComposeReport,
+  ComposeRequest,
+  ContainerMetrics,
+  DockerChange,
+  DockerOverview,
+  LogEvent,
+  ProjectDetail,
+  ProjectStatus,
+  ProjectSummary,
+  StatsFrame,
+} from "#libs/api";
+import {
+  getComposeBatchesMockHandler,
+  getComposeOutputMockHandler,
+  getComposeRunMockHandler,
+  getDockerLogsMockHandler,
+  getDockerOverviewMockHandler,
+  getDockerProjectMockHandler,
+  getDockerProjectsMockHandler,
+} from "#libs/api/mock";
+import { coded, countCalls, events, feed, network, problem } from "#mock/network.ts";
+import { FakeEventSource, renderAt, stubEventSource } from "#mock/page.tsx";
 import { composeCommandLine } from "#modules/common/helpers/compose-actions.ts";
 
 /** An installed app with one container, `<name>-1`. */
@@ -53,6 +77,21 @@ const alpha: ProjectDetail = {
   ],
 };
 
+/** A container's usage: nothing measured but what `measured` says. */
+function usage(measured: Partial<ContainerMetrics>): ContainerMetrics {
+  return {
+    blockRead: null,
+    blockWrite: null,
+    cpuPercent: null,
+    memoryLimit: null,
+    memoryPercent: null,
+    memoryUsage: null,
+    networkRx: null,
+    networkTx: null,
+    ...measured,
+  };
+}
+
 /** The names of the apps the table lists, in its order. */
 function rows(): string[] {
   return (
@@ -64,7 +103,37 @@ function rows(): string[] {
   );
 }
 
-/** The source of `url` the page holds open, once it does. */
+/** Docker's host, with 16 GiB of memory. */
+const host: DockerOverview = {
+  version: "29.0.1",
+  memory: 16 * 1024 ** 3,
+  containers: { total: 4, running: 3, stopped: 1 },
+  images: { total: 4, unused: 0, size: 0 },
+  volumes: { total: 0, inUse: 0, unused: 0 },
+};
+
+/**
+ * What the apps' pages call: `projects` as the apps, `alpha` as the page of any of them, Docker's host, no compose
+ * batch, and the Docker changes, opened once `changesOpened` resolves, and the containers' usage: two feeds the test
+ * sends on. A test's own handlers, added after, win.
+ */
+function appsPages({ changesOpened }: { changesOpened?: Promise<void> } = {}) {
+  const changes = feed<DockerChange>("/api/docker/changes", changesOpened);
+  const stats = feed<StatsFrame>("/api/docker/stats");
+
+  network.use(
+    getDockerProjectsMockHandler(projects),
+    getDockerProjectMockHandler(alpha),
+    getDockerOverviewMockHandler(host),
+    getComposeBatchesMockHandler([]),
+    changes.handler,
+    stats.handler,
+  );
+
+  return { changes, stats };
+}
+
+/** The source of `url` the page holds open, once it does, in a test that drives a lost stream. */
 async function source(url: string): Promise<FakeEventSource> {
   let found: FakeEventSource | undefined;
 
@@ -84,7 +153,7 @@ afterEach(() => {
 
 describe("/apps", () => {
   it("lists the installed apps by name, with their category and status", async () => {
-    serve({ "GET /api/docker/apps": () => Response.json(projects) });
+    appsPages();
     renderAt("/apps");
 
     await screen.findByText("jellyfin");
@@ -96,7 +165,7 @@ describe("/apps", () => {
   });
 
   it("keeps the apps of the statuses of the URL, then narrows them by its query", async () => {
-    serve({ "GET /api/docker/apps": () => Response.json(projects) });
+    appsPages();
     renderAt("/apps?status=running,stopped");
 
     await screen.findByText("jellyfin");
@@ -104,7 +173,6 @@ describe("/apps", () => {
     expect(rows()).toEqual(["jellyfin", "miniflux"]);
 
     cleanup();
-    serve({ "GET /api/docker/apps": () => Response.json(projects) });
     renderAt("/apps?status=running,stopped&q=mini");
 
     await screen.findByText("miniflux");
@@ -115,7 +183,8 @@ describe("/apps", () => {
   it("badges the apps the last image check found an update for, and keeps them by the update filter", async () => {
     const outdated = [...projects.slice(0, 2), { ...project("frigate", "unhealthy"), updateAvailable: true }];
 
-    serve({ "GET /api/docker/apps": () => Response.json(outdated) });
+    appsPages();
+    network.use(getDockerProjectsMockHandler(outdated));
     renderAt("/apps?update=available");
 
     await screen.findByText("frigate");
@@ -123,7 +192,6 @@ describe("/apps", () => {
     expect(rows()).toEqual(["frigateUpdate"]);
 
     cleanup();
-    serve({ "GET /api/docker/apps": () => Response.json(outdated) });
     renderAt("/apps?update=current");
 
     await screen.findByText("jellyfin");
@@ -133,7 +201,7 @@ describe("/apps", () => {
   });
 
   it("orders the apps by a column header, then the other way", async () => {
-    serve({ "GET /api/docker/apps": () => Response.json(projects) });
+    appsPages();
     renderAt("/apps");
 
     await screen.findByText("jellyfin");
@@ -148,9 +216,12 @@ describe("/apps", () => {
 
   it("says why Docker could not be read, once its reads were tried again", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    serve({
-      "GET /api/docker/apps": () => problem(503, "the Docker daemon could not be read. See the server's log."),
-    });
+    appsPages();
+    network.use(
+      getDockerProjectsMockHandler(() => {
+        throw problem(503, "the Docker daemon could not be read. See the server's log.");
+      }),
+    );
 
     renderAt("/apps");
     // The query's three retries, a second, two and four apart.
@@ -162,26 +233,32 @@ describe("/apps", () => {
 
   it("reads the apps again when the server says their containers changed", async () => {
     let status: ProjectStatus = "running";
+    let openChanges: () => void = () => {};
+    const calls = countCalls();
+    const { changes } = appsPages({ changesOpened: new Promise(resolve => (openChanges = resolve)) });
 
-    const fetch = serve({ "GET /api/docker/apps": () => Response.json([project("jellyfin", status)]) });
-
+    network.use(getDockerProjectsMockHandler(() => [project("jellyfin", status)]));
     renderAt("/apps");
     await screen.findByText("Running");
-
-    const changes = await source("/api/docker/changes");
+    // The changes open once the apps are read: what they missed is read again.
+    openChanges();
+    await waitFor(() => expect(calls("GET /api/docker/apps")).toBe(2));
 
     status = "stopped";
     act(() => changes.send("containers"));
 
     expect(await screen.findByText("Stopped")).toBeDefined();
-    expect(fetch.mock.calls.filter(([url]) => url === "/api/docker/apps")).toHaveLength(2);
+    expect(calls("GET /api/docker/apps")).toBe(3);
   });
 
   it("reads the apps again each time the changes open, then after a wait once they are lost, saying so meanwhile", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    // A stream lost, then connected again: the fake `EventSource`, which the test opens and fails.
+    stubEventSource();
+    appsPages();
 
-    const fetch = serve({ "GET /api/docker/apps": () => Response.json(projects) });
-    const reads = () => fetch.mock.calls.filter(([url]) => url === "/api/docker/apps").length;
+    const calls = countCalls();
+    const reads = () => calls("GET /api/docker/apps");
 
     renderAt("/apps");
     await screen.findByText("jellyfin");
@@ -212,12 +289,14 @@ describe("/apps", () => {
   });
 
   it("clears the live usage while its stream is lost", async () => {
-    serve({ "GET /api/docker/apps": () => Response.json(projects) });
+    // A stream lost: the fake `EventSource`, which the test fails.
+    stubEventSource();
+    appsPages();
     renderAt("/apps");
 
     const stats = await source("/api/docker/stats");
 
-    act(() => stats.send({ containers: { "jellyfin-1": { cpuPercent: 12.5, memoryUsage: null, memoryLimit: null } } }));
+    act(() => stats.send({ containers: { "jellyfin-1": usage({ cpuPercent: 12.5 }) } }));
     expect(await screen.findByText("12.5%")).toBeDefined();
 
     act(() => stats.fail());
@@ -226,11 +305,12 @@ describe("/apps", () => {
   });
 
   it("totals the live usage of the containers of the installed apps alone", async () => {
-    serve({ "GET /api/docker/apps": () => Response.json(projects) });
-    renderAt("/apps");
+    const { stats } = appsPages();
 
-    const stats = await source("/api/docker/stats");
-    const metrics = (cpuPercent: number) => ({ cpuPercent, memoryUsage: 1_024, memoryLimit: null });
+    renderAt("/apps");
+    await waitFor(() => expect(stats.urls).toHaveLength(1));
+
+    const metrics = (cpuPercent: number) => usage({ cpuPercent, memoryUsage: 1_024 });
 
     act(() => stats.send({ containers: { "jellyfin-1": metrics(10), "frigate-1": metrics(2.5), other: metrics(50) } }));
 
@@ -241,7 +321,7 @@ describe("/apps", () => {
 
 describe("/apps/:project", () => {
   it("shows the services of the app and their containers", async () => {
-    serve({ "GET /api/docker/apps/alpha": () => Response.json(alpha) });
+    appsPages();
     renderAt("/apps/alpha");
 
     expect(await screen.findByRole("heading", { name: "alpha" })).toBeDefined();
@@ -255,41 +335,41 @@ describe("/apps/:project", () => {
   it("badges an app the last image check found an update for", async () => {
     const outdated = { ...alpha, summary: { ...alpha.summary, updateAvailable: true } };
 
-    serve({ "GET /api/docker/apps/alpha": () => Response.json(outdated) });
+    appsPages();
+    network.use(getDockerProjectMockHandler(outdated));
     renderAt("/apps/alpha");
 
     expect(await screen.findByText("Update available")).toBeDefined();
   });
 
   it("shows the host's memory once for containers with no limit of their own", async () => {
-    const host = 16 * 1024 ** 3;
-
-    serve({
-      "GET /api/docker/apps/alpha": () => Response.json(alpha),
-      "GET /api/docker/overview": () => Response.json({ version: "29.0.1", memory: host }),
-    });
+    const { stats } = appsPages();
 
     renderAt("/apps/alpha");
+    await waitFor(() => expect(stats.urls).toHaveLength(1));
 
-    const stats = await source("/api/docker/stats");
-
-    act(() => stats.send({ containers: { [alphaId]: { memoryUsage: 1_024, memoryLimit: host } } }));
+    act(() => stats.send({ containers: { [alphaId]: usage({ memoryUsage: 1_024, memoryLimit: host.memory }) } }));
 
     expect(await screen.findByText("16 GiB on the host")).toBeDefined();
   });
 
   it("shows only why a read again failed, not the app as it was", async () => {
     let isInstalled = true;
+    const { changes } = appsPages();
 
-    serve({
-      "GET /api/docker/apps/alpha": () =>
-        isInstalled ? Response.json(alpha) : problem(404, "no app alpha is installed"),
-    });
+    network.use(
+      getDockerProjectMockHandler(() => {
+        if (!isInstalled) {
+          throw problem(404, "no app alpha is installed");
+        }
+
+        return alpha;
+      }),
+    );
 
     renderAt("/apps/alpha");
     await screen.findByRole("heading", { name: "alpha" });
-
-    const changes = await source("/api/docker/changes");
+    await waitFor(() => expect(changes.urls).toHaveLength(1));
 
     isInstalled = false;
     act(() => changes.send("containers"));
@@ -299,7 +379,13 @@ describe("/apps/:project", () => {
   });
 
   it("says an app that is not installed is not found", async () => {
-    serve({ "GET /api/docker/apps/beta": () => problem(404, "no app beta is installed") });
+    appsPages();
+    network.use(
+      getDockerProjectMockHandler(() => {
+        throw problem(404, "no app beta is installed");
+      }),
+    );
+
     renderAt("/apps/beta");
 
     expect(await screen.findByText("App not found")).toBeDefined();
@@ -307,35 +393,37 @@ describe("/apps/:project", () => {
   });
 
   it("follows the log of a container to its end", async () => {
-    const logs = `/api/docker/apps/alpha/containers/${alphaId}/logs`;
+    const container: string[] = [];
 
-    serve({
-      "GET /api/docker/apps/alpha": () => Response.json(alpha),
-      [`GET ${logs}`]: () =>
-        events([
+    appsPages();
+    network.use(
+      getDockerLogsMockHandler(({ params }) => {
+        container.push(params.container);
+
+        return events<LogEvent>([
           { kind: "line", line: "2026-11-26T10:00:00Z hello" },
           { kind: "line", line: "2026-11-26T10:00:01Z world" },
           { kind: "end" },
-        ]),
-    });
+        ]);
+      }),
+    );
 
     renderAt("/apps/alpha");
     fireEvent.click(await screen.findByRole("button", { name: "View the logs of alpha-web-1" }));
 
     expect(await screen.findByText("Stream ended")).toBeDefined();
     expect(screen.getByText(/hello\s+2026-11-26T10:00:01Z world/)).toBeDefined();
+    expect(container).toEqual([alphaId]);
   });
 
   it("reads the log again from its tail on Reconnect, without the lines of the last read", async () => {
-    const reads = [
+    const reads: LogEvent[][] = [
       [{ kind: "line", line: "2026-11-26T10:00:00Z first read" }, { kind: "end" }],
       [{ kind: "line", line: "2026-11-26T10:05:00Z second read" }, { kind: "end" }],
     ];
 
-    serve({
-      "GET /api/docker/apps/alpha": () => Response.json(alpha),
-      [`GET /api/docker/apps/alpha/containers/${alphaId}/logs`]: () => events(reads.shift() ?? []),
-    });
+    appsPages();
+    network.use(getDockerLogsMockHandler(() => events(reads.shift() ?? [])));
 
     renderAt("/apps/alpha");
     fireEvent.click(await screen.findByRole("button", { name: "View the logs of alpha-web-1" }));
@@ -348,11 +436,12 @@ describe("/apps/:project", () => {
   });
 
   it("says why a log could not be followed", async () => {
-    serve({
-      "GET /api/docker/apps/alpha": () => Response.json(alpha),
-      [`GET /api/docker/apps/alpha/containers/${alphaId}/logs`]: () =>
-        problem(404, `the app alpha has no container ${alphaId}`),
-    });
+    appsPages();
+    network.use(
+      getDockerLogsMockHandler(() => {
+        throw problem(404, `the app alpha has no container ${alphaId}`);
+      }),
+    );
 
     renderAt("/apps/alpha");
     fireEvent.click(await screen.findByRole("button", { name: "View the logs of alpha-web-1" }));
@@ -363,7 +452,7 @@ describe("/apps/:project", () => {
 
 describe("compose commands", () => {
   /** The batch of `action` over `apps`, in the order they run, as the server lists it and as its output starts. */
-  function batch(id: number, action: ComposeAction, apps: string[], report: ComposeReport | null = null) {
+  function batch(id: number, action: ComposeAction, apps: string[], report: ComposeReport | null = null): ComposeBatch {
     return {
       id,
       action,
@@ -377,8 +466,8 @@ describe("compose commands", () => {
   const plainUp: ComposeAction = { operation: "up", pull: false, forceRecreate: false };
 
   /** A batch's events on `app`: its start, a line, and its end. */
-  function ran(app: string) {
-    const outcome = { app, status: "succeeded", error: null };
+  function ran(app: string): ComposeEvent[] {
+    const outcome = { app, status: "succeeded", error: null } as const;
 
     return [
       { kind: "started", app },
@@ -388,11 +477,14 @@ describe("compose commands", () => {
   }
 
   it("runs Up on the apps selected, and shows each one's output and outcome", async () => {
-    const fetch = serve({
-      "GET /api/docker/apps": () => Response.json(projects),
-      "GET /api/docker/compose": () => Response.json([]),
-      "POST /api/docker/compose": () =>
-        events([
+    const posted: ComposeRequest[] = [];
+
+    appsPages();
+    network.use(
+      getComposeRunMockHandler(async ({ request }) => {
+        posted.push(await request.json());
+
+        return events<ComposeEvent>([
           // `hangar.yml` lists miniflux first.
           { kind: "batch", ...batch(1, plainUp, ["miniflux", "jellyfin"]) },
           ...ran("miniflux"),
@@ -404,8 +496,9 @@ describe("compose commands", () => {
               { app: "jellyfin", status: "succeeded", error: null },
             ],
           },
-        ]),
-    });
+        ]);
+      }),
+    );
 
     renderAt("/apps");
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select miniflux" }));
@@ -417,12 +510,9 @@ describe("compose commands", () => {
 
     expect(await screen.findByText("Done")).toBeDefined();
 
-    const post = fetch.mock.calls.find(([url, init]) => url === "/api/docker/compose" && init?.method === "POST");
-
-    expect(JSON.parse(post?.[1]?.body as string)).toEqual({
-      action: { operation: "up", pull: false, forceRecreate: false },
-      apps: ["jellyfin", "miniflux"],
-    });
+    expect(posted).toEqual([
+      { action: { operation: "up", pull: false, forceRecreate: false }, apps: ["jellyfin", "miniflux"] },
+    ]);
 
     // Laid out in the order the batch runs them, not the table's.
     const panel = within(screen.getByRole("dialog"));
@@ -445,26 +535,28 @@ describe("compose commands", () => {
       code: "compose.failed",
       params: { app: "alpha", command: "docker compose down" },
       message: "docker compose down failed on alpha. See the server's log.",
-    };
+    } as const;
 
-    const fetch = serve({
-      "GET /api/docker/apps/alpha": () => Response.json(alpha),
-      "GET /api/docker/compose": () => Response.json([]),
-      "POST /api/docker/compose": () =>
-        events([
+    const calls = countCalls();
+
+    appsPages();
+    network.use(
+      getComposeRunMockHandler(() =>
+        events<ComposeEvent>([
           { kind: "batch", ...batch(1, { operation: "down" }, ["alpha"]) },
           { kind: "started", app: "alpha" },
           { kind: "line", app: "alpha", line: "alpha: no such network" },
           { kind: "finished", app: "alpha", status: "failed", error },
           { kind: "end", apps: [{ app: "alpha", status: "failed", error }] },
         ]),
-    });
+      ),
+    );
 
     renderAt("/apps/alpha");
     fireEvent.click(await screen.findByRole("button", { name: "Down" }));
 
     expect(await screen.findByText("Stop alpha?")).toBeDefined();
-    expect(fetch.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    expect(calls("POST /api/docker/compose")).toBe(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
@@ -474,12 +566,16 @@ describe("compose commands", () => {
   });
 
   it("says why a batch was refused", async () => {
-    serve({
-      "GET /api/docker/apps/alpha": () => Response.json(alpha),
-      "GET /api/docker/compose": () => Response.json([]),
-      "POST /api/docker/compose": () =>
-        coded(404, "docker.unknown_project", "no app alpha is installed", { project: "alpha" }),
-    });
+    appsPages();
+    network.use(
+      getComposeRunMockHandler(() => {
+        throw coded(404, {
+          code: "docker.unknown_project",
+          params: { project: "alpha" },
+          message: "no app alpha is installed",
+        });
+      }),
+    );
 
     renderAt("/apps/alpha");
     fireEvent.click(await screen.findByRole("button", { name: "Up: docker compose up -d" }));
@@ -488,16 +584,19 @@ describe("compose commands", () => {
   });
 
   it("finds a batch that runs again, and shows its output from its start", async () => {
-    serve({
-      "GET /api/docker/apps/alpha": () => Response.json(alpha),
-      "GET /api/docker/compose": () => Response.json([batch(4, { operation: "restart" }, ["alpha", "beta"])]),
-      "GET /api/docker/compose/4": () =>
-        events([
-          { kind: "batch", ...batch(4, { operation: "restart" }, ["alpha", "beta"]) },
-          ...ran("alpha"),
-          { kind: "started", app: "beta" },
-        ]),
-    });
+    appsPages();
+    network.use(
+      getComposeBatchesMockHandler([batch(4, { operation: "restart" }, ["alpha", "beta"])]),
+      getComposeOutputMockHandler(({ params }) =>
+        params.id === "4"
+          ? events<ComposeEvent>([
+              { kind: "batch", ...batch(4, { operation: "restart" }, ["alpha", "beta"]) },
+              ...ran("alpha"),
+              { kind: "started", app: "beta" },
+            ])
+          : events([]),
+      ),
+    );
 
     renderAt("/apps/alpha");
 
@@ -518,12 +617,9 @@ describe("compose commands", () => {
 
   it("closes a confirmation whose selection was emptied", async () => {
     let listed = projects;
+    const { changes } = appsPages();
 
-    serve({
-      "GET /api/docker/apps": () => Response.json(listed),
-      "GET /api/docker/compose": () => Response.json([]),
-    });
-
+    network.use(getDockerProjectsMockHandler(() => listed));
     renderAt("/apps");
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select miniflux" }));
     fireEvent.click(screen.getByRole("button", { name: "Restart" }));
@@ -531,8 +627,7 @@ describe("compose commands", () => {
     expect(await screen.findByText("Restart miniflux?")).toBeDefined();
 
     // Uninstalled meanwhile: the apps read again drop it from the selection.
-    const changes = await source("/api/docker/changes");
-
+    await waitFor(() => expect(changes.urls).toHaveLength(1));
     listed = projects.filter(project => project.name !== "miniflux");
     act(() => changes.send("containers"));
 
@@ -543,22 +638,29 @@ describe("compose commands", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
 
     let isReadable = true;
+    const { changes } = appsPages();
 
-    serve({
-      "GET /api/docker/apps/alpha": () => (isReadable ? Response.json(alpha) : problem(500, "the daemon went away")),
-      "GET /api/docker/compose": () => Response.json([batch(4, { operation: "restart" }, ["alpha"])]),
-      "GET /api/docker/compose/4": () =>
-        events([
+    network.use(
+      getDockerProjectMockHandler(() => {
+        if (!isReadable) {
+          throw problem(500, "the daemon went away");
+        }
+
+        return alpha;
+      }),
+      getComposeBatchesMockHandler([batch(4, { operation: "restart" }, ["alpha"])]),
+      getComposeOutputMockHandler(
+        events<ComposeEvent>([
           { kind: "batch", ...batch(4, { operation: "restart" }, ["alpha"]) },
           { kind: "started", app: "alpha" },
         ]),
-    });
+      ),
+    );
 
     renderAt("/apps/alpha");
     fireEvent.click(await screen.findByRole("button", { name: "Show output" }));
     expect(await screen.findByRole("region", { name: "alpha" })).toBeDefined();
-
-    const changes = await source("/api/docker/changes");
+    await waitFor(() => expect(changes.urls).toHaveLength(1));
 
     isReadable = false;
     act(() => changes.send("containers"));
@@ -570,17 +672,13 @@ describe("compose commands", () => {
   });
 
   it("lists a batch another page started once the server says the containers changed", async () => {
-    let listed: unknown[] = [];
+    let listed: ComposeBatch[] = [];
+    const { changes } = appsPages();
 
-    serve({
-      "GET /api/docker/apps/alpha": () => Response.json(alpha),
-      "GET /api/docker/compose": () => Response.json(listed),
-    });
-
+    network.use(getComposeBatchesMockHandler(() => listed));
     renderAt("/apps/alpha");
     await screen.findByRole("heading", { name: "alpha" });
-
-    const changes = await source("/api/docker/changes");
+    await waitFor(() => expect(changes.urls).toHaveLength(1));
 
     listed = [batch(5, plainUp, ["alpha"])];
     act(() => changes.send("containers"));
@@ -591,24 +689,24 @@ describe("compose commands", () => {
 
   it("keeps the panel when the apps read again leave no row to the filter", async () => {
     let status: ProjectStatus = "running";
+    const { changes } = appsPages();
 
-    serve({
-      "GET /api/docker/apps": () => Response.json([project("jellyfin", status)]),
-      "GET /api/docker/compose": () => Response.json([]),
-      "POST /api/docker/compose": () =>
-        events([
+    network.use(
+      getDockerProjectsMockHandler(() => [project("jellyfin", status)]),
+      getComposeRunMockHandler(() =>
+        events<ComposeEvent>([
           { kind: "batch", ...batch(1, { operation: "down" }, ["jellyfin"]) },
           { kind: "started", app: "jellyfin" },
         ]),
-    });
+      ),
+    );
 
     renderAt("/apps?status=running");
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select jellyfin" }));
     fireEvent.click(screen.getByRole("button", { name: "Down" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
     expect(await screen.findByRole("region", { name: "jellyfin" })).toBeDefined();
-
-    const changes = await source("/api/docker/changes");
+    await waitFor(() => expect(changes.urls).toHaveLength(1));
 
     status = "stopped";
     act(() => changes.send("containers"));

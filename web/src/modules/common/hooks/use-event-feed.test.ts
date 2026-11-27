@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FakeEventSource } from "#mock/page.tsx";
+import { FakeEventSource, stubEventSource } from "#mock/page.tsx";
 import { useEventFeed } from "#modules/common/hooks/use-event-feed.ts";
 
 /** The sources opened on `url`, open or closed. */
@@ -14,9 +14,10 @@ function setHidden(isHidden: boolean) {
   document.dispatchEvent(new Event("visibilitychange"));
 }
 
+// The feed's own tests drive its connection, its loss and its reconnection: the fake `EventSource` (ADR 0002,
+// decision 13).
 beforeEach(() => {
-  FakeEventSource.sources = [];
-  vi.stubGlobal("EventSource", FakeEventSource);
+  stubEventSource();
 });
 
 afterEach(() => {
