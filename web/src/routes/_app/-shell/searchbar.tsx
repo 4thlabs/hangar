@@ -1,6 +1,7 @@
 import { useMatches, useNavigate } from "@tanstack/react-router";
 import { SearchIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { commonMessages } from "#modules/common/messages.ts";
 import { Field, FieldLabel } from "#modules/common/ui/field.tsx";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "#modules/common/ui/input-group.tsx";
 
@@ -64,7 +65,7 @@ export function NavbarSearch({ id }: { id: string }) {
   return (
     <Field>
       <FieldLabel htmlFor={id} className="sr-only">
-        Search
+        {commonMessages.shell.search}
       </FieldLabel>
       <InputGroup>
         <InputGroupAddon>
@@ -73,7 +74,9 @@ export function NavbarSearch({ id }: { id: string }) {
         <InputGroupInput
           id={id}
           type="search"
-          placeholder={page.searchable ? "Search…" : "Search unavailable here"}
+          placeholder={
+            page.searchable ? commonMessages.shell.searchPlaceholder : commonMessages.shell.searchUnavailable
+          }
           // No search on this page: nothing to drive, so don't swallow the keystrokes.
           disabled={!page.searchable}
           value={value}

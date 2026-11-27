@@ -1,4 +1,5 @@
 import { ListFilterIcon } from "lucide-react";
+import { commonMessages } from "#modules/common/messages.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   DropdownMenu,
@@ -55,7 +56,7 @@ export function CheckboxFilterMenu({ label, options, selected, onChange }: Check
         ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={selected.length === 0} onClick={() => onChange([])}>
-          Clear all
+          {commonMessages.clearFilters}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

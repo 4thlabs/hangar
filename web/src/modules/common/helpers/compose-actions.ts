@@ -1,4 +1,7 @@
 import type { ComposeAction } from "#libs/api";
+import { commonMessages } from "#modules/common/messages.ts";
+
+const words = commonMessages.compose;
 
 /** The compose commands the Apps pages run on an app. */
 export type ComposeOperation = ComposeAction["operation"];
@@ -15,8 +18,8 @@ type UpFlagSpec = {
   verb: string;
   /** What it did to an app, completing "<app> was …". */
   outcome: string;
-  /** What confirming commits to, about `apps` ("this app", "these apps"). */
-  consequence: (apps: string) => string;
+  /** What confirming commits to, about `count` apps. */
+  consequence: (params: { count: number }) => string;
 };
 
 // The compose commands of the Apps pages: what the buttons, the confirmations and the output say of each, and the
@@ -27,33 +30,8 @@ export const upFlagOrder: readonly UpFlag[] = ["pull", "forceRecreate"];
 
 /** What each option of Up adds to the command, and how the page words it. */
 export const upFlagSpecs: Readonly<Record<UpFlag, UpFlagSpec>> = {
-  pull: {
-    arguments: ["--pull", "always"],
-    label: "Update the images",
-    verb: "Update",
-    outcome: "updated from its registry",
-    consequence: () => "The images will be pulled from the registry and the containers recreated.",
-  },
-  forceRecreate: {
-    arguments: ["--force-recreate"],
-    label: "Force recreation",
-    verb: "Recreate",
-    outcome: "recreated",
-    consequence: apps => `Every container of ${apps} will be recreated, even if its configuration did not change.`,
-  },
-};
-
-const operationLabels: Readonly<Record<ComposeOperation, string>> = {
-  up: "Up",
-  restart: "Restart",
-  down: "Down",
-};
-
-/** What each run without options did to an app, completing "<app> was …". */
-const operationOutcomes: Readonly<Record<ComposeOperation, string>> = {
-  up: "started or updated",
-  restart: "restarted",
-  down: "stopped and removed",
+  pull: { arguments: ["--pull", "always"], ...words.upFlags.pull },
+  forceRecreate: { arguments: ["--force-recreate"], ...words.upFlags.forceRecreate },
 };
 
 const operationArguments: Readonly<Record<ComposeOperation, readonly string[]>> = {
@@ -92,9 +70,9 @@ export function composeOutcome(action: ComposeAction, project: string): string {
   const flags = actionFlags(action);
 
   const outcomes =
-    flags.length === 0 ? [operationOutcomes[action.operation]] : flags.map(flag => upFlagSpecs[flag].outcome);
+    flags.length === 0 ? [words.outcomes[action.operation]] : flags.map(flag => upFlagSpecs[flag].outcome);
 
-  return `${project} was ${outcomes.join(" and ")}.`;
+  return words.outcome({ project, outcomes });
 }
 
 /** The options `action` carries, in their order. */
@@ -123,12 +101,10 @@ export function composeLabel(action: ComposeAction): string {
   const flags = actionFlags(action);
 
   if (flags.length === 0) {
-    return operationLabels[action.operation];
+    return words.operations[action.operation];
   }
 
-  const clauses = flags.map(flag => upFlagSpecs[flag].verb.toLowerCase()).join(" and ");
-
-  return `${clauses.charAt(0).toUpperCase()}${clauses.slice(1)}`;
+  return words.combinedLabel({ verbs: flags.map(flag => upFlagSpecs[flag].verb) });
 }
 
 /** How a confirmation or the output names `apps`: the app's name for one, else how many, as "3 apps". */
@@ -142,33 +118,29 @@ export function composeSubject(apps: readonly string[]): string {
 
 /** `count` apps, in words: "1 app", "3 apps". */
 export function appCount(count: number): string {
-  return `${count} ${count === 1 ? "app" : "apps"}`;
+  return words.appCount({ count });
 }
 
 /** The title of the confirmation of `action` on `subject`, an app's name or "3 apps". */
 export function confirmationTitle(action: ComposeAction, subject: string): string {
   if (action.operation === "down") {
-    return `Stop ${subject}?`;
+    return words.stopTitle({ subject });
   }
 
-  return `${composeLabel(action)} ${subject}?`;
+  return words.confirmTitle({ label: composeLabel(action), subject });
 }
 
 /** What confirming `action` on `count` apps commits to. */
 export function confirmationDescription(action: ComposeAction, count: number): string {
-  const apps = count > 1 ? "these apps" : "this app";
-
   if (action.operation === "down") {
-    const staysListed = count > 1 ? "They stay listed" : "It stays listed";
-
-    return `Docker Compose will remove the containers and networks of ${apps}. ${staysListed}, stopped.`;
+    return words.downDescription({ count });
   }
 
   if (action.operation === "restart") {
-    return `The containers of ${apps} will be restarted without being recreated: a changed configuration will not apply.`;
+    return words.restartDescription({ count });
   }
 
   return actionFlags(action)
-    .map(flag => upFlagSpecs[flag].consequence(apps))
+    .map(flag => upFlagSpecs[flag].consequence({ count }))
     .join(" ");
 }

@@ -1,4 +1,7 @@
 import { ApiError, type ErrorDetail } from "#libs/api";
+import { commonMessages } from "#modules/common/messages.ts";
+
+const words = commonMessages.errors;
 
 /** A code of the server's errors, as `store.unknown_app`. */
 type ErrorCode = ErrorDetail["code"];
@@ -30,10 +33,7 @@ type ParamNames = { [Code in CodeWithParams]: EveryName<keyof ParamsOf<Code>> };
 // without a param its words need, from another version or a member quoll left out, is said in the server's own message.
 
 /** What the page says when the server could not be reached, or answered nothing it reads. */
-export const serverUnreachable = "Could not reach the server. Try again.";
-
-/** Where the page sends its reader for the rest of a failure of the server's own. */
-const logHint = "See the server's log.";
+export const serverUnreachable = words.serverUnreachable;
 
 /** A wait in whole minutes, in English: `15 minutes`. */
 const minuteFormat = new Intl.NumberFormat("en", { style: "unit", unit: "minute", unitDisplay: "long" });
@@ -88,74 +88,70 @@ const paramNames: ParamNames = {
 
 /** The words of each code. */
 const wordsByCode: Words = {
-  "store.unknown_app": ({ app }) => `The store has no app ${app}.`,
-  "store.apps_unreadable": () => hinted("The store's apps could not be read."),
-  "store.install_failed": ({ app }) => hinted(`The installation of ${app} failed.`),
-  "store.uninstall_failed": ({ app }) => hinted(`The uninstallation of ${app} failed.`),
-  "store.clone_failed": () => hinted("The store could not be cloned."),
-  "store.pull_failed": () => hinted("The store could not be pulled."),
-  "store.not_installed": () => "The store is not installed: install it from the settings first.",
-  "store.sync_running": () => "The store is being synced: try again once its sync has ended.",
-  "store.sync_crashed": () => hinted("The sync of the store stopped short."),
-  "config.syntax": ({ reason }) => ended(`hangar.yml is not valid YAML: ${reason}`),
-  "config.invalid": ({ field, reason }) => ended(`Invalid hangar.yml: ${field}: ${reason}`),
-  "config.unreadable": () => hinted("hangar.yml could not be read."),
-  "config.save_failed": () => hinted("hangar.yml could not be saved."),
-  "env.invalid_name": ({ name }) => `Invalid variable name: ${name}.`,
-  "env.line_break": ({ name }) => `The value of ${name} cannot contain a line break.`,
-  "env.unwritable_value": ({ name }) => `The value of ${name} cannot be written to .env.global.`,
-  "env.unreadable": () => hinted(".env.global could not be read."),
-  "env.save_failed": () => hinted(".env.global could not be saved."),
-  "env.updated_and_removed": ({ name }) => `${name} is both set and removed.`,
-  "editor.app_exists": ({ app }) => `The app ${app} already exists.`,
-  "editor.invalid_app_id": ({ app }) =>
-    `${app} is not an app id: lowercase letters, digits, \`.\`, \`_\` and \`-\`, starting with a letter or a digit.`,
-  "editor.invalid_path": ({ path }) => `Invalid file path: ${path}.`,
-  "editor.through_file": ({ path }) => `${path} goes through a file, not a folder.`,
-  "editor.outside_app": ({ app, path }) => `${path} leads outside the app ${app}.`,
-  "editor.hidden_file": ({ path }) => `${path} leads to a hidden file.`,
-  "editor.broken_symlink": ({ path }) => `${path} is a broken symlink.`,
-  "editor.no_such_file": ({ app, path }) => `The app ${app} has no file ${path}.`,
-  "editor.not_a_file": ({ path }) => `${path} is not a file.`,
-  "editor.too_large": ({ path, size }) => `${path} is too large to edit here: ${size} bytes, 1 MiB at most.`,
-  "editor.binary": ({ path }) => `${path} is not a text file.`,
-  "editor.not_utf8": ({ path }) => `${path} is not UTF-8 text: saving it from the editor would corrupt it.`,
-  "editor.file_exists": ({ path }) => `${path} already exists.`,
-  "editor.file_appeared": ({ path }) => `${path} appeared while it was being saved: reopen it before saving again.`,
-  "editor.invalid_file": ({ path, reason }) => ended(`${path} is not valid: ${reason}`),
-  // Docker's complaint keeps its lines and its own punctuation: it is shown as Docker says it.
-  "editor.compose_rejected": ({ path, complaint }) => `Docker rejects ${path}:\n${complaint}`,
-  "editor.unchecked": ({ path }) => hinted(`Docker could not check ${path}.`),
-  "editor.files_unreadable": ({ app }) => hinted(`The files of ${app} could not be listed.`),
-  "editor.read_failed": ({ path }) => hinted(`${path} could not be read.`),
-  "editor.save_failed": ({ path }) => hinted(`${path} could not be saved.`),
-  "editor.create_failed": ({ app }) => hinted(`The app ${app} could not be created.`),
-  "docker.unavailable": () => hinted("The Docker daemon could not be read."),
-  "docker.unknown_project": ({ project }) => `No app ${project} is installed.`,
-  "docker.invalid_project": ({ project }) =>
-    `${project} is not a compose project name: lowercase letters, digits, \`_\` and \`-\`, starting with a letter or a digit.`,
-  "docker.unknown_container": ({ project, container }) => `The app ${project} has no container ${container}.`,
-  "compose.no_apps": () => "A compose command needs at least one app.",
-  "store.batch_running": ({ apps }) =>
-    `Compose commands run on ${apps.join(", ")}: sync the store once they have ended.`,
-  "compose.app_busy": ({ app }) => `Another command runs on ${app}: try again once it has ended.`,
-  "compose.unchecked": ({ command }) => hinted(`The batch of ${command} could not be checked.`),
-  "compose.failed": ({ app, command }) => hinted(`${command} failed on ${app}.`),
-  "compose.unknown_batch": () => "This compose command ended too long ago: its output is no longer kept.",
-  "jobs.unknown_run": () => "This run of a job is no longer kept: read the jobs again.",
-  "jobs.ended": () => "This run of a job has ended already.",
-  "jobs.crashed": () => hinted("The job stopped short."),
-  "widgets.unknown_placement": () => "This widget is no longer on the dashboard: reload the page.",
-  "widgets.unavailable": () => hinted("Its service did not answer."),
-  "widgets.unknown_image": () => "The widget has no such image.",
-  "auth.invalid_credentials": () => "Invalid email or password.",
+  "store.unknown_app": ({ app }) => words.store.unknownApp({ app }),
+  "store.apps_unreadable": () => hinted(words.store.appsUnreadable),
+  "store.install_failed": ({ app }) => hinted(words.store.installFailed({ app })),
+  "store.uninstall_failed": ({ app }) => hinted(words.store.uninstallFailed({ app })),
+  "store.clone_failed": () => hinted(words.store.cloneFailed),
+  "store.pull_failed": () => hinted(words.store.pullFailed),
+  "store.not_installed": () => words.store.notInstalled,
+  "store.sync_running": () => words.store.syncRunning,
+  "store.sync_crashed": () => hinted(words.store.syncCrashed),
+  "config.syntax": ({ reason }) => ended(words.config.syntax({ reason })),
+  "config.invalid": ({ field, reason }) => ended(words.config.invalid({ field, reason })),
+  "config.unreadable": () => hinted(words.config.unreadable),
+  "config.save_failed": () => hinted(words.config.saveFailed),
+  "env.invalid_name": ({ name }) => words.env.invalidName({ name }),
+  "env.line_break": ({ name }) => words.env.lineBreak({ name }),
+  "env.unwritable_value": ({ name }) => words.env.unwritableValue({ name }),
+  "env.unreadable": () => hinted(words.env.unreadable),
+  "env.save_failed": () => hinted(words.env.saveFailed),
+  "env.updated_and_removed": ({ name }) => words.env.updatedAndRemoved({ name }),
+  "editor.app_exists": ({ app }) => words.editor.appExists({ app }),
+  "editor.invalid_app_id": ({ app }) => words.editor.invalidAppId({ app }),
+  "editor.invalid_path": ({ path }) => words.editor.invalidPath({ path }),
+  "editor.through_file": ({ path }) => words.editor.throughFile({ path }),
+  "editor.outside_app": ({ app, path }) => words.editor.outsideApp({ app, path }),
+  "editor.hidden_file": ({ path }) => words.editor.hiddenFile({ path }),
+  "editor.broken_symlink": ({ path }) => words.editor.brokenSymlink({ path }),
+  "editor.no_such_file": ({ app, path }) => words.editor.noSuchFile({ app, path }),
+  "editor.not_a_file": ({ path }) => words.editor.notAFile({ path }),
+  "editor.too_large": ({ path, size }) => words.editor.tooLarge({ path, size }),
+  "editor.binary": ({ path }) => words.editor.binary({ path }),
+  "editor.not_utf8": ({ path }) => words.editor.notUtf8({ path }),
+  "editor.file_exists": ({ path }) => words.editor.fileExists({ path }),
+  "editor.file_appeared": ({ path }) => words.editor.fileAppeared({ path }),
+  "editor.invalid_file": ({ path, reason }) => ended(words.editor.invalidFile({ path, reason })),
+  "editor.compose_rejected": ({ path, complaint }) => words.editor.composeRejected({ path, complaint }),
+  "editor.unchecked": ({ path }) => hinted(words.editor.unchecked({ path })),
+  "editor.files_unreadable": ({ app }) => hinted(words.editor.filesUnreadable({ app })),
+  "editor.read_failed": ({ path }) => hinted(words.editor.readFailed({ path })),
+  "editor.save_failed": ({ path }) => hinted(words.editor.saveFailed({ path })),
+  "editor.create_failed": ({ app }) => hinted(words.editor.createFailed({ app })),
+  "docker.unavailable": () => hinted(words.docker.unavailable),
+  "docker.unknown_project": ({ project }) => words.docker.unknownProject({ project }),
+  "docker.invalid_project": ({ project }) => words.docker.invalidProject({ project }),
+  "docker.unknown_container": ({ project, container }) => words.docker.unknownContainer({ project, container }),
+  "compose.no_apps": () => words.compose.noApps,
+  "store.batch_running": ({ apps }) => words.store.batchRunning({ apps }),
+  "compose.app_busy": ({ app }) => words.compose.appBusy({ app }),
+  "compose.unchecked": ({ command }) => hinted(words.compose.unchecked({ command })),
+  "compose.failed": ({ app, command }) => hinted(words.compose.failed({ app, command })),
+  "compose.unknown_batch": () => words.compose.unknownBatch,
+  "jobs.unknown_run": () => words.jobs.unknownRun,
+  "jobs.ended": () => words.jobs.ended,
+  "jobs.crashed": () => hinted(words.jobs.crashed),
+  "widgets.unknown_placement": () => words.widgets.unknownPlacement,
+  "widgets.unavailable": () => hinted(words.widgets.unavailable),
+  "widgets.unknown_image": () => words.widgets.unknownImage,
+  "auth.invalid_credentials": () => words.auth.invalidCredentials,
   "auth.too_many_sign_ins": (_, retryAfter) => tooManySignIns(retryAfter),
-  "auth.session_expired": () => "Your session is no longer valid, or has expired: sign in again.",
-  "auth.user_removed": () => "Your user is no longer in hangar.yml.",
-  "auth.credentials_changed": () => "Your credentials have changed: sign in again.",
-  "auth.unreadable_cookie": () => "The browser sent a cookie that is not text: sign in again.",
-  "auth.no_oidc_provider": () => "No OpenID Connect provider is configured.",
-  "auth.cross_origin": ({ origin }) => `The request comes from another origin than ${origin}.`,
+  "auth.session_expired": () => words.auth.sessionExpired,
+  "auth.user_removed": () => words.auth.userRemoved,
+  "auth.credentials_changed": () => words.auth.credentialsChanged,
+  "auth.unreadable_cookie": () => words.auth.unreadableCookie,
+  "auth.no_oidc_provider": () => words.auth.noOidcProvider,
+  "auth.cross_origin": ({ origin }) => words.auth.crossOrigin({ origin }),
 };
 
 /** The words of `error`, as a sentence: those of its code, the server's detail, or why the call got no answer. */
@@ -202,17 +198,17 @@ function hasParams(code: ErrorCode, params: Record<string, unknown> | undefined)
 /** What a 429 of the sign-in says: the wait its `Retry-After` gives, in minutes. */
 function tooManySignIns(retryAfter: number | undefined): string {
   if (retryAfter === undefined) {
-    return "Too many failed sign-ins for this email: try again later.";
+    return words.auth.tooManySignIns;
   }
 
   const minutes = Math.max(1, Math.ceil(retryAfter / 60));
 
-  return `Too many failed sign-ins for this email: try again in ${minuteFormat.format(minutes)}.`;
+  return words.auth.tooManySignInsFor({ wait: minuteFormat.format(minutes) });
 }
 
-/** `message`, a sentence, followed by where its details are. */
+/** `message`, a sentence, followed by where its details are: the server's log. */
 function hinted(message: string): string {
-  return `${message} ${logHint}`;
+  return `${message} ${words.logHint}`;
 }
 
 /** `text` with a capital first letter and a final period, as a server's message is written neither. */

@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronDownIcon, LogOutIcon } from "lucide-react";
 import { useState } from "react";
 import { authMutations, authQueries } from "#modules/auth/api/auth-queries.ts";
+import { commonMessages } from "#modules/common/messages.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   DropdownMenu,
@@ -52,7 +53,7 @@ export function UserMenu() {
             className="cursor-pointer lg:h-9 lg:w-auto lg:gap-1.5 lg:px-2.5"
             variant="ghost"
             size="icon"
-            aria-label={`User menu of ${user.name}`}
+            aria-label={commonMessages.shell.userMenu({ name: user.name })}
           />
         }
       >
@@ -81,11 +82,11 @@ export function UserMenu() {
             onClick={() => void handleSignOut()}
           >
             {logout.isPending ? <Spinner /> : <LogOutIcon />}
-            <span>{logout.isPending ? "Signing out…" : "Sign out"}</span>
+            <span>{logout.isPending ? commonMessages.shell.signingOut : commonMessages.shell.signOut}</span>
           </DropdownMenuItem>
           {failed && (
             <p role="alert" className="px-2 py-1.5 text-xs text-destructive">
-              Could not sign you out. Try again.
+              {commonMessages.shell.signOutFailed}
             </p>
           )}
         </DropdownMenuGroup>
