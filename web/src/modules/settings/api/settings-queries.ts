@@ -21,7 +21,7 @@ import { syncPollMs } from "#modules/settings/helpers/store-sync.ts";
 
 /**
  * How a file the page edits is read: anew each time its card opens, as a sync or an install may have changed it since,
- * and shown from that read alone (`isFetchedAfterMount`); not when the window gets the focus back, nor once the network
+ * and shown from that read alone (its card's `QueryRegion` gets `readAfter`); not when the window gets the focus back, nor once the network
  * is back, which would load the file over what is being typed.
  */
 const editedFile = { staleTime: Infinity, refetchOnMount: "always", refetchOnWindowFocus: false } as const;

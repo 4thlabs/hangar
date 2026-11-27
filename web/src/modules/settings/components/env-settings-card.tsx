@@ -22,8 +22,10 @@ function randomSecret(): string {
  * and new ones to add. A save merges into the file as it is on disk: a variable added by hand meanwhile is kept.
  */
 export function EnvSettingsCard() {
-  // Shown from the read of this mount alone (`isFetchedAfterMount`): one cached from an earlier visit may be old.
   const env = useQuery(settingsQueries.env());
+  // Shown from a read of this mount alone: a copy cached by an earlier visit may be older than the file, and a save
+  // from it would write it back. Not `isFetchedAfterMount`, which a failed read sets too.
+  const [cachedAt] = useState(env.dataUpdatedAt);
 
   return (
     <Card className="w-full">
@@ -34,7 +36,7 @@ export function EnvSettingsCard() {
           page are kept.
         </CardDescription>
       </CardHeader>
-      <QueryRegion query={env} failure="Could not show the environment">
+      <QueryRegion query={env} readAfter={cachedAt} failure="Could not show the environment">
         {read => (
           <>
             {env.error && (
@@ -43,7 +45,7 @@ export function EnvSettingsCard() {
               </CardContent>
             )}
             {/* Keyed by the read: a save, which gives the file as written, starts the form again from it. */}
-            {env.isFetchedAfterMount && <EnvForm key={env.dataUpdatedAt} variables={read.variables} />}
+            <EnvForm key={env.dataUpdatedAt} variables={read.variables} />
           </>
         )}
       </QueryRegion>

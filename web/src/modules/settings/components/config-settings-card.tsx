@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { SaveIcon } from "lucide-react";
+import { useState } from "react";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { QueryRegion } from "#modules/common/components/region.tsx";
 import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts";
@@ -10,8 +11,10 @@ import { settingsMutations, settingsQueries } from "#modules/settings/api/settin
 
 /** `hangar.yml`, edited as it is written, and checked by the server before it is saved. */
 export function ConfigSettingsCard() {
-  // Shown from the read of this mount alone (`isFetchedAfterMount`): one cached from an earlier visit may be old.
   const config = useQuery(settingsQueries.config());
+  // Shown from a read of this mount alone: a copy cached by an earlier visit may be older than the file, and a save
+  // from it would write it back. Not `isFetchedAfterMount`, which a failed read sets too.
+  const [cachedAt] = useState(config.dataUpdatedAt);
 
   return (
     <Card className="w-full">
@@ -22,7 +25,7 @@ export function ConfigSettingsCard() {
           before it is written.
         </CardDescription>
       </CardHeader>
-      <QueryRegion query={config} failure="Could not show the configuration">
+      <QueryRegion query={config} readAfter={cachedAt} failure="Could not show the configuration">
         {read => (
           <>
             {config.error && (
@@ -31,7 +34,7 @@ export function ConfigSettingsCard() {
               </CardContent>
             )}
             {/* Keyed by the read: a save, which reads the file again, opens the editor on what was saved. */}
-            {config.isFetchedAfterMount && <ConfigEditor key={config.dataUpdatedAt} source={read.source} />}
+            <ConfigEditor key={config.dataUpdatedAt} source={read.source} />
           </>
         )}
       </QueryRegion>
