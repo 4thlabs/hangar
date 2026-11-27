@@ -4,13 +4,16 @@ import { CircleAlertIcon, KeyRoundIcon } from "lucide-react";
 import { useState, type SubmitEvent } from "react";
 import { getAuthOidcLoginUrl } from "#libs/api";
 import { authMutations, authQueries } from "#modules/auth/api/auth-queries.ts";
-import { describeSignInFailure, isSignInRefusal, signInRefusals } from "#modules/auth/helpers/sign-in-messages.ts";
+import { describeSignInFailure, isSignInRefusal } from "#modules/auth/helpers/sign-in-messages.ts";
+import { authMessages } from "#modules/auth/messages.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldGroup, FieldLabel, FieldSeparator } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
+
+const words = authMessages.signIn;
 
 /**
  * The search of `/login`: why a sign-in through the provider came back, if it did. Any text, which
@@ -35,7 +38,9 @@ function LoginPage() {
   const login = useMutation(authMutations.login());
   const { data: options } = useQuery(authQueries.options());
 
-  const [error, setError] = useState<string | null>(() => (isSignInRefusal(refused) ? signInRefusals[refused] : null));
+  const [error, setError] = useState<string | null>(() =>
+    isSignInRefusal(refused) ? authMessages.refusals[refused] : null,
+  );
 
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,31 +68,31 @@ function LoginPage() {
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-background p-6 font-sans">
-      <title>Sign in | Hangar</title>
+      <title>{words.documentTitle}</title>
       <form onSubmit={event => void handleSubmit(event)} className="w-full max-w-sm">
         <Card>
           <CardHeader>
             <CardTitle>
-              <h1>Sign in to Hangar</h1>
+              <h1>{words.title}</h1>
             </CardTitle>
-            <CardDescription>Enter your email and password to access your account.</CardDescription>
+            <CardDescription>{words.description}</CardDescription>
           </CardHeader>
           <CardContent>
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
+                <FieldLabel htmlFor="email">{words.email}</FieldLabel>
                 <Input
                   id="email"
                   name="email"
                   type="email"
-                  placeholder="you@example.com"
+                  placeholder={words.emailPlaceholder}
                   autoComplete="email"
                   required
                   disabled={login.isPending}
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <FieldLabel htmlFor="password">{words.password}</FieldLabel>
                 <Input
                   id="password"
                   name="password"
@@ -101,23 +106,23 @@ function LoginPage() {
               {error && (
                 <Alert variant="destructive">
                   <CircleAlertIcon />
-                  <AlertTitle>Sign in failed</AlertTitle>
+                  <AlertTitle>{words.failed}</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
             </FieldGroup>
           </CardContent>
           <CardFooter className="flex-col gap-3">
-            <PendingButton type="submit" className="w-full" pending={login.isPending} pendingLabel="Signing in…">
-              Sign in
+            <PendingButton type="submit" className="w-full" pending={login.isPending} pendingLabel={words.submitting}>
+              {words.submit}
             </PendingButton>
             {options?.oidc && (
               <>
-                <FieldSeparator className="w-full">or</FieldSeparator>
+                <FieldSeparator className="w-full">{words.or}</FieldSeparator>
                 {/* A link, not a fetch: the server redirects the browser to the provider. */}
                 <a href={getAuthOidcLoginUrl()} className={buttonVariants({ variant: "outline", className: "w-full" })}>
                   <KeyRoundIcon data-icon="inline-start" />
-                  Sign in with single sign-on
+                  {words.singleSignOn}
                 </a>
               </>
             )}
