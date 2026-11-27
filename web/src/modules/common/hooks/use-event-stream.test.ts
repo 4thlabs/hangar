@@ -68,6 +68,27 @@ describe("useEventStream", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("folds the next items into a state set during the read, as a log cleared while it is followed", async () => {
+    const written = stream();
+
+    answer(written.response);
+
+    const { result } = renderHook(() => useEventStream<Item, readonly string[]>([], lines));
+
+    act(() => result.current.read("/log", []));
+    await waitFor(() => expect(result.current.status).toBe("connected"));
+    act(() => written.send({ kind: "line", line: "old" }));
+    await waitFor(() => expect(result.current.state).toEqual(["old"]));
+
+    act(() => result.current.setState([]));
+    act(() => written.send({ kind: "line", line: "new" }));
+
+    await waitFor(() => expect(result.current.state).toEqual(["new"]));
+    act(() => written.close());
+    await waitFor(() => expect(result.current.status).toBe("ended"));
+    expect(result.current.state).toEqual(["new"]);
+  });
+
   it("fails a stream closed before an end it requires, with no failure, and keeps what it folded", async () => {
     const written = stream();
 
