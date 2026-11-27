@@ -309,6 +309,15 @@ inside. Without catalogs, the same work means finding every literal in every com
 This partly reverses the 2026-11-24 line "its text is written in English in its components". The cost, measured:
 `apps/messages.ts` is 67 lines and `settings/messages.ts` 54.
 
+**Amended by #204, on the maintainer's decision of 2026-11-27.** The words that sit in no module go to a module's
+`messages.ts` too, as no other file is added for them:
+
+- **The shell's**, those of `routes/_app/-shell/`, `-not-found-page.tsx` and `-pending-page.tsx`, are in
+  `common/messages.ts`, under `shell`: the Waku version's shell lived in `common`.
+- **A page's**, those a route file writes, are in the `messages.ts` of its section's module: `/apps` and
+  `/apps/:project` in `apps`, `/login` in `auth`, the dashboard in `widgets`, `/store` and its pages in `store`,
+  `/settings` in `settings`.
+
 ## Decision 6: files
 
 Amended by #207 on 2026-11-26: TanStack Router's layout, and modules kept apart, as decision 1 now says.
@@ -656,7 +665,7 @@ Accepted by the maintainer on 2026-11-26, as recommended:
 - `meta.invalidates` on mutations, run by the query client
 - `useEventFeed` and `useEventStream` as the only ways to read `Events` on the page
 - `Region` (Suspense, CatchBoundary, QueryErrorResetBoundary) per card and widget, with `useSuspenseQuery`, and stale data kept on a failed refetch (amended by #203 on the maintainer's decision of 2026-11-27: `QueryRegion` over the caller's `useQuery`, and `RenderRegion`, with no `Suspense`)
-- `messages.ts` per module, English only, partly reversing 2026-11-24
+- `messages.ts` per module, English only, partly reversing 2026-11-24 (amended by #204 on the maintainer's decision of 2026-11-27: the shell's words in `common`, a page's in its section's module)
 - `createPage` in `page.ts` (`app/page.ts` until #207) as the one place the `QueryClient`, the `Session` and the router are created
 - The closure corollary: a helper of one hook that needs the hook's values is a closure, not a class (amended by #195
   on 2026-11-26: a module function beside the hook when several of its effects call it)

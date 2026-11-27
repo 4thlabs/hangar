@@ -139,13 +139,12 @@ descriptor reaches its components only through `import()`.
 
   ```ts
   // modules/settings/helpers/job-text.ts
-  export const jobNames: Readonly<Record<Job, string>> = {
-    image_check: "Image check",
-    auto_update: "Update of the apps",
-  };
+  export const jobsPollMs = 1000;
 
   export function askedAgainText(asked: JobRun): string {
-    return asked.state === "running" ? `${jobName(asked.job)} runs.` : `${jobName(asked.job)} waits its turn.`;
+    const job = jobName(asked.job);
+
+    return asked.state === "running" ? settingsMessages.jobs.runs({ job }) : settingsMessages.jobs.waits({ job });
   }
   ```
 
@@ -256,8 +255,9 @@ scripts, which run `tsc` and oxlint before Vite. Its design is [ADR 0002](docs/a
 The page is English only, decided with the maintainer on 2026-11-24: the Translations section above is the Waku
 version's alone, until the switch. `web/` has no translation helper, no `t()`, no language cookie or switch. Its words
 are written in English, in each module's `messages.ts`, a plain object (ADR 0002, decision 5, which partly reverses
-the 2026-11-24 line "in its components"), and `Intl` formats dates and numbers in English. A page moved from `src/`
-takes the English words of its `messages.ts`, without the French.
+the 2026-11-24 line "in its components"), and `Intl` formats dates and numbers in English. A page's words are in its
+section's module, the shell's in `common/messages.ts` (#204). A page moved from `src/` takes the English words of its
+`messages.ts`, without the French.
 
 The Rust server runs its jobs in its own process, in memory (`crates/server/src/jobs.rs`): a scheduler, its crons
 read by the core's `CronSchedule`, and queues of one job at a time. The Sidequest worker and its composition root,

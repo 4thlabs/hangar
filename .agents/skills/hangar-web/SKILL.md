@@ -11,8 +11,8 @@ from the server's OpenAPI document, quoll `Events` streams, and shadcn component
 gives the why, the options weighed and the measures.
 
 **The code is moving to it.** The ADR lands in four PRs: #195 (no class made only of statics, `createPage`,
-`Session`), #186 (file routes), #203 (the data layer, the two stream hooks and the regions), then the words in
-`messages.ts`. Until they merge, some names below do not exist yet (`formErrorsOf`, the MSW handlers...).
+`Session`), #186 (file routes), #203 (the data layer, the two stream hooks and the regions), then #204 (the words in
+`messages.ts`). Until they merge, some names below do not exist yet (`formErrorsOf`, the MSW handlers...).
 
 - Write new code in this shape with the pieces that exist.
 - Do not port code an issue is not about: AGENTS.md's scope rule holds.
@@ -519,8 +519,11 @@ export const appsMessages = {
 ```
 
 - A label of an enum is typed by the contract, so a new value is a type error.
-- The tables keyed by code stay where they are: `error-message.ts` by `ErrorCode`, `notification-text.ts` by key.
+- The tables keyed by code stay where they are: `error-message.ts` by `ErrorCode`, `notification-text.ts` by key,
+  each entry calling its message.
 - Prose with markup (a description with `<code>`) may stay in its JSX until translation comes.
+- A page's words are in its section's module (`/apps` in `appsMessages`, the dashboard in `widgetsMessages`), the
+  shell's in `commonMessages.shell`.
 
 ## Classes: none made only of statics
 
