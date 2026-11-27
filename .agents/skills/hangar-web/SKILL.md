@@ -415,28 +415,47 @@ the app editor, which is no form. There is no schema library: a client check is 
 (`modules/common/helpers/form-errors.ts`) and a `FieldsByCode` table per form:
 
 ```tsx
-const fieldsByCode = (variables: readonly EnvVariable[]): FieldsByCode<ValueField> => ({
-  "env.invalid_name": ({ name }) => valueOf(name),
-  "env.line_break": ({ name }) => valueOf(name),
-});
+// routes/_app/store/new.tsx: a refusal goes under the field its code names, else under the form
+const fieldsByCode: FieldsByCode<"id" | "compose"> = {
+  "editor.invalid_app_id": () => "id",
+  "editor.app_exists": () => "id",
+  "editor.compose_rejected": () => "compose",
+};
 
-const save = useMutation(settingsMutations.saveEnv());
+const create = useMutation(storeMutations.createApp());
 const form = useForm({
-  defaultValues: envFormValues(read),
+  defaultValues: { id: "", compose: source },
   onSubmit: async ({ value, formApi }) => {
     try {
-      await save.mutateAsync({ data: envChanges(read, value.variables) });
-      toastSuccess(words.saved, words.savedDescription);
+      await create.mutateAsync({ data: value });
     } catch (failure) {
-      formApi.setErrorMap({ onSubmit: formErrorsOf(failure, fieldsByCode(value.variables)) });
+      formApi.setErrorMap({ onSubmit: formErrorsOf(failure, fieldsByCode) });
     }
   },
 });
+// <form onSubmit={event => { event.preventDefault(); void submitAfterRefusal(form); }}>
+// <form.Field name="id" validators={{ onSubmit: ({ value }) => appIdError(value) }}>
+```
+
+A list's items are no fields of their own: an array's field is a place, which moves as items are added or removed. The
+env form keeps the server's refusal of a variable by its name, in its own state, and only the form's own refusal in
+TanStack's errors:
+
+```tsx
+// settings/components/env-settings-card.tsx
+const [refusals, setRefusals] = useState<ReadonlyMap<string, string>>(new Map());
+// in onSubmit's catch, the table giving a variable's name:
+const { form: formError, fields } = formErrorsOf(failure, fieldsByCode(value.variables));
+
+setRefusals(new Map(Object.entries(fields)));
+formApi.setErrorMap({ onSubmit: { form: formError, fields: {} } });
+// a row, keyed by its variable: error = refusals.get(variable.key), dropped as its value changes or it is removed
 ```
 
 - A form's refusal shows in the form, under a field or for the whole form, with no toast. A toast is for an action
   outside a form.
-- Fields are named by index (`variables[${index}].value`), never by a key: `A.B` would read as a nested path.
+- A field of an array is named by index (`variables[${index}].value`), never by a key: `A.B` would read as a nested
+  path. Its row is keyed by its item.
 - The inputs carry `aria-invalid` and `aria-describedby`.
 - A client check is a plain function in its module's `helpers/`, run by the field's `onSubmit` validator:
   `newVariableError`, `appIdError`, which copies the core's app id rule (no `pattern` in the contract). A YAML file is a
