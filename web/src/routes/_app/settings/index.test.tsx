@@ -205,8 +205,6 @@ describe("/settings#config", () => {
     network.use(
       getConfigReadMockHandler({ source: "categories: []\n" }),
       getConfigSaveMockHandler(() => new Promise<void>(resolve => (answer = resolve))),
-      // What a save makes stale, read again once it succeeds.
-      getStoreAppsMockHandler(),
     );
 
     renderAt("/settings#config");

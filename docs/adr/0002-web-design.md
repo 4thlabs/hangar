@@ -1072,6 +1072,25 @@ const handler = sse<{ message: NotificationEvent }>("*/api/notifications/events"
 - **Noise:** msw 3 prints `Error: socket hang up` (`ECONNRESET`, from its socket interceptor) when the page closes a
   mocked stream on unmount. The tests pass. The cause was not traced.
 
+**Amended by #205 on 2026-11-27, a factual correction of what the port found.**
+
+- **`onUnhandledFrame: "error"` alone fails no test.** msw only rejects the call, and prints why: a page shows the
+  failure as a failed card, and its test passes. The setup file, `mock/setup.ts`, fails it. Each call goes through
+  `trackedFetch` (`mock/network.ts`), which keeps it from the moment the page makes it; msw's `request:unhandled`
+  names the calls no handler answered. `afterEach` waits, through `unhandledCalls`, until every call the test made has
+  reached msw or settled, a call made on the test's last line included, then fails the test that made one; `afterAll`
+  checks again, for what came after the last test's check. A handler that never answers, and a stream left open, do
+  not hold the check up. `network.test.ts` runs a fixture through Vitest's Node API and asserts that its tests fail.
+- **msw writes a string `data` as it is.** `client.send({ data: "overview" })` sends `data: overview`, which the page's
+  `JSON.parse` refuses. The server sends every item as JSON, so `feed<T>(path)` sends `JSON.stringify(item)`.
+- **The head of a stream waits for its first frame.** happy-dom's `fetch`, through msw's socket, gives the page no
+  answer until the first bytes of the body, as a proxy does: quoll's server sends an empty comment with the head for
+  that reason. A stream that ends starts its body with `:\n\n`, as `events(items)` does. msw's `sse()` client cannot
+  write a comment, so `feed()` sends a `retry: 3000` field, which dispatches nothing, as the stream opens.
+- **The `socket hang up` noise is happy-dom's.** Its `fetch` prints the error of every request it ends, with no test's
+  name, a request the page aborted included (a stream closed on unmount, a read cancelled). msw answers every call in
+  the process, so a hang-up can only be such an abort: `setup.ts` leaves out exactly that one, and prints every other.
+
 ### Rule 14: long lists
 
 Do not virtualize today, and reach for TanStack Virtual only for a list whose DOM rows can pass about a thousand and

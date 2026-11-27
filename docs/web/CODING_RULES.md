@@ -171,8 +171,9 @@ Clarity beats cleverness and brevity.
   (`routes/_app/apps/index.test.tsx`), which the route generator ignores (`routeFileIgnorePattern` in `tsr.config.json`).
 - The API is answered at the network, by orval's MSW handlers (`#libs/api/mock`), as the ADR's decision 13 says. One
   msw server, `network` in `mock/network.ts`, answers what the shell calls on every page; a test adds what its page
-  calls with `network.use(...)`, and its handlers win. `mock/setup.ts` starts it for every test file, and fails a test
-  in which a call found no handler, even one the page caught: msw's `"error"` alone only rejects the call.
+  calls with `network.use(...)`, and its handlers win. `mock/setup.ts` starts it for every test file, and fails the
+  test that made a call no handler answered, even one the page caught or made on the test's last line: msw's
+  `"error"` alone only rejects the call (ADR 0002, decision 13, as #205 amended it).
 - A refusal is thrown from the handler: `problem(status, detail)`, or `coded(status, error)` for one of Hangar's codes,
   typed by the contract. An `Events` route is `feed<T>(path)`, on msw's `sse()`, or `events(items)` as the body of
   orval's handler for a stream that ends. `countCalls()` counts what the page called.

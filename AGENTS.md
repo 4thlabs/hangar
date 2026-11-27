@@ -248,9 +248,10 @@ takes from `src/` what a page it moves needs, copied: the Waku version keeps its
 `src/libs/api/generated.ts`, its MSW handlers `generated.msw.ts`, and `web/openapi.json` are written by
 `cargo quoll gen`, never committed. Its `src/routeTree.gen.ts` is not committed either: TanStack Router writes it from
 the route files of `src/routes/`, by its Vite plugin in `vite` and the tests, and by `tsr generate` at the start of
-the `build`, `typecheck` and `lint` scripts, which run `tsc` and oxlint before Vite. Its design is [ADR 0002](docs/adr/0002-web-design.md), accepted on
-2026-11-26, and the `hangar-web` skill gives its rules in short. Where the ADR and the sections for `src/` differ,
-`web/` follows the ADR: no class made only of statics, and its words in a plain `messages.ts` per module.
+the `build`, `typecheck` and `lint` scripts, which run `tsc` and oxlint before Vite. Its design is
+[ADR 0002](docs/adr/0002-web-design.md), accepted on 2026-11-26, and the `hangar-web` skill gives its rules in short.
+Where the ADR and the sections for `src/` differ, `web/` follows the ADR: no class made only of statics, and its words
+in a plain `messages.ts` per module.
 
 The page is English only, decided with the maintainer on 2026-11-24: the Translations section above is the Waku
 version's alone, until the switch. `web/` has no translation helper, no `t()`, no language cookie or switch. Its words
