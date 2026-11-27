@@ -35,12 +35,13 @@ coding rules.
 
 ## The page in `web/src`
 
-ADR 0002's decisions 1 and 6, as #207 amended them: TanStack Router's own layout, and modules kept apart.
+ADR 0002's decisions 1 and 6, as #207 and #210 amended them: TanStack Router's own layout, modules kept apart, and
+the routes in one folder per section.
 
 ```
 main.tsx, page.ts, router.ts   the wiring: createPage, the router, the providers; no app/ folder
-routes/                        one file per route = its page; _app.tsx is the shell, its pieces in -shell/;
-                               a page's own pieces in -<page>/; its tests beside it (apps.test.tsx)
+routes/                        one file per route = its page; _app/route.tsx is the shell, its pieces in _app/-shell/;
+                               one folder per section under _app/; a page's tests beside it (apps/index.test.tsx)
 modules/<d>/
   components/                  the pieces the pages are made of
   hooks/
@@ -50,6 +51,36 @@ modules/<d>/
 modules/common/                what two modules or more share: ui/, components/, hooks/, api/, helpers/
 libs/                          the API client, formats, preferences
 ```
+
+The routes, as the maintainer decided on 2026-11-27 (#210):
+
+```
+routes/
+  __root.tsx
+  login.tsx                         /login, no shell and no guard
+  _app/
+    route.tsx                       the layout: the session guard and the shell
+    -shell/                         the shell's pieces
+    index.tsx  index.test.tsx       /
+    apps/
+      index.tsx  index.test.tsx     /apps
+      $project.tsx                  /apps/:project
+    store/
+      index.tsx  index.test.tsx     /store
+      new.tsx                       /store/new
+      $id.edit.tsx  $id.edit.test.tsx   /store/:id/edit
+    settings/
+      index.tsx  index.test.tsx     /settings
+    cluster/
+      index.tsx                     /cluster
+    $.tsx                           not-found, in the frame
+    -not-found-page.tsx  -pending-page.tsx
+```
+
+A folder per section, always, even for a section with one page, and no layout route inside a section: its pages are
+siblings, so no file name needs a `_` escape. `store/$id.edit.tsx` keeps its dot. The layout is `_app/route.tsx`, with
+everything it uses in `_app/`. A page's tests sit beside it. An index page's route id ends with `/`
+(`useSearch({ from: "/_app/apps/" })`); links still go `to="/apps"`.
 
 A card or a widget reads with `useQuery`, in the component that renders it, and shows the result through
 `QueryRegion`, or `RenderRegion` when it reads nothing: ADR 0002's decision 4, as #203 amended it on the maintainer's

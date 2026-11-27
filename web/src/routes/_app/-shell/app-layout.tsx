@@ -1,7 +1,7 @@
 import { Outlet } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { MobileTabBar } from "#routes/-shell/navbar-mobile.tsx";
-import { AppNavbar } from "#routes/-shell/navbar.tsx";
+import { MobileTabBar } from "#routes/_app/-shell/navbar-mobile.tsx";
+import { AppNavbar } from "#routes/_app/-shell/navbar.tsx";
 
 /** The frame of every signed-in page around `children`: the navbar, the page, and the phone's tab bar. */
 export function AppFrame({ children }: { children: ReactNode }) {

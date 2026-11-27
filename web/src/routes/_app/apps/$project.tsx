@@ -28,10 +28,10 @@ import {
 } from "#modules/common/ui/empty.tsx";
 
 /**
- * `/apps/$project`, one app: its containers, its logs and its compose operations. `apps_`: a page of its own beside
- * the list at `/apps`, not a child rendered inside it.
+ * `/apps/$project`, one app: its containers, its logs and its compose operations. A page of its own beside the list
+ * at `/apps`, `apps/index.tsx`, not a child rendered inside it: the section has no layout route.
  */
-export const Route = createFileRoute("/_app/apps_/$project")({
+export const Route = createFileRoute("/_app/apps/$project")({
   component: AppDetailPage,
 });
 
@@ -125,7 +125,7 @@ function AppNotFound({ project }: { project: string }) {
  * found. Its backups come with #177, and the link to its editor with #172.
  */
 function AppDetailPage() {
-  const { project } = useParams({ from: "/_app/apps_/$project" });
+  const { project } = useParams({ from: "/_app/apps/$project" });
 
   // Keyed: another app's page starts over, its commands' state and panel included.
   return <AppDetail key={project} project={project} />;

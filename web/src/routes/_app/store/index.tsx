@@ -10,7 +10,7 @@ import { StoreFilterMenu } from "#modules/store/components/store-filter-menu.tsx
 import { parseStoreFilters, validateStoreSearch } from "#modules/store/helpers/store-search.ts";
 
 /** `/store`, the store's apps, filtered by its search. */
-export const Route = createFileRoute("/_app/store")({
+export const Route = createFileRoute("/_app/store/")({
   validateSearch: validateStoreSearch,
   staticData: { searchable: true },
   component: StorePage,
@@ -18,7 +18,7 @@ export const Route = createFileRoute("/_app/store")({
 
 /** `/store`: the store's apps, the filters of the URL applied by the server, then its `q` by name. */
 function StorePage() {
-  const search = useSearch({ from: "/_app/store" });
+  const search = useSearch({ from: "/_app/store/" });
   const filters = parseStoreFilters(search.filter);
   const { data, error, isPending } = useQuery(storeQueries.apps(filters));
   const apps = searchByName(search.q ?? "", data?.apps ?? []);

@@ -1,7 +1,7 @@
 import { useRouteContext, useRouter, type ErrorComponentProps } from "@tanstack/react-router";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Button } from "#modules/common/ui/button.tsx";
-import { AppFrame } from "#routes/-shell/app-layout.tsx";
+import { AppFrame } from "#routes/_app/-shell/app-layout.tsx";
 
 /**
  * What the app's frame shows when it could not open, its session unread, or when a page in it failed: why, in the

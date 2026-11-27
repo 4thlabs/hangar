@@ -15,8 +15,8 @@ type StoreFilterMenuProps = {
 
 /** The filters of `/store`, ticked in its URL. */
 export function StoreFilterMenu({ counts }: StoreFilterMenuProps) {
-  const search = useSearch({ from: "/_app/store" });
-  const navigate = useNavigate({ from: "/store" });
+  const search = useSearch({ from: "/_app/store/" });
+  const navigate = useNavigate({ from: "/store/" });
 
   return (
     <CheckboxFilterMenu
