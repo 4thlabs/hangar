@@ -1,5 +1,6 @@
 # Written by orval from openapi.json, itself written by `cargo quoll gen` and gitignored at the root.
 /src/libs/api/generated.ts
+/src/libs/api/generated.msw.ts
 /dist
 /node_modules
 # Written by TanStack Router from src/routes/, by `tsr generate` or the Vite plugin.

@@ -9,11 +9,12 @@ package-lock.json
 .agents
 
 # Generated: shadcn components, drizzle schema and migrations, waku route types, the Rust server's OpenAPI document
-# and orval's client of it
+# and orval's client of it, with its MSW handlers
 src/modules/common/ui
 web/src/modules/common/ui
 web/openapi.json
 web/src/libs/api/generated.ts
+web/src/libs/api/generated.msw.ts
 # TanStack Router's tree of web/src/routes/
 web/src/routeTree.gen.ts
 # Where it was until #207, which a checkout built before it keeps: drop this line after #181.
