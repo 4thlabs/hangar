@@ -36,9 +36,6 @@ export const appStatuses: readonly ProjectStatus[] = [
 /** Both sides of the update filter, in the order its menu lists them. */
 export const appUpdates: readonly AppUpdate[] = ["available", "current"];
 
-/** What the update filter's menu calls each side. */
-export const appUpdateLabels: Readonly<Record<AppUpdate, string>> = { available: "Available", current: "Up to date" };
-
 /** The sortable columns, in the table's order. */
 export const appSortColumns: readonly AppSortColumn[] = [
   "name",

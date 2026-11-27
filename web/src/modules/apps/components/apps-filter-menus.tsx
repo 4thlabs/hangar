@@ -2,7 +2,6 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { ProjectSummary } from "#libs/api";
 import {
   appStatuses,
-  appUpdateLabels,
   appUpdates,
   joinSearchValues,
   parseAppCategories,
@@ -10,7 +9,7 @@ import {
   parseAppUpdates,
 } from "#modules/apps/helpers/apps-search.ts";
 import { countBy, updateSideOf } from "#modules/apps/helpers/project-filter.ts";
-import { projectStatusLabels } from "#modules/apps/helpers/project-status.ts";
+import { appsMessages } from "#modules/apps/messages.ts";
 import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
 
 type AppsFilterMenusProps = {
@@ -37,7 +36,7 @@ export function AppsFilterMenus({ projects }: AppsFilterMenusProps) {
     <>
       {categories.length > 0 && (
         <CheckboxFilterMenu
-          label="Category"
+          label={appsMessages.filters.category}
           options={categories.map(category => ({
             value: category,
             label: category,
@@ -48,20 +47,20 @@ export function AppsFilterMenus({ projects }: AppsFilterMenusProps) {
         />
       )}
       <CheckboxFilterMenu
-        label="Status"
+        label={appsMessages.filters.status}
         options={appStatuses.map(status => ({
           value: status,
-          label: projectStatusLabels[status],
+          label: appsMessages.status[status],
           count: statusCounts.get(status) ?? 0,
         }))}
         selected={parseAppStatuses(search.status)}
         onChange={selected => write("status", selected)}
       />
       <CheckboxFilterMenu
-        label="Update"
+        label={appsMessages.filters.update}
         options={appUpdates.map(update => ({
           value: update,
-          label: appUpdateLabels[update],
+          label: appsMessages.update[update],
           count: updateCounts.get(update) ?? 0,
         }))}
         selected={parseAppUpdates(search.update)}

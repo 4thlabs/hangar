@@ -12,11 +12,9 @@ import {
   emptyComposeOutput,
   type ComposeOutputState,
 } from "#modules/apps/helpers/compose-output.ts";
+import { appsMessages } from "#modules/apps/messages.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { useEventStream, type StreamStatus } from "#modules/common/hooks/use-event-stream.ts";
-
-/** What the panel says of a stream that ended before its `end`. */
-const cutShortMessage = "The output was cut short: the command goes on on the server.";
 
 /** Where the stream of a batch's output is. */
 export type ComposeStreamStatus = StreamStatus;
@@ -48,7 +46,7 @@ export function useComposeStream() {
   return {
     output: stream.state,
     status,
-    error: isFailed ? (failure === null ? cutShortMessage : describeError(failure)) : null,
+    error: isFailed ? (failure === null ? appsMessages.compose.cutShort : describeError(failure)) : null,
     /** Starts a batch of `request`, and reads its output, laid out once its first event, the batch, says its apps' order. */
     start: (request: ComposeRequest) =>
       stream.read(getComposeRunUrl(), emptyComposeOutput([]), {

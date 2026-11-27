@@ -9,12 +9,14 @@ import { ServiceCard } from "#modules/apps/components/service-card.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
 import { availableMemory } from "#modules/apps/helpers/memory-limit.ts";
 import { formatBytes, formatPercent } from "#modules/apps/helpers/metric-format.ts";
-import { projectStatusLabels, statusBadgeVariant } from "#modules/apps/helpers/project-status.ts";
+import { statusBadgeVariant } from "#modules/apps/helpers/project-status.ts";
 import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
+import { appsMessages } from "#modules/apps/messages.ts";
 import { dockerQueries } from "#modules/common/api/docker-queries.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { useDockerChanges } from "#modules/common/hooks/use-docker-changes.ts";
+import { commonMessages } from "#modules/common/messages.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -35,6 +37,9 @@ export const Route = createFileRoute("/_app/apps/$project")({
   component: AppDetailPage,
 });
 
+const words = appsMessages.detail;
+const usage = appsMessages.detail.stats;
+
 /** The usage of the app and its services; they hold the stats, so that a frame leaves the header alone. */
 function AppLiveStats({ detail }: { detail: ProjectDetail }) {
   const { stats, total } = useDockerStats(detail.summary.containerIds);
@@ -47,27 +52,31 @@ function AppLiveStats({ detail }: { detail: ProjectDetail }) {
     <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          title="CPU"
+          title={usage.cpu}
           value={formatPercent(total(metrics => metrics.cpuPercent))}
-          detail="Sum of the running containers"
+          detail={usage.runningSum}
           icon={CpuIcon}
         />
         <StatCard
-          title="Memory"
+          title={usage.memory}
           value={bytes(metrics => metrics.memoryUsage)}
           {...(available
-            ? { detail: `${formatBytes(available.bytes)} ${available.isHost ? "on the host" : "available"}` }
+            ? {
+                detail: available.isHost
+                  ? usage.onTheHost({ bytes: formatBytes(available.bytes) })
+                  : usage.available({ bytes: formatBytes(available.bytes) }),
+              }
             : {})}
           icon={MemoryStickIcon}
         />
         <StatCard
-          title="Network"
+          title={usage.network}
           value={`↓ ${bytes(metrics => metrics.networkRx)}`}
           detail={`↑ ${bytes(metrics => metrics.networkTx)}`}
           icon={NetworkIcon}
         />
         <StatCard
-          title="Disk"
+          title={usage.disk}
           value={`↓ ${bytes(metrics => metrics.blockRead)}`}
           detail={`↑ ${bytes(metrics => metrics.blockWrite)}`}
           icon={HardDriveIcon}
@@ -84,18 +93,18 @@ function AppLiveStats({ detail }: { detail: ProjectDetail }) {
 
 /** The head of an app's page: its name, how it runs, and what it is made of. */
 function AppHeader({ detail: { summary } }: { detail: ProjectDetail }) {
-  const services = `${summary.serviceCount} ${summary.serviceCount === 1 ? "service" : "services"}`;
+  const services = words.services({ count: summary.serviceCount });
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         {summary.icon && <img src={summary.icon} alt="" className="size-7 object-contain" />}
         <h1 className="text-2xl font-semibold">{summary.name}</h1>
-        <Badge variant={statusBadgeVariant(summary.status)}>{projectStatusLabels[summary.status]}</Badge>
-        {summary.updateAvailable && <Badge variant="outline">Update available</Badge>}
+        <Badge variant={statusBadgeVariant(summary.status)}>{appsMessages.status[summary.status]}</Badge>
+        {summary.updateAvailable && <Badge variant="outline">{words.updateAvailable}</Badge>}
       </div>
       <p className="text-sm text-muted-foreground">
-        {services} · {summary.runningCount}/{summary.containerIds.length} containers running
+        {services} · {words.containersRunning({ running: summary.runningCount, total: summary.containerIds.length })}
       </p>
     </div>
   );
@@ -109,11 +118,11 @@ function AppNotFound({ project }: { project: string }) {
         <EmptyMedia variant="icon">
           <BoxIcon />
         </EmptyMedia>
-        <EmptyTitle>App not found</EmptyTitle>
-        <EmptyDescription>No installed app is called “{project}”.</EmptyDescription>
+        <EmptyTitle>{words.notFound}</EmptyTitle>
+        <EmptyDescription>{words.notFoundDescription({ project })}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <Button render={<Link to="/apps">Back to apps</Link>} />
+        <Button render={<Link to="/apps">{words.backToApps}</Link>} />
       </EmptyContent>
     </Empty>
   );
@@ -140,17 +149,17 @@ function AppDetail({ project }: { project: string }) {
 
   return (
     <main>
-      <title>{`${project} | Apps | Hangar`}</title>
-      <Button variant="link" className="w-fit px-0" render={<Link to="/apps">← All apps</Link>} />
+      <title>{words.documentTitle({ project })}</title>
+      <Button variant="link" className="w-fit px-0" render={<Link to="/apps">{words.allApps}</Link>} />
       <ReconnectingNotice isReconnecting={isReconnecting} />
       {isNotFound && <AppNotFound project={project} />}
       {error && !isNotFound && (
         <Alert variant="destructive">
-          <AlertTitle>Could not read this app</AlertTitle>
+          <AlertTitle>{words.readFailed}</AlertTitle>
           <AlertDescription>{describeError(error)}</AlertDescription>
           <AlertAction>
             <Button type="button" variant="outline" size="sm" disabled={isRefetching} onClick={() => void refetch()}>
-              Retry
+              {commonMessages.retry}
             </Button>
           </AlertAction>
         </Alert>
@@ -163,7 +172,7 @@ function AppDetail({ project }: { project: string }) {
           <AppLiveStats detail={data} />
         </>
       )}
-      {isPending && <p className="text-sm text-muted-foreground">Reading Docker…</p>}
+      {isPending && <p className="text-sm text-muted-foreground">{words.reading}</p>}
       <ComposeDialogs compose={compose} subject={project} count={1} />
     </main>
   );
