@@ -169,7 +169,8 @@ Amended by #207 on 2026-11-26, to follow TanStack Router's own examples (`kitche
 `authenticated-routes`, `start-trellaux`) and keep the modules apart: the route file is the page, the shell is the
 layout route `_app.tsx`, the wiring is a few files at `src/`, and the domain `.ts` of a module is in its `helpers/`.
 Amended again by #210 on 2026-11-27: the routes are in one folder per section, and the layout is `_app/route.tsx`
-(decision 6).
+(decision 6). Amended by #214 on 2026-11-27: the words leave `messages.ts` for Paraglide's `messages/en.json`, and a
+module's enum labels are in its `helpers/<d>-labels.ts` (decision 5); `#paraglide/` is allowed in every layer.
 
 ```
 src/main.tsx, page.ts, router.ts   the wiring: createPage (QueryClient, Session, Preferences, router), the router,
@@ -181,19 +182,19 @@ src/modules/<d>/api/               query and mutation options on orval's, keys, 
 src/modules/<d>/helpers/           the domain: pure functions, view models, search params, formats, labels, parsers
 src/modules/<d>/hooks/             compose queries, feeds and local state machines (useComposeCommand, useStoreSync)
 src/modules/<d>/components/        the pieces the pages are made of
-src/modules/<d>/messages.ts        the module's words (decision 5), the one file at a module's root
 src/modules/common/                what two modules or more share: ui/, components/, hooks/, api/, helpers/
 src/libs/                          the API client, formats, preferences
+src/paraglide/                     what Paraglide compiles from messages/en.json (decision 5): generated, gitignored
 ```
 
-| Layer                     | May import                                                         | Must not import                                                                                           |
-| ------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `helpers/`, `messages.ts` | types and enums of `#libs/api`, `helpers/` of its own and `common` | React, `@tanstack/*`, orval's hooks/keys/fetchers, `api/`, `hooks/`, `components/`, `ui/` (types allowed) |
-| `api/`                    | `#libs/api` options, keys, URLs; `helpers/`                        | React, orval's `use*` hooks, `hooks/`, `components/`                                                      |
-| `hooks/`                  | `api/`, `helpers/`, `common/hooks`                                 | orval's `use*` hooks                                                                                      |
-| `components/`             | everything above, `ui/`                                            | orval's `use*` hooks                                                                                      |
-| a module, any layer       | its own folders, `common`, `#libs/...`                             | another module, `routes/`, the wiring; `common` imports no other module                                   |
-| `routes/`                 | every module, the wiring's types                                   | orval's `use*` hooks                                                                                      |
+| Layer               | May import                                                                        | Must not import                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `helpers/`          | types and enums of `#libs/api`, `helpers/` of its own and `common`, `#paraglide/` | React, `@tanstack/*`, orval's hooks/keys/fetchers, `api/`, `hooks/`, `components/`, `ui/` (types allowed) |
+| `api/`              | `#libs/api` options, keys, URLs; `helpers/`                                       | React, orval's `use*` hooks, `hooks/`, `components/`                                                      |
+| `hooks/`            | `api/`, `helpers/`, `common/hooks`                                                | orval's `use*` hooks                                                                                      |
+| `components/`       | everything above, `ui/`                                                           | orval's `use*` hooks                                                                                      |
+| a module, any layer | its own folders, `common`, `#libs/...`, `#paraglide/...`                          | another module, `routes/`, the wiring; `common` imports no other module                                   |
+| `routes/`           | every module, the wiring's types                                                  | orval's `use*` hooks                                                                                      |
 
 Every one of these is a lint rule (decision 10), checked on probe files and on the violations it finds in the code.
 A module goes down into `common` only when two modules really use it: the compose vocabulary (`compose-actions.ts`,
@@ -319,6 +320,47 @@ of their pages, their logs and their four cards, 166 and 112.
   `/apps/:project` in `apps`, `/login` in `auth`, the dashboard in `widgets`, `/store` and its pages in `store`,
   `/settings` in `settings`.
 
+**Amended by #214, on the maintainer's decision of 2026-11-27.** The words move to Paraglide JS now, English only,
+rather than when translation comes: #204's nested `as const` objects with TypeScript functions are not the format of
+a translation library. Paraglide's own format and defaults are taken:
+
+```
+web/
+  project.inlang/settings.json   Paraglide's project: base locale en, locales [en], the inlang message format plugin
+  messages/en.json               every message, flat
+  src/paraglide/                 what Paraglide compiles: generated and gitignored, like orval's generated.ts
+```
+
+- **Ids.** `<module>_<group>_<message>`, in `snake_case`, as `apps_logs_reconnect`, `settings_install_running` and
+  `common_shell_home_link`. The module's prefix keeps #204's ownership in one file. Three parts, decided with the
+  maintainer as the code moved: a nested group is flattened to its innermost (`list.totals.runningContainers` is
+  `apps_totals_running_containers`), and a message with no group of its own gets one (`common_actions_retry`).
+- **Import.** `import { m } from "#paraglide/messages.js"`, through `#paraglide/*` in the import mapping and in
+  `tsconfig.json`, as `#libs`. The code calls `m.<id>()` where the words are shown: no alias of a group, and no call
+  at a module's top level.
+- **Plurals.** A message that counts takes the number, and its forms are Paraglide variants on `count`
+  (`countPlural=one`, `countPlural=other`), picked with `Intl.PluralRules`. No caller picks a plural. A form English
+  gives 0 apart, as "this app" for 0 and 1, takes an exact variant before the plural ones.
+- **Params.** One params object. No message is built from another's words: "1 app selected" is one message, no longer
+  `appCount` and " selected". A standalone label, a name or a whole sentence may still be a param, as a
+  confirmation's `{ label, subject }`, decided with the maintainer as the code moved. A list is joined by the caller
+  with `Intl.ListFormat`.
+- **Tables.** The tables keyed by a code keep their shape and call `m`: `describeError` by `ErrorCode`, the
+  notifications by key, `upFlagSpecs` and the widget looks. The labels of an enum, which were groups of a module's
+  `messages.ts`, are a table of `m`'s functions in one file per module, `helpers/<d>-labels.ts`, decided with the
+  maintainer as the code moved: `appsLabels.status[status]()`, `satisfies Record<ProjectStatus, () => string>`, so
+  that a new value of the contract is still a type error.
+- **Build.** Paraglide's Vite plugin compiles in `vite`, the build and the tests; the `build`, `typecheck` and `lint`
+  scripts run its CLI's `compile` first, as `tsr generate`. Both use the base locale as their one strategy, so that no
+  cookie is read, and write `.d.ts` files, which TypeScript 7 reads. CI's `web` job needs no change: `cargo quoll
+build` runs the `build` script, `npm run lint --prefix web` its `lint`, and the tests the plugin.
+- **Lint.** Rule 4 allows `#paraglide/` in `helpers/`, and the isolation allows it in every layer. Nothing imports
+  `messages/en.json`, whose ids `tsc` would not check. No file stays directly under a module.
+
+Every word the page shows is the same, with its plurals at 0, 1 and 2 and its formats: a comparison, run once and not
+committed, rendered every message of the old `messages.ts` and of `m` with the same params, and the page's wording
+functions on every error code, notification key and compose action, with identical results.
+
 ## Decision 6: files
 
 Amended by #207 on 2026-11-26: TanStack Router's layout, and modules kept apart, as decision 1 now says.
@@ -387,7 +429,8 @@ routes/
 - **Naming.** A file is named after its main export (`apps-view.ts` exports `appsView`). A function's name carries
   its context, as #195 says (`describeSync`, `parseSettingsTab`, `availableMemory`). The query and mutation option
   objects (`appsQueries`, `settingsMutations`) are the one object of functions allowed: it is TanStack's documented
-  factory idiom, read as one, and loaders share it.
+  factory idiom, read as one, and loaders share it. A table keyed by a code or an enum, as `describeError`'s by code
+  or, since #214, a module's labels of `m`'s functions (`appsLabels.status`), is data, not a namespace of helpers.
 
 ## Decision 7: classes, by the rule already decided
 
@@ -442,7 +485,7 @@ The lint selector `ClassDeclaration[superClass=null] > ClassBody:not(:has(> [sta
 | TanStack Router: [router context](https://tanstack.com/router/latest/docs/framework/react/guide/router-context), `beforeLoad`, loaders with `ensureQueryData`, `errorComponent`, `CatchBoundary`, file routes         | the context carries instances; loaders warm the regions                          | modules stay outside `routes/` (#186)                            |
 | [bulletproof-react](https://github.com/alan2207/bulletproof-react)                                                                                                                                                    | `api/` per domain, one-way imports by lint, no barrels                           | imports between modules are allowed; `modules/`, not `features/` |
 | [Feature-Sliced Design](https://feature-sliced.design/)                                                                                                                                                               | the idea of layers with lint                                                     | too many layers for this size                                    |
-| [Paraglide JS](https://inlang.com/m/gerre34r/library-inlang-paraglideJs)                                                                                                                                              | messages as functions of one object, ready for `m.key(params)`                   | not installed until translation comes                            |
+| [Paraglide JS](https://inlang.com/m/gerre34r/library-inlang-paraglideJs)                                                                                                                                              | messages as functions of one object, ready for `m.key(params)`                   | installed by #214, English only                                  |
 | The Waku version itself                                                                                                                                                                                               | its layout, its catalogs, its single stream hook                                 | `api/` for `actions/`, the cache for `reload()`                  |
 
 ## Decision 9: before and after, on apps and settings
@@ -621,7 +664,8 @@ specifier, which core `no-restricted-imports` reads as a regex, with `importName
    `messages.ts` and its test, as it refuses any file directly under `modules/`. #207 adds the isolation of decision
    1: on `modules/<a>/`, no `#...` import but `#libs/`, `#modules/common/` and `#modules/<a>/` (`#mock/` too in a
    test), and no `..` segment anywhere in a specifier, in an `import` or an `import()` of a string or a template with
-   no expression.
+   no expression. Amended by #214 on 2026-11-27: `messages.ts` is gone, so no file stays at a module's root,
+   `#paraglide/` is allowed in every layer, and no file imports `messages/en.json`.
 
 One trap: `.gitignore`-style patterns in `no-restricted-imports` treat a leading `#` as a comment, so `#modules/...`
 must be written with `regex`, not `group`.
@@ -667,7 +711,7 @@ Accepted by the maintainer on 2026-11-26, as recommended:
 - `meta.invalidates` on mutations, run by the query client
 - `useEventFeed` and `useEventStream` as the only ways to read `Events` on the page
 - `Region` (Suspense, CatchBoundary, QueryErrorResetBoundary) per card and widget, with `useSuspenseQuery`, and stale data kept on a failed refetch (amended by #203 on the maintainer's decision of 2026-11-27: `QueryRegion` over the caller's `useQuery`, and `RenderRegion`, with no `Suspense`)
-- `messages.ts` per module, English only, partly reversing 2026-11-24 (amended by #204 on the maintainer's decision of 2026-11-27: the shell's words in `common`, a page's in its section's module)
+- `messages.ts` per module, English only, partly reversing 2026-11-24 (amended by #204 on the maintainer's decision of 2026-11-27: the shell's words in `common`, a page's in its section's module; amended by #214 on the maintainer's decision of 2026-11-27: Paraglide's `messages/en.json` now, English only)
 - `createPage` in `page.ts` (`app/page.ts` until #207) as the one place the `QueryClient`, the `Session` and the router are created
 - The closure corollary: a helper of one hook that needs the hook's values is a closure, not a class (amended by #195
   on 2026-11-26: a module function beside the hook when several of its effects call it)
@@ -680,7 +724,8 @@ Accepted by the maintainer on 2026-11-26, as recommended:
   `refetchOnMount: "always"` and the `key={dataUpdatedAt}` form may need `gcTime` care under suspense. Only `Region`
   itself was tested. Checked by #203, and left: see the amendments of decision 4 and rule 15.
 - Porting `use-notifications` to `useEventFeed`. Done by #203: see decision 3.
-- Paraglide's actual import of a `messages.ts`: the shape matches its message functions, but it was not run.
+- Paraglide's actual import of a `messages.ts`: the shape matches its message functions, but it was not run. Done by
+  #214, by a script run once: see the amendment of decision 5.
 - The bundle size against #186's budget: `vite build` passes, and the size was not compared.
 
 ## Addendum: forms, optimistic updates and tests against the API
