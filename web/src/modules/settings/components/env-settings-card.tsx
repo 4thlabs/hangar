@@ -11,6 +11,9 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "#modules/common
 import { Input } from "#modules/common/ui/input.tsx";
 import { settingsMutations, settingsQueries } from "#modules/settings/api/settings-queries.ts";
 import { envChanges } from "#modules/settings/helpers/env-changes.ts";
+import { settingsMessages } from "#modules/settings/messages.ts";
+
+const words = settingsMessages.env;
 
 /** A secret for a variable, of the shape of `openssl rand -hex 32`. */
 function randomSecret(): string {
@@ -30,13 +33,13 @@ export function EnvSettingsCard() {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>ENVIRONMENT</CardTitle>
+        <CardTitle>{words.title}</CardTitle>
         <CardDescription>
           The variables every stack shares, written to <code>.env.global</code>. Variables added by hand outside this
           page are kept.
         </CardDescription>
       </CardHeader>
-      <QueryRegion query={env} readAfter={cachedAt} failure="Could not show the environment">
+      <QueryRegion query={env} readAfter={cachedAt} failure={words.showFailed}>
         {read => (
           <>
             {env.error && (
@@ -66,9 +69,9 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
   async function handleSave() {
     try {
       await save.mutateAsync({ data: envChanges(variables, values, removed) });
-      toastSuccess("Environment saved", "The global environment was saved.");
+      toastSuccess(words.saved, words.savedDescription);
     } catch (failure) {
-      toastFailure("Save failed", failure);
+      toastFailure(words.saveFailed, failure);
     }
   }
 
@@ -123,14 +126,14 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                 autoComplete="off"
                 spellCheck={false}
                 value={values[key]}
-                placeholder="to fill in"
+                placeholder={words.valuePlaceholder}
                 onChange={event => setValue(key, event.target.value)}
               />
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={shown.has(key) ? `Hide the value of ${key}` : `Show the value of ${key}`}
+                aria-label={shown.has(key) ? words.hideValue({ name: key }) : words.showValue({ name: key })}
                 aria-pressed={shown.has(key)}
                 onClick={() => toggleShown(key)}
               >
@@ -140,7 +143,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={`Generate a secret for ${key}`}
+                aria-label={words.generate({ name: key })}
                 onClick={() => setValue(key, randomSecret())}
               >
                 <KeyRoundIcon />
@@ -149,7 +152,7 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={`Remove ${key}`}
+                aria-label={words.remove({ name: key })}
                 onClick={() => remove(key)}
               >
                 <Trash2Icon />
@@ -159,8 +162,8 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
           <Field orientation="horizontal">
             <Input
               value={newKey}
-              placeholder="NEW_VARIABLE"
-              aria-label="Name of a new variable"
+              placeholder={words.newNamePlaceholder}
+              aria-label={words.newName}
               className="w-72 shrink-0 font-mono text-xs"
               onChange={event => setNewKey(event.target.value.toUpperCase())}
               onKeyDown={event => {
@@ -172,12 +175,12 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
             />
             <Button type="button" variant="outline" onClick={add} disabled={newKey.trim().length === 0}>
               <PlusIcon data-icon="inline-start" />
-              Add
+              {words.add}
             </Button>
           </Field>
           {removed.length > 0 && (
             <FieldDescription>
-              To remove on save: <span className="font-mono">{removed.join(", ")}</span>
+              {words.toRemove} <span className="font-mono">{removed.join(", ")}</span>
             </FieldDescription>
           )}
         </FieldGroup>
@@ -186,11 +189,11 @@ function EnvForm({ variables }: { variables: Record<string, string> }) {
         <PendingButton
           type="button"
           pending={save.isPending}
-          pendingLabel="Saving…"
+          pendingLabel={settingsMessages.saving}
           icon={<SaveIcon data-icon="inline-start" />}
           onClick={() => void handleSave()}
         >
-          Save
+          {settingsMessages.save}
         </PendingButton>
       </CardFooter>
     </>

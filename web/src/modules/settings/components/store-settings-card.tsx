@@ -12,6 +12,9 @@ import { Skeleton } from "#modules/common/ui/skeleton.tsx";
 import { settingsMutations, settingsQueries } from "#modules/settings/api/settings-queries.ts";
 import { describeSync, syncStartedText } from "#modules/settings/helpers/store-sync.ts";
 import { useSyncEnd } from "#modules/settings/hooks/use-sync-end.ts";
+import { settingsMessages } from "#modules/settings/messages.ts";
+
+const words = settingsMessages.store;
 
 /**
  * The store's URL, whether it is cloned, and its sync: started here, run by the server apart from the request, and
@@ -23,12 +26,12 @@ export function StoreSettingsCard() {
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
-        <CardTitle>STORE</CardTitle>
-        <CardDescription>See the configured repository and synchronize its local copy.</CardDescription>
+        <CardTitle>{words.title}</CardTitle>
+        <CardDescription>{words.description}</CardDescription>
       </CardHeader>
       <QueryRegion
         query={status}
-        failure="Could not read the store"
+        failure={words.readFailed}
         fallback={
           <CardContent>
             <Skeleton className="h-16 w-full" />
@@ -56,8 +59,8 @@ function StoreStatusContent({ status, error }: StoreStatusContentProps) {
 
   const start = () =>
     sync.mutate(undefined, {
-      onSuccess: started => toastSuccess("Synchronization started", syncStartedText(started)),
-      onError: failure => toastFailure("Launch failed", failure),
+      onSuccess: started => toastSuccess(words.syncStarted, syncStartedText(started)),
+      onError: failure => toastFailure(words.launchFailed, failure),
     });
 
   return (
@@ -65,11 +68,11 @@ function StoreStatusContent({ status, error }: StoreStatusContentProps) {
       <CardContent>
         <FieldGroup>
           <Field>
-            <FieldLabel htmlFor="store-url">Store URL</FieldLabel>
+            <FieldLabel htmlFor="store-url">{words.url}</FieldLabel>
             <Input id="store-url" value={status.url} readOnly aria-describedby="store-status" />
             <FieldDescription id="store-status">
               {error && describeError(error)}
-              {status.installed ? "The store is installed locally." : "The store is not installed yet."}
+              {status.installed ? words.installed : words.notInstalled}
               {status.sync && (
                 <>
                   <br />
@@ -84,13 +87,13 @@ function StoreStatusContent({ status, error }: StoreStatusContentProps) {
         <PendingButton
           type="button"
           pending={sync.isPending || isRunning}
-          pendingLabel="Synchronizing…"
+          pendingLabel={words.synchronizing}
           icon={
             status.installed ? <RefreshCwIcon data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />
           }
           onClick={start}
         >
-          {status.installed ? "Update" : "Install"}
+          {status.installed ? words.update : words.install}
         </PendingButton>
       </CardFooter>
     </>

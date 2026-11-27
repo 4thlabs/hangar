@@ -8,6 +8,9 @@ import { describeError } from "#modules/common/helpers/error-message.ts";
 import { useYamlEditor } from "#modules/common/hooks/use-yaml-editor.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { settingsMutations, settingsQueries } from "#modules/settings/api/settings-queries.ts";
+import { settingsMessages } from "#modules/settings/messages.ts";
+
+const words = settingsMessages.config;
 
 /** `hangar.yml`, edited as it is written, and checked by the server before it is saved. */
 export function ConfigSettingsCard() {
@@ -19,13 +22,13 @@ export function ConfigSettingsCard() {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>CONFIGURATION</CardTitle>
+        <CardTitle>{words.title}</CardTitle>
         <CardDescription>
           The store's <code>hangar.yml</code> file: categories, shared files and dashboard widgets. It is validated
           before it is written.
         </CardDescription>
       </CardHeader>
-      <QueryRegion query={config} readAfter={cachedAt} failure="Could not show the configuration">
+      <QueryRegion query={config} readAfter={cachedAt} failure={words.showFailed}>
         {read => (
           <>
             {config.error && (
@@ -53,10 +56,10 @@ function ConfigEditor({ source }: { source: string }) {
     try {
       await save.mutateAsync({ data: { source: value } });
       setRefusal(null);
-      toastSuccess("Configuration saved", "The configuration was saved.");
+      toastSuccess(words.saved, words.savedDescription);
     } catch (failure) {
       setRefusal(describeError(failure));
-      toastFailure("Configuration rejected", failure);
+      toastFailure(words.rejected, failure);
     }
   }
 
@@ -70,11 +73,11 @@ function ConfigEditor({ source }: { source: string }) {
         <PendingButton
           type="button"
           pending={save.isPending}
-          pendingLabel="Saving…"
+          pendingLabel={settingsMessages.saving}
           icon={<SaveIcon data-icon="inline-start" />}
           onClick={() => void handleSave()}
         >
-          Save
+          {settingsMessages.save}
         </PendingButton>
       </CardFooter>
     </>

@@ -1,5 +1,7 @@
 import type { StoreSync } from "#libs/api";
 import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
+import { commonMessages } from "#modules/common/messages.ts";
+import { settingsMessages } from "#modules/settings/messages.ts";
 
 // What the store's card says of its last sync.
 
@@ -11,27 +13,22 @@ const syncTimeFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", time
 
 /** The sentence of `sync`: running, ended well, or failed with its reason. */
 export function describeSync(sync: StoreSync): string {
-  const noun = sync.operation === "install" ? "installation" : "update";
+  const words = settingsMessages.store.sync[sync.operation];
 
   if (sync.state === "running") {
-    return sync.operation === "install" ? "Installing the store…" : "Updating the store…";
+    return words.running;
   }
 
   if (sync.state === "failed") {
-    const reason = sync.error ? describeErrorDetail(sync.error) : "See the server's log.";
+    const reason = sync.error ? describeErrorDetail(sync.error) : commonMessages.errors.logHint;
 
-    return `The ${noun} of the store failed: ${reason}`;
+    return words.failed({ reason });
   }
 
-  const ended = sync.finishedAt ? ` on ${syncTimeFormat.format(new Date(sync.finishedAt))}` : "";
-  const verb = sync.operation === "install" ? "installed" : "updated";
-
-  return `The store was ${verb}${ended}.`;
+  return sync.finishedAt ? words.endedAt({ time: syncTimeFormat.format(new Date(sync.finishedAt)) }) : words.ended;
 }
 
 /** What the toast of a sync started says. */
 export function syncStartedText(sync: StoreSync): string {
-  return sync.operation === "install"
-    ? "The installation of the store was started."
-    : "The update of the store was started.";
+  return settingsMessages.store.sync[sync.operation].started;
 }

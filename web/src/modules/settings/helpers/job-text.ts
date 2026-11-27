@@ -1,5 +1,8 @@
 import type { Job, JobRun, JobState } from "#libs/api";
 import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
+import { settingsMessages } from "#modules/settings/messages.ts";
+
+const words = settingsMessages.jobs;
 
 // What the jobs' card says of the server's jobs and their runs.
 
@@ -17,32 +20,17 @@ export function jobsPollDelay(runs: readonly JobRun[]): number {
   return runs.some(isRunActive) ? jobsPollMs : jobsIdlePollMs;
 }
 
-/** The name of each job. */
-export const jobNames: Readonly<Record<Job, string>> = {
-  image_check: "Image check",
-  auto_update: "Update of the apps",
-};
-
-/** The label of each state. */
-export const jobStateLabels: Readonly<Record<JobState, string>> = {
-  waiting: "Waiting",
-  running: "Running",
-  completed: "Completed",
-  failed: "Failed",
-  canceled: "Canceled",
-};
-
 /** A time of a run, in English. */
 const runTimeFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "medium" });
 
 /** The name of `job`; the one the server gives for a job this page does not know, from a newer server. */
 export function jobName(job: string): string {
-  return Object.hasOwn(jobNames, job) ? jobNames[job as Job] : job;
+  return Object.hasOwn(words.names, job) ? words.names[job as Job] : job;
 }
 
 /** The label of `state`; the one the server gives for a state this page does not know. */
 export function jobStateLabel(state: string): string {
-  return Object.hasOwn(jobStateLabels, state) ? jobStateLabels[state as JobState] : state;
+  return Object.hasOwn(words.states, state) ? words.states[state as JobState] : state;
 }
 
 /** Whether `run` still waits or runs, which a cancel stops. */
@@ -62,7 +50,7 @@ export function runFailure(run: JobRun): string | undefined {
 
 /** What the toast of a job asked for again says: its run waits its turn, or already runs. */
 export function askedAgainText(asked: JobRun): string {
-  const name = jobName(asked.job);
+  const job = jobName(asked.job);
 
-  return asked.state === "running" ? `${name} runs.` : `${name} waits its turn.`;
+  return asked.state === "running" ? words.runs({ job }) : words.waits({ job });
 }

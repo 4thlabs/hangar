@@ -1,3 +1,5 @@
+import { settingsMessages } from "#modules/settings/messages.ts";
+
 /** One tab of the settings page. */
 export type SettingsTabId = "store" | "env" | "config" | "jobs";
 
@@ -9,10 +11,10 @@ type SettingsTabEntry = { id: SettingsTabId; label: string };
 
 /** The tabs, in the order the page lists them; the first one opens when the hash names none. */
 export const settingsTabs: readonly SettingsTabEntry[] = [
-  { id: "store", label: "Store" },
-  { id: "env", label: "Environment" },
-  { id: "config", label: "Configuration" },
-  { id: "jobs", label: "Jobs" },
+  { id: "store", label: settingsMessages.tabs.store },
+  { id: "env", label: settingsMessages.tabs.env },
+  { id: "config", label: settingsMessages.tabs.config },
+  { id: "jobs", label: settingsMessages.tabs.jobs },
 ];
 
 /** The tab a URL hash names, with or without its `#`; the first tab for any other hash. */

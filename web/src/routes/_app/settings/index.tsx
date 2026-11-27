@@ -6,6 +6,7 @@ import { EnvSettingsCard } from "#modules/settings/components/env-settings-card.
 import { JobsSettingsCard } from "#modules/settings/components/jobs-settings-card.tsx";
 import { StoreSettingsCard } from "#modules/settings/components/store-settings-card.tsx";
 import { parseSettingsTab, settingsTabs, type SettingsTabId } from "#modules/settings/helpers/settings-tab.ts";
+import { settingsMessages } from "#modules/settings/messages.ts";
 
 /** `/settings`, its tab in the hash. */
 export const Route = createFileRoute("/_app/settings/")({
@@ -29,10 +30,10 @@ function SettingsPage() {
 
   return (
     <main>
-      <title>Settings | Hangar</title>
+      <title>{settingsMessages.page.documentTitle}</title>
       <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-sm text-muted-foreground">Manage the configuration of your Hangar installation.</p>
+        <h1 className="text-2xl font-semibold">{settingsMessages.page.title}</h1>
+        <p className="text-sm text-muted-foreground">{settingsMessages.page.description}</p>
       </div>
       <Tabs
         value={parseSettingsTab(hash)}
