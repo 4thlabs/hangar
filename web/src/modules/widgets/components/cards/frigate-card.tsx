@@ -10,8 +10,10 @@ import {
   WidgetTime,
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { formatCount } from "#modules/widgets/helpers/widget-format.ts";
 import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
+
+const words = widgetsMessages.frigate;
 
 /** How the card names a camera: `frigate_front_door` is `front door`. */
 function cameraName(camera: string) {
@@ -42,10 +44,10 @@ export function FrigateCard({
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{formatCount(cameraCount, "camera", "cameras")}</span>
-            <span>{detectionFps.toFixed(1)} det/s</span>
+            <span>{widgetsMessages.counts.cameras({ count: cameraCount })}</span>
+            <span>{words.detections({ perSecond: detectionFps.toFixed(1) })}</span>
             {detectors.map(detector => (
-              <span key={detector.name} aria-label={`${detector.name} detector inference time`}>
+              <span key={detector.name} aria-label={words.inferenceTime({ detector: detector.name })}>
                 {detector.inferenceSpeed.toFixed(0)} ms
               </span>
             ))}
@@ -54,7 +56,7 @@ export function FrigateCard({
       />
 
       <WidgetContent>
-        <WidgetList empty="No recent events.">
+        <WidgetList empty={words.empty}>
           {events.map(event => (
             <WidgetListItem
               key={event.id}

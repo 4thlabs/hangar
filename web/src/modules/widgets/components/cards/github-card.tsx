@@ -9,6 +9,7 @@ import {
   WidgetTime,
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
 
 /** The latest release of each repository, newest first. */
 export function GithubCard({ releases: { releases } }: { releases: GithubReleases }) {
@@ -20,7 +21,7 @@ export function GithubCard({ releases: { releases } }: { releases: GithubRelease
       <WidgetHeader icon={look.icon} title={look.title} bordered={releases.length > 0} />
 
       <WidgetContent>
-        <WidgetList empty="No releases found.">
+        <WidgetList empty={widgetsMessages.github.empty}>
           {releases.map(release => (
             <WidgetListItem
               key={release.repository}

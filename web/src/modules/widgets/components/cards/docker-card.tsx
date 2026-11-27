@@ -13,7 +13,7 @@ import {
   WidgetMetadata,
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { formatCount } from "#modules/widgets/helpers/widget-format.ts";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
 import { HostMetrics } from "./host-metrics.tsx";
 
 /**
@@ -62,8 +62,8 @@ function DockerHost({ overview, projects }: DockerHostProps) {
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>Docker {overview.version}</span>
-            <span>{formatCount(overview.containers.total, "container", "containers")}</span>
+            <span>{widgetsMessages.docker.version({ version: overview.version })}</span>
+            <span>{widgetsMessages.counts.containers({ count: overview.containers.total })}</span>
           </WidgetMetadata>
         }
       />
@@ -73,7 +73,7 @@ function DockerHost({ overview, projects }: DockerHostProps) {
       </WidgetContent>
 
       {outdated.length > 0 && (
-        <WidgetFooter title="Updates available">
+        <WidgetFooter title={widgetsMessages.docker.updatesAvailable}>
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             {outdated.map(project => (
               <li key={project}>

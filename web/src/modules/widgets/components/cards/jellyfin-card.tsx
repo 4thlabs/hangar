@@ -8,8 +8,10 @@ import {
   WidgetMetadata,
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
+
+const words = widgetsMessages.jellyfin;
 
 type JellyfinCardProps = {
   latest: JellyfinLatest;
@@ -31,10 +33,10 @@ export function JellyfinCard({ latest: { counts, items }, placementKey, link }: 
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{formatInteger(counts.movies)} movies</span>
-            <span>{formatInteger(counts.series)} shows</span>
-            <span>{formatInteger(counts.episodes)} episodes</span>
-            <span>{formatInteger(counts.songs)} songs</span>
+            <span>{words.movies({ count: counts.movies })}</span>
+            <span>{words.shows({ count: counts.series })}</span>
+            <span>{words.episodes({ count: counts.episodes })}</span>
+            <span>{words.songs({ count: counts.songs })}</span>
           </WidgetMetadata>
         }
       />
@@ -71,7 +73,7 @@ export function JellyfinCard({ latest: { counts, items }, placementKey, link }: 
             </ul>
           </ScrollArea>
         ) : (
-          <WidgetEmptyState>No items found.</WidgetEmptyState>
+          <WidgetEmptyState>{words.empty}</WidgetEmptyState>
         )}
       </WidgetContent>
     </WidgetCard>

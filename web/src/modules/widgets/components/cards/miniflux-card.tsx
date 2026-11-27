@@ -11,7 +11,9 @@ import {
   WidgetTime,
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { formatInteger } from "#modules/widgets/helpers/widget-format.ts";
+import { widgetsMessages } from "#modules/widgets/messages.ts";
+
+const words = widgetsMessages.miniflux;
 
 type MinifluxCardProps = {
   entries: MinifluxEntries;
@@ -32,13 +34,13 @@ export function MinifluxCard({ entries: { unread, entries }, link }: MinifluxCar
         bordered={entries.length > 0}
         description={
           <WidgetMetadata>
-            <span>{formatInteger(unread)} unread</span>
+            <span>{words.unread({ count: unread })}</span>
           </WidgetMetadata>
         }
       />
 
       <WidgetContent>
-        <WidgetList empty="No entries.">
+        <WidgetList empty={words.empty}>
           {entries.map(entry => (
             <WidgetListItem
               key={entry.id}
@@ -46,7 +48,7 @@ export function MinifluxCard({ entries: { unread, entries }, link }: MinifluxCar
                 // Kept when read, transparent, so that every title starts on the same column.
                 <span
                   className={cn("size-2 shrink-0 rounded-full", entry.isUnread && "bg-primary")}
-                  {...(entry.isUnread ? { role: "img", "aria-label": "Unread" } : { "aria-hidden": true })}
+                  {...(entry.isUnread ? { role: "img", "aria-label": words.unreadMark } : { "aria-hidden": true })}
                 />
               }
               trailing={<WidgetTime at={Date.parse(entry.publishedAt)} now={now} variant="compact" />}
