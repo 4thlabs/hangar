@@ -1075,12 +1075,14 @@ const handler = sse<{ message: NotificationEvent }>("*/api/notifications/events"
 **Amended by #205 on 2026-11-27, a factual correction of what the port found.**
 
 - **`onUnhandledFrame: "error"` alone fails no test.** msw only rejects the call, and prints why: a page shows the
-  failure as a failed card, and its test passes. The setup file, `mock/setup.ts`, fails it. Each call goes through
-  `trackedFetch` (`mock/network.ts`), which keeps it from the moment the page makes it; msw's `request:unhandled`
-  names the calls no handler answered. `afterEach` waits, through `unhandledCalls`, until every call the test made has
-  reached msw or settled, a call made on the test's last line included, then fails the test that made one; `afterAll`
-  checks again, for what came after the last test's check. A handler that never answers, and a stream left open, do
-  not hold the check up. `network.test.ts` runs a fixture through Vitest's Node API and asserts that its tests fail.
+  failure as a failed card, and its test passes. The setup file, `mock/setup.ts`, fails it, by a check that does not
+  depend on timing. `trackedFetch` (`mock/network.ts`) checks each call against the network's handlers at the moment
+  the page makes it, before anything can abort it: msw's public `listHandlers()` and each handler's `test({ request })`,
+  as msw picks one, a request `bypass()` marked and a common asset let through as msw does. The check needs no
+  network. A call is failed at the first check after it is made: `afterEach` fails its test, the calls an unmount
+  aborted included; a call made after that, as by a timer of the page, fails the next test; one made after the last
+  test's check fails the file, in `afterAll`. A call made after the file's `afterAll` is checked by nothing.
+  `network.test.ts` runs a fixture through Vitest's Node API and asserts which of its tests, and its file, fail.
 - **msw writes a string `data` as it is.** `client.send({ data: "overview" })` sends `data: overview`, which the page's
   `JSON.parse` refuses. The server sends every item as JSON, so `feed<T>(path)` sends `JSON.stringify(item)`.
 - **The head of a stream waits for its first frame.** happy-dom's `fetch`, through msw's socket, gives the page no
