@@ -2,8 +2,9 @@ import type { ContainerHealth, ContainerState, ProjectStatus } from "#libs/api";
 import type { AppUpdate } from "#modules/apps/helpers/apps-search.ts";
 import type { AppRunStatus } from "#modules/apps/helpers/compose-output.ts";
 import type { StreamStatus } from "#modules/common/hooks/use-event-stream.ts";
+import { commonMessages } from "#modules/common/messages.ts";
 
-/** "1 container", "3 containers". */
+/** "container" for one, "containers" for any other count. */
 function containers(count: number): string {
   return count === 1 ? "container" : "containers";
 }
@@ -51,7 +52,7 @@ export const appsMessages = {
     readFailed: "Could not read the apps",
     reading: "Reading Docker…",
     noSelection: "No selection",
-    selected: ({ apps }: { apps: string }) => `${apps} selected`,
+    selected: ({ count }: { count: number }) => `${commonMessages.compose.appCount({ count })} selected`,
     noResults: "No results",
     noResultsDescription: "No app matches this search.",
     noApps: "No apps installed",
@@ -88,7 +89,7 @@ export const appsMessages = {
     updateAvailable: "Update available",
     services: ({ count }: { count: number }) => `${count} ${count === 1 ? "service" : "services"}`,
     containersRunning: ({ running, total }: { running: number; total: number }) =>
-      `${running}/${total} containers running`,
+      `${running}/${total} ${containers(total)} running`,
     stats: {
       cpu: "CPU",
       runningSum: "Sum of the running containers",
@@ -140,7 +141,7 @@ export const appsMessages = {
     closingInterruptsNothing:
       "Closing this panel interrupts nothing: the command runs to its end on the server, and each app files a notification.",
     skipped: ({ count }: { count: number }) =>
-      `The start of the output is no longer kept: ${count} earlier events are left out.`,
+      `The start of the output is no longer kept: ${count} earlier ${count === 1 ? "event is" : "events are"} left out.`,
     /** What the panel says of a stream that ended before its `end`. */
     cutShort: "The output was cut short: the command goes on on the server.",
   },

@@ -11,9 +11,19 @@ export const syncPollMs = 1000;
 /** The time a sync ended at, in English. */
 const syncTimeFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
 
+/**
+ * The words of the operation of `sync`; those of an update for an operation this page does not know, from a newer
+ * server, as the server only installs the store once.
+ */
+function syncWords(sync: StoreSync) {
+  const known = Object.hasOwn(settingsMessages.store.sync, sync.operation);
+
+  return settingsMessages.store.sync[known ? sync.operation : "update"];
+}
+
 /** The sentence of `sync`: running, ended well, or failed with its reason. */
 export function describeSync(sync: StoreSync): string {
-  const words = settingsMessages.store.sync[sync.operation];
+  const words = syncWords(sync);
 
   if (sync.state === "running") {
     return words.running;
@@ -30,5 +40,5 @@ export function describeSync(sync: StoreSync): string {
 
 /** What the toast of a sync started says. */
 export function syncStartedText(sync: StoreSync): string {
-  return settingsMessages.store.sync[sync.operation].started;
+  return syncWords(sync).started;
 }

@@ -1,3 +1,7 @@
+import { commonMessages } from "#modules/common/messages.ts";
+
+const { logHint } = commonMessages.errors;
+
 /** What `notifications` says: the bell, and the words of each notification the server files. */
 export const notificationsMessages = {
   menu: {
@@ -14,11 +18,11 @@ export const notificationsMessages = {
   storeUpdated: { title: "Store: update finished", description: "The store was updated." },
   storeInstallFailed: {
     title: "Store: installation failed",
-    description: "The installation of the store failed. See the server's log.",
+    description: `The installation of the store failed. ${logHint}`,
   },
   storeUpdateFailed: {
     title: "Store: update failed",
-    description: "The update of the store failed. See the server's log.",
+    description: `The update of the store failed. ${logHint}`,
   },
   composeSucceeded: {
     title: ({ label }: { label: string }) => `${label} finished`,
@@ -28,8 +32,7 @@ export const notificationsMessages = {
   composeFailed: {
     title: ({ label }: { label: string }) => `${label} failed`,
     plainLabel: "Docker Compose",
-    description: ({ project }: { project: string }) =>
-      `The Docker Compose command failed for ${project}. See the server's log.`,
+    description: ({ project }: { project: string }) => `The Docker Compose command failed for ${project}. ${logHint}`,
   },
   updatesAvailable: {
     title: "Updates available",

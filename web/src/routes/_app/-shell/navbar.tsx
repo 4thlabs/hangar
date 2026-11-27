@@ -23,7 +23,7 @@ function Brand() {
       render={
         <Link to="/" aria-label={commonMessages.shell.homeLink}>
           <img src="/images/icon.png" alt="" className="size-7" />
-          <span className="text-lg font-semibold">Hangar</span>
+          <span className="text-lg font-semibold">{commonMessages.shell.brand}</span>
         </Link>
       }
     />

@@ -179,6 +179,7 @@ const { data, error, isPending } = useQuery(dockerQueries.projects());
 const { isReconnecting } = useDockerChanges();
 const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
 const view = appsView(data ?? [], search, selection);
+const words = appsMessages.list;
 // ... {view.selected.length === 0 ? words.noSelection : words.selected({ count: view.selected.length })}
 ```
 
@@ -506,15 +507,17 @@ and no hook:
 
 ```ts
 export const appsMessages = {
-  title: "Apps",
-  noSelection: "No selection",
-  selected: ({ count }: { count: number }) => `${count} selected`,
   status: {
     running: "Running",
     partial: "Partial",
     stopped: "Stopped",
-    unhealthy: "Unhealthy",
+    unhealthy: "Degraded",
   } satisfies Record<ProjectStatus, string>,
+  list: {
+    title: "Apps",
+    noSelection: "No selection",
+    selected: ({ count }: { count: number }) => `${commonMessages.compose.appCount({ count })} selected`,
+  },
 } as const;
 ```
 
