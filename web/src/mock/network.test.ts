@@ -49,7 +49,7 @@ describe("the tests' network", () => {
     });
 
     expect(fileErrors).toEqual([
-      "no handler answered 1 call(s) after the last test's check: GET /api/health?after=all",
+      "no handler was in place when the page made 1 call(s) after the last test's check: GET /api/health?after=all",
     ]);
   }, 60_000);
 

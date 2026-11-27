@@ -63,17 +63,18 @@ beforeAll(() => {
 /** Fails, naming `calls`, when there are any. */
 function failOn(calls: readonly string[], when: string) {
   if (calls.length > 0) {
-    throw new Error(`no handler answered ${calls.length} call(s) ${when}: ${calls.join(", ")}`);
+    throw new Error(`no handler was in place when the page made ${calls.length} call(s) ${when}: ${calls.join(", ")}`);
   }
 }
 
 // After the test's own hooks, which run first and unmount its page: every call made since the last check, the ones
 // the unmount aborted included, fails the test.
 afterEach(async () => {
-  const calls = await unhandledCalls();
-
-  network.resetHandlers();
-  failOn(calls, "since the last check");
+  try {
+    failOn(await unhandledCalls(), "since the last check");
+  } finally {
+    network.resetHandlers();
+  }
 });
 
 // A call made after the last test's check, as in the file's own `afterAll`, which runs before this one, fails the file.

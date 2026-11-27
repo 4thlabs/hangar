@@ -473,9 +473,10 @@ cache.
 ## Tests: on orval's MSW handlers
 
 - One msw 3 `setupServer`, `network` in `mock/network.ts`, which `mock/setup.ts` starts for every test file. msw's
-  `"error"` alone only rejects a call no handler answers, so `trackedFetch` checks each call against the handlers as
-  the page makes it, and the first check after it fails: its test's (an awaited call, one on the last line, one an
-  unmount aborts), else the next test's (a timer's), else the file's `afterAll`.
+  `"error"` alone only rejects a call no handler answers, so `trackedFetch` checks each call of the global `fetch`
+  against the handlers in place as the page makes it, and a call none matched fails the first check after it: its
+  test's (an awaited call, one on the last line, one an unmount aborts), else the next test's (a timer's), else the
+  file's `afterAll`. Add a test's handlers before the page calls them.
 - Its defaults are what the shell calls on every page: the session, the auth options, an empty bell and its quiet
   stream.
 - A test adds what its page calls, from orval's handlers in `#libs/api/mock`, typed by the contract. A renamed route or
