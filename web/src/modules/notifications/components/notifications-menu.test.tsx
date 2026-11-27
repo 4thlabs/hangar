@@ -172,8 +172,8 @@ describe("the notifications' bell", () => {
 
     bell(() => recent);
     network.use(getNotificationsReadMockHandler(() => new Promise<void>(resolve => (answerRead = resolve))));
-    renderAt("/apps");
 
+    const { queryClient } = renderAt("/apps").options.context;
     const button = await screen.findByRole("button", { name: "Notifications, 1 unread" });
 
     fireEvent.click(button);
@@ -184,11 +184,11 @@ describe("the notifications' bell", () => {
     await waitFor(() => expect(calls("POST /api/notifications/read")).toBe(1));
     expect(await screen.findByRole("button", { name: "Notifications" })).toBeDefined();
 
-    // Answered, then a tick, in which a read of the list would start: the stream keeps the list, none does.
-    await act(async () => {
-      answerRead();
-      await new Promise(resolve => setTimeout(resolve, 10));
-    });
+    // Answered: once the mark has settled, and its callbacks have run, a read of the list would have started. The
+    // stream keeps the list, so none does.
+    answerRead();
+    await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    await act(() => Promise.resolve());
 
     expect(calls("GET /api/notifications")).toBe(1);
     expect(screen.getByRole("button", { name: "Notifications" })).toBeDefined();
@@ -200,7 +200,9 @@ describe("the notifications' bell", () => {
     const { stream } = bell(() => recent);
 
     network.use(getNotificationsReadMockHandler(() => new Promise<void>(resolve => (answerRead = resolve))));
-    renderAt("/apps");
+
+    const { queryClient } = renderAt("/apps").options.context;
+
     await waitFor(() => expect(stream.urls).toEqual(["/api/notifications/events?since=2&epoch=first"]));
 
     const button = await screen.findByRole("button", { name: "Notifications, 1 unread" });
@@ -216,10 +218,9 @@ describe("the notifications' bell", () => {
 
     expect(await screen.findByRole("button", { name: "Notifications, 1 unread" })).toBeDefined();
 
-    await act(async () => {
-      answerRead();
-      await new Promise(resolve => setTimeout(resolve, 10));
-    });
+    answerRead();
+    await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    await act(() => Promise.resolve());
 
     expect(screen.getByRole("button", { name: "Notifications, 1 unread" })).toBeDefined();
   });
