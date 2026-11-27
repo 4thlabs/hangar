@@ -59,7 +59,10 @@ const overview: DockerOverview = {
   volumes: { total: 8, inUse: 6, unused: 2 },
 };
 
-/** The stocks' data: Apple's, or, when `isBroken`, a body the contract allows but the card does not take. */
+/**
+ * The stocks' data: Apple's, or, when `isBroken`, a body with no stocks, which the contract refuses and the card cannot
+ * render.
+ */
 function stocks({ isBroken }: { isBroken: boolean }): WidgetData {
   if (isBroken) {
     // Cast: the contract refuses this body, which a server newer or older than the page may send, and the card must
@@ -256,7 +259,7 @@ describe("/", () => {
         { key: "gluetun-vpn-status-1", type: "gluetun-vpn-status", column: 2, link: null },
         { key: "stock-prices-1", type: "stock-prices", column: 3, link: null },
       ]),
-      // A body the contract allows, but the card does not take: no stocks.
+      // A body with no stocks, which the contract refuses: the card cannot render it.
       getWidgetsDataMockHandler(({ params }) =>
         params.key === "stock-prices-1" ? stocks({ isBroken: true }) : widgetData(params.key, false),
       ),
