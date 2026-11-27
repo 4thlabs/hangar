@@ -10,6 +10,8 @@ publish.workspace = true
 # The hashes of the users' passwords, argon2id in PHC strings, with their salts from the OS.
 argon2 = "0.6"
 futures.workspace = true
+# The include and exclude globs of an app's backup, as the Waku version's picomatch reads them with `dot: true`.
+globset = "0.4"
 # The timestamps of `.env.global`'s header and of its `.bak` copies.
 jiff = { version = "0.2", default-features = false, features = ["std"] }
 # The client side alone: the core depends on no web framework.
@@ -28,10 +30,13 @@ tokio-util = "0.7"
 tracing.workspace = true
 # The URL of a daemon on TCP, checked before the client is built, which reqwest reads with it too.
 url = "2"
+# The archives of an app's backup, deflated, as the Waku version's yazl writes them: no other method is read or written.
+zip = { version = "9.8", default-features = false, features = ["deflate"] }
 
-# SIGTERM, which lets a child stop on its own before the SIGKILL of tokio's `Child::kill`.
+# SIGTERM, which lets a child stop on its own before the SIGKILL of tokio's `Child::kill`; `O_NOFOLLOW`, so that a
+# backup never reads a file through a link; and the hostname, which tells the container Hangar runs in.
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["signal"] }
+nix = { workspace = true, features = ["fs", "hostname", "signal"] }
 
 [dev-dependencies]
 # The statuses a fake answer of the daemon has.

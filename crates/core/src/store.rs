@@ -48,7 +48,7 @@ pub use yaml::YamlError;
 pub(crate) use disk::Disk;
 
 use crate::{Command, CommandRunner, Output};
-use app_id::AppId;
+pub(crate) use app_id::AppId;
 use disk::Access;
 use yaml::Yaml;
 

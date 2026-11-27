@@ -111,18 +111,7 @@ impl<R: CommandRunner> Compose<R> {
         command: ComposeCommand,
         output: Output,
     ) -> Result<(), ComposeError> {
-        Self::check(&command)?;
-
-        let file = self.installed_file(app).await?;
-
-        self.ensure_env().await?;
-
-        // `-p` pins the project to the app: compose would derive it from the file's top-level `name`, a display
-        // label ("Home Assistant"), and its containers would no longer match the installed app.
-        let run = Command::new("docker")
-            .args(["compose", "--env-file", self.env_file(), "-p", app, "-f"])
-            .arg(Self::arg(&file))
-            .args(command.args());
+        let run = self.project_command(app, &command).await?;
 
         self.runner
             .run(&run, output)
@@ -132,6 +121,49 @@ impl<R: CommandRunner> Compose<R> {
                 command,
                 source,
             })
+    }
+
+    /// Runs `command` on the installed app `app`, as [`run`](Self::run) does, and gives its stdout; its stderr only
+    /// feeds the error.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`run`](Self::run), and [`ComposeError::Failed`] when stdout is not UTF-8.
+    pub(crate) async fn capture(
+        &self,
+        app: &str,
+        command: ComposeCommand,
+    ) -> Result<String, ComposeError> {
+        let run = self.project_command(app, &command).await?;
+
+        self.runner
+            .capture(&run)
+            .await
+            .map_err(|source| ComposeError::Failed {
+                app: app.to_owned(),
+                command,
+                source,
+            })
+    }
+
+    /// The `docker compose` call of `command` on the installed app `app`, once checked, `.env.global` created.
+    async fn project_command(
+        &self,
+        app: &str,
+        command: &ComposeCommand,
+    ) -> Result<Command, ComposeError> {
+        Self::check(command)?;
+
+        let file = self.installed_file(app).await?;
+
+        self.ensure_env().await?;
+
+        // `-p` pins the project to the app: compose would derive it from the file's top-level `name`, a display
+        // label ("Home Assistant"), and its containers would no longer match the installed app.
+        Ok(Command::new("docker")
+            .args(["compose", "--env-file", self.env_file(), "-p", app, "-f"])
+            .arg(Self::arg(&file))
+            .args(command.args()))
     }
 
     /// Checks `file` with `docker compose config -q`, read with `.env.global`, as an app's `compose.yml` is checked
