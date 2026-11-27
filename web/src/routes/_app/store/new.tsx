@@ -9,6 +9,9 @@ import { useYamlEditor } from "#modules/common/hooks/use-yaml-editor.tsx";
 import { Field, FieldDescription, FieldLabel } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
 import { storeMutations, storeQueries } from "#modules/store/api/store-queries.ts";
+import { storeMessages } from "#modules/store/messages.ts";
+
+const words = storeMessages.newApp;
 
 /**
  * `/store/new`, a new app of the store. A page of its own beside `/store`, not a child rendered inside it: the
@@ -27,8 +30,8 @@ function NewAppPage() {
 
   return (
     <main>
-      <title>New app | Hangar</title>
-      <h1 className="text-2xl font-semibold">New app</h1>
+      <title>{words.documentTitle}</title>
+      <h1 className="text-2xl font-semibold">{words.title}</h1>
       {error && <p className="text-sm text-destructive">{describeError(error)}</p>}
       {template && <NewAppEditor source={template.compose} />}
     </main>
@@ -45,40 +48,40 @@ function NewAppEditor({ source }: { source: string }) {
   const create = useMutation({
     ...storeMutations.createApp(),
     onSuccess: async app => {
-      toastSuccess("App saved", `${app.id} was added to the store.`);
+      toastSuccess(words.saved, words.savedDescription({ id: app.id }));
       // The new app gets its own editor, so that a second save edits it rather than create it again.
       await navigate({ to: "/store/$id/edit", params: { id: app.id } });
     },
     onError: failure => {
       setRefusal(describeError(failure));
-      toastFailure("App rejected", failure);
+      toastFailure(words.rejected, failure);
     },
   });
 
   return (
     <div className="flex flex-col gap-3">
       <Field className="max-w-sm">
-        <FieldLabel htmlFor="app-id">Identifier</FieldLabel>
+        <FieldLabel htmlFor="app-id">{words.identifier}</FieldLabel>
         <Input
           id="app-id"
           value={id}
-          placeholder="my-app"
+          placeholder={words.identifierPlaceholder}
           className="font-mono"
           onChange={event => setId(event.target.value.toLowerCase())}
         />
-        <FieldDescription>The app's folder in the store, and the name of its compose project.</FieldDescription>
+        <FieldDescription>{words.identifierDescription}</FieldDescription>
       </Field>
       {editor}
       <PendingButton
         type="button"
         className="self-start"
         pending={create.isPending}
-        pendingLabel="Validating…"
+        pendingLabel={storeMessages.editor.validating}
         icon={<SaveIcon data-icon="inline-start" />}
         disabled={id.length === 0}
         onClick={() => create.mutate({ data: { id, compose: value } })}
       >
-        Save
+        {storeMessages.editor.save}
       </PendingButton>
     </div>
   );

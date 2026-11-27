@@ -1,12 +1,8 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { AppCounts } from "#libs/api";
 import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
-import {
-  joinStoreFilters,
-  parseStoreFilters,
-  storeFilterLabels,
-  storeFilters,
-} from "#modules/store/helpers/store-search.ts";
+import { joinStoreFilters, parseStoreFilters, storeFilters } from "#modules/store/helpers/store-search.ts";
+import { storeMessages } from "#modules/store/messages.ts";
 
 type StoreFilterMenuProps = {
   /** How many apps are installed and how many are not, shown beside each checkbox. */
@@ -20,10 +16,10 @@ export function StoreFilterMenu({ counts }: StoreFilterMenuProps) {
 
   return (
     <CheckboxFilterMenu
-      label="Installation"
+      label={storeMessages.filterMenu}
       options={storeFilters.map(filter => ({
         value: filter,
-        label: storeFilterLabels[filter],
+        label: storeMessages.filter[filter],
         ...(counts ? { count: counts[filter] } : {}),
       }))}
       selected={parseStoreFilters(search.filter)}
