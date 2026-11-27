@@ -1,0 +1,732 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "apps_status_running": "Running",
+  "apps_status_partial": "Partial",
+  "apps_status_stopped": "Stopped",
+  "apps_status_unhealthy": "Degraded",
+  "apps_health_healthy": "Healthy",
+  "apps_health_unhealthy": "Unhealthy",
+  "apps_health_starting": "Starting",
+  "apps_container_state_created": "Created",
+  "apps_container_state_running": "Running",
+  "apps_container_state_paused": "Paused",
+  "apps_container_state_restarting": "Restarting",
+  "apps_container_state_exited": "Exited",
+  "apps_container_state_removing": "Removing",
+  "apps_container_state_dead": "Dead",
+  "apps_container_state_unknown": "Unknown",
+  "apps_update_available": "Available",
+  "apps_update_current": "Up to date",
+  "apps_filters_category": "Category",
+  "apps_filters_status": "Status",
+  "apps_filters_update": "Update",
+  "apps_list_document_title": "Apps | Hangar",
+  "apps_list_title": "Apps",
+  "apps_list_description": "Apps installed by Hangar and their Docker state.",
+  "apps_list_read_failed": "Could not read the apps",
+  "apps_list_reading": "Reading Docker…",
+  "apps_list_no_selection": "No selection",
+  "apps_list_selected": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} app selected",
+        "countPlural=other": "{count} apps selected"
+      }
+    }
+  ],
+  "apps_list_no_results": "No results",
+  "apps_list_no_results_description": "No app matches this search.",
+  "apps_list_no_apps": "No apps installed",
+  "apps_list_no_apps_description": "Install an app from the store to find it here.",
+  "apps_totals_apps": "Apps",
+  "apps_totals_services": "Services",
+  "apps_totals_running_containers": "Running containers",
+  "apps_totals_not_running": "Not running",
+  "apps_totals_cpu": "CPU",
+  "apps_totals_memory": "Memory",
+  "apps_totals_all_apps": "All apps combined",
+  "apps_table_select_all": "Select all",
+  "apps_table_select": "Select {name}",
+  "apps_table_app": "App",
+  "apps_table_category": "Category",
+  "apps_table_status": "Status",
+  "apps_table_services": "Services",
+  "apps_table_containers": "Containers",
+  "apps_table_unhealthy": "Unhealthy",
+  "apps_table_update": "Update",
+  "apps_detail_document_title": "{project} | Apps | Hangar",
+  "apps_detail_all_apps": "← All apps",
+  "apps_detail_read_failed": "Could not read this app",
+  "apps_detail_reading": "Reading Docker…",
+  "apps_detail_not_found": "App not found",
+  "apps_detail_not_found_description": "No installed app is called “{project}”.",
+  "apps_detail_back_to_apps": "Back to apps",
+  "apps_detail_update_available": "Update available",
+  "apps_detail_services": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} service",
+        "countPlural=other": "{count} services"
+      }
+    }
+  ],
+  "apps_detail_containers_running": [
+    {
+      "declarations": ["input total", "input running", "local totalPlural = total: plural"],
+      "selectors": ["totalPlural"],
+      "match": {
+        "totalPlural=one": "{running}/{total} container running",
+        "totalPlural=other": "{running}/{total} containers running"
+      }
+    }
+  ],
+  "apps_stats_cpu": "CPU",
+  "apps_stats_running_sum": "Sum of the running containers",
+  "apps_stats_memory": "Memory",
+  "apps_stats_on_the_host": "{bytes} on the host",
+  "apps_stats_available": "{bytes} available",
+  "apps_stats_network": "Network",
+  "apps_stats_disk": "Disk",
+  "apps_service_running": [
+    {
+      "declarations": ["input total", "input running", "local totalPlural = total: plural"],
+      "selectors": ["totalPlural"],
+      "match": {
+        "totalPlural=one": "{running}/{total} container running",
+        "totalPlural=other": "{running}/{total} containers running"
+      }
+    }
+  ],
+  "apps_service_unhealthy": "{count} unhealthy",
+  "apps_containers_container": "Container",
+  "apps_containers_state": "State",
+  "apps_containers_image": "Image",
+  "apps_containers_ports": "Ports",
+  "apps_containers_cpu": "CPU",
+  "apps_containers_memory": "Memory",
+  "apps_containers_network": "Network",
+  "apps_containers_disk": "Disk",
+  "apps_containers_restarts": "Restarts",
+  "apps_containers_logs": "Logs",
+  "apps_containers_memory_used_by": "Memory used by {name}",
+  "apps_compose_up_label": "Up: {commandLine}",
+  "apps_compose_up_options": "Up options",
+  "apps_compose_runs_on": "{label} runs on {subject}:",
+  "apps_compose_show_output": "Show output",
+  "apps_stream_status_connecting": "Connecting…",
+  "apps_stream_status_connected": "Live",
+  "apps_stream_status_ended": "Done",
+  "apps_stream_status_error": "Error",
+  "apps_run_status_waiting": "Waiting",
+  "apps_run_status_running": "Running",
+  "apps_run_status_succeeded": "Succeeded",
+  "apps_run_status_failed": "Failed",
+  "apps_run_status_not_run": "Not run",
+  "apps_compose_closing_interrupts_nothing": "Closing this panel interrupts nothing: the command runs to its end on the server, and each app files a notification.",
+  "apps_compose_skipped": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "The start of the output is no longer kept: {count} earlier event is left out.",
+        "countPlural=other": "The start of the output is no longer kept: {count} earlier events are left out."
+      }
+    }
+  ],
+  "apps_compose_cut_short": "The output was cut short: the command goes on on the server.",
+  "apps_logs_open": "View the logs of {name}",
+  "apps_logs_button": "Logs",
+  "apps_logs_title": "Logs of {name}",
+  "apps_logs_tail": "last 200 lines, then followed live",
+  "apps_status_connecting": "Connecting…",
+  "apps_status_connected": "Live",
+  "apps_status_ended": "Stream ended",
+  "apps_status_error": "Error",
+  "apps_logs_reconnect": "Reconnect",
+  "apps_logs_clear": "Clear",
+  "apps_logs_resume": "Resume following",
+  "apps_logs_waiting": "Waiting for logs…",
+  "apps_feed_reconnecting": "Reconnecting to the server: what this page shows may be out of date.",
+  "auth_sign_in_document_title": "Sign in | Hangar",
+  "auth_sign_in_title": "Sign in to Hangar",
+  "auth_sign_in_description": "Enter your email and password to access your account.",
+  "auth_sign_in_email": "Email",
+  "auth_sign_in_email_placeholder": "you@example.com",
+  "auth_sign_in_password": "Password",
+  "auth_sign_in_failed": "Sign in failed",
+  "auth_sign_in_submit": "Sign in",
+  "auth_sign_in_submitting": "Signing in…",
+  "auth_sign_in_or": "or",
+  "auth_sign_in_single_sign_on": "Sign in with single sign-on",
+  "auth_sign_in_failure": "Unable to sign in. Please try again.",
+  "auth_refusals_unavailable": "The identity provider cannot be reached. Try again, or sign in with your password.",
+  "auth_refusals_expired": "The sign-in expired, or was started in another tab. Try again.",
+  "auth_refusals_denied": "The identity provider did not sign you in.",
+  "auth_refusals_not_a_user": "This account is not one of Hangar's users: hangar.yml does not list it.",
+  "common_shell_brand": "Hangar",
+  "common_shell_home_link": "Hangar — Dashboard",
+  "common_shell_main_navigation": "Main navigation",
+  "common_navigation_general": "General",
+  "common_navigation_dashboard": "Dashboard",
+  "common_navigation_apps": "Apps",
+  "common_navigation_cluster": "Cluster",
+  "common_navigation_store": "Store",
+  "common_navigation_administration": "Administration",
+  "common_navigation_settings": "Settings",
+  "common_shell_search": "Search",
+  "common_shell_search_placeholder": "Search…",
+  "common_shell_search_unavailable": "Search unavailable here",
+  "common_shell_open_search": "Open search",
+  "common_shell_close_search": "Close search",
+  "common_shell_user_menu": "User menu of {name}",
+  "common_shell_sign_out": "Sign out",
+  "common_shell_signing_out": "Signing out…",
+  "common_shell_sign_out_failed": "Could not sign you out. Try again.",
+  "common_error_page_title": "Could not open this page",
+  "common_error_page_retry": "Try again",
+  "common_not_found_title": "Page not found",
+  "common_not_found_description": "Nothing lives at this address.",
+  "common_not_found_back": "Back to the dashboard",
+  "common_pending_title": "Not here yet",
+  "common_pending_description": "This page is still served by the current version of Hangar.",
+  "common_actions_clear_filters": "Clear all",
+  "common_actions_confirm": "Confirm",
+  "common_actions_cancel": "Cancel",
+  "common_actions_retry": "Retry",
+  "common_pull_label": "Update the images",
+  "common_pull_verb": "Update",
+  "common_pull_outcome": "updated from its registry",
+  "common_pull_consequence": "The images will be pulled from the registry and the containers recreated.",
+  "common_force_recreate_label": "Force recreation",
+  "common_force_recreate_verb": "Recreate",
+  "common_force_recreate_outcome": "recreated",
+  "common_force_recreate_consequence": [
+    {
+      "declarations": ["input count", "local countExact = count", "local countPlural = count: plural"],
+      "selectors": ["countExact", "countPlural"],
+      "match": {
+        "countExact=0, countPlural=*": "Every container of this app will be recreated, even if its configuration did not change.",
+        "countExact=*, countPlural=one": "Every container of this app will be recreated, even if its configuration did not change.",
+        "countExact=*, countPlural=other": "Every container of these apps will be recreated, even if its configuration did not change."
+      }
+    }
+  ],
+  "common_operations_up": "Up",
+  "common_operations_restart": "Restart",
+  "common_operations_down": "Down",
+  "common_outcomes_up": "started or updated",
+  "common_outcomes_restart": "restarted",
+  "common_outcomes_down": "stopped and removed",
+  "common_compose_outcome": "{project} was {outcomes}.",
+  "common_compose_app_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} app",
+        "countPlural=other": "{count} apps"
+      }
+    }
+  ],
+  "common_compose_stop_title": "Stop {subject}?",
+  "common_compose_confirm_title": "{label} {subject}?",
+  "common_compose_down_description": [
+    {
+      "declarations": ["input count", "local countExact = count", "local countPlural = count: plural"],
+      "selectors": ["countExact", "countPlural"],
+      "match": {
+        "countExact=0, countPlural=*": "Docker Compose will remove the containers and networks of this app. It stays listed, stopped.",
+        "countExact=*, countPlural=one": "Docker Compose will remove the containers and networks of this app. It stays listed, stopped.",
+        "countExact=*, countPlural=other": "Docker Compose will remove the containers and networks of these apps. They stay listed, stopped."
+      }
+    }
+  ],
+  "common_compose_restart_description": [
+    {
+      "declarations": ["input count", "local countExact = count", "local countPlural = count: plural"],
+      "selectors": ["countExact", "countPlural"],
+      "match": {
+        "countExact=0, countPlural=*": "The containers of this app will be restarted without being recreated: a changed configuration will not apply.",
+        "countExact=*, countPlural=one": "The containers of this app will be restarted without being recreated: a changed configuration will not apply.",
+        "countExact=*, countPlural=other": "The containers of these apps will be restarted without being recreated: a changed configuration will not apply."
+      }
+    }
+  ],
+  "common_errors_server_unreachable": "Could not reach the server. Try again.",
+  "common_errors_log_hint": "See the server's log.",
+  "common_store_unknown_app": "The store has no app {app}.",
+  "common_store_apps_unreadable": "The store's apps could not be read.",
+  "common_store_install_failed": "The installation of {app} failed.",
+  "common_store_uninstall_failed": "The uninstallation of {app} failed.",
+  "common_store_clone_failed": "The store could not be cloned.",
+  "common_store_pull_failed": "The store could not be pulled.",
+  "common_store_not_installed": "The store is not installed: install it from the settings first.",
+  "common_store_sync_running": "The store is being synced: try again once its sync has ended.",
+  "common_store_sync_crashed": "The sync of the store stopped short.",
+  "common_store_batch_running": "Compose commands run on {apps}: sync the store once they have ended.",
+  "common_config_syntax": "hangar.yml is not valid YAML: {reason}",
+  "common_config_invalid": "Invalid hangar.yml: {field}: {reason}",
+  "common_config_unreadable": "hangar.yml could not be read.",
+  "common_config_save_failed": "hangar.yml could not be saved.",
+  "common_env_invalid_name": "Invalid variable name: {name}.",
+  "common_env_line_break": "The value of {name} cannot contain a line break.",
+  "common_env_unwritable_value": "The value of {name} cannot be written to .env.global.",
+  "common_env_unreadable": ".env.global could not be read.",
+  "common_env_save_failed": ".env.global could not be saved.",
+  "common_env_updated_and_removed": "{name} is both set and removed.",
+  "common_editor_app_exists": "The app {app} already exists.",
+  "common_editor_invalid_app_id": "{app} is not an app id: lowercase letters, digits, `.`, `_` and `-`, starting with a letter or a digit.",
+  "common_editor_invalid_path": "Invalid file path: {path}.",
+  "common_editor_through_file": "{path} goes through a file, not a folder.",
+  "common_editor_outside_app": "{path} leads outside the app {app}.",
+  "common_editor_hidden_file": "{path} leads to a hidden file.",
+  "common_editor_broken_symlink": "{path} is a broken symlink.",
+  "common_editor_no_such_file": "The app {app} has no file {path}.",
+  "common_editor_not_a_file": "{path} is not a file.",
+  "common_editor_too_large": "{path} is too large to edit here: {size} bytes, 1 MiB at most.",
+  "common_editor_binary": "{path} is not a text file.",
+  "common_editor_not_utf8": "{path} is not UTF-8 text: saving it from the editor would corrupt it.",
+  "common_editor_file_exists": "{path} already exists.",
+  "common_editor_file_appeared": "{path} appeared while it was being saved: reopen it before saving again.",
+  "common_editor_invalid_file": "{path} is not valid: {reason}",
+  "common_editor_compose_rejected": "Docker rejects {path}:\n{complaint}",
+  "common_editor_unchecked": "Docker could not check {path}.",
+  "common_editor_files_unreadable": "The files of {app} could not be listed.",
+  "common_editor_read_failed": "{path} could not be read.",
+  "common_editor_save_failed": "{path} could not be saved.",
+  "common_editor_create_failed": "The app {app} could not be created.",
+  "common_docker_unavailable": "The Docker daemon could not be read.",
+  "common_docker_unknown_project": "No app {project} is installed.",
+  "common_docker_invalid_project": "{project} is not a compose project name: lowercase letters, digits, `_` and `-`, starting with a letter or a digit.",
+  "common_docker_unknown_container": "The app {project} has no container {container}.",
+  "common_compose_no_apps": "A compose command needs at least one app.",
+  "common_compose_app_busy": "Another command runs on {app}: try again once it has ended.",
+  "common_compose_unchecked": "The batch of {command} could not be checked.",
+  "common_compose_failed": "{command} failed on {app}.",
+  "common_compose_unknown_batch": "This compose command ended too long ago: its output is no longer kept.",
+  "common_jobs_unknown_run": "This run of a job is no longer kept: read the jobs again.",
+  "common_jobs_ended": "This run of a job has ended already.",
+  "common_jobs_crashed": "The job stopped short.",
+  "common_widgets_unknown_placement": "This widget is no longer on the dashboard: reload the page.",
+  "common_widgets_unavailable": "Its service did not answer.",
+  "common_widgets_unknown_image": "The widget has no such image.",
+  "common_auth_invalid_credentials": "Invalid email or password.",
+  "common_auth_too_many_sign_ins": "Too many failed sign-ins for this email: try again later.",
+  "common_auth_too_many_sign_ins_for": "Too many failed sign-ins for this email: try again in {wait}.",
+  "common_auth_session_expired": "Your session is no longer valid, or has expired: sign in again.",
+  "common_auth_user_removed": "Your user is no longer in hangar.yml.",
+  "common_auth_credentials_changed": "Your credentials have changed: sign in again.",
+  "common_auth_unreadable_cookie": "The browser sent a cookie that is not text: sign in again.",
+  "common_auth_no_oidc_provider": "No OpenID Connect provider is configured.",
+  "common_auth_cross_origin": "The request comes from another origin than {origin}.",
+  "notifications_menu_title": "Notifications",
+  "notifications_menu_unread_label": "Notifications, {count} unread",
+  "notifications_menu_unread_mark": "Unread",
+  "notifications_menu_unread": "{count} unread",
+  "notifications_menu_empty": "No notifications",
+  "notifications_menu_empty_description": "Commands run in the background will land here.",
+  "notifications_unknown_title": "Notification",
+  "notifications_store_installed_title": "Store: installation finished",
+  "notifications_store_installed_description": "The store was installed.",
+  "notifications_store_updated_title": "Store: update finished",
+  "notifications_store_updated_description": "The store was updated.",
+  "notifications_store_install_failed_title": "Store: installation failed",
+  "notifications_store_install_failed_description": "The installation of the store failed. See the server's log.",
+  "notifications_store_update_failed_title": "Store: update failed",
+  "notifications_store_update_failed_description": "The update of the store failed. See the server's log.",
+  "notifications_compose_succeeded_title": "{label} finished",
+  "notifications_compose_succeeded_plain_title": "Docker Compose finished",
+  "notifications_compose_succeeded_plain_description": "The command succeeded for {project}.",
+  "notifications_compose_failed_title": "{label} failed",
+  "notifications_compose_failed_plain_label": "Docker Compose",
+  "notifications_compose_failed_description": "The Docker Compose command failed for {project}. See the server's log.",
+  "notifications_updates_available_title": "Updates available",
+  "notifications_updates_available_description": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} app has a newer image in the registry.",
+        "countPlural=other": "{count} apps have a newer image in the registry."
+      }
+    }
+  ],
+  "notifications_auto_update_title": "Automatic update",
+  "notifications_auto_update_description": [
+    {
+      "declarations": ["input updated", "local updatedPlural = updated: plural"],
+      "selectors": ["updatedPlural"],
+      "match": {
+        "updatedPlural=one": "{updated} app was updated.",
+        "updatedPlural=other": "{updated} apps were updated."
+      }
+    }
+  ],
+  "notifications_auto_update_failed_description": [
+    {
+      "declarations": ["input updated", "input failed", "local updatedPlural = updated: plural"],
+      "selectors": ["updatedPlural"],
+      "match": {
+        "updatedPlural=one": "{updated} app was updated. Failed for: {failed}.",
+        "updatedPlural=other": "{updated} apps were updated. Failed for: {failed}."
+      }
+    }
+  ],
+  "settings_page_document_title": "Settings | Hangar",
+  "settings_page_title": "Settings",
+  "settings_page_description": "Manage the configuration of your Hangar installation.",
+  "settings_tabs_store": "Store",
+  "settings_tabs_env": "Environment",
+  "settings_tabs_config": "Configuration",
+  "settings_tabs_jobs": "Jobs",
+  "settings_form_save": "Save",
+  "settings_form_saving": "Saving…",
+  "settings_store_title": "STORE",
+  "settings_store_description": "See the configured repository and synchronize its local copy.",
+  "settings_store_read_failed": "Could not read the store",
+  "settings_store_url": "Store URL",
+  "settings_store_installed": "The store is installed locally.",
+  "settings_store_not_installed": "The store is not installed yet.",
+  "settings_store_synchronizing": "Synchronizing…",
+  "settings_store_install": "Install",
+  "settings_store_update": "Update",
+  "settings_store_sync_started": "Synchronization started",
+  "settings_store_launch_failed": "Launch failed",
+  "settings_install_running": "Installing the store…",
+  "settings_install_failed": "The installation of the store failed: {reason}",
+  "settings_install_ended": "The store was installed.",
+  "settings_install_ended_at": "The store was installed on {time}.",
+  "settings_install_started": "The installation of the store was started.",
+  "settings_update_running": "Updating the store…",
+  "settings_update_failed": "The update of the store failed: {reason}",
+  "settings_update_ended": "The store was updated.",
+  "settings_update_ended_at": "The store was updated on {time}.",
+  "settings_update_started": "The update of the store was started.",
+  "settings_env_title": "ENVIRONMENT",
+  "settings_env_show_failed": "Could not show the environment",
+  "settings_env_saved": "Environment saved",
+  "settings_env_saved_description": "The global environment was saved.",
+  "settings_env_value_placeholder": "to fill in",
+  "settings_env_show_value": "Show the value of {name}",
+  "settings_env_hide_value": "Hide the value of {name}",
+  "settings_env_generate": "Generate a secret for {name}",
+  "settings_env_remove": "Remove {name}",
+  "settings_env_new_name": "Name of a new variable",
+  "settings_env_new_name_placeholder": "NEW_VARIABLE",
+  "settings_env_add": "Add",
+  "settings_env_to_remove": "To remove on save:",
+  "settings_env_invalid_name": "Invalid variable name: {name}.",
+  "settings_env_exists": "{name} is set already.",
+  "settings_config_title": "CONFIGURATION",
+  "settings_config_show_failed": "Could not show the configuration",
+  "settings_config_saved": "Configuration saved",
+  "settings_config_saved_description": "The configuration was saved.",
+  "settings_jobs_title": "JOBS",
+  "settings_jobs_description": "The last 50 runs of the server's jobs: the image check, every four hours and as the server starts, and the update of the apps, every night.",
+  "settings_jobs_read_failed": "Could not read the jobs",
+  "settings_jobs_empty": "No jobs",
+  "settings_jobs_empty_description": "No job has run since the server started.",
+  "settings_columns_job": "Job",
+  "settings_columns_queue": "Queue",
+  "settings_columns_state": "State",
+  "settings_columns_created": "Created",
+  "settings_columns_ended": "Ended",
+  "settings_columns_actions": "Actions",
+  "settings_jobs_run_again": "Run again",
+  "settings_jobs_run_again_label": [
+    {
+      "declarations": ["input job"],
+      "selectors": ["job"],
+      "match": {
+        "job=image_check": "Run the image check again",
+        "job=auto_update": "Run the update of the apps again",
+        "job=*": "Run the {job} again"
+      }
+    }
+  ],
+  "settings_jobs_cancel": "Cancel",
+  "settings_jobs_cancel_label": [
+    {
+      "declarations": ["input job"],
+      "selectors": ["job"],
+      "match": {
+        "job=image_check": "Cancel the image check",
+        "job=auto_update": "Cancel the update of the apps",
+        "job=*": "Cancel the {job}"
+      }
+    }
+  ],
+  "settings_jobs_asked_again": "Job asked for again",
+  "settings_jobs_runs": "{job} runs.",
+  "settings_jobs_waits": "{job} waits its turn.",
+  "settings_jobs_run_again_failed": "Run again failed",
+  "settings_jobs_canceled": "Job canceled",
+  "settings_jobs_stops": "{job} stops.",
+  "settings_jobs_cancel_failed": "Cancel failed",
+  "settings_names_image_check": "Image check",
+  "settings_names_auto_update": "Update of the apps",
+  "settings_states_waiting": "Waiting",
+  "settings_states_running": "Running",
+  "settings_states_completed": "Completed",
+  "settings_states_failed": "Failed",
+  "settings_states_canceled": "Canceled",
+  "store_filter_installed": "Installed",
+  "store_filter_available": "Not installed",
+  "store_filter_menu": "Installation",
+  "store_list_document_title": "Store | Hangar",
+  "store_list_title": "Store",
+  "store_list_new_app": "New app",
+  "store_list_empty": "No apps available in the store.",
+  "store_list_no_results": "No app matches this search.",
+  "store_list_loading": "Loading the store…",
+  "store_card_edit": "Edit {name}",
+  "store_card_swarm": "Swarm",
+  "store_card_swarm_hint": "Has a compose.swarm.yml: once installed, it deploys from the Cluster page",
+  "store_install_install": "Install",
+  "store_install_install_app": "Install {name}",
+  "store_install_installing": "Installing…",
+  "store_install_installing_app": "Installing {name}",
+  "store_install_installed": "App installed",
+  "store_install_installed_description": "{name} was installed.",
+  "store_install_install_failed": "Installation failed",
+  "store_install_uninstall": "Uninstall",
+  "store_install_uninstall_app": "Uninstall {name}",
+  "store_install_uninstalled": "App uninstalled",
+  "store_install_uninstalled_description": "{name} was uninstalled.",
+  "store_install_uninstall_failed": "Uninstallation failed",
+  "store_install_confirm_title": "Uninstall {name}?",
+  "store_install_confirm_description": "The app's containers are stopped and removed, then the app is taken off the installed apps. The volumes are kept.",
+  "store_new_app_document_title": "New app | Hangar",
+  "store_new_app_title": "New app",
+  "store_new_app_identifier": "Identifier",
+  "store_new_app_identifier_placeholder": "my-app",
+  "store_new_app_identifier_description": "The app's folder in the store, and the name of its compose project.",
+  "store_new_app_saved": "App saved",
+  "store_new_app_saved_description": "{id} was added to the store.",
+  "store_new_app_invalid_id": "{id} is not an app id: lowercase letters, digits, `.`, `_` and `-`, starting with a letter or a digit.",
+  "store_editor_document_title": "{name} | Hangar",
+  "store_editor_cannot_edit": "This app cannot be edited here",
+  "store_editor_save": "Save",
+  "store_editor_validating": "Validating…",
+  "store_editor_files": "The app's files",
+  "store_editor_files_title": "Files",
+  "store_editor_unsaved": "unsaved changes",
+  "store_editor_new_file": "New file",
+  "store_editor_new_file_path": "Path of the new file",
+  "store_editor_new_file_placeholder": "config/settings.yml",
+  "store_editor_file_saved": "File saved",
+  "store_editor_file_saved_description": "{path} was saved.",
+  "store_editor_file_created": "File created",
+  "store_editor_file_created_description": "{path} was created.",
+  "widgets_dashboard_document_title": "Dashboard | Hangar",
+  "widgets_dashboard_read_failed": "Could not read the dashboard",
+  "widgets_clock_title": "Clock",
+  "widgets_clock_error_description": "The clock could not be rendered.",
+  "widgets_docker_general_stats_title": "Local",
+  "widgets_docker_general_stats_error_description": "The local Docker statistics could not be loaded.",
+  "widgets_arcane_general_stats_title": "Arcane",
+  "widgets_arcane_general_stats_error_description": "The general statistics could not be loaded.",
+  "widgets_backrest_summary_title": "Backrest",
+  "widgets_backrest_summary_error_description": "The backup status could not be loaded.",
+  "widgets_beszel_server_stats_title": "Beszel",
+  "widgets_beszel_server_stats_error_description": "The server stats could not be loaded.",
+  "widgets_forgejo_ci_title": "Forgejo",
+  "widgets_forgejo_ci_error_description": "The Forgejo Actions runs could not be loaded.",
+  "widgets_frigate_events_title": "Frigate",
+  "widgets_frigate_events_error_description": "The camera events could not be loaded.",
+  "widgets_gluetun_vpn_status_title": "Gluetun",
+  "widgets_gluetun_vpn_status_error_description": "The VPN status could not be read.",
+  "widgets_miniflux_entries_title": "Miniflux",
+  "widgets_miniflux_entries_error_description": "The feed entries could not be loaded.",
+  "widgets_jellyfin_latest_title": "Jellyfin",
+  "widgets_jellyfin_latest_error_description": "The Jellyfin library could not be loaded.",
+  "widgets_tcg_collector_cards_title": "TCG Collector",
+  "widgets_tcg_collector_cards_error_description": "The card prices could not be loaded.",
+  "widgets_github_releases_title": "Releases",
+  "widgets_github_releases_error_description": "The GitHub releases could not be loaded.",
+  "widgets_stock_prices_title": "Stocks",
+  "widgets_stock_prices_error_description": "The stock prices could not be loaded.",
+  "widgets_states_loading": "Loading {title}",
+  "widgets_states_unavailable": "{title} is unavailable",
+  "widgets_states_card_failed": "The card could not show what its service answered.",
+  "widgets_counts_containers": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count: number maximumFractionDigits=0} container",
+        "countPlural=other": "{count: number maximumFractionDigits=0} containers"
+      }
+    }
+  ],
+  "widgets_counts_repos": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count: number maximumFractionDigits=0} repo",
+        "countPlural=other": "{count: number maximumFractionDigits=0} repos"
+      }
+    }
+  ],
+  "widgets_counts_servers": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count: number maximumFractionDigits=0} server",
+        "countPlural=other": "{count: number maximumFractionDigits=0} servers"
+      }
+    }
+  ],
+  "widgets_counts_cameras": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count: number maximumFractionDigits=0} camera",
+        "countPlural=other": "{count: number maximumFractionDigits=0} cameras"
+      }
+    }
+  ],
+  "widgets_counts_tickers": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count: number maximumFractionDigits=0} ticker",
+        "countPlural=other": "{count: number maximumFractionDigits=0} tickers"
+      }
+    }
+  ],
+  "widgets_counts_cards": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count: number maximumFractionDigits=0} card",
+        "countPlural=other": "{count: number maximumFractionDigits=0} cards"
+      }
+    }
+  ],
+  "widgets_counts_days": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count: number maximumFractionDigits=0} day",
+        "countPlural=other": "{count: number maximumFractionDigits=0} days"
+      }
+    }
+  ],
+  "widgets_host_running": "Running",
+  "widgets_host_stopped": "Stopped",
+  "widgets_host_images": "Images",
+  "widgets_host_images_detail": "{unused: number maximumFractionDigits=0} unused · {size}",
+  "widgets_host_volumes": "Volumes",
+  "widgets_host_volumes_detail": "{inUse: number maximumFractionDigits=0} in use · {unused: number maximumFractionDigits=0} unused",
+  "widgets_arcane_needs_attention": "Needs attention",
+  "widgets_backrest_empty": "No repositories configured.",
+  "widgets_backrest_no_backup": "No backup yet",
+  "widgets_backrest_protected": "{size} protected",
+  "widgets_backrest_added": "{size} added",
+  "widgets_backrest_successes": "{count: number maximumFractionDigits=0} ok / 30d",
+  "widgets_backrest_next": "next {when}",
+  "widgets_beszel_empty": "No servers monitored.",
+  "widgets_beszel_down": "{count: number maximumFractionDigits=0} down",
+  "widgets_beszel_up": "{since} up",
+  "widgets_beszel_cpu": "CPU",
+  "widgets_beszel_memory": "RAM",
+  "widgets_beszel_disk": "Disk",
+  "widgets_docker_version": "Docker {version}",
+  "widgets_docker_updates_available": "Updates available",
+  "widgets_forgejo_empty": "Nothing running.",
+  "widgets_forgejo_running": "{count: number maximumFractionDigits=0} running",
+  "widgets_forgejo_queued": "{count: number maximumFractionDigits=0} queued",
+  "widgets_forgejo_recently_updated": "Recently updated",
+  "widgets_frigate_empty": "No recent events.",
+  "widgets_frigate_detections": "{perSecond} det/s",
+  "widgets_frigate_inference_time": "{detector} detector inference time",
+  "widgets_github_empty": "No releases found.",
+  "widgets_gluetun_connected": "Your VPN is connected!",
+  "widgets_gluetun_disconnected": "Your VPN is not connected!",
+  "widgets_jellyfin_empty": "No items found.",
+  "widgets_jellyfin_movies": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count: number maximumFractionDigits=0} movie",
+        "countPlural=other": "{count: number maximumFractionDigits=0} movies"
+      }
+    }
+  ],
+  "widgets_jellyfin_shows": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count: number maximumFractionDigits=0} show",
+        "countPlural=other": "{count: number maximumFractionDigits=0} shows"
+      }
+    }
+  ],
+  "widgets_jellyfin_episodes": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count: number maximumFractionDigits=0} episode",
+        "countPlural=other": "{count: number maximumFractionDigits=0} episodes"
+      }
+    }
+  ],
+  "widgets_jellyfin_songs": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count: number maximumFractionDigits=0} song",
+        "countPlural=other": "{count: number maximumFractionDigits=0} songs"
+      }
+    }
+  ],
+  "widgets_miniflux_empty": "No entries.",
+  "widgets_miniflux_unread": "{count: number maximumFractionDigits=0} unread",
+  "widgets_miniflux_unread_mark": "Unread",
+  "widgets_stocks_closes": "Closes over the last month: from {from} to {to}",
+  "widgets_stocks_high": "H {amount}",
+  "widgets_stocks_low": "L {amount}",
+  "widgets_stocks_open": "O {amount}",
+  "widgets_stocks_best": "Best",
+  "widgets_stocks_worst": "Worst",
+  "widgets_stocks_rising": "Rising",
+  "widgets_stocks_rising_of": "of {count: number maximumFractionDigits=0}",
+  "widgets_games_magic": "Magic",
+  "widgets_games_star_wars_unlimited": "Star Wars Unlimited",
+  "widgets_tcg_game": "Game {game}",
+  "widgets_tcg_trend": "Trend",
+  "widgets_tcg_low": "Low",
+  "widgets_tcg_low_price": "Low {price}",
+  "widgets_tcg_foil_price": "Foil {price}",
+  "widgets_tcg_version": "V.{version}",
+  "widgets_tcg_series": [
+    {
+      "declarations": ["input days", "input label", "local daysPlural = days: plural"],
+      "selectors": ["daysPlural"],
+      "match": {
+        "daysPlural=one": "{label} over {days: number maximumFractionDigits=0} day",
+        "daysPlural=other": "{label} over {days: number maximumFractionDigits=0} days"
+      }
+    }
+  ],
+  "widgets_tcg_series_at": "{period}: {price}",
+  "widgets_tcg_series_from_to": "{period}: from {from} to {to}",
+  "widgets_tcg_not_found": "Card not found",
+  "widgets_tcg_product": "product {product}",
+  "widgets_tcg_as_of": "as of {day}"
+}

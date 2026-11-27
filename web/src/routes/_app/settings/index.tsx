@@ -5,8 +5,9 @@ import { ConfigSettingsCard } from "#modules/settings/components/config-settings
 import { EnvSettingsCard } from "#modules/settings/components/env-settings-card.tsx";
 import { JobsSettingsCard } from "#modules/settings/components/jobs-settings-card.tsx";
 import { StoreSettingsCard } from "#modules/settings/components/store-settings-card.tsx";
+import { settingsLabels } from "#modules/settings/helpers/settings-labels.ts";
 import { parseSettingsTab, settingsTabs, type SettingsTabId } from "#modules/settings/helpers/settings-tab.ts";
-import { settingsMessages } from "#modules/settings/messages.ts";
+import { m } from "#paraglide/messages.js";
 
 /** `/settings`, its tab in the hash. */
 export const Route = createFileRoute("/_app/settings/")({
@@ -30,10 +31,10 @@ function SettingsPage() {
 
   return (
     <main>
-      <title>{settingsMessages.page.documentTitle}</title>
+      <title>{m.settings_page_document_title()}</title>
       <div>
-        <h1 className="text-2xl font-semibold">{settingsMessages.page.title}</h1>
-        <p className="text-sm text-muted-foreground">{settingsMessages.page.description}</p>
+        <h1 className="text-2xl font-semibold">{m.settings_page_title()}</h1>
+        <p className="text-sm text-muted-foreground">{m.settings_page_description()}</p>
       </div>
       <Tabs
         value={parseSettingsTab(hash)}
@@ -42,8 +43,8 @@ function SettingsPage() {
       >
         <TabsList className="self-center">
           {settingsTabs.map(tab => (
-            <TabsTrigger key={tab.id} value={tab.id}>
-              {tab.label}
+            <TabsTrigger key={tab} value={tab}>
+              {settingsLabels.tabs[tab]()}
             </TabsTrigger>
           ))}
         </TabsList>

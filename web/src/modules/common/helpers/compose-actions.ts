@@ -1,7 +1,6 @@
 import type { ComposeAction } from "#libs/api";
-import { commonMessages } from "#modules/common/messages.ts";
-
-const words = commonMessages.compose;
+import { commonLabels } from "#modules/common/helpers/common-labels.ts";
+import { m } from "#paraglide/messages.js";
 
 /** The compose commands the Apps pages run on an app. */
 export type ComposeOperation = ComposeAction["operation"];
@@ -13,11 +12,11 @@ export type UpFlag = "pull" | "forceRecreate";
 type UpFlagSpec = {
   arguments: readonly string[];
   /** The checkbox in Up's menu. */
-  label: string;
+  label: () => string;
   /** What the run is called with this option, as a verb. */
-  verb: string;
+  verb: () => string;
   /** What it did to an app, completing "<app> was …". */
-  outcome: string;
+  outcome: () => string;
   /** What confirming commits to, about `count` apps. */
   consequence: (params: { count: number }) => string;
 };
@@ -30,9 +29,24 @@ export const upFlagOrder: readonly UpFlag[] = ["pull", "forceRecreate"];
 
 /** What each option of Up adds to the command, and how the page words it. */
 export const upFlagSpecs: Readonly<Record<UpFlag, UpFlagSpec>> = {
-  pull: { arguments: ["--pull", "always"], ...words.upFlags.pull },
-  forceRecreate: { arguments: ["--force-recreate"], ...words.upFlags.forceRecreate },
+  pull: {
+    arguments: ["--pull", "always"],
+    label: m.common_pull_label,
+    verb: m.common_pull_verb,
+    outcome: m.common_pull_outcome,
+    consequence: m.common_pull_consequence,
+  },
+  forceRecreate: {
+    arguments: ["--force-recreate"],
+    label: m.common_force_recreate_label,
+    verb: m.common_force_recreate_verb,
+    outcome: m.common_force_recreate_outcome,
+    consequence: m.common_force_recreate_consequence,
+  },
 };
+
+/** A list of words joined as English joins them: "updated from its registry and recreated". */
+const conjunction = new Intl.ListFormat("en", { type: "conjunction" });
 
 const operationArguments: Readonly<Record<ComposeOperation, readonly string[]>> = {
   up: ["up", "-d"],
@@ -70,9 +84,9 @@ export function composeOutcome(action: ComposeAction, project: string): string {
   const flags = actionFlags(action);
 
   const outcomes =
-    flags.length === 0 ? [words.outcomes[action.operation]] : flags.map(flag => upFlagSpecs[flag].outcome);
+    flags.length === 0 ? [commonLabels.outcomes[action.operation]()] : flags.map(flag => upFlagSpecs[flag].outcome());
 
-  return words.outcome({ project, outcomes });
+  return m.common_compose_outcome({ project, outcomes: conjunction.format(outcomes) });
 }
 
 /** The options `action` carries, in their order. */
@@ -101,10 +115,15 @@ export function composeLabel(action: ComposeAction): string {
   const flags = actionFlags(action);
 
   if (flags.length === 0) {
-    return words.operations[action.operation];
+    return commonLabels.operations[action.operation]();
   }
 
-  return words.combinedLabel({ verbs: flags.map(flag => upFlagSpecs[flag].verb) });
+  return capitalized(conjunction.format(flags.map(flag => upFlagSpecs[flag].verb().toLowerCase())));
+}
+
+/** `text` with a capital first letter. */
+function capitalized(text: string): string {
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 }
 
 /** How a confirmation or the output names `apps`: the app's name for one, else how many, as "3 apps". */
@@ -118,26 +137,26 @@ export function composeSubject(apps: readonly string[]): string {
 
 /** `count` apps, in words: "1 app", "3 apps". */
 export function appCount(count: number): string {
-  return words.appCount({ count });
+  return m.common_compose_app_count({ count });
 }
 
 /** The title of the confirmation of `action` on `subject`, an app's name or "3 apps". */
 export function confirmationTitle(action: ComposeAction, subject: string): string {
   if (action.operation === "down") {
-    return words.stopTitle({ subject });
+    return m.common_compose_stop_title({ subject });
   }
 
-  return words.confirmTitle({ label: composeLabel(action), subject });
+  return m.common_compose_confirm_title({ label: composeLabel(action), subject });
 }
 
 /** What confirming `action` on `count` apps commits to. */
 export function confirmationDescription(action: ComposeAction, count: number): string {
   if (action.operation === "down") {
-    return words.downDescription({ count });
+    return m.common_compose_down_description({ count });
   }
 
   if (action.operation === "restart") {
-    return words.restartDescription({ count });
+    return m.common_compose_restart_description({ count });
   }
 
   return actionFlags(action)

@@ -4,7 +4,7 @@ import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 import { AppFileTree } from "#modules/store/components/app-file-tree.tsx";
 import { useAppFiles, type AppFilesOptions } from "#modules/store/hooks/use-app-files.ts";
-import { storeMessages } from "#modules/store/messages.ts";
+import { m } from "#paraglide/messages.js";
 
 /** CodeMirror, loaded with the first page that edits a file rather than with every page. */
 const CodeEditor = lazy(async () => ({ default: (await import("#modules/common/ui/code-editor.tsx")).CodeEditor }));
@@ -61,12 +61,12 @@ function SingleAppEditor(props: AppFilesOptions) {
           type="button"
           className="self-start"
           pending={files.isPending}
-          pendingLabel={storeMessages.editor.validating}
+          pendingLabel={m.store_editor_validating()}
           icon={<SaveIcon data-icon="inline-start" />}
           disabled={files.selectedDraft === undefined}
           onClick={files.save}
         >
-          {storeMessages.editor.save}
+          {m.store_editor_save()}
         </PendingButton>
       </div>
     </div>

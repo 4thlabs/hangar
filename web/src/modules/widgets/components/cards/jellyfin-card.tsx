@@ -9,9 +9,7 @@ import {
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
-import { widgetsMessages } from "#modules/widgets/messages.ts";
-
-const words = widgetsMessages.jellyfin;
+import { m } from "#paraglide/messages.js";
 
 type JellyfinCardProps = {
   latest: JellyfinLatest;
@@ -33,10 +31,10 @@ export function JellyfinCard({ latest: { counts, items }, placementKey, link }: 
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{words.movies({ count: counts.movies })}</span>
-            <span>{words.shows({ count: counts.series })}</span>
-            <span>{words.episodes({ count: counts.episodes })}</span>
-            <span>{words.songs({ count: counts.songs })}</span>
+            <span>{m.widgets_jellyfin_movies({ count: counts.movies })}</span>
+            <span>{m.widgets_jellyfin_shows({ count: counts.series })}</span>
+            <span>{m.widgets_jellyfin_episodes({ count: counts.episodes })}</span>
+            <span>{m.widgets_jellyfin_songs({ count: counts.songs })}</span>
           </WidgetMetadata>
         }
       />
@@ -73,7 +71,7 @@ export function JellyfinCard({ latest: { counts, items }, placementKey, link }: 
             </ul>
           </ScrollArea>
         ) : (
-          <WidgetEmptyState>{words.empty}</WidgetEmptyState>
+          <WidgetEmptyState>{m.widgets_jellyfin_empty()}</WidgetEmptyState>
         )}
       </WidgetContent>
     </WidgetCard>

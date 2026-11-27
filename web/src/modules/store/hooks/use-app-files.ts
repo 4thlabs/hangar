@@ -4,9 +4,7 @@ import type { AppFile } from "#libs/api";
 import { toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { storeMutations, storeQueries } from "#modules/store/api/store-queries.ts";
-import { storeMessages } from "#modules/store/messages.ts";
-
-const words = storeMessages.editor;
+import { m } from "#paraglide/messages.js";
 
 export type AppFilesOptions = {
   id: string;
@@ -77,7 +75,7 @@ export function useAppFiles({ id, files, initialFile }: AppFilesOptions) {
         onSuccess: () => {
           setError(path, null);
           setSavedSources(current => new Map(current).set(path, source));
-          toastSuccess(words.fileSaved, words.fileSavedDescription({ path }));
+          toastSuccess(m.store_editor_file_saved(), m.store_editor_file_saved_description({ path }));
         },
         // Under the editor of the file saved, which the core's refusal always names, not in a toast: a form's refusal.
         onError: error => setError(path, describeError(error)),
@@ -105,7 +103,7 @@ export function useAppFiles({ id, files, initialFile }: AppFilesOptions) {
     setPaths(current => [...current, path].sort());
     remember(path, "");
     setSelectedPath(path);
-    toastSuccess(words.fileCreated, words.fileCreatedDescription({ path }));
+    toastSuccess(m.store_editor_file_created(), m.store_editor_file_created_description({ path }));
 
     return undefined;
   };

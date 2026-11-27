@@ -12,9 +12,7 @@ import { Skeleton } from "#modules/common/ui/skeleton.tsx";
 import { settingsMutations, settingsQueries } from "#modules/settings/api/settings-queries.ts";
 import { describeSync, syncStartedText } from "#modules/settings/helpers/store-sync.ts";
 import { useSyncEnd } from "#modules/settings/hooks/use-sync-end.ts";
-import { settingsMessages } from "#modules/settings/messages.ts";
-
-const words = settingsMessages.store;
+import { m } from "#paraglide/messages.js";
 
 /**
  * The store's URL, whether it is cloned, and its sync: started here, run by the server apart from the request, and
@@ -26,12 +24,12 @@ export function StoreSettingsCard() {
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
-        <CardTitle>{words.title}</CardTitle>
-        <CardDescription>{words.description}</CardDescription>
+        <CardTitle>{m.settings_store_title()}</CardTitle>
+        <CardDescription>{m.settings_store_description()}</CardDescription>
       </CardHeader>
       <QueryRegion
         query={status}
-        failure={words.readFailed}
+        failure={m.settings_store_read_failed()}
         fallback={
           <CardContent>
             <Skeleton className="h-16 w-full" />
@@ -59,8 +57,8 @@ function StoreStatusContent({ status, error }: StoreStatusContentProps) {
 
   const start = () =>
     sync.mutate(undefined, {
-      onSuccess: started => toastSuccess(words.syncStarted, syncStartedText(started)),
-      onError: failure => toastFailure(words.launchFailed, failure),
+      onSuccess: started => toastSuccess(m.settings_store_sync_started(), syncStartedText(started)),
+      onError: failure => toastFailure(m.settings_store_launch_failed(), failure),
     });
 
   return (
@@ -68,11 +66,11 @@ function StoreStatusContent({ status, error }: StoreStatusContentProps) {
       <CardContent>
         <FieldGroup>
           <Field>
-            <FieldLabel htmlFor="store-url">{words.url}</FieldLabel>
+            <FieldLabel htmlFor="store-url">{m.settings_store_url()}</FieldLabel>
             <Input id="store-url" value={status.url} readOnly aria-describedby="store-status" />
             <FieldDescription id="store-status">
               {error && describeError(error)}
-              {status.installed ? words.installed : words.notInstalled}
+              {status.installed ? m.settings_store_installed() : m.settings_store_not_installed()}
               {status.sync && (
                 <>
                   <br />
@@ -87,13 +85,13 @@ function StoreStatusContent({ status, error }: StoreStatusContentProps) {
         <PendingButton
           type="button"
           pending={sync.isPending || isRunning}
-          pendingLabel={words.synchronizing}
+          pendingLabel={m.settings_store_synchronizing()}
           icon={
             status.installed ? <RefreshCwIcon data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />
           }
           onClick={start}
         >
-          {status.installed ? words.update : words.install}
+          {status.installed ? m.settings_store_update() : m.settings_store_install()}
         </PendingButton>
       </CardFooter>
     </>

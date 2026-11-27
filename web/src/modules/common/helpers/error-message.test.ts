@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, type ErrorDetail } from "#libs/api";
-import { describeError, describeErrorDetail, serverUnreachable } from "./error-message.ts";
+import { describeError, describeErrorDetail } from "./error-message.ts";
 
 /** An error the server answered with `detail`, of no code: one quoll answers itself. */
 function answered(status: number, detail: string) {
@@ -69,8 +69,8 @@ describe("describeError", () => {
   });
 
   it("says the server could not be reached for an answer with no problem, or no answer", () => {
-    expect(describeError(new ApiError(502))).toBe(serverUnreachable);
-    expect(describeError(new TypeError("Failed to fetch"))).toBe(serverUnreachable);
+    expect(describeError(new ApiError(502))).toBe("Could not reach the server. Try again.");
+    expect(describeError(new TypeError("Failed to fetch"))).toBe("Could not reach the server. Try again.");
   });
 });
 

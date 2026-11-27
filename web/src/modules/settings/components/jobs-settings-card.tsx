@@ -19,9 +19,7 @@ import {
   jobStateLabel,
   runFailure,
 } from "#modules/settings/helpers/job-text.ts";
-import { settingsMessages } from "#modules/settings/messages.ts";
-
-const words = settingsMessages.jobs;
+import { m } from "#paraglide/messages.js";
 
 /**
  * The runs of the server's jobs, the last 50 it keeps in memory, the newest first: each can be run again, and one that
@@ -34,11 +32,15 @@ export function JobsSettingsCard() {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>{words.title}</CardTitle>
-        <CardDescription>{words.description}</CardDescription>
+        <CardTitle>{m.settings_jobs_title()}</CardTitle>
+        <CardDescription>{m.settings_jobs_description()}</CardDescription>
       </CardHeader>
       <CardContent>
-        <QueryRegion query={jobs} failure={words.readFailed} fallback={<Skeleton className="h-24 w-full" />}>
+        <QueryRegion
+          query={jobs}
+          failure={m.settings_jobs_read_failed()}
+          fallback={<Skeleton className="h-24 w-full" />}
+        >
           {runs => <JobRuns runs={runs} error={jobs.error} />}
         </QueryRegion>
       </CardContent>
@@ -57,14 +59,15 @@ function JobRuns({ runs, error }: JobRunsProps) {
   // The options read the runs again whatever the outcome; the toasts are this card's.
   const runAgain = useMutation({
     ...settingsMutations.runJob(),
-    onSuccess: asked => toastSuccess(words.askedAgain, askedAgainText(asked)),
-    onError: failure => toastFailure(words.runAgainFailed, failure),
+    onSuccess: asked => toastSuccess(m.settings_jobs_asked_again(), askedAgainText(asked)),
+    onError: failure => toastFailure(m.settings_jobs_run_again_failed(), failure),
   });
 
   const cancel = useMutation({
     ...settingsMutations.cancelJob(),
-    onSuccess: canceled => toastSuccess(words.canceled, words.stops({ job: jobName(canceled.job) })),
-    onError: failure => toastFailure(words.cancelFailed, failure),
+    onSuccess: canceled =>
+      toastSuccess(m.settings_jobs_canceled(), m.settings_jobs_stops({ job: jobName(canceled.job) })),
+    onError: failure => toastFailure(m.settings_jobs_cancel_failed(), failure),
   });
 
   const isPending = runAgain.isPending || cancel.isPending;
@@ -75,8 +78,8 @@ function JobRuns({ runs, error }: JobRunsProps) {
       {runs.length === 0 && (
         <Empty>
           <EmptyHeader>
-            <EmptyTitle>{words.empty}</EmptyTitle>
-            <EmptyDescription>{words.emptyDescription}</EmptyDescription>
+            <EmptyTitle>{m.settings_jobs_empty()}</EmptyTitle>
+            <EmptyDescription>{m.settings_jobs_empty_description()}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       )}
@@ -84,12 +87,12 @@ function JobRuns({ runs, error }: JobRunsProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{words.columns.job}</TableHead>
-              <TableHead>{words.columns.queue}</TableHead>
-              <TableHead>{words.columns.state}</TableHead>
-              <TableHead>{words.columns.created}</TableHead>
-              <TableHead>{words.columns.ended}</TableHead>
-              <TableHead>{words.columns.actions}</TableHead>
+              <TableHead>{m.settings_columns_job()}</TableHead>
+              <TableHead>{m.settings_columns_queue()}</TableHead>
+              <TableHead>{m.settings_columns_state()}</TableHead>
+              <TableHead>{m.settings_columns_created()}</TableHead>
+              <TableHead>{m.settings_columns_ended()}</TableHead>
+              <TableHead>{m.settings_columns_actions()}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -140,8 +143,8 @@ function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
             type="button"
             size="icon-sm"
             variant="outline"
-            title={words.runAgain}
-            aria-label={words.runAgainLabel({ job: name })}
+            title={m.settings_jobs_run_again()}
+            aria-label={m.settings_jobs_run_again_label({ job: run.job })}
             disabled={isPending}
             onClick={onRunAgain}
           >
@@ -152,8 +155,8 @@ function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
               type="button"
               size="icon-sm"
               variant="ghost"
-              title={words.cancel}
-              aria-label={words.cancelLabel({ job: name })}
+              title={m.settings_jobs_cancel()}
+              aria-label={m.settings_jobs_cancel_label({ job: run.job })}
               disabled={isPending}
               onClick={onCancel}
             >

@@ -13,9 +13,7 @@ import {
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { formatBytes } from "#modules/widgets/helpers/widget-format.ts";
-import { widgetsMessages } from "#modules/widgets/messages.ts";
-
-const words = widgetsMessages.backrest;
+import { m } from "#paraglide/messages.js";
 
 /** The dot of a repository: muted for one that has not run, which is neither healthy nor failed. */
 const healthDotClasses: Readonly<Record<BackrestHealth, string>> = {
@@ -43,14 +41,14 @@ export function BackrestCard({ summary: { repositories }, link }: BackrestCardPr
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{widgetsMessages.counts.repos({ count: repositories.length })}</span>
-            <span>{words.protected({ size: formatBytes(protectedBytes) })}</span>
+            <span>{m.widgets_counts_repos({ count: repositories.length })}</span>
+            <span>{m.widgets_backrest_protected({ size: formatBytes(protectedBytes) })}</span>
           </WidgetMetadata>
         }
       />
 
       <WidgetContent>
-        <WidgetList empty={words.empty}>
+        <WidgetList empty={m.widgets_backrest_empty()}>
           {repositories.map(repository => (
             <WidgetListItem
               key={repository.id}
@@ -72,13 +70,15 @@ export function BackrestCard({ summary: { repositories }, link }: BackrestCardPr
               <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                 <WidgetMetadata>
                   <span className={repository.health === "failed" ? "text-destructive" : undefined}>
-                    {repository.status ?? words.noBackup}
+                    {repository.status ?? m.widgets_backrest_no_backup()}
                   </span>
-                  <span>{words.successes({ count: repository.successes })}</span>
-                  <span>{words.added({ size: formatBytes(repository.bytesAdded) })}</span>
-                  <span>{words.protected({ size: formatBytes(repository.protectedBytes) })}</span>
+                  <span>{m.widgets_backrest_successes({ count: repository.successes })}</span>
+                  <span>{m.widgets_backrest_added({ size: formatBytes(repository.bytesAdded) })}</span>
+                  <span>{m.widgets_backrest_protected({ size: formatBytes(repository.protectedBytes) })}</span>
                   {repository.nextBackupAt && (
-                    <span>{words.next({ when: compactRelativeTime(Date.parse(repository.nextBackupAt), now) })}</span>
+                    <span>
+                      {m.widgets_backrest_next({ when: compactRelativeTime(Date.parse(repository.nextBackupAt), now) })}
+                    </span>
                   )}
                 </WidgetMetadata>
               </p>

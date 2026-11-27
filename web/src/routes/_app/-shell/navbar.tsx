@@ -2,11 +2,11 @@ import { Link } from "@tanstack/react-router";
 import { cn } from "cn";
 import { SearchIcon, SettingsIcon } from "lucide-react";
 import { useState } from "react";
-import { commonMessages } from "#modules/common/messages.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Tabs, TabsList, TabsTrigger } from "#modules/common/ui/tabs.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#modules/common/ui/tooltip.tsx";
 import { NotificationsMenu } from "#modules/notifications/components/notifications-menu.tsx";
+import { m } from "#paraglide/messages.js";
 import { isNavigationActive, navigationCategories } from "#routes/_app/-shell/navigations.ts";
 import { NavbarSearch } from "#routes/_app/-shell/searchbar.tsx";
 import { useCurrentPath } from "#routes/_app/-shell/use-current-path.ts";
@@ -21,9 +21,9 @@ function Brand() {
       // left-hand cluster from `sm` up. Cheaper than a second header laid out differently.
       className="absolute left-1/2 -translate-x-1/2 sm:static sm:translate-x-0"
       render={
-        <Link to="/" aria-label={commonMessages.shell.homeLink}>
+        <Link to="/" aria-label={m.common_shell_home_link()}>
           <img src="/images/icon.png" alt="" className="size-7" />
-          <span className="text-lg font-semibold">{commonMessages.shell.brand}</span>
+          <span className="text-lg font-semibold">{m.common_shell_brand()}</span>
         </Link>
       }
     />
@@ -42,7 +42,7 @@ function DesktopNavigation() {
   const active = items.find(item => isNavigationActive(path, item.href))?.href ?? "";
 
   return (
-    <nav className="hidden h-full sm:block" aria-label={commonMessages.shell.mainNavigation}>
+    <nav className="hidden h-full sm:block" aria-label={m.common_shell_main_navigation()}>
       <Tabs value={active} className="h-full gap-0">
         <TabsList variant="line" className="h-full! gap-2 p-0">
           {items.map(item => (
@@ -52,7 +52,7 @@ function DesktopNavigation() {
               className="h-full! px-3 after:-bottom-px! after:bg-sidebar-ring!"
               render={
                 <Link to={item.href} aria-current={active === item.href ? "page" : undefined} preload="intent">
-                  {item.label}
+                  {item.label()}
                 </Link>
               }
             />
@@ -75,14 +75,14 @@ function SettingsButton() {
             size="icon"
             className="hidden sm:inline-flex"
             render={
-              <Link to="/settings" aria-label={commonMessages.shell.navigation.settings} preload="intent">
+              <Link to="/settings" aria-label={m.common_navigation_settings()} preload="intent">
                 <SettingsIcon />
               </Link>
             }
           />
         }
       />
-      <TooltipContent>{commonMessages.shell.navigation.settings}</TooltipContent>
+      <TooltipContent>{m.common_navigation_settings()}</TooltipContent>
     </Tooltip>
   );
 }
@@ -117,7 +117,7 @@ export function AppNavbar() {
             variant="ghost"
             size="icon"
             className="md:hidden"
-            aria-label={isSearchOpen ? commonMessages.shell.closeSearch : commonMessages.shell.openSearch}
+            aria-label={isSearchOpen ? m.common_shell_close_search() : m.common_shell_open_search()}
             aria-expanded={isSearchOpen}
             aria-controls="navbar-search"
             onClick={toggleSearch}

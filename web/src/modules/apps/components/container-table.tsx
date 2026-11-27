@@ -3,11 +3,9 @@ import { ContainerStatus } from "#modules/apps/components/container-status.tsx";
 import { LogsSheet } from "#modules/apps/components/logs-sheet.tsx";
 import { formatBytes, formatPercent, noMetrics, noReading } from "#modules/apps/helpers/metric-format.ts";
 import type { ContainerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { appsMessages } from "#modules/apps/messages.ts";
 import { Progress } from "#modules/common/ui/progress.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#modules/common/ui/table.tsx";
-
-const words = appsMessages.containers;
+import { m } from "#paraglide/messages.js";
 
 type ContainerTableProps = { project: string; containers: readonly ProjectContainer[]; stats: ContainerStats };
 
@@ -17,16 +15,16 @@ export function ContainerTable({ project, containers, stats }: ContainerTablePro
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>{words.container}</TableHead>
-          <TableHead>{words.state}</TableHead>
-          <TableHead>{words.image}</TableHead>
-          <TableHead>{words.ports}</TableHead>
-          <TableHead>{words.cpu}</TableHead>
-          <TableHead>{words.memory}</TableHead>
-          <TableHead>{words.network}</TableHead>
-          <TableHead>{words.disk}</TableHead>
-          <TableHead>{words.restarts}</TableHead>
-          <TableHead>{words.logs}</TableHead>
+          <TableHead>{m.apps_containers_container()}</TableHead>
+          <TableHead>{m.apps_containers_state()}</TableHead>
+          <TableHead>{m.apps_containers_image()}</TableHead>
+          <TableHead>{m.apps_containers_ports()}</TableHead>
+          <TableHead>{m.apps_containers_cpu()}</TableHead>
+          <TableHead>{m.apps_containers_memory()}</TableHead>
+          <TableHead>{m.apps_containers_network()}</TableHead>
+          <TableHead>{m.apps_containers_disk()}</TableHead>
+          <TableHead>{m.apps_containers_restarts()}</TableHead>
+          <TableHead>{m.apps_containers_logs()}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -68,7 +66,7 @@ function ContainerRow({ project, container, stats }: ContainerRowProps) {
         ) : (
           <Progress
             value={Math.min(metrics.memoryPercent ?? 0, 100)}
-            aria-label={words.memoryUsedBy({ name: container.name })}
+            aria-label={m.apps_containers_memory_used_by({ name: container.name })}
           >
             <span className="ml-auto text-sm text-muted-foreground tabular-nums">
               {formatBytes(metrics.memoryUsage)} / {formatBytes(metrics.memoryLimit)}

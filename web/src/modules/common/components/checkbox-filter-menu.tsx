@@ -1,5 +1,4 @@
 import { ListFilterIcon } from "lucide-react";
-import { commonMessages } from "#modules/common/messages.ts";
 import { Button } from "#modules/common/ui/button.tsx";
 import {
   DropdownMenu,
@@ -9,6 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "#modules/common/ui/dropdown-menu.tsx";
+import { m } from "#paraglide/messages.js";
 
 type FilterOption = {
   value: string;
@@ -56,7 +56,7 @@ export function CheckboxFilterMenu({ label, options, selected, onChange }: Check
         ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={selected.length === 0} onClick={() => onChange([])}>
-          {commonMessages.clearFilters}
+          {m.common_actions_clear_filters()}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

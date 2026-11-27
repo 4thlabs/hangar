@@ -1,14 +1,13 @@
 import { useEffect, useRef } from "react";
+import { appsLabels } from "#modules/apps/helpers/apps-labels.ts";
 import type { AppRun, AppRunStatus } from "#modules/apps/helpers/compose-output.ts";
 import type { ComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
-import { appsMessages } from "#modules/apps/messages.ts";
 import { composeCommandLine, composeLabel, composeSubject } from "#modules/common/helpers/compose-actions.ts";
 import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "#modules/common/ui/sheet.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
-
-const words = appsMessages.compose;
+import { m } from "#paraglide/messages.js";
 
 /** The badge of each state of an app's run. */
 function runBadgeVariant(status: AppRunStatus): "secondary" | "outline" | "destructive" | "default" {
@@ -33,7 +32,7 @@ function AppRunSection({ run }: { run: AppRun }) {
         <h3 className="font-mono text-sm font-medium">{run.app}</h3>
         <Badge variant={runBadgeVariant(run.status)}>
           {run.status === "running" && <Spinner />}
-          {words.runStatus[run.status]}
+          {appsLabels.runStatus[run.status]()}
         </Badge>
       </div>
       {run.error && <p className="text-sm text-destructive">{describeErrorDetail(run.error)}</p>}
@@ -64,17 +63,19 @@ export function ComposeOutputSheet({ compose }: { compose: ComposeCommand }) {
         <SheetHeader>
           <div className="flex flex-wrap items-center gap-2 pr-8">
             <SheetTitle>{shown ? `${composeLabel(shown.action)} · ${composeSubject(shown.apps)}` : ""}</SheetTitle>
-            <Badge variant={status === "error" ? "destructive" : "secondary"}>{words.streamStatus[status]}</Badge>
+            <Badge variant={status === "error" ? "destructive" : "secondary"}>
+              {appsLabels.streamStatus[status]()}
+            </Badge>
           </div>
           <SheetDescription>
             {shown && <span className="font-mono">{composeCommandLine(shown.action)}</span>} ·{" "}
-            {words.closingInterruptsNothing}
+            {m.apps_compose_closing_interrupts_nothing()}
           </SheetDescription>
         </SheetHeader>
         <div ref={viewport} className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-4 pb-4">
           {error && <p className="text-sm text-destructive">{error}</p>}
           {output.skipped > 0 && (
-            <p className="text-sm text-muted-foreground">{words.skipped({ count: output.skipped })}</p>
+            <p className="text-sm text-muted-foreground">{m.apps_compose_skipped({ count: output.skipped })}</p>
           )}
           {output.apps.map(run => (
             <AppRunSection key={run.app} run={run} />

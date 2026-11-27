@@ -11,9 +11,7 @@ import {
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
-import { widgetsMessages } from "#modules/widgets/messages.ts";
-
-const words = widgetsMessages.frigate;
+import { m } from "#paraglide/messages.js";
 
 /** How the card names a camera: `frigate_front_door` is `front door`. */
 function cameraName(camera: string) {
@@ -44,10 +42,10 @@ export function FrigateCard({
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{widgetsMessages.counts.cameras({ count: cameraCount })}</span>
-            <span>{words.detections({ perSecond: detectionFps.toFixed(1) })}</span>
+            <span>{m.widgets_counts_cameras({ count: cameraCount })}</span>
+            <span>{m.widgets_frigate_detections({ perSecond: detectionFps.toFixed(1) })}</span>
             {detectors.map(detector => (
-              <span key={detector.name} aria-label={words.inferenceTime({ detector: detector.name })}>
+              <span key={detector.name} aria-label={m.widgets_frigate_inference_time({ detector: detector.name })}>
                 {detector.inferenceSpeed.toFixed(0)} ms
               </span>
             ))}
@@ -56,7 +54,7 @@ export function FrigateCard({
       />
 
       <WidgetContent>
-        <WidgetList empty={words.empty}>
+        <WidgetList empty={m.widgets_frigate_empty()}>
           {events.map(event => (
             <WidgetListItem
               key={event.id}

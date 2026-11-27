@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.ts
 import { storeQueries } from "#modules/store/api/store-queries.ts";
 import { AppEditor } from "#modules/store/components/app-editor.tsx";
 import { composeFileName } from "#modules/store/helpers/compose-file.ts";
-import { storeMessages } from "#modules/store/messages.ts";
+import { m } from "#paraglide/messages.js";
 
 /**
  * `/store/$id/edit`, the editor of an app of the store. A page of its own beside `/store`, not a child rendered
@@ -26,7 +26,7 @@ function EditAppPage() {
 
   return (
     <main>
-      <title>{storeMessages.editor.documentTitle({ name: opened.data?.app.name ?? id })}</title>
+      <title>{m.store_editor_document_title({ name: opened.data?.app.name ?? id })}</title>
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold">{opened.data?.app.name ?? id}</h1>
         <p className="text-sm text-muted-foreground">
@@ -41,7 +41,7 @@ function EditAppPage() {
       {opened.error && <p className="text-sm text-destructive">{describeError(opened.error)}</p>}
       {!opened.error && compose.error && (
         <Alert variant="destructive">
-          <AlertTitle>{storeMessages.editor.cannotEdit}</AlertTitle>
+          <AlertTitle>{m.store_editor_cannot_edit()}</AlertTitle>
           <AlertDescription>{describeError(compose.error)}</AlertDescription>
         </Alert>
       )}

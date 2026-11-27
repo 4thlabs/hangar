@@ -1,8 +1,9 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { AppCounts } from "#libs/api";
 import { CheckboxFilterMenu } from "#modules/common/components/checkbox-filter-menu.tsx";
+import { storeLabels } from "#modules/store/helpers/store-labels.ts";
 import { joinStoreFilters, parseStoreFilters, storeFilters } from "#modules/store/helpers/store-search.ts";
-import { storeMessages } from "#modules/store/messages.ts";
+import { m } from "#paraglide/messages.js";
 
 type StoreFilterMenuProps = {
   /** How many apps are installed and how many are not, shown beside each checkbox. */
@@ -16,10 +17,10 @@ export function StoreFilterMenu({ counts }: StoreFilterMenuProps) {
 
   return (
     <CheckboxFilterMenu
-      label={storeMessages.filterMenu}
+      label={m.store_filter_menu()}
       options={storeFilters.map(filter => ({
         value: filter,
-        label: storeMessages.filter[filter],
+        label: storeLabels.filter[filter](),
         ...(counts ? { count: counts[filter] } : {}),
       }))}
       selected={parseStoreFilters(search.filter)}

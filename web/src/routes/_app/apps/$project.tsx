@@ -7,16 +7,15 @@ import { ProjectActions } from "#modules/apps/components/project-actions.tsx";
 import { ReconnectingNotice } from "#modules/apps/components/reconnecting-notice.tsx";
 import { ServiceCard } from "#modules/apps/components/service-card.tsx";
 import { StatCard } from "#modules/apps/components/stat-card.tsx";
+import { appsLabels } from "#modules/apps/helpers/apps-labels.ts";
 import { availableMemory } from "#modules/apps/helpers/memory-limit.ts";
 import { formatBytes, formatPercent } from "#modules/apps/helpers/metric-format.ts";
 import { statusBadgeVariant } from "#modules/apps/helpers/project-status.ts";
 import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { appsMessages } from "#modules/apps/messages.ts";
 import { dockerQueries } from "#modules/common/api/docker-queries.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { useDockerChanges } from "#modules/common/hooks/use-docker-changes.ts";
-import { commonMessages } from "#modules/common/messages.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Badge } from "#modules/common/ui/badge.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
@@ -28,6 +27,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#modules/common/ui/empty.tsx";
+import { m } from "#paraglide/messages.js";
 
 /**
  * `/apps/$project`, one app: its containers, its logs and its compose operations. A page of its own beside the list
@@ -36,9 +36,6 @@ import {
 export const Route = createFileRoute("/_app/apps/$project")({
   component: AppDetailPage,
 });
-
-const words = appsMessages.detail;
-const usage = appsMessages.detail.stats;
 
 /** The usage of the app and its services; they hold the stats, so that a frame leaves the header alone. */
 function AppLiveStats({ detail }: { detail: ProjectDetail }) {
@@ -52,31 +49,31 @@ function AppLiveStats({ detail }: { detail: ProjectDetail }) {
     <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          title={usage.cpu}
+          title={m.apps_stats_cpu()}
           value={formatPercent(total(metrics => metrics.cpuPercent))}
-          detail={usage.runningSum}
+          detail={m.apps_stats_running_sum()}
           icon={CpuIcon}
         />
         <StatCard
-          title={usage.memory}
+          title={m.apps_stats_memory()}
           value={bytes(metrics => metrics.memoryUsage)}
           {...(available
             ? {
                 detail: available.isHost
-                  ? usage.onTheHost({ bytes: formatBytes(available.bytes) })
-                  : usage.available({ bytes: formatBytes(available.bytes) }),
+                  ? m.apps_stats_on_the_host({ bytes: formatBytes(available.bytes) })
+                  : m.apps_stats_available({ bytes: formatBytes(available.bytes) }),
               }
             : {})}
           icon={MemoryStickIcon}
         />
         <StatCard
-          title={usage.network}
+          title={m.apps_stats_network()}
           value={`↓ ${bytes(metrics => metrics.networkRx)}`}
           detail={`↑ ${bytes(metrics => metrics.networkTx)}`}
           icon={NetworkIcon}
         />
         <StatCard
-          title={usage.disk}
+          title={m.apps_stats_disk()}
           value={`↓ ${bytes(metrics => metrics.blockRead)}`}
           detail={`↑ ${bytes(metrics => metrics.blockWrite)}`}
           icon={HardDriveIcon}
@@ -93,18 +90,19 @@ function AppLiveStats({ detail }: { detail: ProjectDetail }) {
 
 /** The head of an app's page: its name, how it runs, and what it is made of. */
 function AppHeader({ detail: { summary } }: { detail: ProjectDetail }) {
-  const services = words.services({ count: summary.serviceCount });
+  const services = m.apps_detail_services({ count: summary.serviceCount });
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         {summary.icon && <img src={summary.icon} alt="" className="size-7 object-contain" />}
         <h1 className="text-2xl font-semibold">{summary.name}</h1>
-        <Badge variant={statusBadgeVariant(summary.status)}>{appsMessages.status[summary.status]}</Badge>
-        {summary.updateAvailable && <Badge variant="outline">{words.updateAvailable}</Badge>}
+        <Badge variant={statusBadgeVariant(summary.status)}>{appsLabels.status[summary.status]()}</Badge>
+        {summary.updateAvailable && <Badge variant="outline">{m.apps_detail_update_available()}</Badge>}
       </div>
       <p className="text-sm text-muted-foreground">
-        {services} · {words.containersRunning({ running: summary.runningCount, total: summary.containerIds.length })}
+        {services} ·{" "}
+        {m.apps_detail_containers_running({ running: summary.runningCount, total: summary.containerIds.length })}
       </p>
     </div>
   );
@@ -118,11 +116,11 @@ function AppNotFound({ project }: { project: string }) {
         <EmptyMedia variant="icon">
           <BoxIcon />
         </EmptyMedia>
-        <EmptyTitle>{words.notFound}</EmptyTitle>
-        <EmptyDescription>{words.notFoundDescription({ project })}</EmptyDescription>
+        <EmptyTitle>{m.apps_detail_not_found()}</EmptyTitle>
+        <EmptyDescription>{m.apps_detail_not_found_description({ project })}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <Button render={<Link to="/apps">{words.backToApps}</Link>} />
+        <Button render={<Link to="/apps">{m.apps_detail_back_to_apps()}</Link>} />
       </EmptyContent>
     </Empty>
   );
@@ -149,17 +147,17 @@ function AppDetail({ project }: { project: string }) {
 
   return (
     <main>
-      <title>{words.documentTitle({ project })}</title>
-      <Button variant="link" className="w-fit px-0" render={<Link to="/apps">{words.allApps}</Link>} />
+      <title>{m.apps_detail_document_title({ project })}</title>
+      <Button variant="link" className="w-fit px-0" render={<Link to="/apps">{m.apps_detail_all_apps()}</Link>} />
       <ReconnectingNotice isReconnecting={isReconnecting} />
       {isNotFound && <AppNotFound project={project} />}
       {error && !isNotFound && (
         <Alert variant="destructive">
-          <AlertTitle>{words.readFailed}</AlertTitle>
+          <AlertTitle>{m.apps_detail_read_failed()}</AlertTitle>
           <AlertDescription>{describeError(error)}</AlertDescription>
           <AlertAction>
             <Button type="button" variant="outline" size="sm" disabled={isRefetching} onClick={() => void refetch()}>
-              {commonMessages.retry}
+              {m.common_actions_retry()}
             </Button>
           </AlertAction>
         </Alert>
@@ -172,7 +170,7 @@ function AppDetail({ project }: { project: string }) {
           <AppLiveStats detail={data} />
         </>
       )}
-      {isPending && <p className="text-sm text-muted-foreground">{words.reading}</p>}
+      {isPending && <p className="text-sm text-muted-foreground">{m.apps_detail_reading()}</p>}
       <ComposeDialogs compose={compose} subject={project} count={1} />
     </main>
   );

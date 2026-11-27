@@ -5,7 +5,7 @@ import { Button } from "#modules/common/ui/button.tsx";
 import { FieldError } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
 import { buildFileTree, type FileTreeFolder, type FileTreeNode } from "#modules/store/helpers/file-tree.ts";
-import { storeMessages } from "#modules/store/messages.ts";
+import { m } from "#paraglide/messages.js";
 
 /** How the tree lays out its rows: the indent per nesting level, in rem: a level must read as such at a glance in a narrow column. */
 const indentRem = 0.875;
@@ -68,7 +68,7 @@ export function AppFileTree({ paths, selectedPath, unsavedPaths, onSelect, onCre
     ));
 
   return (
-    <nav aria-label={storeMessages.editor.files} className="flex flex-col gap-1 rounded-lg border border-input p-1.5">
+    <nav aria-label={m.store_editor_files()} className="flex flex-col gap-1 rounded-lg border border-input p-1.5">
       <Button
         type="button"
         variant="ghost"
@@ -83,7 +83,7 @@ export function AppFileTree({ paths, selectedPath, unsavedPaths, onSelect, onCre
         <ChevronDownIcon className={cn("transition-transform", isOpenOnMobile && "rotate-180")} />
       </Button>
       <div className={cn("flex-col gap-1", isOpenOnMobile ? "flex" : "hidden", "md:flex")}>
-        <p className="px-2 pt-1 text-xs font-medium text-muted-foreground">{storeMessages.editor.filesTitle}</p>
+        <p className="px-2 pt-1 text-xs font-medium text-muted-foreground">{m.store_editor_files_title()}</p>
         <ul className="flex flex-col">{renderNodes(buildFileTree(paths), 0)}</ul>
         <NewFileForm onCreate={onCreate} isCreating={isCreating} />
       </div>
@@ -156,7 +156,7 @@ function TreeRow({ depth, className, style, ...props }: TreeRowProps) {
 
 function UnsavedDot() {
   return (
-    <span className="ml-auto pl-1.5 text-primary" role="img" aria-label={storeMessages.editor.unsaved}>
+    <span className="ml-auto pl-1.5 text-primary" role="img" aria-label={m.store_editor_unsaved()}>
       ●
     </span>
   );
@@ -215,7 +215,7 @@ function NewFileForm({ onCreate, isCreating }: NewFileFormProps) {
         onClick={() => setIsEditing(true)}
       >
         <PlusIcon data-icon="inline-start" />
-        {storeMessages.editor.newFile}
+        {m.store_editor_new_file()}
       </Button>
     );
   }
@@ -224,11 +224,11 @@ function NewFileForm({ onCreate, isCreating }: NewFileFormProps) {
     <form className="flex flex-col gap-1" onSubmit={event => void handleSubmit(event)}>
       <Input
         autoFocus
-        aria-label={storeMessages.editor.newFilePath}
+        aria-label={m.store_editor_new_file_path()}
         aria-invalid={refusal !== undefined}
         aria-describedby={refusal === undefined ? undefined : "new-file-error"}
         value={relativePath}
-        placeholder={storeMessages.editor.newFilePlaceholder}
+        placeholder={m.store_editor_new_file_placeholder()}
         className="font-mono"
         readOnly={isCreating}
         onChange={event => {

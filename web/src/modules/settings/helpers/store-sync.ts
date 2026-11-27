@@ -1,7 +1,7 @@
 import type { StoreSync } from "#libs/api";
 import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
-import { commonMessages } from "#modules/common/messages.ts";
-import { settingsMessages } from "#modules/settings/messages.ts";
+import { settingsLabels } from "#modules/settings/helpers/settings-labels.ts";
+import { m } from "#paraglide/messages.js";
 
 // What the store's card says of its last sync.
 
@@ -15,30 +15,30 @@ const syncTimeFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", time
  * The words of the operation of `sync`; those of an update for an operation this page does not know, from a newer
  * server, as the server only installs the store once.
  */
-function syncWords(sync: StoreSync) {
-  const known = Object.hasOwn(settingsMessages.store.sync, sync.operation);
+function syncLabels(sync: StoreSync) {
+  const known = Object.hasOwn(settingsLabels.sync, sync.operation);
 
-  return settingsMessages.store.sync[known ? sync.operation : "update"];
+  return settingsLabels.sync[known ? sync.operation : "update"];
 }
 
 /** The sentence of `sync`: running, ended well, or failed with its reason. */
 export function describeSync(sync: StoreSync): string {
-  const words = syncWords(sync);
+  const labels = syncLabels(sync);
 
   if (sync.state === "running") {
-    return words.running;
+    return labels.running();
   }
 
   if (sync.state === "failed") {
-    const reason = sync.error ? describeErrorDetail(sync.error) : commonMessages.errors.logHint;
+    const reason = sync.error ? describeErrorDetail(sync.error) : m.common_errors_log_hint();
 
-    return words.failed({ reason });
+    return labels.failed({ reason });
   }
 
-  return sync.finishedAt ? words.endedAt({ time: syncTimeFormat.format(new Date(sync.finishedAt)) }) : words.ended;
+  return sync.finishedAt ? labels.endedAt({ time: syncTimeFormat.format(new Date(sync.finishedAt)) }) : labels.ended();
 }
 
 /** What the toast of a sync started says. */
 export function syncStartedText(sync: StoreSync): string {
-  return syncWords(sync).started;
+  return syncLabels(sync).started();
 }

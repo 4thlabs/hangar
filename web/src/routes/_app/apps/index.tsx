@@ -21,19 +21,15 @@ import { formatBytes, formatPercent } from "#modules/apps/helpers/metric-format.
 import { filterProjects } from "#modules/apps/helpers/project-filter.ts";
 import { useComposeCommand } from "#modules/apps/hooks/use-compose-command.ts";
 import { useDockerStats } from "#modules/apps/hooks/use-docker-stats.ts";
-import { appsMessages } from "#modules/apps/messages.ts";
 import { dockerQueries } from "#modules/common/api/docker-queries.ts";
 import { composeSubject } from "#modules/common/helpers/compose-actions.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { nextSort, serializeSort } from "#modules/common/helpers/table-sort.ts";
 import { useDockerChanges } from "#modules/common/hooks/use-docker-changes.ts";
-import { commonMessages } from "#modules/common/messages.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "#modules/common/ui/empty.tsx";
-
-const words = appsMessages.list;
-const totals = appsMessages.list.totals;
+import { m } from "#paraglide/messages.js";
 
 /** `/apps`, the installed apps, filtered by its search. */
 export const Route = createFileRoute("/_app/apps/")({
@@ -49,15 +45,15 @@ function LiveTotals({ containerIds }: { containerIds: readonly string[] }) {
   return (
     <>
       <StatCard
-        title={totals.cpu}
+        title={m.apps_totals_cpu()}
         value={formatPercent(total(metrics => metrics.cpuPercent))}
-        detail={totals.allApps}
+        detail={m.apps_totals_all_apps()}
         icon={CpuIcon}
       />
       <StatCard
-        title={totals.memory}
+        title={m.apps_totals_memory()}
         value={formatBytes(total(metrics => metrics.memoryUsage))}
-        detail={totals.allApps}
+        detail={m.apps_totals_all_apps()}
         icon={MemoryStickIcon}
       />
     </>
@@ -71,11 +67,15 @@ function AppsTotals({ projects }: { projects: readonly ProjectSummary[] }) {
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-      <StatCard title={totals.apps} value={projects.length} icon={BoxesIcon} />
-      <StatCard title={totals.services} value={sum(project => project.serviceCount)} icon={LayersIcon} />
-      <StatCard title={totals.runningContainers} value={sum(project => project.runningCount)} icon={PlayIcon} />
+      <StatCard title={m.apps_totals_apps()} value={projects.length} icon={BoxesIcon} />
+      <StatCard title={m.apps_totals_services()} value={sum(project => project.serviceCount)} icon={LayersIcon} />
       <StatCard
-        title={totals.notRunning}
+        title={m.apps_totals_running_containers()}
+        value={sum(project => project.runningCount)}
+        icon={PlayIcon}
+      />
+      <StatCard
+        title={m.apps_totals_not_running()}
         value={sum(project => project.containerIds.length - project.runningCount)}
         icon={SquareIcon}
       />
@@ -92,8 +92,10 @@ function NoApps({ isInstalled }: { isInstalled: boolean }) {
         <EmptyMedia variant="icon">
           <PackageOpenIcon />
         </EmptyMedia>
-        <EmptyTitle>{isInstalled ? words.noResults : words.noApps}</EmptyTitle>
-        <EmptyDescription>{isInstalled ? words.noResultsDescription : words.noAppsDescription}</EmptyDescription>
+        <EmptyTitle>{isInstalled ? m.apps_list_no_results() : m.apps_list_no_apps()}</EmptyTitle>
+        <EmptyDescription>
+          {isInstalled ? m.apps_list_no_results_description() : m.apps_list_no_apps_description()}
+        </EmptyDescription>
       </EmptyHeader>
     </Empty>
   );
@@ -134,15 +136,16 @@ function AppsPage() {
   const selected = visible.map(project => project.name).filter(name => selection.has(name));
   const compose = useComposeCommand(selected);
 
-  const selectionLabel = selected.length === 0 ? words.noSelection : words.selected({ count: selected.length });
+  const selectionLabel =
+    selected.length === 0 ? m.apps_list_no_selection() : m.apps_list_selected({ count: selected.length });
 
   return (
     <main>
-      <title>{words.documentTitle}</title>
+      <title>{m.apps_list_document_title()}</title>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">{words.title}</h1>
-          <p className="text-sm text-muted-foreground">{words.description}</p>
+          <h1 className="text-2xl font-semibold">{m.apps_list_title()}</h1>
+          <p className="text-sm text-muted-foreground">{m.apps_list_description()}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <AppsFilterMenus projects={projects} />
@@ -151,11 +154,11 @@ function AppsPage() {
       <ReconnectingNotice isReconnecting={isReconnecting} />
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>{words.readFailed}</AlertTitle>
+          <AlertTitle>{m.apps_list_read_failed()}</AlertTitle>
           <AlertDescription>{describeError(error)}</AlertDescription>
           <AlertAction>
             <Button type="button" variant="outline" size="sm" disabled={isRefetching} onClick={() => void refetch()}>
-              {commonMessages.retry}
+              {m.common_actions_retry()}
             </Button>
           </AlertAction>
         </Alert>
@@ -184,7 +187,7 @@ function AppsPage() {
           )}
         </>
       )}
-      {isPending && <p className="text-sm text-muted-foreground">{words.reading}</p>}
+      {isPending && <p className="text-sm text-muted-foreground">{m.apps_list_reading()}</p>}
       <ComposeDialogs compose={compose} subject={composeSubject(selected)} count={selected.length} />
     </main>
   );

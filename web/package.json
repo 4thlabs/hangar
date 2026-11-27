@@ -7,14 +7,15 @@
   },
   "imports": {
     "#libs/*": "./src/libs/*/index.ts",
+    "#paraglide/*": "./src/paraglide/*",
     "#*": "./src/*"
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsr generate && tsc --noEmit && vite build",
+    "build": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy baseLocale --emit-ts-declarations --silent && tsr generate && tsc --noEmit && vite build",
     "test": "vitest run",
-    "lint": "tsr generate && oxlint",
-    "typecheck": "tsr generate && tsc --noEmit"
+    "lint": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy baseLocale --emit-ts-declarations --silent && tsr generate && oxlint",
+    "typecheck": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy baseLocale --emit-ts-declarations --silent && tsr generate && tsc --noEmit"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -42,6 +43,7 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^10.6.0",
+    "@inlang/paraglide-js": "2.29.3",
     "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/intent": "0.5.6",

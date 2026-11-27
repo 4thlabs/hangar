@@ -12,9 +12,7 @@ import {
   WidgetTime,
 } from "#modules/widgets/components/widget.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { widgetsMessages } from "#modules/widgets/messages.ts";
-
-const words = widgetsMessages.forgejo;
+import { m } from "#paraglide/messages.js";
 
 type ForgejoCardProps = {
   ci: ForgejoCi;
@@ -36,15 +34,17 @@ export function ForgejoCard({ ci: { repositoryCount, activeRuns, recentRepositor
         title={look.title}
         description={
           <WidgetMetadata>
-            <span>{widgetsMessages.counts.repos({ count: repositoryCount })}</span>
-            {running > 0 && <span className="font-medium text-chart-4">{words.running({ count: running })}</span>}
-            {queued > 0 && <span>{words.queued({ count: queued })}</span>}
+            <span>{m.widgets_counts_repos({ count: repositoryCount })}</span>
+            {running > 0 && (
+              <span className="font-medium text-chart-4">{m.widgets_forgejo_running({ count: running })}</span>
+            )}
+            {queued > 0 && <span>{m.widgets_forgejo_queued({ count: queued })}</span>}
           </WidgetMetadata>
         }
       />
 
       <WidgetContent>
-        <WidgetList empty={words.empty}>
+        <WidgetList empty={m.widgets_forgejo_empty()}>
           {activeRuns.map(run => (
             <WidgetListItem
               key={`${run.repository}-${run.id}`}
@@ -83,7 +83,7 @@ export function ForgejoCard({ ci: { repositoryCount, activeRuns, recentRepositor
       </WidgetContent>
 
       {recentRepositories.length > 0 && (
-        <WidgetFooter title={words.recentlyUpdated}>
+        <WidgetFooter title={m.widgets_forgejo_recently_updated()}>
           <WidgetList className="w-full gap-2">
             {recentRepositories.map(repository => (
               <WidgetListItem

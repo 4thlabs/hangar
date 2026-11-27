@@ -4,16 +4,15 @@ import { CircleAlertIcon, KeyRoundIcon } from "lucide-react";
 import { useState, type SubmitEvent } from "react";
 import { getAuthOidcLoginUrl } from "#libs/api";
 import { authMutations, authQueries } from "#modules/auth/api/auth-queries.ts";
+import { authLabels } from "#modules/auth/helpers/auth-labels.ts";
 import { describeSignInFailure, isSignInRefusal } from "#modules/auth/helpers/sign-in-messages.ts";
-import { authMessages } from "#modules/auth/messages.ts";
 import { PendingButton } from "#modules/common/components/pending-button.tsx";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { buttonVariants } from "#modules/common/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { Field, FieldGroup, FieldLabel, FieldSeparator } from "#modules/common/ui/field.tsx";
 import { Input } from "#modules/common/ui/input.tsx";
-
-const words = authMessages.signIn;
+import { m } from "#paraglide/messages.js";
 
 /**
  * The search of `/login`: why a sign-in through the provider came back, if it did. Any text, which
@@ -39,7 +38,7 @@ function LoginPage() {
   const { data: options } = useQuery(authQueries.options());
 
   const [error, setError] = useState<string | null>(() =>
-    isSignInRefusal(refused) ? authMessages.refusals[refused] : null,
+    isSignInRefusal(refused) ? authLabels.refusals[refused]() : null,
   );
 
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
@@ -68,31 +67,31 @@ function LoginPage() {
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-background p-6 font-sans">
-      <title>{words.documentTitle}</title>
+      <title>{m.auth_sign_in_document_title()}</title>
       <form onSubmit={event => void handleSubmit(event)} className="w-full max-w-sm">
         <Card>
           <CardHeader>
             <CardTitle>
-              <h1>{words.title}</h1>
+              <h1>{m.auth_sign_in_title()}</h1>
             </CardTitle>
-            <CardDescription>{words.description}</CardDescription>
+            <CardDescription>{m.auth_sign_in_description()}</CardDescription>
           </CardHeader>
           <CardContent>
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="email">{words.email}</FieldLabel>
+                <FieldLabel htmlFor="email">{m.auth_sign_in_email()}</FieldLabel>
                 <Input
                   id="email"
                   name="email"
                   type="email"
-                  placeholder={words.emailPlaceholder}
+                  placeholder={m.auth_sign_in_email_placeholder()}
                   autoComplete="email"
                   required
                   disabled={login.isPending}
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="password">{words.password}</FieldLabel>
+                <FieldLabel htmlFor="password">{m.auth_sign_in_password()}</FieldLabel>
                 <Input
                   id="password"
                   name="password"
@@ -106,23 +105,28 @@ function LoginPage() {
               {error && (
                 <Alert variant="destructive">
                   <CircleAlertIcon />
-                  <AlertTitle>{words.failed}</AlertTitle>
+                  <AlertTitle>{m.auth_sign_in_failed()}</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
             </FieldGroup>
           </CardContent>
           <CardFooter className="flex-col gap-3">
-            <PendingButton type="submit" className="w-full" pending={login.isPending} pendingLabel={words.submitting}>
-              {words.submit}
+            <PendingButton
+              type="submit"
+              className="w-full"
+              pending={login.isPending}
+              pendingLabel={m.auth_sign_in_submitting()}
+            >
+              {m.auth_sign_in_submit()}
             </PendingButton>
             {options?.oidc && (
               <>
-                <FieldSeparator className="w-full">{words.or}</FieldSeparator>
+                <FieldSeparator className="w-full">{m.auth_sign_in_or()}</FieldSeparator>
                 {/* A link, not a fetch: the server redirects the browser to the provider. */}
                 <a href={getAuthOidcLoginUrl()} className={buttonVariants({ variant: "outline", className: "w-full" })}>
                   <KeyRoundIcon data-icon="inline-start" />
-                  {words.singleSignOn}
+                  {m.auth_sign_in_single_sign_on()}
                 </a>
               </>
             )}

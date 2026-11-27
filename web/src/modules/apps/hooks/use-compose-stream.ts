@@ -12,9 +12,9 @@ import {
   emptyComposeOutput,
   type ComposeOutputState,
 } from "#modules/apps/helpers/compose-output.ts";
-import { appsMessages } from "#modules/apps/messages.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
 import { useEventStream } from "#modules/common/hooks/use-event-stream.ts";
+import { m } from "#paraglide/messages.js";
 
 /**
  * The output of one batch at a time: one this page starts, or one the server runs already, read again from its start.
@@ -43,7 +43,7 @@ export function useComposeStream() {
   return {
     output: stream.state,
     status,
-    error: isFailed ? (failure === null ? appsMessages.compose.cutShort : describeError(failure)) : null,
+    error: isFailed ? (failure === null ? m.apps_compose_cut_short() : describeError(failure)) : null,
     /** Starts a batch of `request`, and reads its output, laid out once its first event, the batch, says its apps' order. */
     start: (request: ComposeRequest) =>
       stream.read(getComposeRunUrl(), emptyComposeOutput([]), {

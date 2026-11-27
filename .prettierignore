@@ -15,6 +15,10 @@ web/src/modules/common/ui
 web/openapi.json
 web/src/libs/api/generated.ts
 web/src/libs/api/generated.msw.ts
+# Paraglide's output, compiled from web/messages/, and what the inlang SDK writes beside the project's settings
+web/src/paraglide
+web/project.inlang/*
+!web/project.inlang/settings.json
 # TanStack Router's tree of web/src/routes/
 web/src/routeTree.gen.ts
 # Where it was until #207, which a checkout built before it keeps: drop this line after #181.

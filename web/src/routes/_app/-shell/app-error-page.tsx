@@ -1,7 +1,7 @@
 import { useRouteContext, useRouter, type ErrorComponentProps } from "@tanstack/react-router";
 import { describeError } from "#modules/common/helpers/error-message.ts";
-import { commonMessages } from "#modules/common/messages.ts";
 import { Button } from "#modules/common/ui/button.tsx";
+import { m } from "#paraglide/messages.js";
 import { AppFrame } from "#routes/_app/-shell/app-layout.tsx";
 
 /**
@@ -25,10 +25,10 @@ export function AppErrorPage({ error }: ErrorComponentProps) {
   return (
     <AppFrame>
       <main className="items-start">
-        <h1 className="text-2xl font-semibold">{commonMessages.shell.errorPage.title}</h1>
+        <h1 className="text-2xl font-semibold">{m.common_error_page_title()}</h1>
         <p className="text-muted-foreground">{describeError(error)}</p>
         <Button variant="outline" onClick={() => void handleRetry()}>
-          {commonMessages.shell.errorPage.retry}
+          {m.common_error_page_retry()}
         </Button>
       </main>
     </AppFrame>

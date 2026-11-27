@@ -63,6 +63,15 @@ const orvalHooks = {
     "orval's hooks stay in #libs/api: call useQuery or useMutation on the options of the module's api/ (ADR 0002, decision 1).",
 };
 
+/**
+ * #214: the words are read through Paraglide's `m`, from `#paraglide/messages.js`, which `messages/en.json` compiles
+ * into. Nothing imports the catalog itself, whose ids `tsc` would not check.
+ */
+const catalogFile = {
+  regex: "(^|/)messages/[^/]+\\.json$",
+  message: "Read the words with m, from #paraglide/messages.js, never from messages/en.json (#214).",
+};
+
 /** Rule 2 too: no `..` segment in a route or the wiring, so that every import is a `#...` specifier the rules read. */
 const parentSegment = {
   regex: "(^|/)\\.\\.(/|$)",
@@ -95,12 +104,12 @@ const apiDynamicImport = {
 };
 
 /**
- * ADR 0002, rule 4: a module's `helpers/` and its `messages.ts` are its domain, pure and tested without rendering. They
- * import no React and no package of React's (`react-*`, `lucide-react`, `@base-ui/`), no TanStack, only the types,
- * enums and classes of `#libs/api` (its names that start with a capital: orval's hooks, fetchers and keys, and the
- * transport's functions, start with a lowercase letter), and only types from a module's `api/`, `hooks/`,
- * `components/` or `ui/`. The specifiers are `#modules/...`, which a gitignore-style `group` would read as a comment:
- * they are written as `regex`.
+ * ADR 0002, rule 4: a module's `helpers/` are its domain, pure and tested without rendering. They import no React and no
+ * package of React's (`react-*`, `lucide-react`, `@base-ui/`), no TanStack, only the types, enums and classes of
+ * `#libs/api` (its names that start with a capital: orval's hooks, fetchers and keys, and the transport's functions,
+ * start with a lowercase letter), and only types from a module's `api/`, `hooks/`, `components/` or `ui/`. Paraglide's
+ * `m`, from `#paraglide/messages.js`, is allowed (#214): the words are plain functions. The specifiers are
+ * `#modules/...`, which a gitignore-style `group` would read as a comment: they are written as `regex`.
  */
 const helperPatterns = [
   {
@@ -118,7 +127,7 @@ const helperPatterns = [
     message: "A module's helpers take only the types and enums of #libs/api (ADR 0002, decision 1).",
   },
   {
-    // `./hooks/` is what `messages.ts` would write: `../` is refused in every module.
+    // `./hooks/` is what a file at a module's root would write: `../` is refused in every module.
     regex: "^(#modules/[^/]+|\\.)/(api|hooks|components|ui)/",
     allowTypeImports: true,
     message: "A module's helpers take only types from api/, hooks/, components/ and ui/ (ADR 0002, decision 1).",
@@ -153,17 +162,19 @@ const pageModules = readdirSync(new URL("web/src/modules/", import.meta.url), { 
 /**
  * #207, ADR 0002's decision 6: a module imports only `common`, `#libs/...`, its own files and packages; `common`, only
  * itself. The routes compose the modules, and nothing of `#routes/`, the wiring or another module is imported from
- * one. A test may take `#mock/`, the page's test double. A `..` segment is refused wherever it is (`../`, `./../`,
- * `#modules/apps/../store/`), so that every import names its module.
+ * one. Paraglide's output, `#paraglide/`, is shared by all (#214). A test may take `#mock/`, the page's test double. A
+ * `..` segment is refused wherever it is (`../`, `./../`, `#modules/apps/../store/`), so that every import names its
+ * module.
  */
 function modulePatterns(module, { tests }) {
-  const allowed = ["libs/", "modules/common/", `modules/${module}/`, ...(tests ? ["mock/"] : [])];
+  const allowed = ["libs/", "paraglide/", "modules/common/", `modules/${module}/`, ...(tests ? ["mock/"] : [])];
 
   return [
     orvalHooks,
+    catalogFile,
     {
       regex: `^#(?!${allowed.join("|")})`,
-      message: `A module imports only common and #libs: ${module} may not import another module, a route or the wiring (ADR 0002, decision 6). Compose them in a route.`,
+      message: `A module imports only common, #libs and #paraglide: ${module} may not import another module, a route or the wiring (ADR 0002, decision 6). Compose them in a route.`,
     },
     {
       regex: "(^|/)\\.\\.(/|$)",
@@ -175,11 +186,13 @@ function modulePatterns(module, { tests }) {
 
 /** The isolation of a module for `import()`, which `no-restricted-imports` does not read. */
 function moduleDynamicImport(module) {
-  const allowed = ["libs", "modules\\/common", `modules\\/${module}`].map(prefix => `${prefix}\\/`).join("|");
+  const allowed = ["libs", "paraglide", "modules\\/common", `modules\\/${module}`]
+    .map(prefix => `${prefix}\\/`)
+    .join("|");
 
   return {
     selector: importOf(`^#(?!${allowed})|(^|\\/)\\.\\.(\\/|$)`),
-    message: `A module loads only common and #libs: ${module} may not load another module, a route or the wiring (ADR 0002, decision 6).`,
+    message: `A module loads only common, #libs and #paraglide: ${module} may not load another module, a route or the wiring (ADR 0002, decision 6).`,
   };
 }
 
@@ -208,7 +221,7 @@ const moduleBlocks = pageModules.flatMap(module => [
     },
   },
   {
-    files: [`web/src/modules/${module}/helpers/**/*.{ts,tsx}`, `web/src/modules/${module}/messages.ts`],
+    files: [`web/src/modules/${module}/helpers/**/*.{ts,tsx}`],
     ignores: [`web/src/modules/${module}/helpers/**/*.test.{ts,tsx}`],
     // Flat config does not merge a rule's options across blocks: the isolation and rule 1 are given again here.
     rules: {
@@ -222,13 +235,13 @@ const moduleBlocks = pageModules.flatMap(module => [
 ]);
 
 /**
- * #207: a module holds a folder per level (`components/`, `hooks/`, `api/`, `helpers/`) and one file of its own,
- * `messages.ts`. Any other file directly under it is refused, whatever it holds.
+ * #207: a module holds a folder per level (`components/`, `hooks/`, `api/`, `helpers/`), and no file of its own: its
+ * words are in `messages/en.json` since #214. Any file directly under it is refused, whatever it holds.
  */
 const looseModuleFile = {
   selector: "Program",
   message:
-    "A file directly under a module: put it in its components/, hooks/, api/ or helpers/; only messages.ts and its test stay at its root (ADR 0002, decision 6).",
+    "A file directly under a module: put it in its components/, hooks/, api/ or helpers/ (ADR 0002, decision 6). Its words go in messages/en.json (#214).",
 };
 
 /** #207: a file directly under `web/src/modules/` belongs to no module, so no module block would hold its imports. */
@@ -248,6 +261,7 @@ export default [
       "web/src/libs/api/generated.ts",
       "web/src/libs/api/generated.msw.ts",
       "web/src/routeTree.gen.ts",
+      "web/src/paraglide/**",
     ],
   },
   {
@@ -269,17 +283,21 @@ export default [
   {
     files: ["web/src/**/*.{ts,tsx}"],
     plugins: { "react-hooks": reactHooks },
-    rules: { ...pageRules, "no-restricted-syntax": ["error", staticOnlyClass] },
+    // The catalog for every file, `libs/` and `mock/` included: the blocks below repeat it with their own patterns.
+    rules: {
+      ...pageRules,
+      "no-restricted-imports": ["error", { patterns: [catalogFile] }],
+      "no-restricted-syntax": ["error", staticOnlyClass],
+    },
   },
   ...moduleBlocks,
-  // Rule 2 on the routes and the wiring, which compose the modules: no orval hook, no `..` segment.
+  // Rule 2 on the routes and the wiring, which compose the modules: no orval hook, no `..` segment, no catalog.
   {
     files: ["web/src/routes/**/*.{ts,tsx}", "web/src/*.{ts,tsx}"],
-    rules: { "no-restricted-imports": ["error", { patterns: [orvalHooks, parentSegment] }] },
+    rules: { "no-restricted-imports": ["error", { patterns: [orvalHooks, parentSegment, catalogFile] }] },
   },
   {
     files: ["web/src/modules/*/*.{ts,tsx}"],
-    ignores: ["web/src/modules/*/messages.ts", "web/src/modules/*/messages.test.ts"],
     rules: { "no-restricted-syntax": ["error", staticOnlyClass, looseModuleFile] },
   },
   {

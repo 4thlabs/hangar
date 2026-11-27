@@ -7,9 +7,7 @@ import { toastFailure, toastSuccess } from "#modules/common/components/toast.ts"
 import { Button } from "#modules/common/ui/button.tsx";
 import { Spinner } from "#modules/common/ui/spinner.tsx";
 import { storeMutations } from "#modules/store/api/store-queries.ts";
-import { storeMessages } from "#modules/store/messages.ts";
-
-const words = storeMessages.install;
+import { m } from "#paraglide/messages.js";
 
 type StoreAppButtonProps = {
   app: StoreApp;
@@ -19,17 +17,25 @@ type StoreAppButtonProps = {
 function buttonFace(app: StoreApp, isPending: boolean) {
   if (app.installed) {
     return {
-      title: words.uninstall,
-      label: words.uninstallApp({ name: app.name }),
+      title: m.store_install_uninstall(),
+      label: m.store_install_uninstall_app({ name: app.name }),
       icon: isPending ? <Spinner /> : <Trash2Icon />,
     };
   }
 
   if (isPending) {
-    return { title: words.installing, label: words.installingApp({ name: app.name }), icon: <Spinner /> };
+    return {
+      title: m.store_install_installing(),
+      label: m.store_install_installing_app({ name: app.name }),
+      icon: <Spinner />,
+    };
   }
 
-  return { title: words.install, label: words.installApp({ name: app.name }), icon: <DownloadIcon /> };
+  return {
+    title: m.store_install_install(),
+    label: m.store_install_install_app({ name: app.name }),
+    icon: <DownloadIcon />,
+  };
 }
 
 /** A card's install or uninstall, the latter confirmed first: it takes the app's containers down. */
@@ -40,14 +46,16 @@ export function StoreAppButton({ app }: StoreAppButtonProps) {
   // `mutate`, so that they show even when the list read again leaves this card out.
   const install = useMutation({
     ...storeMutations.install(),
-    onSuccess: () => toastSuccess(words.installed, words.installedDescription({ name: app.name })),
-    onError: error => toastFailure(words.installFailed, error),
+    onSuccess: () =>
+      toastSuccess(m.store_install_installed(), m.store_install_installed_description({ name: app.name })),
+    onError: error => toastFailure(m.store_install_install_failed(), error),
   });
 
   const uninstall = useMutation({
     ...storeMutations.uninstall(),
-    onSuccess: () => toastSuccess(words.uninstalled, words.uninstalledDescription({ name: app.name })),
-    onError: error => toastFailure(words.uninstallFailed, error),
+    onSuccess: () =>
+      toastSuccess(m.store_install_uninstalled(), m.store_install_uninstalled_description({ name: app.name })),
+    onError: error => toastFailure(m.store_install_uninstall_failed(), error),
   });
 
   const isPending = install.isPending || uninstall.isPending;
@@ -74,9 +82,9 @@ export function StoreAppButton({ app }: StoreAppButtonProps) {
       </Button>
       <ConfirmDialog
         open={confirming}
-        title={words.confirmTitle({ name: app.name })}
-        description={words.confirmDescription}
-        confirmLabel={words.uninstall}
+        title={m.store_install_confirm_title({ name: app.name })}
+        description={m.store_install_confirm_description()}
+        confirmLabel={m.store_install_uninstall()}
         destructive
         onConfirm={confirmUninstall}
         onCancel={() => setConfirming(false)}
