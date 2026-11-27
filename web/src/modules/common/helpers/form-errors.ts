@@ -30,9 +30,11 @@ export function formErrorsOf<Field extends string>(
     return { form: message, fields: {} };
   }
 
+  // An own data property, whatever the field's name: an assignment to a variable named `__proto__` would set the
+  // object's prototype instead, and the refusal would show nowhere.
   const fields: Partial<Record<Field, string>> = {};
 
-  fields[field] = message;
+  Object.defineProperty(fields, field, { value: message, enumerable: true, writable: true, configurable: true });
 
   return { fields };
 }

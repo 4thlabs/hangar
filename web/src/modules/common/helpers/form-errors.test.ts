@@ -28,6 +28,14 @@ describe("formErrorsOf", () => {
     });
   });
 
+  it("puts a code under a field named __proto__, as an own property", () => {
+    const byName: FieldsByCode<string> = { "env.line_break": ({ name }) => name };
+    const { fields } = formErrorsOf(coded("env.line_break", { name: "__proto__" }), byName);
+
+    expect(Object.getPrototypeOf(fields)).toBe(Object.prototype);
+    expect(Object.entries(fields)).toEqual([["__proto__", "The value of __proto__ cannot contain a line break."]]);
+  });
+
   it("gives the whole form a code whose field it cannot find, or that its table leaves out", () => {
     expect(formErrorsOf(coded("env.line_break", { name: "GONE" }), envFields(["KEPT"]))).toEqual({
       form: "The value of GONE cannot contain a line break.",

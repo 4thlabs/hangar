@@ -255,6 +255,49 @@ describe("/settings#env, its refusals", () => {
     expect(screen.getByText(refusal).id).toBe(screen.getByLabelText("ZED").getAttribute("aria-describedby"));
   });
 
+  it("forgets the refusal of a variable whose secret is generated", async () => {
+    settingsPage();
+    network.use(
+      getEnvReadMockHandler({ variables: { KEPT: "1", ZED: "3" } }),
+      getEnvSaveMockHandler(() => {
+        throw coded(400, { code: "env.line_break", params: { name: "ZED" }, message: "line break" });
+      }),
+    );
+
+    renderAt("/settings#env");
+    await screen.findByLabelText("ZED");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("The value of ZED cannot contain a line break.")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate a secret for ZED" }));
+
+    expect(screen.queryByText("The value of ZED cannot contain a line break.")).toBeNull();
+    expect(screen.getByLabelText("ZED").getAttribute("aria-invalid")).toBe("false");
+  });
+
+  it("forgets the refusal of a variable removed, which comes back new once added again", async () => {
+    settingsPage();
+    network.use(
+      getEnvReadMockHandler({ variables: { KEPT: "1", ZED: "3" } }),
+      getEnvSaveMockHandler(() => {
+        throw coded(400, { code: "env.line_break", params: { name: "ZED" }, message: "line break" });
+      }),
+    );
+
+    renderAt("/settings#env");
+    await screen.findByLabelText("ZED");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("The value of ZED cannot contain a line break.")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove ZED" }));
+    await waitFor(() => expect(screen.queryByLabelText("ZED")).toBeNull());
+    fireEvent.change(screen.getByLabelText("Name of a new variable"), { target: { value: "ZED" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect((await screen.findByLabelText("ZED")).getAttribute("aria-invalid")).toBe("false");
+    expect(screen.queryByText("The value of ZED cannot contain a line break.")).toBeNull();
+  });
+
   it("removes one variable for a double click on its Remove", async () => {
     const saved: EnvChanges[] = [];
 
