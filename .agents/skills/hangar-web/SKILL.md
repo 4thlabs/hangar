@@ -12,7 +12,7 @@ gives the why, the options weighed and the measures.
 
 **The code is moving to it.** The ADR lands in four PRs: #195 (no class made only of statics, `createPage`,
 `Session`), #186 (file routes), #203 (the data layer, the two stream hooks and the regions), then #204 (the words in
-`messages.ts`). Until they merge, some names below do not exist yet (`formErrorsOf`...).
+`messages.ts`).
 
 - Write new code in this shape with the pieces that exist.
 - Do not port code an issue is not about: AGENTS.md's scope rule holds.
@@ -437,6 +437,11 @@ const form = useForm({
   outside a form.
 - Fields are named by index (`variables[${index}].value`), never by a key: `A.B` would read as a nested path.
 - The inputs carry `aria-invalid` and `aria-describedby`.
+- A client check is a plain function in its module's `helpers/`, run by the field's `onSubmit` validator:
+  `newVariableError`, `appIdError`, which copies the core's app id rule (no `pattern` in the contract). A YAML file is a
+  field, edited in `YamlEditor`, its refusal under it.
+- The app editor is no form: its drafts stay in `useAppFiles`, a save's refusal placed by `formErrorsOf` with a table by
+  path, a refused new file under its path's input.
 
 ## Optimistic updates: rarely
 
