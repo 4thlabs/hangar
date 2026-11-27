@@ -204,6 +204,82 @@ describe("/settings#env, its refusals", () => {
     expect(screen.getByLabelText("ZED").getAttribute("aria-invalid")).toBe("false");
   });
 
+  it("keeps the refusal of the last variable when one is added before it", async () => {
+    settingsPage();
+    network.use(
+      getEnvReadMockHandler({ variables: { KEPT: "1", SAME: "2", ZED: "3" } }),
+      getEnvSaveMockHandler(() => {
+        throw coded(400, { code: "env.line_break", params: { name: "ZED" }, message: "line break" });
+      }),
+    );
+
+    renderAt("/settings#env");
+    await screen.findByLabelText("ZED");
+
+    const refusal = "The value of ZED cannot contain a line break.";
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(refusal)).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText("Name of a new variable"), { target: { value: "YYY" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await screen.findByLabelText("YYY");
+
+    expect(screen.getByText(refusal).id).toBe(screen.getByLabelText("ZED").getAttribute("aria-describedby"));
+    expect(screen.getByLabelText("ZED").getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("keeps a refusal when a variable is removed, then another added", async () => {
+    settingsPage();
+    network.use(
+      getEnvReadMockHandler({ variables: { KEPT: "1", SAME: "2", ZED: "3" } }),
+      getEnvSaveMockHandler(() => {
+        throw coded(400, { code: "env.line_break", params: { name: "ZED" }, message: "line break" });
+      }),
+    );
+
+    renderAt("/settings#env");
+    await screen.findByLabelText("ZED");
+
+    const refusal = "The value of ZED cannot contain a line break.";
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(refusal)).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove KEPT" }));
+    await waitFor(() => expect(screen.queryByLabelText("KEPT")).toBeNull());
+    fireEvent.change(screen.getByLabelText("Name of a new variable"), { target: { value: "AAA" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await screen.findByLabelText("AAA");
+
+    expect(screen.getByText(refusal).id).toBe(screen.getByLabelText("ZED").getAttribute("aria-describedby"));
+  });
+
+  it("removes one variable for a double click on its Remove", async () => {
+    const saved: EnvChanges[] = [];
+
+    settingsPage();
+    network.use(
+      getEnvReadMockHandler({ variables: { KEPT: "1", SAME: "2" } }),
+      getEnvSaveMockHandler(async ({ request }) => {
+        saved.push(await request.json());
+
+        return { variables: { SAME: "2" } };
+      }),
+    );
+
+    renderAt("/settings#env");
+    await screen.findByLabelText("KEPT");
+
+    const remove = screen.getByRole("button", { name: "Remove KEPT" });
+
+    fireEvent.click(remove);
+    fireEvent.click(remove);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(saved).toEqual([{ updates: {}, remove: ["KEPT"] }]));
+  });
+
   it("adds nothing, and says nothing, for an Enter with no name", async () => {
     settingsPage();
     network.use(getEnvReadMockHandler({ variables: { KEPT: "1" } }));

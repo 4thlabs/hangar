@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { envChanges, envFormValues, newVariableError, newVariableIndex } from "./env-variables.ts";
+import { envChanges, envFormValues, newVariableError, withVariable } from "./env-variables.ts";
 
 describe("envChanges", () => {
   it("sends what changed since the read, the new variables, and the ones of the read no row holds", () => {
@@ -44,15 +44,31 @@ describe("newVariableError", () => {
   });
 });
 
-describe("newVariableIndex", () => {
-  it("gives the place of a new name among the variables, by name", () => {
+describe("withVariable", () => {
+  it("adds the variable, empty, in its place by name", () => {
     const variables = [
       { key: "A", value: "1" },
       { key: "C", value: "3" },
     ];
 
-    expect(newVariableIndex(variables, "B")).toBe(1);
-    expect(newVariableIndex(variables, "D")).toBe(2);
-    expect(newVariableIndex([], "A")).toBe(0);
+    expect(withVariable(variables, "B").map(variable => variable.key)).toEqual(["A", "B", "C"]);
+  });
+});
+
+describe("the order of the variables", () => {
+  it("is their names' code units, as the page always sorted them, the same in every locale", () => {
+    const names = ["a_lower", "DB_HOST", "ZED", "A_", "DBX", "B", "A1"];
+    const order = ["A1", "A_", "B", "DBX", "DB_HOST", "ZED", "a_lower"];
+
+    expect(envFormValues(Object.fromEntries(names.map(name => [name, ""]))).variables.map(row => row.key)).toEqual(
+      order,
+    );
+
+    expect(withVariable(envFormValues({ A1: "", B: "", ZED: "" }).variables, "A_").map(row => row.key)).toEqual([
+      "A1",
+      "A_",
+      "B",
+      "ZED",
+    ]);
   });
 });

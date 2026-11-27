@@ -1197,9 +1197,12 @@ is decided when the new app's form is ported.
   which a form with no validator of its own never clears, and refuses every submit after it: a retry after a 500 would
   send nothing. Each form submits through `submitAfterRefusal` (`form-errors.ts`), which clears it first; the client
   checks are the fields' `onSubmit` validators, run again by the submit.
-- **A refusal stays with its variable.** The env form's fields are named by index, and keyed by it, as TanStack Form
-  moves the rows' meta as they move. A row is added with `insertFieldValue` in its place and removed with
-  `removeValue`, both with `dontValidate`: their validation would clear the refusals of the rows after it.
+- **A refusal belongs to its variable, not to its row.** The env form keeps the server's refusal of a variable in a map
+  by its name, in the form's own state: set from `formErrorsOf` when a save is refused, an entry dropped when that
+  variable's value changes or it is removed. TanStack Form's meta is per field, and a field is a row's place, which
+  moves as variables are added or removed: kept there, a refusal was dropped or shifted with the rows. The rows are
+  keyed by the variable's name, added in their place by name and removed by name. The form's own refusal, of no
+  variable, stays in TanStack's `onSubmit` errors, and a new name's check in its field's validator.
 
 ### Not checked
 
@@ -1210,5 +1213,6 @@ is decided when the new app's form is ported.
   noise.
 - Route preloading (rule 15), and the bundle once #186 splits it per route: today everything is in one entry chunk.
 - Whether importing only the `RegExp` that orval's zod output exports leaves zod out of the bundle.
-- The login form on TanStack Form: left as it is by #205. The new app, the app editor and the configuration's rule of no
-  toast were ported and tested there.
+- The login form on TanStack Form: left as it is by #205. The new app and the configuration were ported there, with no
+  toast for their refusals; the app editor, which is no form, shows its save's refusal under the file saved, with no
+  toast.

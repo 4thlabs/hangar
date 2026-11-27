@@ -445,8 +445,9 @@ const form = useForm({
   an alert, a refused new file under its path's input.
 - A form submits through `submitAfterRefusal(form)`, never `form.handleSubmit()` alone: TanStack Form keeps the
   server's last refusal in the form's `onSubmit` errors, and would refuse a retry.
-- An array's rows are keyed by index, as their fields are named, and added or removed with `dontValidate`
-  (`insertFieldValue`, `removeValue`), so that a row's refusal moves with it.
+- A refusal that belongs to an item of a list, not to a place in it, is kept by the item's name in the form's own state,
+  as the env form's refusals by variable: TanStack's meta is per field, and a field of an array is a place, which moves.
+  The rows are keyed by the item, and removed by it.
 
 ## Optimistic updates: rarely
 
