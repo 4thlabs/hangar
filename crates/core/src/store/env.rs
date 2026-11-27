@@ -194,7 +194,7 @@ impl GlobalEnv {
 
     /// Adds to the file the namespaced variables the installed apps reference that it lacks, `APP_*` and `<APP>_*`,
     /// empty unless their value is known; and returns the variables. Only ever adds: a bare name like `DOMAIN` is
-    /// left to the operator.
+    /// left to the operator. A file not there yet is created, as [`ensure_exists`](Self::ensure_exists) does.
     ///
     /// # Errors
     ///
@@ -207,6 +207,7 @@ impl GlobalEnv {
 
     /// [`ensure`](Self::ensure), reading the files of `app` alone: the variables it needs show up without reading
     /// every app. A variable of another app it references is seeded too, as glance reaching for `GLUETUN_API_KEY`.
+    /// A file not there yet is created, as [`ensure_exists`](Self::ensure_exists) does, from every installed app.
     ///
     /// # Errors
     ///
@@ -215,15 +216,66 @@ impl GlobalEnv {
         self.seed(&[app.to_owned()]).await
     }
 
-    /// Seeds the namespaced variables the files of `entries` reference.
+    /// Creates the file when it is not there, as on a fresh data directory: every compose call reads it, and fails
+    /// without it. It starts with `APP_DATA_DIR` filled in, and the variables the installed apps reference seeded,
+    /// as [`ensure`](Self::ensure) seeds them. A file there is left as it is, and nothing else is read.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] when whether the file is there cannot be told, and the errors of
+    /// [`write`](Self::write).
+    pub async fn ensure_exists(&self) -> Result<(), StoreError> {
+        let _turn = self.lock.lock().await;
+
+        if self.exists().await? {
+            return Ok(());
+        }
+
+        self.create().await.map(drop)
+    }
+
+    /// Seeds the namespaced variables the files of `entries` reference, or creates the file when it is not there.
     async fn seed(&self, entries: &[String]) -> Result<BTreeMap<String, String>, StoreError> {
         let _turn = self.lock.lock().await;
+
+        if !self.exists().await? {
+            return self.create().await;
+        }
+
         let current = self.read().await?;
+        let missing = self.missing(entries, &current).await;
+
+        if missing.is_empty() {
+            return Ok(current);
+        }
+
+        self.update(missing, &[]).await
+    }
+
+    /// Writes the file, which is not there: Hangar's defaults, and what every installed app references. Its turn
+    /// taken.
+    async fn create(&self) -> Result<BTreeMap<String, String>, StoreError> {
+        let entries = self.entries().await;
+        let mut variables = self.missing(&entries, &BTreeMap::new()).await;
+
+        variables.extend(self.defaults.clone());
+
+        self.update(variables, &[]).await
+    }
+
+    /// The namespaced variables the files of `entries` reference that `current` lacks, each with its default value or
+    /// empty.
+    async fn missing(
+        &self,
+        entries: &[String],
+        current: &BTreeMap<String, String>,
+    ) -> BTreeMap<String, String> {
         // Naming the apps is a listing; reading their files is what a narrower scope saves.
         let prefixes: Vec<String> = std::iter::once(Self::SHARED_PREFIX.to_owned())
             .chain(self.apps().await.iter().flat_map(|app| Self::prefixes(app)))
             .collect();
-        let missing: BTreeMap<String, String> = Self::referenced(&self.files(entries).await)
+
+        Self::referenced(&self.files(entries).await)
             .await
             .into_iter()
             .filter(|key| !current.contains_key(key))
@@ -237,13 +289,16 @@ impl GlobalEnv {
 
                 (key, value)
             })
-            .collect();
+            .collect()
+    }
 
-        if missing.is_empty() {
-            return Ok(current);
+    /// Whether the file is there, as compose looks for it: its link followed.
+    async fn exists(&self) -> Result<bool, StoreError> {
+        match tokio::fs::metadata(&self.file).await {
+            Ok(_) => Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(StoreError::io("inspect", &self.file, error)),
         }
-
-        self.update(missing, &[]).await
     }
 
     /// The installed apps: the entries of `app-installed` that read as a folder.
@@ -594,7 +649,11 @@ mod tests {
 
         assert_eq!(
             seeded,
-            variables([("SYNCIN_AUTH_SECRET", ""), ("SYNC_IN_PORT", "")])
+            variables([
+                ("APP_DATA_DIR", &fixture.app_data()),
+                ("SYNCIN_AUTH_SECRET", ""),
+                ("SYNC_IN_PORT", ""),
+            ])
         );
     }
 
@@ -613,6 +672,8 @@ mod tests {
             "services:\n  gluetun:\n    image: gluetun:${GLUETUN_TAG}\n",
             None,
         );
+        // A file there already: one that is not is created from every app.
+        std::fs::write(fixture.env.file(), "").expect("the file can be written");
 
         let seeded = fixture
             .env
@@ -647,7 +708,123 @@ mod tests {
             .await
             .expect("the environment can be seeded");
 
-        assert_eq!(seeded, variables([("ALPHA_APP_TAG", "")]));
+        assert_eq!(
+            seeded,
+            variables([("ALPHA_APP_TAG", ""), ("APP_DATA_DIR", &fixture.app_data())])
+        );
+    }
+
+    #[tokio::test]
+    async fn creates_the_file_with_app_data_dir_and_what_every_installed_app_references() {
+        let fixture = Fixture::new();
+
+        fixture.stack(
+            "alpha-app",
+            "services:\n  alpha:\n    image: alpha:${ALPHA_APP_TAG}\n",
+            None,
+        );
+        fixture.stack(
+            "gluetun",
+            "services:\n  gluetun:\n    image: gluetun:${GLUETUN_TAG}\n",
+            None,
+        );
+
+        fixture
+            .env
+            .ensure_exists()
+            .await
+            .expect("the file can be created");
+
+        assert_eq!(
+            fixture.env.read().await.expect("the file reads"),
+            variables([
+                ("ALPHA_APP_TAG", ""),
+                ("APP_DATA_DIR", &fixture.app_data()),
+                ("GLUETUN_TAG", ""),
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn creates_the_file_from_every_installed_app_on_the_first_install_of_one() {
+        let fixture = Fixture::new();
+
+        fixture.stack(
+            "alpha-app",
+            "services:\n  alpha:\n    image: alpha:${ALPHA_APP_TAG}\n",
+            None,
+        );
+        fixture.stack(
+            "gluetun",
+            "services:\n  gluetun:\n    image: gluetun:${GLUETUN_TAG}\n",
+            None,
+        );
+
+        let seeded = fixture
+            .env
+            .ensure_app("alpha-app")
+            .await
+            .expect("the file can be created");
+
+        // No app was ever seeded into a file that was not there.
+        assert_eq!(
+            seeded,
+            variables([
+                ("ALPHA_APP_TAG", ""),
+                ("APP_DATA_DIR", &fixture.app_data()),
+                ("GLUETUN_TAG", ""),
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn leaves_a_file_that_is_there_as_it_is() {
+        let fixture = Fixture::new();
+        let by_hand = "DOMAIN=example.com\n";
+
+        fixture.stack(
+            "alpha-app",
+            "services:\n  alpha:\n    image: alpha:${ALPHA_APP_TAG}\n",
+            None,
+        );
+        std::fs::write(fixture.env.file(), by_hand).expect("written by hand");
+
+        fixture
+            .env
+            .ensure_exists()
+            .await
+            .expect("the file is there");
+
+        assert_eq!(
+            std::fs::read_to_string(fixture.env.file()).expect("the file reads"),
+            by_hand
+        );
+        assert!(backups(fixture.data_dir.root()).is_empty());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn creates_the_file_readable_by_its_owner_alone_when_it_is_not_there() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture = Fixture::new();
+
+        fixture
+            .env
+            .ensure_exists()
+            .await
+            .expect("the file can be created");
+
+        let mode = std::fs::metadata(fixture.env.file())
+            .expect("the file is there")
+            .permissions()
+            .mode();
+
+        assert_eq!(mode & 0o777, 0o600);
+        assert!(
+            backups(fixture.data_dir.root()).is_empty(),
+            "nothing to copy aside"
+        );
     }
 
     #[tokio::test]

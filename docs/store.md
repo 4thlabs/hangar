@@ -128,6 +128,11 @@ Anything else, like a bare `DOMAIN` or `TZ`, is yours to add. Hangar only ever a
 overwrites a value or removes one you did not delete yourself, and it keeps a timestamped
 `.env.global.<date>.bak` copy before every write.
 
+Every compose command reads `.env.global`, and fails without it. So on a fresh data directory,
+Hangar creates it before it runs the first compose command or installs the first app, from the
+server or the `hangar` CLI: `APP_DATA_DIR` filled in, and the variables of every installed app
+seeded, readable by its owner alone. A file that is there is left as it is.
+
 A widget reads its service's API key from `<CONTAINER>_API_KEY`, so `JELLYFIN_API_KEY` for the
 Jellyfin widget. See [Widgets](widgets.md).
 
