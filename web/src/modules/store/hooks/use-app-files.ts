@@ -3,35 +3,10 @@ import { useState } from "react";
 import type { AppFile } from "#libs/api";
 import { toastSuccess } from "#modules/common/components/toast.ts";
 import { describeError } from "#modules/common/helpers/error-message.ts";
-import { formErrorsOf, type FieldsByCode } from "#modules/common/helpers/form-errors.ts";
 import { storeMutations, storeQueries } from "#modules/store/api/store-queries.ts";
 import { storeMessages } from "#modules/store/messages.ts";
 
 const words = storeMessages.editor;
-
-/** The file a code of the editor's names. */
-const atPath = ({ path }: { path: string }) => path;
-
-/** Where a save's refusal goes: under the file its code names, its path; any other under the file saved. */
-const filesByCode: FieldsByCode<string> = {
-  "editor.invalid_path": atPath,
-  "editor.through_file": atPath,
-  "editor.outside_app": atPath,
-  "editor.hidden_file": atPath,
-  "editor.broken_symlink": atPath,
-  "editor.no_such_file": atPath,
-  "editor.not_a_file": atPath,
-  "editor.too_large": atPath,
-  "editor.binary": atPath,
-  "editor.not_utf8": atPath,
-  "editor.file_exists": atPath,
-  "editor.file_appeared": atPath,
-  "editor.invalid_file": atPath,
-  "editor.compose_rejected": atPath,
-  "editor.unchecked": atPath,
-  "editor.read_failed": atPath,
-  "editor.save_failed": atPath,
-};
 
 export type AppFilesOptions = {
   id: string;
@@ -104,24 +79,8 @@ export function useAppFiles({ id, files, initialFile }: AppFilesOptions) {
           setSavedSources(current => new Map(current).set(path, source));
           toastSuccess(words.fileSaved, words.fileSavedDescription({ path }));
         },
-        // Under the editor, not in a toast: a form's refusal. Under the file saved, and also under the one its code
-        // names when that is another, as compose's check of a file may name the compose file.
-        onError: error => {
-          const placed = formErrorsOf(error, filesByCode);
-
-          const message =
-            placed.form ?? placed.fields[path] ?? Object.values(placed.fields).find(text => text !== undefined);
-
-          setErrors(current => {
-            const next = new Map(current).set(path, message ?? null);
-
-            for (const [named, text] of Object.entries(placed.fields)) {
-              next.set(named, text ?? null);
-            }
-
-            return next;
-          });
-        },
+        // Under the editor of the file saved, which the core's refusal always names, not in a toast: a form's refusal.
+        onError: error => setError(path, describeError(error)),
       },
     );
   };

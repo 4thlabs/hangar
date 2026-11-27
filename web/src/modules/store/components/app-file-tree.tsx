@@ -182,6 +182,11 @@ function NewFileForm({ onCreate, isCreating }: NewFileFormProps) {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    // An Enter while the create runs would send a second one: `readOnly` stops the typing, not the submit.
+    if (isCreating) {
+      return;
+    }
+
     const trimmed = relativePath.trim();
 
     if (trimmed.length === 0) {

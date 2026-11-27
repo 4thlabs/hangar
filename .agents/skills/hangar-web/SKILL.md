@@ -409,7 +409,8 @@ export function DockerCard() {
 
 ## Forms: TanStack Form, and `formErrorsOf`
 
-Every form uses TanStack Form. There is no schema library: a client check is a plain function in its module's
+Every form uses TanStack Form, but two: the login form, left as it is by the maintainer's decision of 2026-11-27, and
+the app editor, which is no form. There is no schema library: a client check is a plain function in its module's
 `helpers/`. The server's refusal goes under the field its code names, through `formErrorsOf`
 (`modules/common/helpers/form-errors.ts`) and a `FieldsByCode` table per form:
 
@@ -440,8 +441,12 @@ const form = useForm({
 - A client check is a plain function in its module's `helpers/`, run by the field's `onSubmit` validator:
   `newVariableError`, `appIdError`, which copies the core's app id rule (no `pattern` in the contract). A YAML file is a
   field, edited in `YamlEditor`, its refusal under it.
-- The app editor is no form: its drafts stay in `useAppFiles`, a save's refusal placed by `formErrorsOf` with a table by
-  path, a refused new file under its path's input.
+- The app editor is no form: its drafts stay in `useAppFiles`, a save's refusal under the editor of the file saved, as
+  an alert, a refused new file under its path's input.
+- A form submits through `submitAfterRefusal(form)`, never `form.handleSubmit()` alone: TanStack Form keeps the
+  server's last refusal in the form's `onSubmit` errors, and would refuse a retry.
+- An array's rows are keyed by index, as their fields are named, and added or removed with `dontValidate`
+  (`insertFieldValue`, `removeValue`), so that a row's refusal moves with it.
 
 ## Optimistic updates: rarely
 

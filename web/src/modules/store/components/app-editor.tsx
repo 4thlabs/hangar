@@ -52,7 +52,11 @@ function SingleAppEditor(props: AppFilesOptions) {
             />
           </Suspense>
         )}
-        {files.error && <pre className="text-sm whitespace-pre-wrap text-destructive">{files.error}</pre>}
+        {files.error && (
+          <pre role="alert" className="text-sm whitespace-pre-wrap text-destructive">
+            {files.error}
+          </pre>
+        )}
         <PendingButton
           type="button"
           className="self-start"

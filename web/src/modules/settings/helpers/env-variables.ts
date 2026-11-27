@@ -52,7 +52,9 @@ export function newVariableError(name: string, variables: readonly EnvVariable[]
   return undefined;
 }
 
-/** `variables` with `name` added, empty, in its place by name. */
-export function withVariable(variables: readonly EnvVariable[], name: string): EnvVariable[] {
-  return [...variables, { key: name, value: "" }].sort((a, b) => a.key.localeCompare(b.key));
+/** Where `name` goes among `variables`, which are sorted by name: the index of the first that sorts after it. */
+export function newVariableIndex(variables: readonly EnvVariable[], name: string): number {
+  const after = variables.findIndex(variable => variable.key.localeCompare(name) > 0);
+
+  return after === -1 ? variables.length : after;
 }

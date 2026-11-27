@@ -1186,11 +1186,20 @@ is decided when the new app's form is ported.
   which copies the core's rule (`AppId::regex()`), as the env form's `newVariableError` copies the variable name's. The
   server's `editor.invalid_app_id` and `editor.app_exists` still land under the id's field.
 - **The app editor is no form.** Its drafts stay as they are, and nothing of it moves to TanStack Form. A save's refusal
-  shows under the editor of the file its code names, placed by `formErrorsOf` with a `FieldsByCode` by path, with no
-  toast. A refused new file shows why under its path's input, which stays open, in plain local state.
+  shows under the editor of the file saved, as an alert, with no toast: in `describeError`'s words, as the core's
+  refusal of a file always names the file written (`refusal()` in `crates/core/src/store/files.rs`), so a table by path
+  would place nothing elsewhere. A refused new file shows why under its path's input, which stays open, in plain local
+  state.
 - **The login form is not ported** in #205, whose text names the other four.
 - The YAML editor of the configuration and of the new app is a component, `YamlEditor`
   (`common/components/yaml-editor.tsx`), whose value the form holds: `useYamlEditor`, which held it, is gone.
+- **A refusal does not stop the next submit.** TanStack Form keeps the server's refusal in the form's `onSubmit` errors,
+  which a form with no validator of its own never clears, and refuses every submit after it: a retry after a 500 would
+  send nothing. Each form submits through `submitAfterRefusal` (`form-errors.ts`), which clears it first; the client
+  checks are the fields' `onSubmit` validators, run again by the submit.
+- **A refusal stays with its variable.** The env form's fields are named by index, and keyed by it, as TanStack Form
+  moves the rows' meta as they move. A row is added with `insertFieldValue` in its place and removed with
+  `removeValue`, both with `dontValidate`: their validation would clear the refusals of the rows after it.
 
 ### Not checked
 
@@ -1201,4 +1210,5 @@ is decided when the new app's form is ported.
   noise.
 - Route preloading (rule 15), and the bundle once #186 splits it per route: today everything is in one entry chunk.
 - Whether importing only the `RegExp` that orval's zod output exports leaves zod out of the bundle.
-- The new app, login and app editor forms on TanStack Form, and the config editor's toast rule.
+- The login form on TanStack Form: left as it is by #205. The new app, the app editor and the configuration's rule of no
+  toast were ported and tested there.

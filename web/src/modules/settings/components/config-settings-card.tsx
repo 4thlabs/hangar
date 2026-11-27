@@ -7,7 +7,7 @@ import { QueryRegion } from "#modules/common/components/region.tsx";
 import { toastSuccess } from "#modules/common/components/toast.ts";
 import { YamlEditor } from "#modules/common/components/yaml-editor.tsx";
 import { describeError } from "#modules/common/helpers/error-message.ts";
-import { errorText, formErrorsOf, type FieldsByCode } from "#modules/common/helpers/form-errors.ts";
+import { errorText, formErrorsOf, submitAfterRefusal, type FieldsByCode } from "#modules/common/helpers/form-errors.ts";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "#modules/common/ui/card.tsx";
 import { settingsMutations, settingsQueries } from "#modules/settings/api/settings-queries.ts";
 import { settingsMessages } from "#modules/settings/messages.ts";
@@ -75,7 +75,7 @@ function ConfigEditor({ source }: { source: string }) {
     <form
       onSubmit={event => {
         event.preventDefault();
-        void form.handleSubmit();
+        void submitAfterRefusal(form);
       }}
     >
       {/* Inert while the save runs: the editor opens again on the file saved, which would drop what is typed meanwhile. */}

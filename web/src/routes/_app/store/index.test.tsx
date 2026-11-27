@@ -219,6 +219,37 @@ describe("/store/new", () => {
     expect(screen.getAllByText("The app jellyfin already exists.")).toHaveLength(1);
   });
 
+  it("retries a new app the server refused, with nothing changed", async () => {
+    let isDown = true;
+    const calls = countCalls();
+
+    network.use(
+      getStoreNewAppMockHandler({ compose: "name: My app\nservices: {}\n" }),
+      getEditorCreateAppMockHandler(() => {
+        if (isDown) {
+          throw problem(500, "the disk is full");
+        }
+
+        return app("my-app", "My app", false);
+      }),
+      getEditorFilesMockHandler({ app: app("my-app", "My app", false), files: [] }),
+      getEditorReadMockHandler({ path: "compose.yml", source: "name: My app\nservices: {}\n" }),
+    );
+
+    const router = renderAt("/store/new");
+
+    fireEvent.change(await screen.findByLabelText("Identifier"), { target: { value: "my-app" } });
+    await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toContain("name: My app"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("The disk is full.")).toBeDefined();
+
+    isDown = false;
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/store/my-app/edit"));
+    expect(calls("POST /api/store/apps")).toBe(2);
+  });
+
   it("shows why compose refused the new app under the editor", async () => {
     network.use(
       getStoreNewAppMockHandler({ compose: "services: {}\n" }),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { envChanges, envFormValues, newVariableError, withVariable } from "./env-variables.ts";
+import { envChanges, envFormValues, newVariableError, newVariableIndex } from "./env-variables.ts";
 
 describe("envChanges", () => {
   it("sends what changed since the read, the new variables, and the ones of the read no row holds", () => {
@@ -44,20 +44,15 @@ describe("newVariableError", () => {
   });
 });
 
-describe("withVariable", () => {
-  it("adds the variable, empty, in its place by name", () => {
-    expect(
-      withVariable(
-        [
-          { key: "A", value: "1" },
-          { key: "C", value: "3" },
-        ],
-        "B",
-      ),
-    ).toEqual([
+describe("newVariableIndex", () => {
+  it("gives the place of a new name among the variables, by name", () => {
+    const variables = [
       { key: "A", value: "1" },
-      { key: "B", value: "" },
       { key: "C", value: "3" },
-    ]);
+    ];
+
+    expect(newVariableIndex(variables, "B")).toBe(1);
+    expect(newVariableIndex(variables, "D")).toBe(2);
+    expect(newVariableIndex([], "A")).toBe(0);
   });
 });
