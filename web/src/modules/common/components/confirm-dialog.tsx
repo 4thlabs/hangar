@@ -1,3 +1,4 @@
+import { commonMessages } from "#modules/common/messages.ts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,7 +27,7 @@ export function ConfirmDialog({
   open,
   title,
   description,
-  confirmLabel = "Confirm",
+  confirmLabel = commonMessages.confirm,
   destructive = false,
   onConfirm,
   onCancel,
@@ -39,7 +40,7 @@ export function ConfirmDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{commonMessages.cancel}</AlertDialogCancel>
           <AlertDialogAction variant={destructive ? "destructive" : "default"} onClick={onConfirm}>
             {confirmLabel}
           </AlertDialogAction>

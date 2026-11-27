@@ -1,4 +1,8 @@
+import { commonMessages } from "#modules/common/messages.ts";
+
 export type NavigationPath = "/" | "/apps" | "/cluster" | "/store" | "/settings";
+
+const words = commonMessages.shell.navigation;
 
 type NavigationItem = {
   label: string;
@@ -14,18 +18,18 @@ type NavigationCategory = {
 /** The sections of the app, in the order the navbar and the phone's tab bar list them. */
 export const navigationCategories: readonly NavigationCategory[] = [
   {
-    label: "General",
+    label: words.general,
     items: [
-      { label: "Dashboard", href: "/" },
-      { label: "Apps", href: "/apps" },
-      { label: "Cluster", href: "/cluster" },
-      { label: "Store", href: "/store" },
+      { label: words.dashboard, href: "/" },
+      { label: words.apps, href: "/apps" },
+      { label: words.cluster, href: "/cluster" },
+      { label: words.store, href: "/store" },
     ],
   },
   {
-    label: "Administration",
+    label: words.administration,
     position: "bottom",
-    items: [{ label: "Settings", href: "/settings" }],
+    items: [{ label: words.settings, href: "/settings" }],
   },
 ];
 

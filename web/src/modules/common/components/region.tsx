@@ -4,6 +4,7 @@ import { CircleAlertIcon } from "lucide-react";
 import { createContext, use, type ReactNode } from "react";
 import { ApiError } from "#libs/api";
 import { describeError } from "#modules/common/helpers/error-message.ts";
+import { commonMessages } from "#modules/common/messages.ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Button } from "#modules/common/ui/button.tsx";
 
@@ -143,7 +144,7 @@ function RegionFailureView({ failure, ...shown }: RegionFailure & { failure: Fai
 export function RetryButton({ retry }: { retry: () => void }) {
   return (
     <Button type="button" variant="outline" size="sm" onClick={retry}>
-      Retry
+      {commonMessages.retry}
     </Button>
   );
 }
