@@ -12,7 +12,7 @@ gives the why, the options weighed and the measures.
 
 **The code is moving to it.** The ADR lands in four PRs: #195 (no class made only of statics, `createPage`,
 `Session`), #186 (file routes), #203 (the data layer, the two stream hooks and the regions), then #204 (the words in
-`messages.ts`). Until they merge, some names below do not exist yet (`formErrorsOf`, the MSW handlers...).
+`messages.ts`). Until they merge, some names below do not exist yet (`formErrorsOf`...).
 
 - Write new code in this shape with the pieces that exist.
 - Do not port code an issue is not about: AGENTS.md's scope rule holds.
@@ -472,32 +472,38 @@ cache.
 
 ## Tests: on orval's MSW handlers
 
-- One msw 3 `setupServer`, `network` in `mock/network.ts`, listening with `onUnhandledFrame: "error"`: a call no
-  handler answers fails the test.
+- One msw 3 `setupServer`, `network` in `mock/network.ts`, which `mock/setup.ts` starts for every test file. A call no
+  handler answers fails, and fails its test, even when the page catches the failure: msw's `"error"` alone only
+  rejects the call, so `setup.ts` listens with `keepUnhandled` and throws after the test.
 - Its defaults are what the shell calls on every page: the session, the auth options, an empty bell and its quiet
   stream.
 - A test adds what its page calls, from orval's handlers in `#libs/api/mock`, typed by the contract. A renamed route or
-  a changed body is a `tsc` error in the test.
-- A refusal is thrown as a problem from the handler.
-- An `Events` route uses msw's `sse()`. orval's handler for it is useless.
+  a changed body is a `tsc` error in the test. msw answers with the first handler that matches, and each
+  `network.use` goes before the last: a test's own handlers, added after a page's defaults, win.
+- A refusal is thrown from the handler: `problem(status, detail)`, or `coded(status, error)`, typed by the contract.
+- An `Events` route that does not end is `feed<T>(path)`, on msw's `sse()`: orval's handler for it is useless. One
+  that ends, read with `fetch` (a log, a compose run), is orval's handler with `events(items)` as its body.
+- `countCalls()` counts the calls the page made, by `METHOD /path`.
 
 ```ts
+const bell = feed<NotificationEvent>("/api/notifications/events");
+
 network.use(
   getEnvReadMockHandler({ variables: { KEPT: "1", OLD: "3" } }),
   getEnvSaveMockHandler(async ({ request }) => {
     saved.push(await request.json()); // EnvChanges
     throw problem(400, "invalid variable name: 1BAD");
   }),
-  sse<{ message: NotificationEvent }>("*/api/notifications/events", ({ client }) => {
-    send = event => client.send({ data: event });
-  }),
+  bell.handler,
 );
+// ... bell.urls is ["/api/notifications/events?since=2&epoch=first"] once the page opened it
+bell.send({ kind: "filed", notification });
 ```
 
 - To assert `keepalive`, spy on `fetch`: msw's request loses it.
-- `FakeEventSource` stays only for the tests that drive a lost stream and its reconnection.
+- `FakeEventSource` stays only for the tests that drive a lost stream and its reconnection: `stubEventSource()` puts it
+  in place, and the rest is still answered by the network.
 - Faker's answers are random: use them only for bodies the test never reads.
-- The old `serve({...})` fake goes module by module. Do not add to it.
 - Test the domain's `helpers/` directly, without rendering. Name a test after the behaviour it checks.
 
 ## The words: `messages.ts`, in English

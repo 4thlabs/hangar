@@ -169,7 +169,14 @@ Clarity beats cleverness and brevity.
   or a function the test calls, not a `beforeEach` that hides what the test depends on.
 - The domain's `helpers/` are tested directly, without rendering. A page's tests sit beside its route file
   (`routes/_app/apps/index.test.tsx`), which the route generator ignores (`routeFileIgnorePattern` in `tsr.config.json`).
-- The API is answered at the network, by orval's MSW handlers, as the ADR's decision 13 says: a call no handler
-  answers fails the test. Until they come, tests use `mock/page.tsx`'s `serve`, which is not extended.
+- The API is answered at the network, by orval's MSW handlers (`#libs/api/mock`), as the ADR's decision 13 says. One
+  msw server, `network` in `mock/network.ts`, answers what the shell calls on every page; a test adds what its page
+  calls with `network.use(...)`, and its handlers win. `mock/setup.ts` starts it for every test file, and fails a test
+  in which a call found no handler, even one the page caught: msw's `"error"` alone only rejects the call.
+- A refusal is thrown from the handler: `problem(status, detail)`, or `coded(status, error)` for one of Hangar's codes,
+  typed by the contract. An `Events` route is `feed<T>(path)`, on msw's `sse()`, or `events(items)` as the body of
+  orval's handler for a stream that ends. `countCalls()` counts what the page called.
+- `FakeEventSource` (`mock/page.tsx`, put in place by `stubEventSource()`) is only for a test that drives a lost stream
+  and its reconnection.
 - The clock is the fake timers' (`vi.useFakeTimers({ now })`), not a prop added for the test.
 - A fixed bug gets the test that fails without its fix.

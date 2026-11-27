@@ -245,10 +245,10 @@ web/              # the server's page: a Vite SPA on the TanStack Query hooks or
 [`docs/web/CODING_RULES.md`](docs/web/CODING_RULES.md), with the same import mapping, the root's Prettier and ESLint
 (`npm run lint` covers `web/src`), and its own oxlint for the rules that read types (`npm run lint --prefix web`). It
 takes from `src/` what a page it moves needs, copied: the Waku version keeps its own until the switch. Its
-`src/libs/api/generated.ts` and `web/openapi.json` are written by `cargo quoll gen`, never committed. Its
-`src/routeTree.gen.ts` is not committed either: TanStack Router writes it from the route files of `src/routes/`,
-by its Vite plugin in `vite` and the tests, and by `tsr generate` at the start of the `build`, `typecheck` and `lint`
-scripts, which run `tsc` and oxlint before Vite. Its design is [ADR 0002](docs/adr/0002-web-design.md), accepted on
+`src/libs/api/generated.ts`, its MSW handlers `generated.msw.ts`, and `web/openapi.json` are written by
+`cargo quoll gen`, never committed. Its `src/routeTree.gen.ts` is not committed either: TanStack Router writes it from
+the route files of `src/routes/`, by its Vite plugin in `vite` and the tests, and by `tsr generate` at the start of
+the `build`, `typecheck` and `lint` scripts, which run `tsc` and oxlint before Vite. Its design is [ADR 0002](docs/adr/0002-web-design.md), accepted on
 2026-11-26, and the `hangar-web` skill gives its rules in short. Where the ADR and the sections for `src/` differ,
 `web/` follows the ADR: no class made only of statics, and its words in a plain `messages.ts` per module.
 
