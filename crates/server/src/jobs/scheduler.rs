@@ -497,7 +497,10 @@ impl Runs {
 impl Run {
     /// Whether it waits or runs.
     fn is_active(&self) -> bool {
-        matches!(self.state, JobState::Waiting | JobState::Running)
+        match self.state {
+            JobState::Waiting | JobState::Running => true,
+            JobState::Completed | JobState::Failed | JobState::Canceled => false,
+        }
     }
 }
 

@@ -26,8 +26,8 @@ import {
 /**
  * The reads of the services the widgets show, one per service: each takes the placement's key and the read of its card,
  * the parts it shows, which `useServiceRead` gives back. Not asked again on a failure: the server has tried its service
- * twice already, and serves the last answer 15 minutes past the widget's `ttl`; the card shows its error at once rather
- * than seconds later.
+ * twice already, and serves the last answer 15 minutes past the widget's `ttl`. A card with no answer yet shows its
+ * error at once rather than seconds later; one that has data keeps it, as its `QueryRegion` does.
  */
 export const servicesQueries = {
   arcane: (widget: string, read: ServicesArcaneParams) =>

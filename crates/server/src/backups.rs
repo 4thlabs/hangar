@@ -132,7 +132,25 @@ impl Backups {
         };
         let code = Failure::logged_code(code, &error);
 
-        if !matches!(error, BackupError::NotRestarted { .. }) {
+        // An app the backup left down says so in a notification of its own.
+        let is_left_down = match error {
+            BackupError::NotRestarted { .. } => true,
+            BackupError::InvalidApp { .. }
+            | BackupError::InvalidArchive { .. }
+            | BackupError::UnknownArchive { .. }
+            | BackupError::NoDataFolder { .. }
+            | BackupError::OutsideAppData { .. }
+            | BackupError::LinkedFolder { .. }
+            | BackupError::InvalidGlob { .. }
+            | BackupError::RunsHangar { .. }
+            | BackupError::NotStopped { .. }
+            | BackupError::UnreadableServices { .. }
+            | BackupError::Canceled { .. }
+            | BackupError::Io { .. }
+            | BackupError::Crashed { .. } => false,
+        };
+
+        if !is_left_down {
             self.notify_failed(app, code.clone());
         }
 
