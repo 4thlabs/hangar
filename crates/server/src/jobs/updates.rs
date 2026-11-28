@@ -161,7 +161,8 @@ impl Updates {
 
         drop(claim);
 
-        // Its lists would say an app it never tried was neither updated nor failed.
+        // Only guards a race: a cancel between the registry's answer and the first app, where nothing awaits. Its
+        // lists would say an app it never tried was neither updated nor failed.
         if cancel.is_cancelled() && updated.is_empty() && failed.is_empty() {
             tracing::info!("the update of the apps was canceled before it tried an app");
             return Ok(None);

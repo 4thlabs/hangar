@@ -282,7 +282,8 @@ and a success otherwise. The update fails with `compose.app_busy`, and updates n
 **Settings → Jobs** lists the last 50 runs, the newest first, from `GET /api/jobs`: the job, its queue and its state,
 when it was asked for and when it ended, why it failed, as a code, and what it did, for a job that says so. The update
 of the apps says, in its run's `result`, the apps it updated, failed to update and skipped, each by name in the order
-of `hangar.yml`; a run canceled says what it did before it stopped. The ids count from the time the server
+of `hangar.yml`; a run canceled says what it did before it stopped, and one canceled before it tried an app has no
+result. The ids count from the time the server
 started, in milliseconds, so that a page opened before a restart names no run of the new server. **Run again** asks
 for the job of a run again, `POST /api/jobs/<id>/run`. **Cancel**, `POST /api/jobs/<id>/cancel`, takes a run that
 waits out of its queue, and tells one that runs to stop: the image check stops at once, the update of the apps once

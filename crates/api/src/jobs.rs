@@ -115,7 +115,8 @@ pub struct JobRun {
 #[serde(tag = "kind", content = "params", rename_all = "snake_case")]
 pub enum JobResult {
     /// The update of the apps: the apps the registry has moved past, by what it did with them, in the order of
-    /// `hangar.yml`. A run that ended lists each of them once; one canceled lists none of those it did not try.
+    /// `hangar.yml`. A run that completed lists each of them once; one canceled leaves out the apps it had not
+    /// reached.
     AutoUpdate {
         /// The apps it updated.
         updated: Vec<String>,
