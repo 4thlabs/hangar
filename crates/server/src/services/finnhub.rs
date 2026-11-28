@@ -1,5 +1,6 @@
 //! Finnhub's public API: each symbol's quote, profile and closes, each kept per symbol, so that every placement shares
-//! them. Finnhub's free plan gives 60 calls a minute: a longer `ttl` asks less often.
+//! them. Finnhub's free plan gives 60 calls a minute: each symbol's calls are made again once a `ttl` passes, 30 minutes
+//! by default, and a longer one asks less often.
 
 use std::sync::Arc;
 use std::time::Duration;

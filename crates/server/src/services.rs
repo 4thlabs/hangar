@@ -279,7 +279,7 @@ pub(crate) enum Declared<'a> {
 impl<'a> Declared<'a> {
     /// How long a call is served as it is when the declaration gives no `ttl`: the dashboard does not read it again by
     /// itself, so this is what a visit sees.
-    const FRESH: Duration = Duration::from_secs(60);
+    const FRESH: Duration = Duration::from_secs(30 * 60);
 
     /// How long past its `ttl` a call is still served while it is made again: how long a service that stopped
     /// answering keeps showing its last answer.
@@ -348,7 +348,7 @@ impl<'a> Declared<'a> {
         }
     }
 
-    /// How long the calls it makes are kept: fresh for its `ttl`, else a minute, then stale for 15 minutes.
+    /// How long the calls it makes are kept: fresh for its `ttl`, else 30 minutes, then stale for 15 minutes.
     pub(crate) fn policy(&self) -> Policy {
         let ttl = match self {
             Self::Github { ttl, .. } | Self::Finnhub { ttl, .. } => *ttl,
@@ -673,7 +673,7 @@ mod tests {
     }
 
     #[test]
-    fn keeps_a_call_for_the_ttl_of_its_declaration_or_a_minute_then_15_minutes_stale() {
+    fn keeps_a_call_for_the_ttl_of_its_declaration_or_30_minutes_then_15_minutes_stale() {
         let config = config(
             "  - { type: miniflux-entries, column: 1, ttl: 5 }\n  - { type: github-releases, column: 1, \
              repositories: [a/b] }\n  - { type: stock-prices, column: 1, ttl: 600, tickers: [AAPL] }\n",
@@ -690,7 +690,7 @@ mod tests {
             fresh,
             [
                 (Duration::from_secs(5), stale),
-                (Duration::from_secs(60), stale),
+                (Duration::from_secs(30 * 60), stale),
                 (Duration::from_secs(600), stale),
             ]
         );
@@ -753,6 +753,20 @@ mod tests {
             policy: Declared::Nothing.policy(),
             declared: Arc::new(HashSet::new()),
             resolved: Arc::new(OnceCell::new()),
+        }
+    }
+
+    /// A read of GitHub's API at `api`, with a token, as a declaration of `hangar.yml` names it.
+    pub(super) fn fixed_locator(api: &str) -> Locator {
+        let origin = Origin::Settings(FixedService {
+            name: "github",
+            api: api.to_owned(),
+            key: Some("token".to_owned()),
+        });
+
+        Locator {
+            declared: Arc::new(HashSet::from([origin.key()])),
+            ..locator(origin)
         }
     }
 

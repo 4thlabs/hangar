@@ -344,3 +344,53 @@ async fn sends_the_new_key_once_env_global_changes_it() {
         [KEY, KEY, "rotated-key"]
     );
 }
+
+#[tokio::test]
+async fn refuses_more_events_than_its_part_gives() {
+    let url = frigate(Calls::default()).await;
+    let fixture = fixture(&url);
+    let server = fixture.serve().await;
+    let key = server.key("frigate-events").await;
+
+    for events in ["0", "51"] {
+        let (status, _, _) = server
+            .get(&format!("/api/services/frigate/{key}?events={events}"))
+            .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{events}");
+    }
+}
+
+#[tokio::test]
+async fn relays_a_thumbnail_for_frigate_s_widget_alone() {
+    let url = frigate(Calls::default()).await;
+    // A Jellyfin at Frigate's address: a thumbnail asked through it would be found, were the relay to fetch it.
+    let fixture = Fixture::new(&format!(
+        "  - {{ type: frigate-events, column: 3, url: '{url}' }}\n  - {{ type: jellyfin-latest, column: 2, user: ana, \
+         url: '{url}' }}\n"
+    ));
+
+    fixture.env(&format!("FRIGATE_API_KEY={KEY}\nJELLYFIN_API_KEY={KEY}\n"));
+
+    let server = fixture.serve().await;
+    let frigate = server.key("frigate-events").await;
+    let jellyfin = server.key("jellyfin-latest").await;
+    let thumbnail = "thumbnail.1700000000.5-abc";
+
+    assert_eq!(
+        server
+            .get(&format!("/api/services/images/{frigate}/{thumbnail}"))
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        server
+            .problem(&format!("/api/services/images/{jellyfin}/{thumbnail}"))
+            .await,
+        (
+            StatusCode::NOT_FOUND,
+            Some("widgets.unknown_image".to_owned())
+        )
+    );
+}

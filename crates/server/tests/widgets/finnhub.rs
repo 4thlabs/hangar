@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use axum::Json;
 use axum::extract::Query;
 use axum::http::HeaderMap;
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use hangar_api::Services as _;
@@ -13,15 +14,29 @@ use hangar_server::Settings;
 use http::StatusCode;
 use serde_json::{Value, json};
 
-use super::{Fixture, Server};
+use super::{Calls, Fixture, Server};
 
 /// A Finnhub on port 0 that answers its key alone. It quotes `AAPL`, with its profile and its closes, and `AIR.PA`,
 /// with no profile and its closes refused, as on the free plan; it knows no `NOPE`. Its URL.
 async fn finnhub() -> String {
+    counting(Calls::default()).await
+}
+
+/// The Finnhub of [`finnhub`], which counts every call it answers; its URL.
+async fn counting(calls: Calls) -> String {
     let router = axum::Router::new()
         .route("/api/v1/quote", get(quote))
         .route("/api/v1/stock/profile2", get(profile))
-        .route("/api/v1/stock/candle", get(candles));
+        .route("/api/v1/stock/candle", get(candles))
+        .layer(axum::middleware::from_fn(move |request, next: Next| {
+            let calls = calls.clone();
+
+            async move {
+                calls.count();
+
+                next.run(request).await
+            }
+        }));
 
     quoll::test::spawn(router).await
 }
@@ -192,4 +207,35 @@ async fn fails_without_a_key_or_when_no_symbol_is_quoted() {
             )
         );
     }
+}
+
+#[tokio::test]
+async fn shares_a_symbol_s_calls_between_the_placements_that_read_it() -> quoll::Result<()> {
+    let calls = Calls::default();
+    let url = counting(calls.clone()).await;
+    let fixture = Fixture::new(
+        "  - { type: stock-prices, column: 3, tickers: [AIR.PA, AAPL] }\n  - { type: stock-prices, column: 2, \
+         tickers: [AAPL] }\n",
+    );
+    let server = serve(&fixture, url, &[("FINNHUB_API_KEY", "finnhub-key")]).await;
+    let read = FinnhubRead {
+        quotes: true,
+        profiles: true,
+        closes: true,
+    };
+
+    for placement in server.placements().await {
+        server
+            .api()
+            .services()
+            .finnhub(&placement.key, read)
+            .await?;
+    }
+
+    assert_eq!(
+        calls.get(),
+        6,
+        "a quote, a profile and closes per symbol: the second placement reads AAPL's the first kept"
+    );
+    Ok(())
 }

@@ -1,5 +1,6 @@
 //! GitHub's public API: the latest release of each repository of a widget, each kept on its own, so that every
-//! placement shares them. GitHub gives 60 calls an hour without a token: a longer `ttl` asks less often.
+//! placement shares them. GitHub gives 60 calls an hour without a token: each repository's release is asked again once
+//! a `ttl` passes, 30 minutes by default, and a longer one asks less often.
 
 use std::fmt;
 use std::sync::Arc;

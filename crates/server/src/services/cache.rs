@@ -38,10 +38,12 @@ pub(crate) struct Policy {
 /// failed load is not kept; a failed reload keeps the last value, which ages on, so that a service that stopped
 /// answering shows its failure once the value is too old.
 ///
-/// An entry is forgotten once it would no longer be served at all, by the longest policy of its readers: its value is
-/// older than `fresh` and `stale` together, 60 seconds and 15 minutes by default, and no load of it runs. A reader that came
-/// then would wait for a load anyway, so forgetting it changes no answer, and the keys no reader asks for any more, as
-/// those of a `hangar.yml` changed since, do not stay.
+/// An entry is forgotten once it would no longer be served at all, by the longest policy of the readers that read it
+/// since it was made: its value is older than `fresh` and `stale` together, 30 minutes and 15 minutes by default, and no
+/// load of it runs. Such a reader would wait for a load anyway. One of a longer policy that has not read it yet may
+/// come later and find it gone: it waits for a load too, and gets the failure of a service that stopped answering
+/// rather than its last value. The entries are judged as the same `Kept` is read: the values of a widget no longer in
+/// `hangar.yml` stay until a read of the same part, or until the server stops.
 pub(crate) struct Kept<K, T> {
     /// What the values are, in the log.
     name: &'static str,
@@ -204,7 +206,7 @@ where
 /// parameters, `Call`. The service is resolved and its client taken only when the call is made: a fresh value kept
 /// reads neither the store nor `.env.global`.
 ///
-/// It is kept by the declaration's policy: fresh for its `ttl`, else a minute. A service whose calls are limited is
+/// It is kept by the declaration's policy: fresh for its `ttl`, else 30 minutes. A service whose calls are limited is
 /// asked less often by a longer `ttl`.
 pub(crate) struct Part<Call, T> {
     kept: Arc<Kept<(ServiceKey, Call), T>>,
@@ -488,11 +490,13 @@ mod tests {
             stale: Duration::from_secs(100),
         };
 
+        // A reader of the short policy makes the entry, one of the long policy reads it after.
+        get(&kept, &source).await.expect("loaded");
+        tokio::time::advance(Duration::from_secs(5)).await;
         kept.get("key".to_owned(), long, source.load())
             .await
-            .expect("loaded");
-        get(&kept, &source).await.expect("kept");
-        tokio::time::advance(Duration::from_secs(25)).await;
+            .expect("kept");
+        tokio::time::advance(Duration::from_secs(20)).await;
         kept.get("other".to_owned(), POLICY, other.load())
             .await
             .expect("loaded");

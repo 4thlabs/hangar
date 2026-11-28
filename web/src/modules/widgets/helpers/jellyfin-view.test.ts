@@ -46,4 +46,14 @@ describe("jellyfinView", () => {
 
     expect(jellyfinView(latest).map(poster => poster.id)).toEqual(latest.slice(0, 10).map(movie => movie.id));
   });
+
+  it("counts the ten posters once each series is shown once", () => {
+    const episode = (id: string) => item(id, "Episode", { seriesId: "s1", seriesName: "A Show" });
+    const movies = Array.from({ length: 10 }, (_, index) => item(`m${index}`, "Movie"));
+
+    expect(jellyfinView([episode("e1"), episode("e2"), ...movies]).map(poster => poster.id)).toEqual([
+      "s1",
+      ...movies.slice(0, 9).map(movie => movie.id),
+    ]);
+  });
 });

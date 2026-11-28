@@ -82,6 +82,17 @@ async fn reads_the_latest_release_of_each_repository_in_its_order_and_leaves_one
         .await;
     let placements = server.placements().await;
 
+    assert_eq!(
+        server
+            .api()
+            .services()
+            .github(&placements[0].key, GithubRead { releases: false })
+            .await?,
+        GithubData { releases: None },
+        "a part not asked is not read"
+    );
+    assert_eq!(calls.get(), 0, "GitHub is called for none");
+
     let read = GithubRead { releases: true };
     let first = server
         .api()

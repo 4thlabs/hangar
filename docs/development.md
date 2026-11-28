@@ -334,32 +334,43 @@ there. The card shows whatever Docker answers, and nothing for an app with no ba
 
 ### Widgets
 
-The dashboard reads `GET /api/widgets`, the widgets `hangar.yml` places, in its order: each with its column, its link,
-and a key, `<type>-<hash>` of its options but not its column, so that moving a card keeps what it loaded, a second
-placement of the same options taking `-2`. Each card then reads `GET /api/widgets/<key>` on its own, a slow service
-holding its card alone. A widget's service is a quoll contract of its own in `crates/server/src/widgets/`, called at
-its `url`, else `https://<container>.<DOMAIN>`, the container's that the store's app declares, with its key from
-`.env.global`, `<CONTAINER>_API_KEY` under either prefix of the container's name, `SYNCIN_` or `SYNC_IN_`; GitHub's
-releases with `GITHUB_TOKEN`, and Finnhub's stocks with `FINNHUB_API_KEY`. Each placement's service gets a client of
-its own, which sends the key as its contract's scheme says, built at its first load and again once its address or its
-key changes; GitHub's and Finnhub's are built as the server starts. A call is given 10 seconds and tried again once.
+The server knows the services, the page the widgets. The dashboard reads `GET /api/widgets`, the widgets `hangar.yml`
+places, in its order: each with its column, its link, and a key, `<type>-<hash>` of its options but not its column, a
+second placement of the same options taking `-2`. Each card then reads its service on its own, a slow service holding
+its card alone, through the route of that service, `GET /api/services/<service>/<key>`, with a read: the parts of the
+service it shows, as `?counts=true&latest=100`. Each part asked is in the answer, the others are `null`. A read holds
+booleans and limits only, each limit capped by its part (`latest` from 1 to 100), any other a 400 as the query is read:
+what names data, a user, the symbols, the repositories or the cards, comes from `hangar.yml`.
 
-What a placement loaded is kept by its key: fresh for its `ttl`, 60 seconds unless `hangar.yml` says, then served while
-it loads again behind its reader for 15 minutes more, which is also how long a service that stopped answering keeps
-its last card. A failed first load is not kept. Nothing is loaded without a reader: the Waku version's keep-warm loop,
-which polled every widget every 30 seconds, is gone. The readers of a key share one load, which runs on its own, so a
-page that leaves does not cancel it. GitHub's releases and Finnhub's calls are also kept per repository and per symbol,
-as the Waku version keeps them, and shared by every placement. A service that does not answer, or not as the widget
-reads it, is a 502, `widgets.unavailable`, the cause in the server's log; a key that places nothing, the clock or
-Docker's stats, which load nothing here, is a 404. Docker's stats read `GET /api/docker/overview`, and the apps
+The key leads to the widget's declaration, which one `match`, `Declared::of`, reads into its service. A store app's is
+called at its `url`, else `https://<container>.<DOMAIN>`, the container's that the store's app declares, with its key
+from `.env.global`, `<CONTAINER>_API_KEY` under either prefix of the container's name, `SYNCIN_` or `SYNC_IN_`;
+GitHub's at the server's own address with `GITHUB_TOKEN`, and Finnhub's with `FINNHUB_API_KEY`. A key of another
+service's widget, the clock's or Docker's stats', is a 404, `widgets.unknown_placement`. The address and the key are
+read only when a call is made, once a read, never for a value kept fresh. Each service's contract is a quoll contract of
+its own in `crates/server/src/services/`, its client built once per service, as its declarations write where it is,
+and again once its address or its key changes. A call is given 10 seconds and tried again once.
+
+Each part is one call of its service, kept by the call: the service, as its declaration writes where it is, and the
+call's parameters, a limit and a user included. Two cards that make the same call share it, two placements of the same
+options too; a different limit is another call. A call is fresh for the widget's `ttl`, 30 minutes unless `hangar.yml`
+says, then served while it is made again behind its reader for 15 minutes more, which is also how long a service that
+stopped answering keeps its last answer. A failed first call is not kept. An entry is forgotten once no reader would be
+served it any more, as a later read of the same part finds it. Nothing is called without a reader: the Waku version's
+keep-warm loop, which polled every widget every 30 seconds, is gone. The readers of a call share one load, which runs on
+its own, so a page that leaves does not cancel it. GitHub's releases and Finnhub's calls are kept per repository and
+per symbol, shared by every placement. A service that does not answer a part asked, or not as the server reads it, is a
+502, `widgets.unavailable`, the cause in the server's log. Docker's stats read `GET /api/docker/overview`, and the apps
 due an update from `GET /api/docker/apps`, as the image check marks them, both read again as the daemon's changes come.
 
-`GET /api/widgets/<key>/image/<id>` relays a Frigate thumbnail, a Jellyfin poster or a tcg-collector card, so that the
-browser needs neither the service's address nor its key. An id is letters, digits, `_`, `.` and `-`, but not `.` or
-`..`, checked rather than escaped, as it goes in the service's path. Only a raster image is relayed, JPEG, PNG, WebP,
-GIF or AVIF, and one of no type as a JPEG: anything else, a page of a proxy or an SVG, which may hold a script that
-would run on Hangar's origin, is a 404 like a missing image. The answer carries `X-Content-Type-Options: nosniff`, and
-the browser keeps it a day, `Cache-Control: private, max-age=86400`.
+`GET /api/services/images/<key>/<id>` relays a Jellyfin poster, a Frigate thumbnail or a tcg-collector card, so that
+the browser needs neither the service's address nor its key. The id is the one the server wrote in a part, its kind
+before its service's id, `poster.<item>`, `thumbnail.<event>`, `card.<game>-<product>`, passed as it is; an image of
+another service than the widget's is a 404. The service's id is letters, digits, `_`, `.` and `-`, but not `.` or `..`,
+checked rather than escaped, as it goes in the service's path. Only a raster image is relayed, JPEG, PNG, WebP, GIF or
+AVIF, and one of no type as a JPEG: anything else, a page of a proxy or an SVG, which may hold a script that would run
+on Hangar's origin, is a 404 like a missing image. The answer carries `X-Content-Type-Options: nosniff`, and the browser
+keeps it a day, `Cache-Control: private, max-age=86400`.
 
 ## Database
 
@@ -421,17 +432,22 @@ On the Rust server, the server knows the services and the page the widgets. A wi
    rustc checks whole.
 2. Its card in `web/src/modules/widgets/components/cards/<x>-card.tsx`, which exports its entry with `defineWidget`
    and reads the parts it shows with `ServiceWidget`, its read `as const satisfies` its service's params, listed in
-   `web/src/modules/widgets/widgets-registry.ts`. Its display choices, how many and in which order, are a helper of
-   `helpers/`, `<service>-view.ts`, tested by vitest.
+   `web/src/modules/widgets/widgets-registry.ts`. A limit the card chooses, as Frigate's five events, is a constant of
+   its read, pinned by the dashboard's test (`web/src/routes/_app/index.test.tsx`), which checks each card's read. What
+   it does with the parts, an order, a join, a count, is a helper of `helpers/`, `<service>-view.ts`, tested by vitest.
 
 A widget on known parts needs nothing more. A new service, or a new part of one, is:
 
 1. Its read and its data in `crates/api/src/services/<service>.rs`, one field per part, and its route in the group
    `Services` of `crates/api/src/services.rs`.
-2. Its contract and its parts in `crates/server/src/services/<service>.rs`, `#[server(none)]`, its key sent by
+2. Its variant of `Declared`, with what its declaration gives it, in `Declared::of` and the other `match`es rustc then
+   lists, and its `ServicesState::origin`.
+3. Its contract and its parts in `crates/server/src/services/<service>.rs`, `#[server(none)]`, its key sent by
    `client::key` or `client::bearer` in its `client`, each part a `Part` kept by its call. A key that goes in
    `Authorization` in a form of its own, as Beszel's raw token and Jellyfin's `MediaBrowser Token="..."`, goes through
    `Service::authorization`: quoll's header schemes leave that header to its `Bearer` and `Basic`. An image it names is
-   a variant of `Image`, relayed by `GET /services/images/{widget}/{id}`.
-3. Its route in `crates/server/src/services/routes.rs`, through `ServicesState::read`.
-4. A test in `crates/server/tests/widgets/`, against its service faked on port 0.
+   a variant of `Image`, relayed by `GET /services/images/{widget}/{id}`. The service is a field of `ServicesState`,
+   built in its `new`.
+4. Its route in `crates/server/src/services/routes.rs`, through `ServicesState::read`.
+5. Its read in `web/src/modules/widgets/api/services-queries.ts`, on orval's options.
+6. A test in `crates/server/tests/widgets/`, against its service faked on port 0.

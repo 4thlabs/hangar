@@ -80,6 +80,14 @@ const parentSegment = {
 };
 
 /**
+ * #220: a file at a module's root, as `#modules/widgets/widgets-registry.ts`, which lists the cards of `components/`,
+ * is of the level of its components: rules 3 and 4 refuse it as they refuse `components/`. As a `regex` of
+ * `no-restricted-imports`, and as the pattern of an `import()` selector, its `/` escaped.
+ */
+const rootFile = "^#modules/[^/]+/[^/]+\\.tsx?$";
+const rootFileSelector = "^#modules\\/[^\\/]+\\/[^\\/]+\\.tsx?$";
+
+/**
  * ADR 0002, rule 3: a module's `api/` holds the options of its reads and changes, the keys, and what a change makes
  * stale. It imports no React and no package of React's, and nothing of a module's `hooks/`, `components/` or `ui/`:
  * what renders or holds state takes its options, not the other way.
@@ -95,12 +103,18 @@ const apiPatterns = [
     message:
       "A module's api/ takes nothing of hooks/, components/ or ui/: they take its options (ADR 0002, decision 1).",
   },
+  {
+    regex: rootFile,
+    message:
+      "A module's api/ takes nothing of a file at the module's root, of its components' level (ADR 0002, decision 1).",
+  },
 ];
 
 /** Rule 3 for `import()`, which `no-restricted-imports` does not read: no module's `hooks/`, `components/` or `ui/`. */
 const apiDynamicImport = {
-  selector: importOf("^(#modules\\/[^\\/]+|\\.)\\/(hooks|components|ui)\\/"),
-  message: "A module's api/ loads nothing of hooks/, components/ or ui/ (ADR 0002, decision 1).",
+  selector: [importOf("^(#modules\\/[^\\/]+|\\.)\\/(hooks|components|ui)\\/"), importOf(rootFileSelector)].join(", "),
+  message:
+    "A module's api/ loads nothing of hooks/, components/, ui/ or a file at the module's root (ADR 0002, decision 1).",
 };
 
 /**
@@ -132,6 +146,12 @@ const helperPatterns = [
     allowTypeImports: true,
     message: "A module's helpers take only types from api/, hooks/, components/ and ui/ (ADR 0002, decision 1).",
   },
+  {
+    regex: rootFile,
+    allowTypeImports: true,
+    message:
+      "A module's helpers take only types from a file at the module's root, of its components' level (ADR 0002, decision 1).",
+  },
 ];
 
 /**
@@ -150,8 +170,11 @@ function importOf(pattern) {
  * `ui/`.
  */
 const helperDynamicImport = {
-  selector: importOf("^(#modules\\/[^\\/]+|\\.)\\/(api|hooks|components|ui)\\/"),
-  message: "A module's helpers load nothing of api/, hooks/, components/ or ui/ (ADR 0002, decision 1).",
+  selector: [importOf("^(#modules\\/[^\\/]+|\\.)\\/(api|hooks|components|ui)\\/"), importOf(rootFileSelector)].join(
+    ", ",
+  ),
+  message:
+    "A module's helpers load nothing of api/, hooks/, components/, ui/ or a file at the module's root (ADR 0002, decision 1).",
 };
 
 /** The modules of the page, each a folder of `web/src/modules`: a new one is held by the rules below as it is added. */
