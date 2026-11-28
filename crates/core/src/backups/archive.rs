@@ -44,7 +44,7 @@ impl<'a> Archive<'a> {
         let mut zip = ZipWriter::new(BufWriter::new(file));
         let mut count = 0;
 
-        files.walk(&mut |file| {
+        files.walk(self.cancel, &mut |file| {
             self.add(&mut zip, file, target)?;
             count += 1;
 

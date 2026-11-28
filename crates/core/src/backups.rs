@@ -37,9 +37,12 @@ mod files;
 mod names;
 mod services;
 
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
 
 use tokio_util::sync::CancellationToken;
 
@@ -97,11 +100,16 @@ pub struct ArchiveFile {
 /// The backups of a data directory's apps: each archives the app's data folder, stopping its running services first
 /// when it says so, and starting them again whatever the outcome, but never the container Hangar runs in. Its compose
 /// commands run through a [`CommandRunner`]; its work on the disk runs on Tokio's blocking threads.
+///
+/// The backups of one app take turns, whoever asks for them: a second waits for the first to end, as they would
+/// remove each other's partial archive and stop and start the same services. Its clones share the turns.
 #[derive(Debug, Clone)]
 pub struct AppBackups<R> {
     data_dir: DataDir,
     compose: Compose<R>,
     services: Services,
+    /// The turn of each app's backups, by app.
+    turns: Arc<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
 }
 
 impl<R: CommandRunner> AppBackups<R> {
@@ -117,6 +125,7 @@ impl<R: CommandRunner> AppBackups<R> {
             compose: Compose::new(data_dir.clone(), runner),
             data_dir,
             services: Services::new(hostname),
+            turns: Arc::default(),
         }
     }
 
@@ -128,14 +137,14 @@ impl<R: CommandRunner> AppBackups<R> {
     /// A file gone since the walk listed it is passed over, and an archive that the pruning could not remove is
     /// logged: neither fails the backup.
     ///
-    /// The future must be awaited to its end, and stopped through `cancel` alone: dropped once the services are
-    /// stopped, it never starts them again.
+    /// It waits for the end of a backup of the same app that runs, or for `cancel`. The future must be awaited to its
+    /// end, and stopped through `cancel` alone: dropped once the services are stopped, it never starts them again.
     ///
     /// # Errors
     ///
-    /// - [`BackupError::NoDataFolder`] and [`BackupError::OutsideAppData`] for a folder to back up that is not there or
-    ///   leads out of `app-data/`, and [`BackupError::InvalidGlob`] for a glob globset cannot read, before anything is
-    ///   stopped;
+    /// - [`BackupError::NoDataFolder`] for a folder to back up that is not there, [`BackupError::LinkedFolder`] for one
+    ///   with a link in its path, [`BackupError::OutsideAppData`] for a path that could lead out of `app-data/`, and
+    ///   [`BackupError::InvalidGlob`] for a glob that is not read, before anything is stopped;
     /// - [`BackupError::RunsHangar`] when a service to stop runs in the container Hangar runs in, and
     ///   [`BackupError::NotStopped`] or [`BackupError::UnreadableServices`] when the services could not be stopped:
     ///   nothing is archived then, and those listed are started again;
@@ -150,6 +159,12 @@ impl<R: CommandRunner> AppBackups<R> {
     ) -> Result<BackupSummary, BackupError> {
         let app = backup.app.clone();
         let folder = self.folder(&app)?;
+        let turn = self.turn(&app);
+        let _turn = tokio::select! {
+            biased;
+            () = cancel.cancelled() => return Err(BackupError::Canceled { app }),
+            held = turn.lock() => held,
+        };
         let prefix = backup.path.clone().unwrap_or_else(|| app.clone());
         let app_data = self.data_dir.app_data().to_owned();
         let root_path = app_data.join(&prefix);
@@ -316,6 +331,13 @@ impl<R: CommandRunner> AppBackups<R> {
             .join(format!("{archive}{}", ArchiveName::EXTENSION)))
     }
 
+    /// The turn of `app`'s backups.
+    fn turn(&self, app: &str) -> Arc<tokio::sync::Mutex<()>> {
+        let mut turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
+
+        Arc::clone(turns.entry(app.to_owned()).or_default())
+    }
+
     /// Runs `work` on a blocking thread; its panic is the backup of `app` crashed.
     async fn blocking<T: Send + 'static>(
         app: &str,
@@ -341,7 +363,18 @@ impl<R: CommandRunner> AppBackups<R> {
         fs::create_dir_all(folder).map_err(|error| BackupError::io("create", folder, error))?;
         Self::remove_partials(folder)?;
 
-        let name = ArchiveName::of(jiff::Timestamp::now());
+        let name = loop {
+            let name = ArchiveName::of(jiff::Timestamp::now());
+
+            if fs::symlink_metadata(folder.join(format!("{name}{}", ArchiveName::EXTENSION)))
+                .is_err()
+            {
+                break name;
+            }
+
+            // A backup ended within this millisecond: this one takes the next, rather than replace its archive.
+            std::thread::sleep(Duration::from_millis(1));
+        };
         let partial = folder.join(format!("{name}{}", ArchiveName::PARTIAL_EXTENSION));
         let target = folder.join(format!("{name}{}", ArchiveName::EXTENSION));
         let written = Archive::new(prefix, cancel)
@@ -906,7 +939,7 @@ mod tests {
             .await;
 
         assert!(matches!(missing, Err(BackupError::NoDataFolder { .. })));
-        assert!(matches!(escaping, Err(BackupError::OutsideAppData { .. })));
+        assert!(matches!(escaping, Err(BackupError::LinkedFolder { .. })));
         assert!(runner.runs().is_empty());
     }
 
@@ -1057,27 +1090,91 @@ mod tests {
         assert_eq!(modified, Some(1_760_758_200));
     }
 
-    #[cfg(target_os = "linux")]
     #[tokio::test]
-    async fn follows_a_link_to_the_folder_that_stays_under_app_data() {
+    async fn refuses_a_link_anywhere_in_the_folder_s_path_even_one_that_stays_under_app_data() {
         let (_dir, data_dir) = data_dir(&["data.db"]);
+        let app_data = data_dir.app_data();
 
-        symlink("alpha", data_dir.app_data().join("beta")).expect("linked");
+        fs::create_dir_all(app_data.join("beta/config")).expect("created");
+        fs::write(app_data.join("beta/config/secret.txt"), "beta's").expect("written");
+        symlink("alpha", app_data.join("gamma")).expect("linked");
+        symlink("../beta/config", app_data.join("alpha/config")).expect("linked");
+        symlink(".", app_data.join("self")).expect("linked");
 
         let runner = FakeRunner::new();
         let backups = AppBackups::with_hostname(data_dir.clone(), &runner, None);
-        let summary = backups
-            .back_up(
-                &Backup {
-                    path: Some("beta".to_owned()),
-                    ..backup()
-                },
-                &CancellationToken::new(),
-            )
-            .await
-            .expect("backed up");
 
-        assert_eq!(summary.files, 1);
+        for path in ["gamma", "alpha/config", "self"] {
+            let refused = backups
+                .back_up(
+                    &Backup {
+                        path: Some(path.to_owned()),
+                        ..backup()
+                    },
+                    &CancellationToken::new(),
+                )
+                .await;
+
+            assert!(
+                matches!(refused, Err(BackupError::LinkedFolder { .. })),
+                "{path}: {refused:?}"
+            );
+        }
+
+        for path in [".", "alpha/..", "/etc", "alpha//data"] {
+            assert!(
+                matches!(
+                    BackupFiles::open_root(app_data, "alpha", path),
+                    Err(BackupError::OutsideAppData { .. })
+                ),
+                "{path}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn runs_the_backups_of_one_app_in_turn() {
+        let (_dir, data_dir) = data_dir(&["data.db"]);
+        let runner = FakeRunner::new();
+
+        for _ in 0..2 {
+            runner.reply(Reply::Success {
+                stdout: RUNNING.to_owned(),
+            });
+            runner.reply(Reply::Success {
+                stdout: String::new(),
+            });
+            runner.reply(Reply::Success {
+                stdout: String::new(),
+            });
+        }
+
+        let backups = AppBackups::with_hostname(data_dir.clone(), &runner, None);
+        let stopping = Backup {
+            stop: true,
+            ..backup()
+        };
+        let cancel = CancellationToken::new();
+        let (first, second) = tokio::join!(
+            backups.back_up(&stopping, &cancel),
+            backups.back_up(&stopping, &cancel)
+        );
+
+        first.expect("backed up");
+        second.expect("backed up");
+
+        let one = [
+            "ps --status running --format json",
+            "stop web db",
+            "start web db",
+        ];
+
+        assert_eq!(compose_calls(&runner.runs()), [one, one].concat());
+        assert_eq!(
+            archive_folder(&data_dir).len(),
+            2,
+            "neither replaced the other"
+        );
     }
 
     #[tokio::test]
