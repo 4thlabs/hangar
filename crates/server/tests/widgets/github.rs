@@ -129,5 +129,17 @@ async fn reads_the_latest_release_of_each_repository_in_its_order_and_leaves_one
         3,
         "the second placement reads glance's release the first kept"
     );
+
+    server
+        .api()
+        .services()
+        .github(&placements[0].key, read)
+        .await?;
+
+    assert_eq!(
+        calls.get(),
+        3,
+        "the repository with no release is not asked again before its ttl, as the others"
+    );
     Ok(())
 }

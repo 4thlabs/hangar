@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use futures::future::{self, OptionFuture};
 use hangar_api::{GithubData, GithubRead, GithubRelease};
+use http::StatusCode;
 use quoll::client;
 use serde::Deserialize;
 
@@ -57,7 +58,8 @@ struct Release {
 #[derive(Debug)]
 pub(super) struct Github {
     clients: Arc<Clients<GithubApiClient>>,
-    release: Part<String, GithubRelease>,
+    /// The latest release of each repository, `None` for one GitHub shows none of, kept as any answer is.
+    release: Part<String, Option<GithubRelease>>,
 }
 
 impl Github {
@@ -89,7 +91,7 @@ impl Github {
     }
 
     /// The latest release of each of `repositories`, in their order. A repository with none, renamed, or private is
-    /// logged and left out, so that one bad entry does not take the card down.
+    /// left out, as one whose call failed, logged, so that one bad entry does not take the card down.
     async fn releases(&self, locator: &Locator, repositories: &[String]) -> Vec<GithubRelease> {
         let releases = future::join_all(
             repositories
@@ -102,7 +104,7 @@ impl Github {
             .iter()
             .zip(releases)
             .filter_map(|(repository, release)| match release {
-                Ok(release) => Some(release),
+                Ok(release) => release,
                 Err(error) => {
                     tracing::warn!(
                         repository,
@@ -116,12 +118,13 @@ impl Github {
             .collect()
     }
 
-    /// The latest release of `repository`, `owner/repo`.
+    /// The latest release of `repository`, `owner/repo`; `None` when GitHub shows none, as for a repository with no
+    /// release, renamed or private, which is kept as a release is: asked again once the `ttl` passes, not at each read.
     async fn latest(
         &self,
         locator: &Locator,
         repository: &str,
-    ) -> Result<GithubRelease, Arc<LoadError>> {
+    ) -> Result<Option<GithubRelease>, Arc<LoadError>> {
         let owned = repository.to_owned();
 
         self.release
@@ -133,21 +136,29 @@ impl Github {
                     let (owner, repo) = owned.split_once('/').ok_or_else(|| {
                         LoadError::refused(format!("{owned} is not a repository, owner/repo"))
                     })?;
-                    let release =
-                        client
-                            .releases()
-                            .latest(owner, repo)
-                            .await
-                            .map_err(LoadError::call(format!(
-                                "read the latest release of {owned} on GitHub"
-                            )))?;
+                    let release = match client.releases().latest(owner, repo).await {
+                        Ok(release) => release,
+                        Err(error) if error.status() == Some(StatusCode::NOT_FOUND) => {
+                            tracing::warn!(
+                                repository = owned,
+                                "GitHub shows no release of a repository"
+                            );
 
-                    Ok(GithubRelease {
+                            return Ok(None);
+                        }
+                        Err(error) => {
+                            return Err(LoadError::call(format!(
+                                "read the latest release of {owned} on GitHub"
+                            ))(error));
+                        }
+                    };
+
+                    Ok(Some(GithubRelease {
                         repository: owned.clone(),
                         tag: release.tag_name,
                         url: release.html_url,
                         published_at: release.published_at,
-                    })
+                    }))
                 },
             )
             .await
