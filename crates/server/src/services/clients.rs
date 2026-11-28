@@ -111,10 +111,9 @@ mod tests {
         Ok(service.key.clone())
     }
 
-    fn service(api: &str, link: &str, key: &str) -> Service {
+    fn service(api: &str, key: &str) -> Service {
         Service {
             api: api.to_owned(),
-            link: link.to_owned(),
             key: Some(key.to_owned()),
         }
     }
@@ -133,27 +132,14 @@ mod tests {
         let declared = |kept: &ServiceKey| *kept == key("a");
         let get = |service: &Service| clients.get(key("a"), service, declared).ok().flatten();
 
-        assert_eq!(
-            get(&service("http://a", "https://a", "one")),
-            Some("one".to_owned())
-        );
-        assert_eq!(
-            get(&service("http://a", "https://other", "one")),
-            Some("one".to_owned())
-        );
-        assert_eq!(
-            BUILDS.load(Ordering::SeqCst),
-            1,
-            "the link is not the client's"
-        );
+        assert_eq!(get(&service("http://a", "one")), Some("one".to_owned()));
+        assert_eq!(get(&service("http://a", "one")), Some("one".to_owned()));
+        assert_eq!(BUILDS.load(Ordering::SeqCst), 1);
 
-        assert_eq!(
-            get(&service("http://a", "https://a", "two")),
-            Some("two".to_owned())
-        );
+        assert_eq!(get(&service("http://a", "two")), Some("two".to_owned()));
         assert_eq!(BUILDS.load(Ordering::SeqCst), 2, "a new key, a new client");
 
-        get(&service("http://b", "https://a", "two"));
+        get(&service("http://b", "two"));
         assert_eq!(
             BUILDS.load(Ordering::SeqCst),
             3,
@@ -161,7 +147,7 @@ mod tests {
         );
 
         clients
-            .get(key("b"), &service("http://b", "https://b", "two"), |kept| {
+            .get(key("b"), &service("http://b", "two"), |kept| {
                 *kept == key("b")
             })
             .expect("built");

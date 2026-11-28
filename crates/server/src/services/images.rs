@@ -6,11 +6,13 @@ use std::fmt;
 
 use hangar_api::ErrorCode;
 use quoll::Bytes;
+use strum::{EnumIter, IntoEnumIterator};
 
 use super::{Declared, ServicesState};
 
-/// An image a service holds, as the server names it in a part: `<kind>.<the service's id>`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// An image a service holds, as the server names it in a part: `<kind>.<the service's id>`. `parse` walks every variant,
+/// as `EnumIter` gives them, each with an empty id.
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter)]
 pub(crate) enum Image {
     /// `poster.<item>`: a Jellyfin item's primary image.
     JellyfinPoster(String),
@@ -44,14 +46,17 @@ impl Image {
             return None;
         }
 
-        Self::VARIANTS
-            .iter()
-            .map(|variant| variant(service_id.to_owned()))
+        Self::iter()
             .find(|image| image.kind() == kind)
+            .map(|image| image.with_service_id(service_id.to_owned()))
     }
 
-    /// Each variant, from its service's id, which `parse` tries by its kind.
-    const VARIANTS: [fn(String) -> Self; 1] = [Self::JellyfinPoster];
+    /// The image of the same kind, of the service's id `id`.
+    fn with_service_id(self, id: String) -> Self {
+        match self {
+            Self::JellyfinPoster(_) => Self::JellyfinPoster(id),
+        }
+    }
 
     /// The kind it is written under, before its service's id: one `match`, which both `parse` and `Display` read.
     fn kind(&self) -> &'static str {
@@ -122,18 +127,16 @@ impl ServicesState {
         let image = Image::parse(id).ok_or_else(unknown)?;
         let (placement, declared) = self.placement(key).await?;
         let found = Declared::of(&placement.widget.kind);
-        let policy = found.policy();
         // Exhaustive on the image: one of another service than the widget's is not the widget's to relay. The service is
         // resolved as the image is fetched: an image is not kept, the browser keeps it a day.
         let fetched = match &image {
             Image::JellyfinPoster(item) => {
-                let Declared::Jellyfin { at, .. } = found else {
+                let Declared::Jellyfin { .. } = found else {
                     return Err(unknown().into());
                 };
+                let locator = self.locator(&found, declared).ok_or_else(unknown)?;
 
-                self.jellyfin
-                    .poster(&self.locator(at, policy, declared), item)
-                    .await
+                self.jellyfin.poster(&locator, item).await
             }
         };
         let fetched = fetched.map_err(|error| Self::unavailable(&placement, &error))?;
@@ -145,13 +148,9 @@ impl ServicesState {
 #[cfg(test)]
 mod tests {
     use quoll::Bytes;
+    use strum::IntoEnumIterator;
 
     use super::Image;
-
-    /// One image of each variant.
-    fn every_image() -> Vec<Image> {
-        vec![Image::JellyfinPoster("6c1e2f0a9b".to_owned())]
-    }
 
     #[test]
     fn reads_back_the_id_it_writes_of_every_variant_and_no_other() {
@@ -160,7 +159,7 @@ mod tests {
             "poster.6c1e2f0a9b"
         );
 
-        for image in every_image() {
+        for image in Image::iter().map(|image| image.with_service_id("6c1e2f0a9b".to_owned())) {
             assert_eq!(
                 Image::parse(&image.to_string()),
                 Some(image.clone()),

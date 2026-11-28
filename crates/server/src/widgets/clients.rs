@@ -92,7 +92,6 @@ mod tests {
     fn service(key: &str) -> Service {
         Service {
             api: "http://frigate:5000".to_owned(),
-            link: "https://frigate.example.com".to_owned(),
             key: Some(key.to_owned()),
         }
     }
