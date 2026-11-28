@@ -67,8 +67,8 @@ hangar-api = { workspace = true, features = ["client"] }
 http.workspace = true
 reqwest = { version = "0.13", default-features = false, features = ["json", "query"] }
 tempfile.workspace = true
-# Time paused in the tests of the Docker cache.
-tokio = { workspace = true, features = ["test-util"] }
+# Time paused in the tests of the Docker cache, and the FIFO a test's fake `docker` writes to.
+tokio = { workspace = true, features = ["net", "test-util"] }
 
 [lints]
 workspace = true

@@ -340,10 +340,11 @@ pub enum ErrorCode {
     /// A batch of compose commands asked for no app.
     #[serde(rename = "compose.no_apps")]
     NoApps,
-    /// A sync of the store, while compose batches run on the files it pulls and links.
+    /// A sync of the store, while compose batches, or backups that stop the services, run on the files it pulls and
+    /// links.
     #[serde(rename = "store.batch_running")]
     BatchRunning {
-        /// The apps the batches hold, by id.
+        /// The apps the batches and those backups hold, by id.
         apps: Vec<String>,
     },
     /// An app that another command holds: a batch of compose commands that runs on it, or its install or uninstall.

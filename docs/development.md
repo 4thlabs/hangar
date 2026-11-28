@@ -303,10 +303,11 @@ threads, and the backups of one app take turns.
 A backup with `stop` holds its app, from before it reads which services run to after it starts them again, as a
 compose batch holds its own: a batch, an install, an uninstall of it, or the update of the apps, is refused meanwhile
 with a 409, `compose.app_busy`, as a batch's `up` would recreate the containers and zip a live database, and a `down`
-would make its `start` fail. A backup with `stop` of an app another command holds fails at once with
-`compose.app_busy`, without waiting. A sync of the store does not wait for a backup, nor a backup for a sync: a backup
-may run for hours. A backup without `stop` holds nothing. The update of the apps claims every app it updates at once:
-while a backup with `stop` runs, the update of that night fails, and updates none.
+would make its `start` fail. A sync of the store is refused too, `store.batch_running` naming the app, as its pull
+could rewrite or remove the `compose.yml` the services are started again from. A backup with `stop` of an app another
+command holds, or while a sync runs, fails at once with `compose.app_busy`, without waiting. A backup without `stop`
+holds nothing. While a backup with `stop` holds an app the update of the apps would update, that night's update fails
+and updates none.
 
 It runs as the job `backup` of its app, in the queue `backups`, on its cron, and when **Back up now** asks for it on the
 app's page, `POST /api/backups/<app>`: a 404, `backups.not_declared`, when `hangar.yml` declares no backup of it, and

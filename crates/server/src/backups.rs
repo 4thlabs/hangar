@@ -597,4 +597,27 @@ esac
             Err(ErrorCode::NoDataFolder { .. })
         ));
     }
+
+    #[tokio::test]
+    async fn fails_at_once_a_backup_that_stops_the_services_while_the_store_is_synced() {
+        let fixture = Fixture::new();
+        let (backups, notifier) = fixture.backups(0, 0, Backups::TIMEOUT).await;
+        let _sync = fixture.locks.claim_sync().expect("nothing is held");
+        let busy = ErrorCode::AppBusy {
+            app: "alpha".to_owned(),
+        };
+
+        assert_eq!(
+            backups.back_up("alpha", &CancellationToken::new()).await,
+            Err(busy.clone())
+        );
+        assert!(fixture.calls().is_empty(), "nothing was stopped");
+        assert_eq!(
+            notified(&notifier),
+            [NotificationMessage::BackupFailed {
+                app: "alpha".to_owned(),
+                error: ErrorDetail::from(busy),
+            }]
+        );
+    }
 }
