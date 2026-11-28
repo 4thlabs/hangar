@@ -6,6 +6,9 @@
 //! complete. Its entries keep the path of the backed-up folder under `app-data/` (`jellyfin/config/…`), so that
 //! unzipping it into `app-data/` restores it in place.
 //!
+//! Unix only: a backup opens each folder and each file through the descriptor of the folder it is in, never through a
+//! link, while the app may be running and changing them.
+//!
 //! ```no_run
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! use hangar_core::{AppBackups, CancellationToken, DataDir, Runtime, Store};
@@ -61,6 +64,8 @@ pub struct BackupSummary {
     pub files: u64,
     /// The symbolic links left out of it: a backup follows none.
     pub skipped_links: u64,
+    /// The FIFOs, sockets and devices the globs matched, left out of it: they have nothing to read.
+    pub skipped_special: u64,
     /// The services stopped while their files were read, then started again; none without `stop`.
     pub stopped: Vec<String>,
 }
@@ -123,6 +128,9 @@ impl<R: CommandRunner> AppBackups<R> {
     /// A file gone since the walk listed it is passed over, and an archive that the pruning could not remove is
     /// logged: neither fails the backup.
     ///
+    /// The future must be awaited to its end, and stopped through `cancel` alone: dropped once the services are
+    /// stopped, it never starts them again.
+    ///
     /// # Errors
     ///
     /// - [`BackupError::NoDataFolder`] and [`BackupError::OutsideAppData`] for a folder to back up that is not there or
@@ -130,7 +138,7 @@ impl<R: CommandRunner> AppBackups<R> {
     ///   stopped;
     /// - [`BackupError::RunsHangar`] when a service to stop runs in the container Hangar runs in, and
     ///   [`BackupError::NotStopped`] or [`BackupError::UnreadableServices`] when the services could not be stopped:
-    ///   nothing is archived then;
+    ///   nothing is archived then, and those listed are started again;
     /// - [`BackupError::Canceled`] once canceled, [`BackupError::Io`] when the archive cannot be written, and
     ///   [`BackupError::Crashed`] when its writing panicked;
     /// - [`BackupError::NotRestarted`] when the services stopped do not start again, with the failure of the backup
@@ -144,13 +152,14 @@ impl<R: CommandRunner> AppBackups<R> {
         let folder = self.folder(&app)?;
         let prefix = backup.path.clone().unwrap_or_else(|| app.clone());
         let app_data = self.data_dir.app_data().to_owned();
-        let source = Self::blocking(&app, {
+        let root_path = app_data.join(&prefix);
+        let root = Self::blocking(&app, {
             let (app, prefix) = (app.clone(), prefix.clone());
 
-            move || Self::source(&app_data, &app, &prefix)
+            move || BackupFiles::open_root(&app_data, &app, &prefix)
         })
         .await?;
-        let files = BackupFiles::new(source, &backup.include, &backup.exclude)?;
+        let files = BackupFiles::new(root, root_path, &backup.include, &backup.exclude)?;
 
         if cancel.is_cancelled() {
             return Err(BackupError::Canceled { app });
@@ -321,36 +330,6 @@ impl<R: CommandRunner> AppBackups<R> {
         })
     }
 
-    /// The folder `prefix` of `app_data`, links resolved: it must be a folder, and stay under `app_data` even through
-    /// a link, as `hangar.yml` only checks the path as written.
-    fn source(app_data: &Path, app: &str, prefix: &str) -> Result<PathBuf, BackupError> {
-        let folder = app_data.join(prefix);
-        let missing = || BackupError::NoDataFolder {
-            app: app.to_owned(),
-            folder: folder.clone(),
-        };
-        let resolved = match fs::canonicalize(&folder) {
-            Ok(resolved) => resolved,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Err(missing()),
-            Err(error) => return Err(BackupError::io("resolve", &folder, error)),
-        };
-        let root = fs::canonicalize(app_data)
-            .map_err(|error| BackupError::io("resolve", app_data, error))?;
-
-        if resolved == root || !resolved.starts_with(&root) {
-            return Err(BackupError::OutsideAppData {
-                app: app.to_owned(),
-                folder,
-            });
-        }
-
-        if !resolved.is_dir() {
-            return Err(missing());
-        }
-
-        Ok(resolved)
-    }
-
     /// Writes `files` into a new archive of `folder`, its entries under `prefix`, once the partial archives a killed
     /// backup left are removed: a partial archive first, renamed once complete, and removed when it fails.
     fn write(
@@ -392,6 +371,7 @@ impl<R: CommandRunner> AppBackups<R> {
             size,
             files: count,
             skipped_links: files.skipped_links(),
+            skipped_special: files.skipped_special(),
             stopped: Vec::new(),
         })
     }
@@ -493,17 +473,21 @@ impl<R: CommandRunner> AppBackups<R> {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
     use std::fs;
     use std::io::Read;
+    use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::{PermissionsExt, symlink};
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+    use std::sync::Mutex;
 
     use tempfile::TempDir;
     use tokio_util::sync::CancellationToken;
+    use zip::ExtraField;
 
     use super::{AppBackups, BackupError, BackupFiles};
     use crate::runtime::fake::{FakeRunner, Reply};
-    use crate::{Backup, Command, DataDir};
+    use crate::{Backup, Command, CommandRunner, DataDir, Output, RunError};
 
     /// What `docker compose ps --status running --format json` prints for `web`, in two containers, and `db`.
     const RUNNING: &str = concat!(
@@ -576,6 +560,42 @@ mod tests {
 
         names.sort();
         names
+    }
+
+    /// The fake runner, which also notes, at each `docker compose start`, how many archives are written by then.
+    struct CountsArchivesAtStart<'a> {
+        fake: &'a FakeRunner,
+        folder: PathBuf,
+        at_start: Mutex<Vec<usize>>,
+    }
+
+    impl CommandRunner for CountsArchivesAtStart<'_> {
+        async fn run(&self, command: &Command, output: Output) -> Result<(), RunError> {
+            self.fake.run(command, output).await
+        }
+
+        async fn capture(&self, command: &Command) -> Result<String, RunError> {
+            if command.args.iter().any(|arg| arg == "start") {
+                let archives = fs::read_dir(&self.folder)
+                    .map(|entries| {
+                        entries
+                            .filter(|entry| {
+                                entry.as_ref().is_ok_and(|entry| {
+                                    entry.file_name().to_string_lossy().ends_with(".zip")
+                                })
+                            })
+                            .count()
+                    })
+                    .unwrap_or(0);
+
+                self.at_start
+                    .lock()
+                    .expect("no test panics with the lock")
+                    .push(archives);
+            }
+
+            self.fake.capture(command).await
+        }
     }
 
     /// What each compose call ran, after the app's project and file.
@@ -739,9 +759,14 @@ mod tests {
     #[tokio::test]
     async fn stops_the_running_services_then_starts_them_again_after_the_archive() {
         let (_dir, data_dir) = data_dir(&["data.db"]);
-        let runner = FakeRunner::new();
+        let fake = FakeRunner::new();
+        let runner = CountsArchivesAtStart {
+            fake: &fake,
+            folder: data_dir.backups().join("alpha"),
+            at_start: Mutex::default(),
+        };
 
-        runner.reply(Reply::Success {
+        fake.reply(Reply::Success {
             stdout: RUNNING.to_owned(),
         });
 
@@ -759,12 +784,17 @@ mod tests {
 
         assert_eq!(summary.stopped, ["web", "db"]);
         assert_eq!(
-            compose_calls(&runner.runs()),
+            compose_calls(&fake.runs()),
             [
                 "ps --status running --format json",
                 "stop web db",
                 "start web db"
             ]
+        );
+        assert_eq!(
+            *runner.at_start.lock().expect("the lock"),
+            [1],
+            "started once the archive is written"
         );
         assert_eq!(archive_folder(&data_dir).len(), 1);
     }
@@ -895,12 +925,159 @@ mod tests {
 
         // Canceled while it writes: what it wrote goes.
         let folder = data_dir.backups().join("alpha");
-        let files = BackupFiles::new(data_dir.app_data().join("alpha"), &["**".to_owned()], &[])
-            .expect("valid globs");
+        let root = BackupFiles::open_root(data_dir.app_data(), "alpha", "alpha").expect("opened");
+        let files = BackupFiles::new(
+            root,
+            data_dir.app_data().join("alpha"),
+            &["**".to_owned()],
+            &[],
+        )
+        .expect("valid globs");
         let written = AppBackups::<FakeRunner>::write(&folder, "alpha", files, &canceled);
 
         assert!(written.is_err());
         assert!(archive_folder(&data_dir).is_empty());
+    }
+
+    #[tokio::test]
+    async fn starts_the_services_listed_again_when_their_stop_fails() {
+        for start_fails in [false, true] {
+            let (_dir, data_dir) = data_dir(&["data.db"]);
+            let runner = FakeRunner::new();
+
+            runner.reply(Reply::Success {
+                stdout: RUNNING.to_owned(),
+            });
+            // `web` stopped, then `db` did not.
+            runner.reply(Reply::Failure {
+                code: 1,
+                stderr: "db: timeout".to_owned(),
+            });
+
+            if start_fails {
+                runner.reply(Reply::Failure {
+                    code: 1,
+                    stderr: "web: no such container".to_owned(),
+                });
+            }
+
+            let backups = AppBackups::with_hostname(data_dir.clone(), &runner, None);
+            let failed = backups
+                .back_up(
+                    &Backup {
+                        stop: true,
+                        ..backup()
+                    },
+                    &CancellationToken::new(),
+                )
+                .await;
+
+            assert_eq!(
+                compose_calls(&runner.runs()),
+                [
+                    "ps --status running --format json",
+                    "stop web db",
+                    "start web db"
+                ]
+            );
+            assert!(
+                !data_dir.backups().join("alpha").exists(),
+                "nothing archived"
+            );
+
+            match failed {
+                Err(BackupError::NotRestarted {
+                    services, failure, ..
+                }) if start_fails => {
+                    assert_eq!(services, ["web", "db"]);
+                    assert!(matches!(
+                        failure.as_deref(),
+                        Some(BackupError::NotStopped { .. })
+                    ));
+                }
+                Err(BackupError::NotStopped { .. }) if !start_fails => {}
+                other => panic!("unexpected: {other:?}"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn names_each_entry_by_its_bytes_and_gives_its_time_as_an_extended_timestamp() {
+        let (_dir, data_dir) = data_dir(&[]);
+        let folder = data_dir.app_data().join("alpha");
+        // Two names that differ only in bytes that are not UTF-8, beside the name both would be made into.
+        let names: [&[u8]; 3] = [b"a\xff.txt", b"a\xfe.txt", "a\u{fffd}.txt".as_bytes()];
+
+        for name in names {
+            fs::write(folder.join(OsStr::from_bytes(name)), name).expect("written");
+        }
+
+        let file = fs::File::options()
+            .write(true)
+            .open(folder.join(OsStr::from_bytes(names[0])))
+            .expect("opened");
+        let changed = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_760_758_200);
+
+        file.set_modified(changed).expect("set");
+
+        let runner = FakeRunner::new();
+        let backups = AppBackups::with_hostname(data_dir.clone(), &runner, None);
+        let summary = backups
+            .back_up(&backup(), &CancellationToken::new())
+            .await
+            .expect("backed up");
+        let path = data_dir
+            .backups()
+            .join("alpha")
+            .join(format!("{}.zip", summary.archive));
+        let mut zip = zip::ZipArchive::new(fs::File::open(&path).expect("opened")).expect("a zip");
+        let mut raw: Vec<Vec<u8>> = zip.file_names_raw().map(<[u8]>::to_vec).collect();
+
+        raw.sort();
+
+        let mut expected: Vec<Vec<u8>> = names
+            .iter()
+            .map(|name| [b"alpha/", *name].concat())
+            .collect();
+
+        expected.sort();
+
+        assert_eq!(summary.files, 3);
+        assert_eq!(raw, expected);
+
+        let index = zip
+            .index_for_name_raw(&[b"alpha/", names[0]].concat())
+            .expect("the entry");
+        let entry = zip.by_index(index).expect("read");
+        let modified = entry.extra_data_fields().find_map(|field| match field {
+            ExtraField::ExtendedTimestamp(timestamp) => timestamp.mod_time(),
+            _ => None,
+        });
+
+        assert_eq!(modified, Some(1_760_758_200));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn follows_a_link_to_the_folder_that_stays_under_app_data() {
+        let (_dir, data_dir) = data_dir(&["data.db"]);
+
+        symlink("alpha", data_dir.app_data().join("beta")).expect("linked");
+
+        let runner = FakeRunner::new();
+        let backups = AppBackups::with_hostname(data_dir.clone(), &runner, None);
+        let summary = backups
+            .back_up(
+                &Backup {
+                    path: Some("beta".to_owned()),
+                    ..backup()
+                },
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("backed up");
+
+        assert_eq!(summary.files, 1);
     }
 
     #[tokio::test]

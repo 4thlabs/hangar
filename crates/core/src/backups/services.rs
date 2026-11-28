@@ -39,26 +39,22 @@ impl Services {
     }
 
     /// The hostname of this process, when it can be read.
-    #[cfg(unix)]
     pub(super) fn hostname() -> Option<String> {
         nix::unistd::gethostname()
             .ok()
             .and_then(|name| name.into_string().ok())
     }
 
-    #[cfg(not(unix))]
-    pub(super) fn hostname() -> Option<String> {
-        None
-    }
-
     /// Stops the services of `app` that have a container running, and gives them, in the order compose listed them:
-    /// the ones to start again. None for an app compose runs nothing of.
+    /// the ones to start again. None for an app compose runs nothing of. A `stop` that fails may have stopped some of
+    /// them already: they are all started again before it fails.
     ///
     /// # Errors
     ///
     /// [`BackupError::RunsHangar`] when one runs in the container Hangar runs in, before anything is stopped,
-    /// [`BackupError::NotStopped`] when compose fails, and [`BackupError::UnreadableServices`] when its list does not
-    /// read.
+    /// [`BackupError::UnreadableServices`] when compose's list does not read, [`BackupError::NotStopped`] when compose
+    /// fails to list or stop them, and [`BackupError::NotRestarted`], its failure the [`BackupError::NotStopped`], when
+    /// they do not start again after a `stop` that failed.
     pub(super) async fn stop<R: CommandRunner>(
         &self,
         compose: &Compose<R>,
@@ -70,15 +66,23 @@ impl Services {
             return Ok(running);
         }
 
-        compose
-            .capture(app, Self::command("stop", &running))
-            .await
-            .map_err(|source| BackupError::NotStopped {
-                app: app.to_owned(),
-                source: Box::new(source),
-            })?;
+        let Err(stop) = compose.capture(app, Self::command("stop", &running)).await else {
+            return Ok(running);
+        };
+        let not_stopped = BackupError::NotStopped {
+            app: app.to_owned(),
+            source: Box::new(stop),
+        };
 
-        Ok(running)
+        match Self::start(compose, app, &running).await {
+            Ok(()) => Err(not_stopped),
+            Err(start) => Err(BackupError::NotRestarted {
+                app: app.to_owned(),
+                services: running,
+                source: Box::new(start),
+                failure: Some(Box::new(not_stopped)),
+            }),
+        }
     }
 
     /// Starts again the `services` of `app` a backup stopped.
