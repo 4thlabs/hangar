@@ -36,9 +36,10 @@ const PATIENCE: Duration = Duration::from_secs(30);
 const ARCHIVE: &str = "2026-10-18T03-30-00-000Z";
 const ARCHIVE_BYTES: &[u8] = b"PK\x05\x06 an archive, as far as the routes care";
 
-/// The fake `docker`: it logs its arguments, one call per line, after the app's compose file or its project; answers `ps` with `web` running; and holds its stop
-/// and its `up` until the file `HANGAR_TEST_RELEASE` exists, its child's wait and not the test's. As it stops, it says
-/// so on `HANGAR_TEST_SIGNAL` when that is a FIFO, which the test reads, and waits for the test to.
+/// The fake `docker`: it logs its arguments, one call per line, after the app's compose file or its project; answers
+/// `ps` with `web` running; and holds its stop and its `up` until the file `HANGAR_TEST_RELEASE` exists, its child's
+/// wait and not the test's. As it stops, it says so on `HANGAR_TEST_SIGNAL` when that is a FIFO, which the test reads,
+/// and waits for the test to.
 const FAKE_DOCKER: &str = r#"#!/bin/sh
 echo "$*" | sed -e 's/.* -f [^ ]* //' -e 's/^compose -p [^ ]* //' >> "$HANGAR_TEST_LOG"
 case " $* " in

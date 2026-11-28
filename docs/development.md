@@ -298,10 +298,10 @@ archives: written as `.zip.partial`, renamed once complete, and the oldest remov
 exclude globs match dotfiles, and it follows no symbolic link. Its work on the disk runs on Tokio's blocking threads,
 and the backups of one app take turns.
 
-With `stop`, it stops the services that run, or that restart between the attempts of their restart policy, as
-`docker compose ps` lists them, never the container Hangar runs in, then starts them again whatever the outcome. It
-stops and starts them by the project's name alone, `docker compose -p <app> stop` then `start`, run from `/` with no
-compose file and no `COMPOSE_FILE`: compose takes the project from its containers' labels. It stops the dependents
+With `stop`, it stops the services that run, or that restart between the attempts of their restart policy, never the
+container Hangar runs in, then starts them again whatever the outcome. It lists, stops and starts them by the project's
+name alone, `docker compose -p <app> ps`, `stop` then `start`, with no `-f`: compose then reads no compose file, no
+`COMPOSE_FILE` and no `.env`, and takes the project from its containers' labels. It stops the dependents
 before what they depend on, starts them in the order of their dependencies, a service with a health check waited for
 before those that need it healthy, each with the grace and the signal it was created with; and a compose file changed
 or removed meanwhile, by a sync, the editor or a shared file it includes, cannot keep them from starting. This was

@@ -17,8 +17,8 @@ use crate::app_locks::AppLocks;
 use crate::failure::Failure;
 use crate::notifications::{Notification, Notifier};
 
-/// What the backups run on: the store, whose `hangar.yml` declares them, the core's backups, the apps the commands hold,
-/// and the notifications.
+/// What the backups run on: the store, whose `hangar.yml` declares them, the core's backups, the apps the commands
+/// hold, and the notifications.
 #[derive(Debug)]
 pub(crate) struct Backups {
     store: Store<Runtime>,
@@ -264,10 +264,9 @@ mod tests {
     use crate::app_locks::AppLocks;
     use crate::notifications::Notifier;
 
-    /// The fake `docker`: it logs its arguments, one call per line, after the app's compose file or its project; answers
-    /// `ps` with
-    /// `web` running; takes `HANGAR_TEST_STOP` seconds to stop it; and starts it again with the exit code
-    /// `HANGAR_TEST_START`.
+    /// The fake `docker`: it logs its arguments, one call per line, after the app's compose file or its project;
+    /// answers `ps` with `web` running; takes `HANGAR_TEST_STOP` seconds to stop it; and starts it again with the exit
+    /// code `HANGAR_TEST_START`.
     const FAKE_DOCKER: &str = r#"#!/bin/sh
 echo "$*" | sed -e 's/.* -f [^ ]* //' -e 's/^compose -p [^ ]* //' >> "$HANGAR_TEST_LOG"
 case " $* " in

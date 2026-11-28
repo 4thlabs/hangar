@@ -1194,12 +1194,14 @@ mod tests {
 
         assert_eq!(summary.stopped, ["web", "db"]);
 
-        // Compose orders the stop and the start of a project by its containers' labels: no file is read.
-        for (run, command) in runs[1..].iter().zip(["stop", "start"]) {
+        // Compose lists, stops and starts a project by its containers' labels, in their order: no file is read.
+        for (run, command) in runs.iter().zip([
+            "ps --status running --status restarting --format json",
+            "stop web db",
+            "start web db",
+        ]) {
             assert_eq!(run.program, "docker");
-            assert_eq!(run.args, ["compose", "-p", "alpha", command, "web", "db"]);
-            assert_eq!(run.current_dir.as_deref(), Some(Path::new("/")));
-            assert!(run.env_removed.contains("COMPOSE_FILE"));
+            assert_eq!(run.args.join(" "), format!("compose -p alpha {command}"));
         }
 
         assert_eq!(runs.len(), 3);
