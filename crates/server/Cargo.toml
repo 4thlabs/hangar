@@ -46,7 +46,7 @@ serde_json.workspace = true
 sha2 = "0.10"
 # Every kind of image the relay names, walked when it reads an image's id back: a kind added is read with no list kept
 # by hand.
-strum = { version = "=0.28.0", features = ["derive"] }
+strum = { version = "0.28", features = ["derive"] }
 # The `state` of a sign-in through the provider, compared in constant time.
 subtle = "2"
 thiserror.workspace = true
