@@ -1,7 +1,8 @@
 import { cn } from "cn";
-import type { MinifluxEntries } from "#libs/api";
+import type { MinifluxEntry, ServicesMinifluxParams } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
+import { servicesQueries } from "#modules/widgets/api/services-queries.ts";
+import { ServiceWidget } from "#modules/widgets/components/service-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -15,6 +16,9 @@ import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.t
 import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { m } from "#paraglide/messages.js";
 
+/** What the card reads of Miniflux: how many entries are unread, and the eight newest. */
+const entriesRead = { unread: true, entries: 8 } as const satisfies ServicesMinifluxParams;
+
 /** `miniflux-entries`: Miniflux's newest entries. */
 export const minifluxWidget = defineWidget("miniflux-entries", {
   icon: WidgetIcon.dashboard("miniflux", "miniflux-light"),
@@ -23,22 +27,26 @@ export const minifluxWidget = defineWidget("miniflux-entries", {
   card: MinifluxWidget,
 });
 
-/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+/** The card, read from its service in its own region. */
 function MinifluxWidget({ placement }: WidgetProps) {
+  const look = widgetLook(minifluxWidget);
+
   return (
-    <LoadedWidget placement={placement} type="miniflux-entries" look={widgetLook(minifluxWidget)}>
-      {entries => <MinifluxCard entries={entries} link={placement.link} />}
-    </LoadedWidget>
+    <ServiceWidget query={servicesQueries.miniflux} placement={placement} read={entriesRead} look={look}>
+      {({ unread, entries }) => <MinifluxCard unread={unread} entries={entries} link={placement.link} />}
+    </ServiceWidget>
   );
 }
 
 type MinifluxCardProps = {
-  entries: MinifluxEntries;
+  /** How many entries are unread, in every feed. */
+  unread: number;
+  entries: readonly MinifluxEntry[];
   link: string | null;
 };
 
 /** Miniflux's newest entries, each marked when not read yet, and how many are unread. */
-export function MinifluxCard({ entries: { unread, entries }, link }: MinifluxCardProps) {
+export function MinifluxCard({ unread, entries, link }: MinifluxCardProps) {
   const now = useNow();
   const look = widgetLook(minifluxWidget);
 

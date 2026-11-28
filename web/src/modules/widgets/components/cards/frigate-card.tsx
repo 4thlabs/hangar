@@ -1,6 +1,7 @@
-import type { FrigateEvents } from "#libs/api";
+import type { FrigateEvent, FrigateStats, ServicesFrigateParams } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
+import { servicesQueries } from "#modules/widgets/api/services-queries.ts";
+import { ServiceWidget } from "#modules/widgets/components/service-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -12,8 +13,11 @@ import {
 } from "#modules/widgets/components/widget.tsx";
 import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
 import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { placementImageUrl } from "#modules/widgets/helpers/widget-image.ts";
+import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
 import { m } from "#paraglide/messages.js";
+
+/** What the card reads of Frigate: how its detection runs, and the five latest events. */
+const eventsRead = { stats: true, events: 5 } as const satisfies ServicesFrigateParams;
 
 /** `frigate-events`: Frigate's latest events. */
 export const frigateWidget = defineWidget("frigate-events", {
@@ -24,12 +28,16 @@ export const frigateWidget = defineWidget("frigate-events", {
   card: FrigateWidget,
 });
 
-/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+/** The card, read from its service in its own region. */
 function FrigateWidget({ placement }: WidgetProps) {
+  const look = widgetLook(frigateWidget);
+
   return (
-    <LoadedWidget placement={placement} type="frigate-events" look={widgetLook(frigateWidget)}>
-      {events => <FrigateCard events={events} placementKey={placement.key} link={placement.link} />}
-    </LoadedWidget>
+    <ServiceWidget query={servicesQueries.frigate} placement={placement} read={eventsRead} look={look}>
+      {({ stats, events }) => (
+        <FrigateCard stats={stats} events={events} placementKey={placement.key} link={placement.link} />
+      )}
+    </ServiceWidget>
   );
 }
 
@@ -39,7 +47,8 @@ function cameraName(camera: string) {
 }
 
 type FrigateCardProps = {
-  events: FrigateEvents;
+  stats: FrigateStats;
+  events: readonly FrigateEvent[];
   /** The placement's key, which its thumbnails are relayed by. */
   placementKey: string;
   link: string | null;
@@ -47,7 +56,8 @@ type FrigateCardProps = {
 
 /** Frigate's latest events, with their thumbnails, and how its detection runs. */
 export function FrigateCard({
-  events: { cameraCount, detectionFps, detectors, events },
+  stats: { cameraCount, detectionFps, detectors },
+  events,
   placementKey,
   link,
 }: FrigateCardProps) {
@@ -80,7 +90,7 @@ export function FrigateCard({
               key={event.id}
               media={
                 <img
-                  src={placementImageUrl(placementKey, event.id)}
+                  src={widgetImageUrl(placementKey, event.thumbnailId)}
                   alt=""
                   loading="lazy"
                   className="aspect-video w-16 shrink-0 rounded-sm object-cover"

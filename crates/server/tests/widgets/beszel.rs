@@ -1,4 +1,4 @@
-//! `beszel-server-stats`, on a fake Beszel hub.
+//! Beszel's route, `beszel-server-stats`'s service, on a fake Beszel hub.
 
 use std::collections::HashMap;
 
@@ -7,8 +7,8 @@ use axum::extract::Query;
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use hangar_api::Widgets as _;
-use hangar_api::{BeszelServerStats, BeszelSystem, WidgetData};
+use hangar_api::Services as _;
+use hangar_api::{BeszelData, BeszelRead, BeszelSystem};
 use http::StatusCode;
 use serde_json::json;
 
@@ -68,12 +68,16 @@ async fn reads_each_system_as_its_agent_last_reported_it() -> quoll::Result<()> 
     let server = fixture.serve().await;
     let key = server.key("beszel-server-stats").await;
 
-    let data = server.api().widgets().data(&key).await?;
+    let data = server
+        .api()
+        .services()
+        .beszel(&key, BeszelRead { systems: true })
+        .await?;
 
     assert_eq!(
         data,
-        WidgetData::BeszelServerStats(BeszelServerStats {
-            systems: vec![
+        BeszelData {
+            systems: Some(vec![
                 BeszelSystem {
                     id: "a1".to_owned(),
                     name: "nas".to_owned(),
@@ -98,8 +102,17 @@ async fn reads_each_system_as_its_agent_last_reported_it() -> quoll::Result<()> 
                     temperature: None,
                     cpu_model: None,
                 },
-            ],
-        })
+            ]),
+        }
+    );
+    assert_eq!(
+        server
+            .api()
+            .services()
+            .beszel(&key, BeszelRead { systems: false })
+            .await?,
+        BeszelData { systems: None },
+        "a part not asked is not read"
     );
     Ok(())
 }

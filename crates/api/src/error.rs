@@ -483,8 +483,8 @@ pub enum ErrorCode {
         /// The app.
         app: String,
     },
-    /// No widget that loads is placed under this key: none at all, the clock, or Docker's stats, which the page reads
-    /// itself.
+    /// No widget of the service asked is placed under this key: none at all, one of another service, the clock, or
+    /// Docker's stats, which the page reads itself.
     #[serde(rename = "widgets.unknown_placement")]
     UnknownPlacement {
         /// The key asked for.
@@ -896,7 +896,9 @@ impl ErrorCode {
                 format!("the backup of {app} took more than six hours and was stopped")
             }
             Self::BackupFailed { app } => Self::hinted(&format!("the backup of {app} failed")),
-            Self::UnknownPlacement { key } => format!("no widget that loads is placed as {key}"),
+            Self::UnknownPlacement { key } => {
+                format!("no widget of this service is placed as {key}")
+            }
             Self::WidgetUnavailable { widget } => {
                 Self::hinted(&format!("the {widget} widget could not be loaded"))
             }

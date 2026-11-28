@@ -224,9 +224,17 @@ async fn the_widget_routes_take_a_session() {
 
     for path in [
         "/api/widgets",
-        "/api/widgets/clock-1",
-        "/api/widgets/clock-1/image/a",
+        "/api/services/arcane/clock-1",
+        "/api/services/backrest/clock-1",
+        "/api/services/beszel/clock-1",
+        "/api/services/finnhub/clock-1",
+        "/api/services/forgejo/clock-1",
+        "/api/services/frigate/clock-1",
+        "/api/services/github/clock-1",
+        "/api/services/gluetun/clock-1",
         "/api/services/jellyfin/clock-1",
+        "/api/services/miniflux/clock-1",
+        "/api/services/tcg-collector/clock-1",
         "/api/services/images/clock-1/poster.a",
     ] {
         let response = reqwest::get(format!("{}{path}", server.url))
@@ -284,7 +292,7 @@ async fn lists_the_placements_in_their_order_with_their_column_and_link() {
 }
 
 #[tokio::test]
-async fn answers_404_for_a_key_placed_nowhere_or_that_of_a_widget_that_loads_nothing() {
+async fn answers_404_for_a_key_placed_nowhere_or_that_of_a_widget_that_reads_no_service() {
     let fixture = Fixture::new(
         "  - { type: clock, column: 1 }\n  - { type: docker-general-stats, column: 1 }\n",
     );
@@ -297,7 +305,9 @@ async fn answers_404_for_a_key_placed_nowhere_or_that_of_a_widget_that_loads_not
         placements[1].key.clone(),
     ] {
         assert_eq!(
-            server.problem(&format!("/api/widgets/{key}")).await,
+            server
+                .problem(&format!("/api/services/frigate/{key}?stats=true"))
+                .await,
             (
                 StatusCode::NOT_FOUND,
                 Some("widgets.unknown_placement".to_owned())

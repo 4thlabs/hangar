@@ -1,4 +1,4 @@
-//! `frigate-events`, on a fake Frigate.
+//! Frigate's route, `frigate-events`'s service, on a fake Frigate, and the relay of its thumbnails.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -10,8 +10,8 @@ use axum::http::HeaderMap;
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use hangar_api::Widgets as _;
-use hangar_api::{FrigateDetector, FrigateEvent, FrigateEvents, WidgetData};
+use hangar_api::Services as _;
+use hangar_api::{FrigateData, FrigateDetector, FrigateEvent, FrigateRead, FrigateStats, Limit};
 use http::StatusCode;
 use serde_json::json;
 
@@ -100,6 +100,14 @@ async fn thumbnail(Path(id): Path<String>, headers: HeaderMap) -> Response {
     }
 }
 
+/// A read of the stats and of the five latest events.
+fn latest() -> FrigateRead {
+    FrigateRead {
+        stats: true,
+        events: Some(Limit::new(5).expect("within the cap")),
+    }
+}
+
 /// A store whose Frigate, `frigate-nvr` in the store, is at `url`, with its key in `.env.global`.
 fn fixture(url: &str) -> Fixture {
     let fixture = Fixture::new(&format!(
@@ -124,26 +132,42 @@ async fn loads_the_latest_events_and_the_stats_with_the_key_of_its_container() -
     let server = fixture.serve().await;
     let key = server.key("frigate-events").await;
 
-    let data = server.api().widgets().data(&key).await?;
+    let data = server.api().services().frigate(&key, latest()).await?;
+    let stats = server
+        .api()
+        .services()
+        .frigate(
+            &key,
+            FrigateRead {
+                stats: true,
+                events: None,
+            },
+        )
+        .await?;
 
+    assert_eq!(stats.events, None, "the events, not asked, are not read");
+    assert_eq!(stats.stats, data.stats);
     assert_eq!(
         data,
-        WidgetData::FrigateEvents(FrigateEvents {
-            camera_count: 2,
-            detection_fps: 4.25,
-            detectors: vec![
-                FrigateDetector {
-                    name: "tpu".to_owned(),
-                    inference_speed: 8.5,
-                },
-                FrigateDetector {
-                    name: "cpu".to_owned(),
-                    inference_speed: 30.0,
-                },
-            ],
-            events: vec![
+        FrigateData {
+            stats: Some(FrigateStats {
+                camera_count: 2,
+                detection_fps: 4.25,
+                detectors: vec![
+                    FrigateDetector {
+                        name: "tpu".to_owned(),
+                        inference_speed: 8.5,
+                    },
+                    FrigateDetector {
+                        name: "cpu".to_owned(),
+                        inference_speed: 30.0,
+                    },
+                ],
+            }),
+            events: Some(vec![
                 FrigateEvent {
                     id: "1700000000.5-abc".to_owned(),
+                    thumbnail_id: "thumbnail.1700000000.5-abc".to_owned(),
                     camera: "frigate_front_door".to_owned(),
                     label: "person".to_owned(),
                     sub_label: Some("Ana".to_owned()),
@@ -151,13 +175,14 @@ async fn loads_the_latest_events_and_the_stats_with_the_key_of_its_container() -
                 },
                 FrigateEvent {
                     id: "1699990000.0-def".to_owned(),
+                    thumbnail_id: "thumbnail.1699990000.0-def".to_owned(),
                     camera: "garden".to_owned(),
                     label: "cat".to_owned(),
                     sub_label: None,
                     start_time: "2023-11-14T19:26:40.000Z".to_owned(),
                 },
-            ],
-        })
+            ]),
+        }
     );
     Ok(())
 }
@@ -170,8 +195,8 @@ async fn keeps_what_it_loaded_for_the_next_reader() -> quoll::Result<()> {
     let server = fixture.serve().await;
     let key = server.key("frigate-events").await;
 
-    let first = server.api().widgets().data(&key).await?;
-    let second = server.api().widgets().data(&key).await?;
+    let first = server.api().services().frigate(&key, latest()).await?;
+    let second = server.api().services().frigate(&key, latest()).await?;
 
     assert_eq!(first, second);
     assert_eq!(calls.get(), 1, "the second read is served from the cache");
@@ -185,7 +210,9 @@ async fn answers_502_with_its_code_when_the_service_does_not_answer() {
     let key = server.key("frigate-events").await;
 
     assert_eq!(
-        server.problem(&format!("/api/widgets/{key}")).await,
+        server
+            .problem(&format!("/api/services/frigate/{key}?stats=true"))
+            .await,
         (
             StatusCode::BAD_GATEWAY,
             Some("widgets.unavailable".to_owned())
@@ -202,7 +229,9 @@ async fn answers_502_when_the_service_refuses_a_missing_key() {
 
     let server = fixture.serve().await;
     let key = server.key("frigate-events").await;
-    let (status, _) = server.problem(&format!("/api/widgets/{key}")).await;
+    let (status, _) = server
+        .problem(&format!("/api/services/frigate/{key}?stats=true"))
+        .await;
 
     assert_eq!(status, StatusCode::BAD_GATEWAY);
 }
@@ -215,7 +244,9 @@ async fn relays_a_thumbnail_kept_a_day_by_the_browser() {
     let key = server.key("frigate-events").await;
 
     let (status, headers, body) = server
-        .get(&format!("/api/widgets/{key}/image/1700000000.5-abc"))
+        .get(&format!(
+            "/api/services/images/{key}/thumbnail.1700000000.5-abc"
+        ))
         .await;
 
     assert_eq!(status, StatusCode::OK);
@@ -233,7 +264,7 @@ async fn relays_an_image_of_no_type_as_a_jpeg_and_one_of_its_type_in_any_case() 
     let key = server.key("frigate-events").await;
 
     let (status, headers, _) = server
-        .get(&format!("/api/widgets/{key}/image/no-type"))
+        .get(&format!("/api/services/images/{key}/thumbnail.no-type"))
         .await;
 
     assert_eq!(
@@ -244,7 +275,7 @@ async fn relays_an_image_of_no_type_as_a_jpeg_and_one_of_its_type_in_any_case() 
     assert_eq!(headers["x-content-type-options"], "nosniff");
 
     let (status, headers, _) = server
-        .get(&format!("/api/widgets/{key}/image/upper-case"))
+        .get(&format!("/api/services/images/{key}/thumbnail.upper-case"))
         .await;
 
     assert_eq!(
@@ -264,7 +295,7 @@ async fn answers_404_for_an_image_the_service_has_not_or_that_is_none() {
     for id in ["unknown", "a-page", "an-svg", "a%2F..%2Fstats", "a%20b"] {
         assert_eq!(
             server
-                .problem(&format!("/api/widgets/{key}/image/{id}"))
+                .problem(&format!("/api/services/images/{key}/thumbnail.{id}"))
                 .await,
             (
                 StatusCode::NOT_FOUND,
@@ -300,7 +331,7 @@ async fn sends_the_new_key_once_env_global_changes_it() {
     let fixture = fixture(&url);
     let server = fixture.serve().await;
     let key = server.key("frigate-events").await;
-    let thumbnail = format!("/api/widgets/{key}/image/1700000000.5-abc");
+    let thumbnail = format!("/api/services/images/{key}/thumbnail.1700000000.5-abc");
 
     assert_eq!(server.get(&thumbnail).await.0, StatusCode::OK);
     assert_eq!(server.get(&thumbnail).await.0, StatusCode::OK);

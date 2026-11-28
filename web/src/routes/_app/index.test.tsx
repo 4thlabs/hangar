@@ -2,21 +2,32 @@ import { focusManager } from "@tanstack/react-query";
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  getWidgetsDataQueryKey,
+  getServicesGluetunQueryKey,
   type DockerChange,
   type DockerOverview,
+  type FinnhubData,
+  type FrigateData,
+  type GluetunData,
   type JellyfinItem,
   type ProjectSummary,
-  type WidgetData,
   type WidgetPlacement,
 } from "#libs/api";
 import {
   getDockerOverviewMockHandler,
   getDockerProjectsMockHandler,
   getJobsListMockHandler,
+  getServicesArcaneMockHandler,
+  getServicesBackrestMockHandler,
+  getServicesBeszelMockHandler,
+  getServicesFinnhubMockHandler,
+  getServicesForgejoMockHandler,
+  getServicesFrigateMockHandler,
+  getServicesGithubMockHandler,
+  getServicesGluetunMockHandler,
   getServicesJellyfinMockHandler,
+  getServicesMinifluxMockHandler,
+  getServicesTcgCollectorMockHandler,
   getStoreStatusMockHandler,
-  getWidgetsDataMockHandler,
   getWidgetsPlacementsMockHandler,
 } from "#libs/api/mock";
 import { coded, countCalls, feed, network } from "#mock/network.ts";
@@ -30,27 +41,22 @@ const placements: WidgetPlacement[] = [
   { key: "miniflux-entries-1", type: "miniflux-entries", column: 3, link: "https://miniflux.example.com" },
 ];
 
-const gluetun: WidgetData = {
-  type: "gluetun-vpn-status",
-  data: { publicIp: "203.0.113.7", city: "Amsterdam", country: "Netherlands" },
+const gluetun: GluetunData = {
+  publicIp: { publicIp: "203.0.113.7", city: "Amsterdam", country: "Netherlands" },
 };
 
-const frigate: WidgetData = {
-  type: "frigate-events",
-  data: {
-    cameraCount: 2,
-    detectionFps: 4.25,
-    detectors: [{ name: "coral", inferenceSpeed: 8.5 }],
-    events: [
-      {
-        id: "1700000000.5-abc",
-        camera: "frigate_front_door",
-        label: "person",
-        subLabel: "Ana",
-        startTime: "2023-11-14T22:13:20.500Z",
-      },
-    ],
-  },
+const frigate: FrigateData = {
+  stats: { cameraCount: 2, detectionFps: 4.25, detectors: [{ name: "coral", inferenceSpeed: 8.5 }] },
+  events: [
+    {
+      id: "1700000000.5-abc",
+      thumbnailId: "thumbnail.1700000000.5-abc",
+      camera: "frigate_front_door",
+      label: "person",
+      subLabel: "Ana",
+      startTime: "2023-11-14T22:13:20.500Z",
+    },
+  ],
 };
 
 const overview: DockerOverview = {
@@ -62,60 +68,43 @@ const overview: DockerOverview = {
 };
 
 /**
- * The stocks' data: Apple's, or, when `isBroken`, a body with no stocks, which the contract refuses and the card cannot
+ * Finnhub's parts: Apple's, or, when `isBroken`, quotes that are no list, which the contract refuses and the card cannot
  * render.
  */
-function stocks({ isBroken }: { isBroken: boolean }): WidgetData {
+function stocks({ isBroken }: { isBroken: boolean }): FinnhubData {
   if (isBroken) {
     // Cast: the contract refuses this body, which a server newer or older than the page may send, and the card must
     // fail on it alone.
-    return { type: "stock-prices", data: {} } as WidgetData;
+    return { quotes: {}, profiles: [], closes: [] } as unknown as FinnhubData;
   }
 
   return {
-    type: "stock-prices",
-    data: {
-      stocks: [
-        {
-          symbol: "AAPL",
-          name: "Apple Inc",
-          currency: "USD",
-          price: 190.5,
-          changePercent: 1.06,
-          high: 191,
-          low: 187,
-          open: 188,
-          closes: [],
-        },
-      ],
-    },
+    quotes: [{ symbol: "AAPL", price: 190.5, changePercent: 1.06, high: 191, low: 187, open: 188 }],
+    profiles: [{ symbol: "AAPL", name: "Apple Inc", currency: "USD" }],
+    closes: [{ symbol: "AAPL", closes: [] }],
   };
 }
 
-/** The widgets' data, by key: Miniflux's service failing, and gluetun's when `isGluetunDown` says. */
-function widgetData(key: string, isGluetunDown: boolean): WidgetData {
-  switch (key) {
-    case "gluetun-vpn-status-1":
-      if (isGluetunDown) {
-        throw coded(502, {
-          code: "widgets.unavailable",
-          params: { widget: "gluetun-vpn-status" },
-          message: "the gluetun-vpn-status widget could not be loaded.",
-        });
-      }
-
-      return gluetun;
-    case "frigate-events-1":
-      return frigate;
-    case "miniflux-entries-1":
-      throw coded(502, {
-        code: "widgets.unavailable",
-        params: { widget: "miniflux-entries" },
-        message: "the miniflux-entries widget could not be loaded. See the server's log.",
-      });
-    default:
-      throw new Error(`no data for the widget ${key}`);
+/** gluetun's answer: where it exits, or, when `isGluetunDown`, its service failing. */
+function gluetunAnswer(isGluetunDown: boolean): GluetunData {
+  if (isGluetunDown) {
+    throw coded(502, {
+      code: "widgets.unavailable",
+      params: { widget: "gluetun-vpn-status" },
+      message: "the gluetun-vpn-status widget could not be loaded.",
+    });
   }
+
+  return gluetun;
+}
+
+/** Miniflux's answer: its service failing. */
+function minifluxDown(): never {
+  throw coded(502, {
+    code: "widgets.unavailable",
+    params: { widget: "miniflux-entries" },
+    message: "the miniflux-entries widget could not be loaded. See the server's log.",
+  });
 }
 
 /**
@@ -131,7 +120,9 @@ function dashboard({
 
   network.use(
     getWidgetsPlacementsMockHandler(shown),
-    getWidgetsDataMockHandler(({ params }) => widgetData(params.key, isGluetunDown())),
+    getServicesGluetunMockHandler(() => gluetunAnswer(isGluetunDown())),
+    getServicesFrigateMockHandler(frigate),
+    getServicesMinifluxMockHandler(minifluxDown),
     getDockerOverviewMockHandler(overview),
     getDockerProjectsMockHandler(apps),
     changes.handler,
@@ -196,7 +187,7 @@ describe("/", () => {
     );
 
     expect(frigateCard.querySelector("li img")?.getAttribute("src")).toBe(
-      "/api/widgets/frigate-events-1/image/1700000000.5-abc",
+      "/api/services/images/frigate-events-1/thumbnail.1700000000.5-abc",
     );
 
     expect(await screen.findByText("Your VPN is connected!")).toBeDefined();
@@ -254,6 +245,149 @@ describe("/", () => {
     expect(asked).toEqual(["?counts=true&latest=100"]);
   });
 
+  it("shows each other card from the parts its read asks of its service", async () => {
+    const asked: string[] = [];
+
+    const read =
+      <T,>(answer: T) =>
+      ({ request }: { request: Request }) => {
+        const url = new URL(request.url);
+
+        asked.push(`${url.pathname}${url.search}`);
+
+        return answer;
+      };
+
+    network.use(
+      getWidgetsPlacementsMockHandler([
+        { key: "arcane-general-stats-1", type: "arcane-general-stats", column: 1, link: null },
+        { key: "backrest-summary-1", type: "backrest-summary", column: 1, link: null },
+        { key: "beszel-server-stats-1", type: "beszel-server-stats", column: 2, link: null },
+        { key: "forgejo-ci-1", type: "forgejo-ci", column: 2, link: null },
+        { key: "github-releases-1", type: "github-releases", column: 3, link: null },
+        { key: "tcg-collector-cards-1", type: "tcg-collector-cards", column: 3, link: null },
+      ]),
+      getServicesArcaneMockHandler(
+        read({
+          dashboard: {
+            version: { current: "v1.1.0", newest: null, updateAvailable: false, releaseUrl: null },
+            containers: { total: 3, running: 2, stopped: 1 },
+            images: { total: 1, unused: 0, size: 1 },
+            volumes: { total: 0, inUse: 0, unused: 0 },
+            actionItems: [{ kind: "image_update", severity: "warning", count: 4 }],
+          },
+        }),
+      ),
+      getServicesBackrestMockHandler(
+        read({
+          repositories: [
+            {
+              id: "nas",
+              status: "SUCCESS",
+              health: "healthy" as const,
+              lastRunAt: null,
+              successes: 1,
+              bytesAdded: 0,
+              protectedBytes: 0,
+              nextBackupAt: null,
+            },
+          ],
+        }),
+      ),
+      getServicesBeszelMockHandler(
+        read({
+          systems: [
+            {
+              id: "a1",
+              name: "the-nas",
+              status: "up",
+              up: true,
+              uptime: null,
+              cpu: 1,
+              memory: 1,
+              disk: 1,
+              temperature: null,
+              cpuModel: null,
+            },
+          ],
+        }),
+      ),
+      getServicesForgejoMockHandler(
+        read({
+          repositories: [
+            {
+              fullName: "ana/hangar",
+              url: "https://f.example.com/ana/hangar",
+              updatedAt: "2026-11-25T09:00:00Z",
+              archived: false,
+            },
+          ],
+          runs: [
+            {
+              id: 1,
+              repository: "ana/hangar",
+              title: "Run 1",
+              status: "running",
+              reference: "main",
+              url: "https://f.example.com/ana/hangar/actions/runs/1",
+              createdAt: "2026-11-26T08:00:00Z",
+              startedAt: null,
+            },
+          ],
+        }),
+      ),
+      getServicesGithubMockHandler(
+        read({
+          releases: [
+            {
+              repository: "glanceapp/glance",
+              tag: "v0.9.0",
+              url: "https://github.com/glanceapp/glance/releases/tag/v0.9.0",
+              publishedAt: "2026-11-25T10:00:00Z",
+            },
+          ],
+        }),
+      ),
+      getServicesTcgCollectorMockHandler(
+        read({
+          cards: [
+            {
+              game: 21,
+              product: 7,
+              imageId: "card.21-7",
+              card: { name: "Luke Skywalker", expansion: null, version: null, trend: 12.5, low: 9.9, trendFoil: null },
+            },
+          ],
+          prices: { days: 14, cards: [{ game: 21, product: 7, history: [] }] },
+        }),
+      ),
+    );
+
+    renderAt("/");
+
+    expect(await within(await card("Arcane")).findByText("image_update")).toBeDefined();
+    expect(within(await card("Backrest")).getByText("nas")).toBeDefined();
+    expect(within(await card("Beszel")).getByText("the-nas")).toBeDefined();
+    expect(within(await card("Forgejo")).getAllByText("ana/hangar")).toHaveLength(2);
+    expect(within(await card("Releases")).getByText("glanceapp/glance")).toBeDefined();
+
+    const tcg = await card("TCG Collector");
+
+    expect(within(tcg).getByText("Luke Skywalker")).toBeDefined();
+    expect(tcg.querySelector("li img")?.getAttribute("src")).toBe(
+      "/api/services/images/tcg-collector-cards-1/card.21-7",
+    );
+
+    expect(asked.toSorted()).toEqual([
+      "/api/services/arcane/arcane-general-stats-1?dashboard=true",
+      "/api/services/backrest/backrest-summary-1?repositories=true",
+      "/api/services/beszel/beszel-server-stats-1?systems=true",
+      "/api/services/forgejo/forgejo-ci-1?repositories=true&runs=true",
+      "/api/services/github/github-releases-1?releases=true",
+      "/api/services/tcg-collector/tcg-collector-cards-1?cards=true&prices=true",
+    ]);
+  });
+
   it("shows Docker's host from the Docker routes", async () => {
     dashboard();
     renderAt("/");
@@ -302,7 +436,7 @@ describe("/", () => {
 
     expect(await screen.findByText("Miniflux is unavailable")).toBeDefined();
     expect(screen.getByText("Its service did not answer. See the server's log.")).toBeDefined();
-    expect(calls("GET /api/widgets/miniflux-entries-1")).toBe(1);
+    expect(calls("GET /api/services/miniflux/miniflux-entries-1")).toBe(1);
     expect(screen.getByText("Your VPN is connected!")).toBeDefined();
   });
 
@@ -313,9 +447,8 @@ describe("/", () => {
         { key: "stock-prices-1", type: "stock-prices", column: 3, link: null },
       ]),
       // A body with no stocks, which the contract refuses: the card cannot render it.
-      getWidgetsDataMockHandler(({ params }) =>
-        params.key === "stock-prices-1" ? stocks({ isBroken: true }) : widgetData(params.key, false),
-      ),
+      getServicesGluetunMockHandler(gluetun),
+      getServicesFinnhubMockHandler(stocks({ isBroken: true })),
     );
 
     vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -331,7 +464,7 @@ describe("/", () => {
 
     network.use(
       getWidgetsPlacementsMockHandler([{ key: "stock-prices-1", type: "stock-prices", column: 3, link: null }]),
-      getWidgetsDataMockHandler(() => stocks({ isBroken })),
+      getServicesFinnhubMockHandler(() => stocks({ isBroken })),
     );
 
     vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -367,9 +500,11 @@ describe("/", () => {
       focusManager.setFocused(true);
     });
 
-    await waitFor(() => expect(calls("GET /api/widgets/gluetun-vpn-status-1")).toBe(2));
+    await waitFor(() => expect(calls("GET /api/services/gluetun/gluetun-vpn-status-1")).toBe(2));
     await waitFor(() =>
-      expect(queryClient.getQueryState(getWidgetsDataQueryKey("gluetun-vpn-status-1"))?.status).toBe("error"),
+      expect(
+        queryClient.getQueryState(getServicesGluetunQueryKey("gluetun-vpn-status-1", { publicIp: true }))?.status,
+      ).toBe("error"),
     );
 
     expect(screen.getByText("Your VPN is connected!")).toBeDefined();
@@ -456,13 +591,13 @@ describe("/", () => {
     const router = renderAt("/");
 
     expect(await screen.findByText("Miniflux is unavailable")).toBeDefined();
-    expect(calls("GET /api/widgets/miniflux-entries-1")).toBe(1);
+    expect(calls("GET /api/services/miniflux/miniflux-entries-1")).toBe(1);
 
     await act(() => router.navigate({ to: "/settings" }));
     await act(() => router.navigate({ to: "/" }));
 
     expect(await screen.findByText("Miniflux is unavailable")).toBeDefined();
-    await waitFor(() => expect(calls("GET /api/widgets/miniflux-entries-1")).toBe(2));
+    await waitFor(() => expect(calls("GET /api/services/miniflux/miniflux-entries-1")).toBe(2));
   });
 
   it("follows no change of the daemon without a Docker card", async () => {

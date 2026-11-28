@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { TcgCard, TcgDailyPrices, TcgFollowedCard } from "#libs/api";
+import type { TcgCard, TcgDailyPrices } from "#libs/api";
+import type { TcgCardView } from "#modules/widgets/helpers/tcg-collector-view.ts";
 import { describePriceSeries, latestPriceDay, priceSeries, TcgCollectorCard } from "./tcg-collector-card.tsx";
 
 const aCard = (overrides: Partial<TcgCard> = {}): TcgCard => ({
@@ -26,9 +27,9 @@ const history = [
   aDay("2026-10-11", { trend: 1.45 }),
 ];
 
-const solRing: TcgFollowedCard = { game: 1, product: 910771, imageId: "1-910771", card: aCard(), history };
+const solRing: TcgCardView = { game: 1, product: 910771, imageId: "card.1-910771", card: aCard(), history };
 
-const render = (cards: TcgFollowedCard[], days = 30, link = "https://cards.test.local") =>
+const render = (cards: TcgCardView[], days = 30, link = "https://cards.test.local") =>
   renderToStaticMarkup(<TcgCollectorCard cards={{ days, cards }} placementKey="tcg-collector-cards-k1" link={link} />);
 
 describe("the price curve", () => {
@@ -78,7 +79,7 @@ describe("TcgCollectorCard", () => {
     expect(html).toContain("V.2");
     expect(html).toContain("Commander Masters");
     expect(html).toContain('href="https://cards.test.local/?game=1&amp;card=910771"');
-    expect(html).toContain('src="/api/widgets/tcg-collector-cards-k1/image/1-910771"');
+    expect(html).toContain('src="/api/services/images/tcg-collector-cards-k1/card.1-910771"');
     expect(render([solRing], 30, "https://cards.test.local/")).toContain(
       'href="https://cards.test.local/?game=1&amp;card=910771"',
     );
@@ -104,7 +105,10 @@ describe("TcgCollectorCard", () => {
   });
 
   it("gives a product tcg-collector does not know a row of its own, and says what the card covers", () => {
-    const html = render([solRing, { game: 21, product: 755143, imageId: "21-755143", card: null, history: [] }], 90);
+    const html = render(
+      [solRing, { game: 21, product: 755143, imageId: "card.21-755143", card: null, history: [] }],
+      90,
+    );
 
     expect(html).toContain("Card not found");
     expect(html).toContain("Star Wars Unlimited · product 755143");

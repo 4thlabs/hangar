@@ -73,7 +73,7 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
 - **No cast where the type can be narrowed.** Narrow with `typeof`, `in`, a type guard, `satisfies`, or a generic
   parameter where the API takes one: `screen.getByRole<HTMLButtonElement>("button")`, not
   `screen.getByRole("button") as HTMLButtonElement`. `as const` is no cast. A cast the checker cannot prove says why
-  in a comment, as `use-widget-data.ts`'s on a generic union.
+  in a comment.
 - **The boundary.** What the server sends is typed by the contract, through orval: never cast it to something else.
   What comes from elsewhere (`JSON.parse`, a cookie, storage, the URL, an `EventSource` frame) is `unknown` until a
   check reads it.

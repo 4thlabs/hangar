@@ -1,5 +1,6 @@
-import type { Stock, StockPrices } from "#libs/api";
-import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
+import type { ServicesFinnhubParams } from "#libs/api";
+import { servicesQueries } from "#modules/widgets/api/services-queries.ts";
+import { ServiceWidget } from "#modules/widgets/components/service-widget.tsx";
 import { WidgetSparkline } from "#modules/widgets/components/widget-sparkline.tsx";
 import {
   WidgetCard,
@@ -10,8 +11,12 @@ import {
   WidgetMetricGrid,
 } from "#modules/widgets/components/widget.tsx";
 import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
+import { finnhubView, type StockView } from "#modules/widgets/helpers/finnhub-view.ts";
 import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { m } from "#paraglide/messages.js";
+
+/** What the card reads of Finnhub: each symbol's quote, profile and closes. */
+const stocksRead = { quotes: true, profiles: true, closes: true } as const satisfies ServicesFinnhubParams;
 
 /** `stock-prices`: stock quotes from Finnhub. */
 export const stockWidget = defineWidget("stock-prices", {
@@ -22,12 +27,14 @@ export const stockWidget = defineWidget("stock-prices", {
   card: StockWidget,
 });
 
-/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+/** The card, read from its service in its own region. */
 function StockWidget({ placement }: WidgetProps) {
+  const look = widgetLook(stockWidget);
+
   return (
-    <LoadedWidget placement={placement} type="stock-prices" look={widgetLook(stockWidget)}>
-      {prices => <StockCard prices={prices} />}
-    </LoadedWidget>
+    <ServiceWidget query={servicesQueries.finnhub} placement={placement} read={stocksRead} look={look}>
+      {({ quotes, profiles, closes }) => <StockCard stocks={finnhubView(quotes, profiles, closes)} />}
+    </ServiceWidget>
   );
 }
 
@@ -82,7 +89,7 @@ export function changeClassName(changePercent: number) {
 }
 
 /** The stock's closes over the last month. Nothing when Finnhub's plan gives none. */
-function ClosesSparkline({ stock }: { stock: Stock }) {
+function ClosesSparkline({ stock }: { stock: StockView }) {
   const first = stock.closes[0];
   const last = stock.closes.at(-1);
 
@@ -97,7 +104,7 @@ function ClosesSparkline({ stock }: { stock: Stock }) {
 }
 
 /** One stock: what it is, what it is worth, and how that moved today. */
-function StockTile({ stock }: { stock: Stock }) {
+function StockTile({ stock }: { stock: StockView }) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3">
       <div className="flex items-center justify-between gap-2">
@@ -130,7 +137,7 @@ function StockTile({ stock }: { stock: Stock }) {
  * The day's best and worst change, and how many stocks rose. Only the changes compare: the stocks may be quoted in
  * different currencies, whose prices add up to nothing.
  */
-function StockMetrics({ stocks }: { stocks: Stock[] }) {
+function StockMetrics({ stocks }: { stocks: readonly StockView[] }) {
   const byChange = stocks.toSorted((first, second) => second.changePercent - first.changePercent);
   const best = byChange[0];
   const worst = byChange.at(-1);
@@ -165,7 +172,7 @@ function StockMetrics({ stocks }: { stocks: Stock[] }) {
 }
 
 /** The quote of each stock, in the order `hangar.yml` lists them. */
-export function StockCard({ prices: { stocks } }: { prices: StockPrices }) {
+export function StockCard({ stocks }: { stocks: readonly StockView[] }) {
   const look = widgetLook(stockWidget);
 
   return (

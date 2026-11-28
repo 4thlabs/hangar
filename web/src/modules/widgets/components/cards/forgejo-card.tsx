@@ -1,7 +1,8 @@
 import { cn } from "cn";
-import type { ForgejoCi } from "#libs/api";
+import type { ServicesForgejoParams } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
+import { servicesQueries } from "#modules/widgets/api/services-queries.ts";
+import { ServiceWidget } from "#modules/widgets/components/service-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -13,8 +14,12 @@ import {
   WidgetTime,
 } from "#modules/widgets/components/widget.tsx";
 import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
+import { forgejoView, type ForgejoView } from "#modules/widgets/helpers/forgejo-view.ts";
 import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { m } from "#paraglide/messages.js";
+
+/** What the card reads of Forgejo: the repositories, and the runs not finished in them. */
+const ciRead = { repositories: true, runs: true } as const satisfies ServicesForgejoParams;
 
 /** `forgejo-ci`: what Forgejo Actions runs, and the repositories updated last. */
 export const forgejoWidget = defineWidget("forgejo-ci", {
@@ -25,17 +30,19 @@ export const forgejoWidget = defineWidget("forgejo-ci", {
   card: ForgejoWidget,
 });
 
-/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+/** The card, read from its service in its own region. */
 function ForgejoWidget({ placement }: WidgetProps) {
+  const look = widgetLook(forgejoWidget);
+
   return (
-    <LoadedWidget placement={placement} type="forgejo-ci" look={widgetLook(forgejoWidget)}>
-      {ci => <ForgejoCard ci={ci} link={placement.link} />}
-    </LoadedWidget>
+    <ServiceWidget query={servicesQueries.forgejo} placement={placement} read={ciRead} look={look}>
+      {({ repositories, runs }) => <ForgejoCard ci={forgejoView(repositories, runs)} link={placement.link} />}
+    </ServiceWidget>
   );
 }
 
 type ForgejoCardProps = {
-  ci: ForgejoCi;
+  ci: ForgejoView;
   link: string | null;
 };
 

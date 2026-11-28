@@ -1,13 +1,17 @@
-//! `backrest-summary`: Backrest's repositories and how their backups went, from its summary dashboard.
+//! Backrest: its repositories and how their backups went, from its summary dashboard.
 
-use hangar_api::{BackrestHealth, BackrestRepository, BackrestSummary};
+use std::sync::Arc;
+
+use futures::future::OptionFuture;
+use hangar_api::{BackrestData, BackrestHealth, BackrestRead, BackrestRepository};
 use quoll::client;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 
-use crate::services::LoadError;
-use crate::services::Moment;
-use crate::services::Service;
+use super::cache::Part;
+use super::clients::Clients;
+use super::error::LoadError;
+use super::{Locator, Moment, Service};
 
 quoll::api! {
     /// Backrest's Connect-RPC API, at the root: every call, a read too, is a `POST` of JSON.
@@ -18,7 +22,7 @@ quoll::api! {
     scheme ApiKey = header "X-API-Key";
 
     #[auth(ApiKey)]
-    group Backrest {
+    group Summaries {
         POST "/v1.Backrest/GetSummaryDashboard" => summary(request: &Empty) -> Summary;
     }
 }
@@ -128,40 +132,61 @@ impl RepoSummary {
     }
 }
 
-/// The client of a placement's service, built once for its address and its key.
-#[derive(Debug, Clone)]
-pub(super) struct Client(BackrestApiClient);
+/// Backrest, as the widgets read it: its clients, and its parts, each kept by its call.
+#[derive(Debug)]
+pub(super) struct Backrest {
+    clients: Arc<Clients<BackrestApiClient>>,
+    repositories: Part<(), Vec<BackrestRepository>>,
+}
 
-impl Client {
-    /// The client of the service `service`, with its key.
-    ///
-    /// # Errors
-    ///
-    /// When the client cannot be built, or the key cannot be sent.
-    pub(super) fn new(service: &Service) -> Result<Self, LoadError> {
-        build(service).map(Self)
+impl Backrest {
+    /// No client and no part kept yet.
+    pub(super) fn new() -> Self {
+        Self {
+            clients: Clients::new(Self::client),
+            repositories: Part::new("Backrest repositories"),
+        }
     }
-}
 
-/// The client of the Backrest of `service`, with its key.
-fn build(service: &Service) -> Result<BackrestApiClient, LoadError> {
-    service.client::<BackrestApi>("Backrest", service.key().map(client::key::<ApiKey>))
-}
+    /// The parts `read` asks of the Backrest `locator` finds.
+    pub(super) async fn read(
+        &self,
+        locator: &Locator,
+        read: BackrestRead,
+    ) -> Result<BackrestData, Arc<LoadError>> {
+        let BackrestRead { repositories } = read;
+        let repositories =
+            OptionFuture::from(repositories.then(|| self.repositories(locator))).await;
 
-/// The repositories of the Backrest of `client`.
-pub(super) async fn load(client: &Client) -> Result<BackrestSummary, LoadError> {
-    let summary = client
-        .0
-        .backrest()
-        .summary(&Empty {})
-        .await
-        .map_err(LoadError::call("read Backrest's summary"))?;
+        Ok(BackrestData {
+            repositories: repositories.transpose()?,
+        })
+    }
 
-    Ok(BackrestSummary {
-        repositories: summary
-            .repo_summaries
-            .into_iter()
-            .map(RepoSummary::repository)
-            .collect(),
-    })
+    /// The client of the Backrest of `service`, with its key.
+    fn client(service: &Service) -> Result<BackrestApiClient, LoadError> {
+        service.client::<BackrestApi>("Backrest", service.key().map(client::key::<ApiKey>))
+    }
+
+    /// The repositories, in Backrest's order.
+    async fn repositories(
+        &self,
+        locator: &Locator,
+    ) -> Result<Vec<BackrestRepository>, Arc<LoadError>> {
+        self.repositories
+            .get(locator, &self.clients, (), |client| async move {
+                let summary = client
+                    .summaries()
+                    .summary(&Empty {})
+                    .await
+                    .map_err(LoadError::call("read Backrest's summary"))?;
+
+                Ok(summary
+                    .repo_summaries
+                    .into_iter()
+                    .map(RepoSummary::repository)
+                    .collect())
+            })
+            .await
+    }
 }

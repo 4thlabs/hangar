@@ -174,7 +174,7 @@
         ],
         "type": "object"
       },
-      "ArcaneGeneralStats": {
+      "ArcaneDashboard": {
         "description": "The Docker host as Arcane reports it for its first environment.",
         "properties": {
           "actionItems": {
@@ -226,6 +226,26 @@
         ],
         "type": "object"
       },
+      "ArcaneData": {
+        "description": "Arcane's parts, those the read asked for.",
+        "properties": {
+          "dashboard": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArcaneDashboard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The dashboard, when the read asked."
+          }
+        },
+        "required": [
+          "dashboard"
+        ],
+        "type": "object"
+      },
       "ArcaneVersion": {
         "description": "The version of Arcane, and whether a newer one is out.",
         "properties": {
@@ -257,6 +277,25 @@
           "newest",
           "updateAvailable",
           "releaseUrl"
+        ],
+        "type": "object"
+      },
+      "BackrestData": {
+        "description": "Backrest's parts, those the read asked for.",
+        "properties": {
+          "repositories": {
+            "description": "Its repositories, in Backrest's order, when the read asked.",
+            "items": {
+              "$ref": "#/components/schemas/BackrestRepository"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "repositories"
         ],
         "type": "object"
       },
@@ -344,22 +383,6 @@
           "bytesAdded",
           "protectedBytes",
           "nextBackupAt"
-        ],
-        "type": "object"
-      },
-      "BackrestSummary": {
-        "description": "Backrest's repositories, and how their backups went.",
-        "properties": {
-          "repositories": {
-            "description": "Its repositories, in Backrest's order.",
-            "items": {
-              "$ref": "#/components/schemas/BackrestRepository"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "repositories"
         ],
         "type": "object"
       },
@@ -456,15 +479,18 @@
         ],
         "type": "object"
       },
-      "BeszelServerStats": {
-        "description": "The systems a Beszel hub monitors, as its agents last reported them.",
+      "BeszelData": {
+        "description": "Beszel's parts, those the read asked for.",
         "properties": {
           "systems": {
-            "description": "Its systems, by name.",
+            "description": "The systems, by name, as the hub's own page lists them, when the read asked.",
             "items": {
               "$ref": "#/components/schemas/BeszelSystem"
             },
-            "type": "array"
+            "type": [
+              "array",
+              "null"
+            ]
           }
         },
         "required": [
@@ -2832,7 +2858,7 @@
             "type": "object"
           },
           {
-            "description": "No widget that loads is placed under this key: none at all, the clock, or Docker's stats, which the page reads\nitself.",
+            "description": "No widget of the service asked is placed under this key: none at all, one of another service, the clock, or\nDocker's stats, which the page reads itself.",
             "properties": {
               "code": {
                 "const": "widgets.unknown_placement",
@@ -3056,46 +3082,184 @@
         ],
         "type": "object"
       },
-      "ForgejoCi": {
-        "description": "What Forgejo Actions runs, and the repositories updated last.",
+      "FinnhubCloses": {
+        "description": "A symbol's daily closes over the last month.",
         "properties": {
-          "activeRuns": {
-            "description": "Every run not finished yet, running ones first, then newest first.",
+          "closes": {
+            "description": "Its closes, oldest first; none when Finnhub's plan gives none.",
             "items": {
-              "$ref": "#/components/schemas/ForgejoRun"
+              "format": "double",
+              "type": "number"
             },
             "type": "array"
           },
-          "recentRepositories": {
-            "description": "The three repositories updated last, newest first, archived ones left out.",
-            "items": {
-              "$ref": "#/components/schemas/ForgejoRepository"
-            },
-            "type": "array"
-          },
-          "repositoryCount": {
-            "description": "How many repositories the card covers.",
-            "format": "uint64",
-            "minimum": 0,
-            "type": "integer"
+          "symbol": {
+            "description": "The symbol, as `hangar.yml` writes it.",
+            "type": "string"
           }
         },
         "required": [
-          "repositoryCount",
-          "activeRuns",
-          "recentRepositories"
+          "symbol",
+          "closes"
+        ],
+        "type": "object"
+      },
+      "FinnhubData": {
+        "description": "Finnhub's parts, those the read asked for.",
+        "properties": {
+          "closes": {
+            "description": "The closes, when the read asked: none for a symbol Finnhub's plan gives none of.",
+            "items": {
+              "$ref": "#/components/schemas/FinnhubCloses"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "profiles": {
+            "description": "The profiles, when the read asked: a symbol Finnhub has no profile of is left out.",
+            "items": {
+              "$ref": "#/components/schemas/FinnhubProfile"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quotes": {
+            "description": "The quotes, when the read asked: a symbol Finnhub cannot quote is left out.",
+            "items": {
+              "$ref": "#/components/schemas/FinnhubQuote"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "quotes",
+          "profiles",
+          "closes"
+        ],
+        "type": "object"
+      },
+      "FinnhubProfile": {
+        "description": "What Finnhub knows of a symbol's company.",
+        "properties": {
+          "currency": {
+            "description": "The ISO 4217 code of the currency it is quoted in, when Finnhub gives one.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "The company's name, when Finnhub gives one.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "symbol": {
+            "description": "The symbol, as `hangar.yml` writes it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "name",
+          "currency"
+        ],
+        "type": "object"
+      },
+      "FinnhubQuote": {
+        "description": "A symbol's quote, in the currency it is quoted in.",
+        "properties": {
+          "changePercent": {
+            "description": "Its change since the previous close, in percent.",
+            "format": "double",
+            "type": "number"
+          },
+          "high": {
+            "description": "The day's high.",
+            "format": "double",
+            "type": "number"
+          },
+          "low": {
+            "description": "The day's low.",
+            "format": "double",
+            "type": "number"
+          },
+          "open": {
+            "description": "The day's open.",
+            "format": "double",
+            "type": "number"
+          },
+          "price": {
+            "description": "Its last price.",
+            "format": "double",
+            "type": "number"
+          },
+          "symbol": {
+            "description": "The symbol, as `hangar.yml` writes it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "price",
+          "changePercent",
+          "high",
+          "low",
+          "open"
+        ],
+        "type": "object"
+      },
+      "ForgejoData": {
+        "description": "Forgejo's parts, those the read asked for.",
+        "properties": {
+          "repositories": {
+            "description": "The repositories, when the read asked.",
+            "items": {
+              "$ref": "#/components/schemas/ForgejoRepository"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "runs": {
+            "description": "The runs that have not finished, when the read asked.",
+            "items": {
+              "$ref": "#/components/schemas/ForgejoRun"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "repositories",
+          "runs"
         ],
         "type": "object"
       },
       "ForgejoRepository": {
         "description": "A repository of Forgejo's.",
         "properties": {
+          "archived": {
+            "description": "Whether it is archived.",
+            "type": "boolean"
+          },
           "fullName": {
             "description": "`owner/name`.",
             "type": "string"
           },
           "updatedAt": {
-            "description": "When it was pushed to or changed last, in RFC 3339.",
+            "description": "When it was pushed to or changed last, archiving too, in RFC 3339.",
             "type": "string"
           },
           "url": {
@@ -3106,22 +3270,23 @@
         "required": [
           "fullName",
           "url",
-          "updatedAt"
+          "updatedAt",
+          "archived"
         ],
         "type": "object"
       },
       "ForgejoRun": {
         "description": "A run of Forgejo Actions that has not finished.",
         "properties": {
+          "createdAt": {
+            "description": "When it was queued, in RFC 3339.",
+            "type": "string"
+          },
           "id": {
             "description": "Its id.",
             "format": "uint64",
             "minimum": 0,
             "type": "integer"
-          },
-          "isQueued": {
-            "description": "Whether it waits for a runner or an approval, rather than runs.",
-            "type": "boolean"
           },
           "reference": {
             "description": "The branch, tag or pull request it runs on, as `main` or `#2`.",
@@ -3131,9 +3296,12 @@
             "description": "The repository it runs in, `owner/name`.",
             "type": "string"
           },
-          "since": {
-            "description": "When it started, or, until it does, when it was queued, in RFC 3339.",
-            "type": "string"
+          "startedAt": {
+            "description": "When it started, in RFC 3339; `None` until it does.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "status": {
             "description": "`running`, `waiting` or `blocked`.",
@@ -3153,10 +3321,41 @@
           "repository",
           "title",
           "status",
-          "isQueued",
           "reference",
           "url",
-          "since"
+          "createdAt",
+          "startedAt"
+        ],
+        "type": "object"
+      },
+      "FrigateData": {
+        "description": "Frigate's parts, those the read asked for.",
+        "properties": {
+          "events": {
+            "description": "The latest events, when the read asked.",
+            "items": {
+              "$ref": "#/components/schemas/FrigateEvent"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "stats": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FrigateStats"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How its detection runs, when the read asked."
+          }
+        },
+        "required": [
+          "stats",
+          "events"
         ],
         "type": "object"
       },
@@ -3187,7 +3386,7 @@
             "type": "string"
           },
           "id": {
-            "description": "Its id, which is also that of its thumbnail, relayed by `GET /widgets/{key}/image/{id}`.",
+            "description": "Its id.",
             "type": "string"
           },
           "label": {
@@ -3204,10 +3403,15 @@
               "string",
               "null"
             ]
+          },
+          "thumbnailId": {
+            "description": "Its thumbnail, relayed by `GET /services/images/{widget}/{id}`.",
+            "type": "string"
           }
         },
         "required": [
           "id",
+          "thumbnailId",
           "camera",
           "label",
           "subLabel",
@@ -3215,8 +3419,8 @@
         ],
         "type": "object"
       },
-      "FrigateEvents": {
-        "description": "Frigate's latest events, and how its detection runs.",
+      "FrigateStats": {
+        "description": "How Frigate's detection runs.",
         "properties": {
           "cameraCount": {
             "description": "How many cameras it watches.",
@@ -3235,20 +3439,31 @@
               "$ref": "#/components/schemas/FrigateDetector"
             },
             "type": "array"
-          },
-          "events": {
-            "description": "The latest events, newest first.",
-            "items": {
-              "$ref": "#/components/schemas/FrigateEvent"
-            },
-            "type": "array"
           }
         },
         "required": [
           "cameraCount",
           "detectionFps",
-          "detectors",
-          "events"
+          "detectors"
+        ],
+        "type": "object"
+      },
+      "GithubData": {
+        "description": "GitHub's parts, those the read asked for.",
+        "properties": {
+          "releases": {
+            "description": "The releases, in the order `hangar.yml` lists the repositories: a repository with none, renamed, or private is\nleft out. When the read asked.",
+            "items": {
+              "$ref": "#/components/schemas/GithubRelease"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "releases"
         ],
         "type": "object"
       },
@@ -3280,22 +3495,6 @@
         ],
         "type": "object"
       },
-      "GithubReleases": {
-        "description": "The latest release of each repository of the widget.",
-        "properties": {
-          "releases": {
-            "description": "The releases, newest first: a repository with none, renamed, or private is left out.",
-            "items": {
-              "$ref": "#/components/schemas/GithubRelease"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "releases"
-        ],
-        "type": "object"
-      },
       "GlobalVariables": {
         "description": "The variables of `.env.global`, by name. Their values are secrets as often as not: the answer is never cached.",
         "properties": {
@@ -3312,7 +3511,27 @@
         ],
         "type": "object"
       },
-      "GluetunVpnStatus": {
+      "GluetunData": {
+        "description": "gluetun's parts, those the read asked for.",
+        "properties": {
+          "publicIp": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GluetunPublicIp"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the tunnel exits, when the read asked."
+          }
+        },
+        "required": [
+          "publicIp"
+        ],
+        "type": "object"
+      },
+      "GluetunPublicIp": {
         "description": "Where gluetun's tunnel exits: an empty address when it is down, an empty city or country when gluetun could not\nplace it.",
         "properties": {
           "city": {
@@ -3709,21 +3928,27 @@
           }
         ]
       },
-      "MinifluxEntries": {
-        "description": "Miniflux's newest entries, and how many are unread.",
+      "MinifluxData": {
+        "description": "Miniflux's parts, those the read asked for.",
         "properties": {
           "entries": {
-            "description": "The newest entries, read or not, newest first.",
+            "description": "The newest entries, when the read asked.",
             "items": {
               "$ref": "#/components/schemas/MinifluxEntry"
             },
-            "type": "array"
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "unread": {
-            "description": "How many entries are unread, in every feed.",
+            "description": "How many entries are unread, when the read asked.",
             "format": "uint64",
             "minimum": 0,
-            "type": "integer"
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         },
         "required": [
@@ -4623,90 +4848,6 @@
         ],
         "type": "object"
       },
-      "Stock": {
-        "description": "A stock, as Finnhub quotes it, in the currency it is quoted in.",
-        "properties": {
-          "changePercent": {
-            "description": "Its change since the previous close, in percent.",
-            "format": "double",
-            "type": "number"
-          },
-          "closes": {
-            "description": "Its daily closes over the last month, oldest first; none when Finnhub's plan gives none.",
-            "items": {
-              "format": "double",
-              "type": "number"
-            },
-            "type": "array"
-          },
-          "currency": {
-            "description": "The ISO 4217 code of the currency it is quoted in; `None` when Finnhub has no profile of it.",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "high": {
-            "description": "The day's high.",
-            "format": "double",
-            "type": "number"
-          },
-          "low": {
-            "description": "The day's low.",
-            "format": "double",
-            "type": "number"
-          },
-          "name": {
-            "description": "The company's name; `None` when Finnhub has no profile of it.",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "open": {
-            "description": "The day's open.",
-            "format": "double",
-            "type": "number"
-          },
-          "price": {
-            "description": "Its last price.",
-            "format": "double",
-            "type": "number"
-          },
-          "symbol": {
-            "description": "Its symbol, as `hangar.yml` writes it.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "symbol",
-          "name",
-          "currency",
-          "price",
-          "changePercent",
-          "high",
-          "low",
-          "open",
-          "closes"
-        ],
-        "type": "object"
-      },
-      "StockPrices": {
-        "description": "Stock quotes from Finnhub, in the order the widget lists them.",
-        "properties": {
-          "stocks": {
-            "description": "The stocks: a symbol Finnhub cannot quote is left out.",
-            "items": {
-              "$ref": "#/components/schemas/Stock"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "stocks"
-        ],
-        "type": "object"
-      },
       "StoreApp": {
         "description": "An app of the store, installed or not.",
         "properties": {
@@ -4942,27 +5083,64 @@
         ],
         "type": "object"
       },
-      "TcgCollectorCards": {
-        "description": "The prices of the cards tcg-collector follows, in euros, from Cardmarket's price guides.",
+      "TcgCardPrices": {
+        "description": "The prices of a card over the widget's `days`.",
         "properties": {
-          "cards": {
-            "description": "The cards, in the order `hangar.yml` lists them.",
+          "game": {
+            "description": "Cardmarket's game id.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "history": {
+            "description": "Its prices, oldest first, from the first day that has one.",
             "items": {
-              "$ref": "#/components/schemas/TcgFollowedCard"
+              "$ref": "#/components/schemas/TcgDailyPrices"
             },
             "type": "array"
           },
-          "days": {
-            "description": "How many days the price curves cover.",
-            "format": "uint16",
-            "maximum": 65535,
+          "product": {
+            "description": "Cardmarket's product id.",
+            "format": "uint32",
             "minimum": 0,
             "type": "integer"
           }
         },
         "required": [
-          "days",
-          "cards"
+          "game",
+          "product",
+          "history"
+        ],
+        "type": "object"
+      },
+      "TcgCollectorData": {
+        "description": "tcg-collector's parts, those the read asked for.",
+        "properties": {
+          "cards": {
+            "description": "The cards, when the read asked.",
+            "items": {
+              "$ref": "#/components/schemas/TcgFollowedCard"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "prices": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TcgPrices"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The prices of the cards, when the read asked."
+          }
+        },
+        "required": [
+          "cards",
+          "prices"
         ],
         "type": "object"
       },
@@ -5017,15 +5195,8 @@
             "minimum": 0,
             "type": "integer"
           },
-          "history": {
-            "description": "Its prices over the days of the curve, oldest first, from the first day that has one.",
-            "items": {
-              "$ref": "#/components/schemas/TcgDailyPrices"
-            },
-            "type": "array"
-          },
           "imageId": {
-            "description": "The id of its image, relayed by `GET /widgets/{key}/image/{id}`.",
+            "description": "The id of its image, relayed by `GET /services/images/{widget}/{id}`.",
             "type": "string"
           },
           "product": {
@@ -5039,8 +5210,31 @@
           "game",
           "product",
           "imageId",
-          "card",
-          "history"
+          "card"
+        ],
+        "type": "object"
+      },
+      "TcgPrices": {
+        "description": "The prices of the cards over the widget's `days`.",
+        "properties": {
+          "cards": {
+            "description": "The curve of each card.",
+            "items": {
+              "$ref": "#/components/schemas/TcgCardPrices"
+            },
+            "type": "array"
+          },
+          "days": {
+            "description": "How many days the curves cover.",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "days",
+          "cards"
         ],
         "type": "object"
       },
@@ -5073,181 +5267,6 @@
         ],
         "type": "object"
       },
-      "WidgetData": {
-        "description": "What a widget loaded from its service, by its `type`.",
-        "oneOf": [
-          {
-            "description": "`arcane-general-stats`.",
-            "properties": {
-              "data": {
-                "$ref": "#/components/schemas/ArcaneGeneralStats"
-              },
-              "type": {
-                "const": "arcane-general-stats",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "data"
-            ],
-            "type": "object"
-          },
-          {
-            "description": "`backrest-summary`.",
-            "properties": {
-              "data": {
-                "$ref": "#/components/schemas/BackrestSummary"
-              },
-              "type": {
-                "const": "backrest-summary",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "data"
-            ],
-            "type": "object"
-          },
-          {
-            "description": "`beszel-server-stats`.",
-            "properties": {
-              "data": {
-                "$ref": "#/components/schemas/BeszelServerStats"
-              },
-              "type": {
-                "const": "beszel-server-stats",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "data"
-            ],
-            "type": "object"
-          },
-          {
-            "description": "`forgejo-ci`.",
-            "properties": {
-              "data": {
-                "$ref": "#/components/schemas/ForgejoCi"
-              },
-              "type": {
-                "const": "forgejo-ci",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "data"
-            ],
-            "type": "object"
-          },
-          {
-            "description": "`frigate-events`.",
-            "properties": {
-              "data": {
-                "$ref": "#/components/schemas/FrigateEvents"
-              },
-              "type": {
-                "const": "frigate-events",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "data"
-            ],
-            "type": "object"
-          },
-          {
-            "description": "`gluetun-vpn-status`.",
-            "properties": {
-              "data": {
-                "$ref": "#/components/schemas/GluetunVpnStatus"
-              },
-              "type": {
-                "const": "gluetun-vpn-status",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "data"
-            ],
-            "type": "object"
-          },
-          {
-            "description": "`miniflux-entries`.",
-            "properties": {
-              "data": {
-                "$ref": "#/components/schemas/MinifluxEntries"
-              },
-              "type": {
-                "const": "miniflux-entries",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "data"
-            ],
-            "type": "object"
-          },
-          {
-            "description": "`tcg-collector-cards`.",
-            "properties": {
-              "data": {
-                "$ref": "#/components/schemas/TcgCollectorCards"
-              },
-              "type": {
-                "const": "tcg-collector-cards",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "data"
-            ],
-            "type": "object"
-          },
-          {
-            "description": "`github-releases`.",
-            "properties": {
-              "data": {
-                "$ref": "#/components/schemas/GithubReleases"
-              },
-              "type": {
-                "const": "github-releases",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "data"
-            ],
-            "type": "object"
-          },
-          {
-            "description": "`stock-prices`.",
-            "properties": {
-              "data": {
-                "$ref": "#/components/schemas/StockPrices"
-              },
-              "type": {
-                "const": "stock-prices",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "data"
-            ],
-            "type": "object"
-          }
-        ]
-      },
       "WidgetPlacement": {
         "description": "A widget placed on the dashboard.",
         "properties": {
@@ -5259,7 +5278,7 @@
             "type": "integer"
           },
           "key": {
-            "description": "What names its data and its images, `<type>-<hash>` of its options, so that moving it to another column keeps\nwhat was loaded; a second placement of the same options takes `-2`, and so on.",
+            "description": "What its card's reads and images go by, `<type>-<hash>` of its options, so that moving it to another column keeps\nwhat was read; a second placement of the same options takes `-2`, and so on.",
             "type": "string"
           },
           "link": {
@@ -5291,12 +5310,12 @@
         "oneOf": [
           {
             "const": "clock",
-            "description": "The date and time, from the reader's own clock: it loads nothing.",
+            "description": "The date and time, from the reader's own clock: it reads no service.",
             "type": "string"
           },
           {
             "const": "docker-general-stats",
-            "description": "The usage of the Docker host, which the page reads from the Docker routes: it loads nothing here.",
+            "description": "The usage of the Docker host, which the page reads from the Docker routes: it reads no service.",
             "type": "string"
           },
           {
@@ -6599,6 +6618,488 @@
         ]
       }
     },
+    "/api/services/arcane/{widget}": {
+      "get": {
+        "operationId": "services_arcane",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "widget",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The dashboard of its first environment, its own host.",
+            "in": "query",
+            "name": "dashboard",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArcaneData"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Arcane's dashboard of the Docker host.",
+        "tags": [
+          "Services"
+        ]
+      }
+    },
+    "/api/services/backrest/{widget}": {
+      "get": {
+        "operationId": "services_backrest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "widget",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Its repositories, from its summary dashboard.",
+            "in": "query",
+            "name": "repositories",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackrestData"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Backrest's repositories, and how their backups went.",
+        "tags": [
+          "Services"
+        ]
+      }
+    },
+    "/api/services/beszel/{widget}": {
+      "get": {
+        "operationId": "services_beszel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "widget",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The systems the hub monitors.",
+            "in": "query",
+            "name": "systems",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BeszelData"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The systems a Beszel hub monitors.",
+        "tags": [
+          "Services"
+        ]
+      }
+    },
+    "/api/services/finnhub/{widget}": {
+      "get": {
+        "operationId": "services_finnhub",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "widget",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The daily closes of each symbol over the last month.",
+            "in": "query",
+            "name": "closes",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "The company and the currency of each symbol.",
+            "in": "query",
+            "name": "profiles",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "The quote of each symbol.",
+            "in": "query",
+            "name": "quotes",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinnhubData"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Stock quotes from Finnhub's public API, for the widget's symbols.",
+        "tags": [
+          "Services"
+        ]
+      }
+    },
+    "/api/services/forgejo/{widget}": {
+      "get": {
+        "operationId": "services_forgejo",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "widget",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The repositories.",
+            "in": "query",
+            "name": "repositories",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "The runs that have not finished, in every repository that runs Actions.",
+            "in": "query",
+            "name": "runs",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgejoData"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Forgejo's repositories, and the runs of Forgejo Actions that have not finished.",
+        "tags": [
+          "Services"
+        ]
+      }
+    },
+    "/api/services/frigate/{widget}": {
+      "get": {
+        "operationId": "services_frigate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "widget",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The latest events, newest first: at most this many.",
+            "in": "query",
+            "name": "events",
+            "required": false,
+            "schema": {
+              "format": "uint32",
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "How its detection runs: its cameras, its detectors.",
+            "in": "query",
+            "name": "stats",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrigateData"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "How Frigate's detection runs, and its latest events.",
+        "tags": [
+          "Services"
+        ]
+      }
+    },
+    "/api/services/github/{widget}": {
+      "get": {
+        "operationId": "services_github",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "widget",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The latest release of each repository of the widget.",
+            "in": "query",
+            "name": "releases",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubData"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The latest release of the widget's repositories, from GitHub's public API.",
+        "tags": [
+          "Services"
+        ]
+      }
+    },
+    "/api/services/gluetun/{widget}": {
+      "get": {
+        "operationId": "services_gluetun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "widget",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Where the tunnel exits, from the control server.",
+            "in": "query",
+            "name": "publicIp",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GluetunData"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Where gluetun's tunnel exits.",
+        "tags": [
+          "Services"
+        ]
+      }
+    },
     "/api/services/images/{widget}/{id}": {
       "get": {
         "operationId": "services_image",
@@ -6713,6 +7214,138 @@
           }
         ],
         "summary": "What a Jellyfin server holds, and what was added to it last.",
+        "tags": [
+          "Services"
+        ]
+      }
+    },
+    "/api/services/miniflux/{widget}": {
+      "get": {
+        "operationId": "services_miniflux",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "widget",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The newest entries, read or not, newest first: at most this many.",
+            "in": "query",
+            "name": "entries",
+            "required": false,
+            "schema": {
+              "format": "uint32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "How many entries are unread, in every feed.",
+            "in": "query",
+            "name": "unread",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MinifluxData"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "How many of Miniflux's entries are unread, and the newest.",
+        "tags": [
+          "Services"
+        ]
+      }
+    },
+    "/api/services/tcg-collector/{widget}": {
+      "get": {
+        "operationId": "services_tcg_collector",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "widget",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Each card, as the catalog has it, with its latest prices.",
+            "in": "query",
+            "name": "cards",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "The prices of each card over the widget's `days`.",
+            "in": "query",
+            "name": "prices",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TcgCollectorData"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The cards tcg-collector follows for the widget, and their prices.",
         "tags": [
           "Services"
         ]
@@ -7265,103 +7898,6 @@
           "Widgets"
         ]
       }
-    },
-    "/api/widgets/{key}": {
-      "get": {
-        "operationId": "widgets_data",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "key",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WidgetData"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "default": {
-            "$ref": "#/components/responses/Problem"
-          }
-        },
-        "security": [
-          {
-            "Session": []
-          }
-        ],
-        "summary": "What the widget placed as `key` loaded. A 404 for a key the dashboard does not place, or that of a widget that loads nothing, the clock's or Docker's; a 502 when its service did not answer.",
-        "tags": [
-          "Widgets"
-        ]
-      }
-    },
-    "/api/widgets/{key}/image/{id}": {
-      "get": {
-        "operationId": "widgets_image",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "key",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "*/*": {}
-            },
-            "description": "Bytes of the media type `Content-Type` says."
-          },
-          "204": {
-            "description": "No Content"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "default": {
-            "$ref": "#/components/responses/Problem"
-          }
-        },
-        "security": [
-          {
-            "Session": []
-          }
-        ],
-        "summary": "An image the widget placed as `key` shows, fetched from its service: a Frigate thumbnail, a card of tcg-collector. Kept a day by the browser. A 404 for an id that is not letters, digits, `_`, `.` and `-`, or that its service does not have.",
-        "tags": [
-          "Widgets"
-        ]
-      }
     }
   },
   "tags": [
@@ -7410,7 +7946,7 @@
       "name": "Backups"
     },
     {
-      "description": "The dashboard, as `hangar.yml` places its widgets. A widget's data is kept per placement: fresh for its `ttl`,\n60 seconds unless `hangar.yml` says, then served while it reloads behind the reader for 15 minutes more, which\nis also how long a service that stops answering keeps its last card. Nothing is loaded without a reader.",
+      "description": "The dashboard, as `hangar.yml` places its widgets.",
       "name": "Widgets"
     },
     {

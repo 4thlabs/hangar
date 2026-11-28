@@ -1,22 +1,20 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { GithubReleases } from "#libs/api";
+import type { GithubRelease } from "#libs/api";
 import { GithubCard } from "./github-card.tsx";
 
 const opened = Date.UTC(2026, 10, 26, 8, 0, 0);
 const minute = 60_000;
 
-function releasedAt(publishedAt: number): GithubReleases {
-  return {
-    releases: [
-      {
-        repository: "4thlabs/hangar",
-        tag: "v1.2.3",
-        url: "https://github.com/4thlabs/hangar/releases/tag/v1.2.3",
-        publishedAt: new Date(publishedAt).toISOString(),
-      },
-    ],
-  };
+function releasedAt(publishedAt: number): GithubRelease[] {
+  return [
+    {
+      repository: "4thlabs/hangar",
+      tag: "v1.2.3",
+      url: "https://github.com/4thlabs/hangar/releases/tag/v1.2.3",
+      publishedAt: new Date(publishedAt).toISOString(),
+    },
+  ];
 }
 
 describe("GithubCard", () => {

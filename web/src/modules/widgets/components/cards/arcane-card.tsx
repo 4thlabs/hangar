@@ -1,5 +1,6 @@
-import type { ArcaneGeneralStats, ArcaneVersion } from "#libs/api";
-import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
+import type { ArcaneDashboard, ArcaneVersion, ServicesArcaneParams } from "#libs/api";
+import { servicesQueries } from "#modules/widgets/api/services-queries.ts";
+import { ServiceWidget } from "#modules/widgets/components/service-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -13,6 +14,9 @@ import { formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 import { m } from "#paraglide/messages.js";
 import { HostMetrics } from "./host-metrics.tsx";
 
+/** What the card reads of Arcane: its dashboard of the Docker host. */
+const dashboardRead = { dashboard: true } as const satisfies ServicesArcaneParams;
+
 /** `arcane-general-stats`: Arcane's view of the Docker host. */
 export const arcaneWidget = defineWidget("arcane-general-stats", {
   icon: WidgetIcon.dashboard("arcane"),
@@ -22,12 +26,14 @@ export const arcaneWidget = defineWidget("arcane-general-stats", {
   card: ArcaneWidget,
 });
 
-/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+/** The card, read from its service in its own region. */
 function ArcaneWidget({ placement }: WidgetProps) {
+  const look = widgetLook(arcaneWidget);
+
   return (
-    <LoadedWidget placement={placement} type="arcane-general-stats" look={widgetLook(arcaneWidget)}>
-      {stats => <ArcaneCard stats={stats} link={placement.link} />}
-    </LoadedWidget>
+    <ServiceWidget query={servicesQueries.arcane} placement={placement} read={dashboardRead} look={look}>
+      {({ dashboard }) => <ArcaneCard stats={dashboard} link={placement.link} />}
+    </ServiceWidget>
   );
 }
 
@@ -69,7 +75,7 @@ function VersionLabel({ version }: { version: ArcaneVersion }) {
 }
 
 type ArcaneCardProps = {
-  stats: ArcaneGeneralStats;
+  stats: ArcaneDashboard;
   link: string | null;
 };
 
@@ -100,8 +106,8 @@ export function ArcaneCard({ stats: { version, containers, images, volumes, acti
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             {actionItems.map(action => (
               <li key={`${action.kind}-${action.severity}`} className={severityClassName(action.severity)}>
-                <span className="font-semibold tabular-nums">{formatInteger(action.count)}</span>{" "}
-                {action.kind.replaceAll("_", " ")}
+                {/* What it is, as Arcane names it: data, not words of the page's. */}
+                <span className="font-semibold tabular-nums">{formatInteger(action.count)}</span> {action.kind}
               </li>
             ))}
           </ul>
