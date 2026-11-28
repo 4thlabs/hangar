@@ -305,7 +305,9 @@ name alone, `docker compose -p <app> ps`, `stop` then `start`, with no `-f`: com
 before what they depend on, starts them in the order of their dependencies, a service with a health check waited for
 before those that need it healthy, each with the grace and the signal it was created with; and a compose file changed
 or removed meanwhile, by a sync, the editor or a shared file it includes, cannot keep them from starting. This was
-checked with Docker Compose 5.7, Alpine 3.24's `docker-cli-compose`, which the image ships.
+checked with Docker Compose 5.7, Alpine 3.24's `docker-cli-compose`, which the image ships. As compose does, `start`
+also starts the dependencies of those services that were not running: a one-shot init runs again, and a dependency
+stopped on purpose comes back. And `stop` leaves alone the one-off containers of `docker compose run`.
 
 A backup with `stop` holds its app, from before it reads which services run to after it starts them again, as a
 compose batch holds its own: a batch, an install, an uninstall of it, or the update of the apps, is refused meanwhile
