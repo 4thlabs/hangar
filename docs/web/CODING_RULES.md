@@ -225,8 +225,9 @@ The server knows the services, the page the widgets (#220):
   params. A limit the card chooses is that constant, which the dashboard's test pins.
 - **A read holds booleans and limits only.** What names data, a user, the symbols, the repositories, comes from
   `hangar.yml`, never from the page.
-- **A widget on known parts touches the page alone**: its card's file, which writes its entry with `defineWidget`, and
-  its line in `modules/widgets/widgets-registry.ts`.
+- **A widget on known parts adds no route and no service type.** It is its options in the core's `WidgetKind`, its
+  `WidgetType`, its arm of `Declared::of`, and on the page its card's file, which writes its entry with
+  `defineWidget`, and its line in `modules/widgets/widgets-registry.ts`.
 
 ## Readability
 

@@ -88,7 +88,21 @@ impl BackupsServer for App {
                 .collect(),
             // A name that is no app's, as a project Hangar does not manage: it has no backup.
             Err(BackupError::InvalidApp { .. }) => Vec::new(),
-            Err(error) => {
+            Err(
+                error @ (BackupError::InvalidArchive { .. }
+                | BackupError::UnknownArchive { .. }
+                | BackupError::NoDataFolder { .. }
+                | BackupError::OutsideAppData { .. }
+                | BackupError::LinkedFolder { .. }
+                | BackupError::InvalidGlob { .. }
+                | BackupError::RunsHangar { .. }
+                | BackupError::NotStopped { .. }
+                | BackupError::UnreadableServices { .. }
+                | BackupError::NotRestarted { .. }
+                | BackupError::Canceled { .. }
+                | BackupError::Io { .. }
+                | BackupError::Crashed { .. }),
+            ) => {
                 return Err(Failure::logged(
                     ErrorCode::BackupsUnreadable { app },
                     &error,

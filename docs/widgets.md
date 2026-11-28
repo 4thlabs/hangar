@@ -39,8 +39,8 @@ reads the `frigate` app. From that app Hangar takes the `container_name` of its 
 - **API key:** `<CONTAINER>_API_KEY` from `.env.global`, for instance `MINIFLUX_API_KEY`. The key
   is optional: without one, the request is sent unauthenticated.
 
-When a service cannot be reached, the card shows an error and keeps its last good answer for up
-to 15 minutes.
+When a service cannot be reached, the card keeps its last good answer for 15 minutes past its
+`ttl`, 45 minutes from when it was read by default, then shows an error.
 
 ## Available widgets
 
@@ -172,10 +172,9 @@ The latest release of each repository, newest first.
   repositories: [4thlabs/hangar, immich-app/immich]
 ```
 
-`repositories` is **required**, at least one, each written `owner/repo`. Anonymous calls to the
-GitHub API are limited to 60 an hour; set `GITHUB_TOKEN` in Hangar's own environment to lift that.
-GitHub limits calls (60 an hour without a token): each repository is asked once per `ttl`, and a
-longer `ttl` keeps the card under it.
+`repositories` is **required**, at least one, each written `owner/repo`. GitHub limits calls, 60
+an hour without a token: each repository is asked once per `ttl`, and a longer `ttl` keeps the card
+under it. Set `GITHUB_TOKEN` in Hangar's own environment to lift the limit.
 
 ### `stock-prices`
 
@@ -217,12 +216,12 @@ service.
 
 ## Adding a widget
 
-A widget on parts a service already has is a change of the page alone: a card in
-`web/src/modules/widgets/components/cards/`, which writes its entry with `defineWidget` and reads
-its parts through `ServiceWidget`, a line in `web/src/modules/widgets/widgets-registry.ts`, and
-what it does with the parts, how many and in which order, in a helper of
-`web/src/modules/widgets/helpers/` with its test. Its type and options in `hangar.yml` come from
-the core and the contract, as for any widget.
+A widget on parts a service already has adds no route and no service type. It is its type and
+options in the core's `WidgetKind`, its `WidgetType` in the contract and its arm of `Declared::of`
+on the server; and on the page a card in `web/src/modules/widgets/components/cards/`, which writes
+its entry with `defineWidget` and reads its parts through `ServiceWidget`, a line in
+`web/src/modules/widgets/widgets-registry.ts`, and what it does with the parts, how many and in
+which order, in a helper of `web/src/modules/widgets/helpers/` with its test.
 
 ## Adding a service
 

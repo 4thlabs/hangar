@@ -20,7 +20,7 @@ type ServiceWidgetProps<Data, Failure, Params, Read> = {
  * A widget that reads its service, in its own region: its skeleton while the parts come, its error when its service did
  * not answer, and its card once read, which renders the next answer when it threw on one. Each widget waits for its own:
  * a slow service holds its card alone. A card that has data keeps it when it is read again and that fails: the server
- * keeps a service's last answer for 15 minutes, and says when it is too old.
+ * serves a service's last answer 15 minutes past the widget's `ttl`, and says when it is too old.
  */
 export function ServiceWidget<Data extends object, Failure extends Error, Params extends object, Read extends Params>({
   query,

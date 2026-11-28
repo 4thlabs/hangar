@@ -101,7 +101,9 @@ impl DockerState {
                     project: project.to_owned(),
                 }
                 .into(),
-                other => Self::unavailable(&other),
+                other @ (DockerError::UnsupportedHost { .. }
+                | DockerError::UnsupportedTls
+                | DockerError::Daemon { .. }) => Self::unavailable(&other),
             })?;
         let outdated = self.outdated(&containers, &installed.apps).await;
 
@@ -124,7 +126,9 @@ impl DockerState {
                     container: container.to_owned(),
                 }
                 .into(),
-                other => Self::unavailable(&other),
+                other @ (DockerError::UnsupportedHost { .. }
+                | DockerError::UnsupportedTls
+                | DockerError::Daemon { .. }) => Self::unavailable(&other),
             })?;
         let events = lines
             .map(|line| {

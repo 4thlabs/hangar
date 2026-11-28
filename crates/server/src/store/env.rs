@@ -76,7 +76,36 @@ impl EnvServer for App {
 
                 Err(ErrorCode::InvalidVariableName { name: key }.into())
             }
-            Err(error) => Err(Failure::logged(ErrorCode::EnvSaveFailed, &error)),
+            Err(
+                error @ (StoreError::DataDirNotSet
+                | StoreError::NotUtf8 { .. }
+                | StoreError::Io { .. }
+                | StoreError::Git { .. }
+                | StoreError::Config { .. }
+                | StoreError::NotInstalled
+                | StoreError::InvalidName { .. }
+                | StoreError::InvalidAppId { .. }
+                | StoreError::InTheWay { .. }
+                | StoreError::UnknownApp { .. }
+                | StoreError::SharedFile { .. }
+                | StoreError::AppExists { .. }
+                | StoreError::InvalidPath { .. }
+                | StoreError::ThroughFile { .. }
+                | StoreError::OutsideApp { .. }
+                | StoreError::HiddenFile { .. }
+                | StoreError::BrokenSymlink { .. }
+                | StoreError::NoSuchFile { .. }
+                | StoreError::NotAFile { .. }
+                | StoreError::TooLarge { .. }
+                | StoreError::Binary { .. }
+                | StoreError::NotUtf8Text { .. }
+                | StoreError::FileExists { .. }
+                | StoreError::FileAppeared { .. }
+                | StoreError::Interrupted { .. }
+                | StoreError::InvalidFile { .. }
+                | StoreError::Rejected { .. }
+                | StoreError::Unchecked { .. }),
+            ) => Err(Failure::logged(ErrorCode::EnvSaveFailed, &error)),
         }
     }
 }

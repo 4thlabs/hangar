@@ -40,7 +40,36 @@ impl ConfigServer for App {
             // The user's to fix: the field at fault, as the editor shows it under the file.
             Err(StoreError::Config { source, .. }) => Err(Failure::config(&source).into()),
             Err(StoreError::NotInstalled) => Err(ErrorCode::StoreNotInstalled.into()),
-            Err(error) => Err(Failure::logged(ErrorCode::ConfigSaveFailed, &error)),
+            Err(
+                error @ (StoreError::DataDirNotSet
+                | StoreError::NotUtf8 { .. }
+                | StoreError::Io { .. }
+                | StoreError::Git { .. }
+                | StoreError::InvalidName { .. }
+                | StoreError::InvalidAppId { .. }
+                | StoreError::InTheWay { .. }
+                | StoreError::InvalidVariable { .. }
+                | StoreError::UnwritableValue { .. }
+                | StoreError::UnknownApp { .. }
+                | StoreError::SharedFile { .. }
+                | StoreError::AppExists { .. }
+                | StoreError::InvalidPath { .. }
+                | StoreError::ThroughFile { .. }
+                | StoreError::OutsideApp { .. }
+                | StoreError::HiddenFile { .. }
+                | StoreError::BrokenSymlink { .. }
+                | StoreError::NoSuchFile { .. }
+                | StoreError::NotAFile { .. }
+                | StoreError::TooLarge { .. }
+                | StoreError::Binary { .. }
+                | StoreError::NotUtf8Text { .. }
+                | StoreError::FileExists { .. }
+                | StoreError::FileAppeared { .. }
+                | StoreError::Interrupted { .. }
+                | StoreError::InvalidFile { .. }
+                | StoreError::Rejected { .. }
+                | StoreError::Unchecked { .. }),
+            ) => Err(Failure::logged(ErrorCode::ConfigSaveFailed, &error)),
         }
     }
 }
