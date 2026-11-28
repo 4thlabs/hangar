@@ -618,4 +618,20 @@ done
         );
         assert!(fixture.updated().is_empty());
     }
+
+    #[tokio::test]
+    async fn updates_no_app_while_a_backup_has_stopped_the_services_of_one() {
+        let fixture = Fixture::new(None).await;
+        let _backup = fixture.updates.locks.claim_backup("alpha").expect("held");
+
+        let refused = fixture.updates.update_apps(&CancellationToken::new()).await;
+
+        assert_eq!(
+            refused,
+            Err(hangar_api::ErrorCode::AppBusy {
+                app: "alpha".to_owned()
+            })
+        );
+        assert!(fixture.updated().is_empty());
+    }
 }

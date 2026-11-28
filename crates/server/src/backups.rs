@@ -4,6 +4,7 @@
 
 mod routes;
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use hangar_api::{BackupPlan, ErrorCode, ErrorDetail, NotificationLevel, NotificationMessage};
@@ -12,14 +13,17 @@ use hangar_core::{
 };
 
 use crate::Settings;
+use crate::app_locks::AppLocks;
 use crate::failure::Failure;
 use crate::notifications::{Notification, Notifier};
 
-/// What the backups run on: the store, whose `hangar.yml` declares them, the core's backups, and the notifications.
+/// What the backups run on: the store, whose `hangar.yml` declares them, the core's backups, the apps the commands hold,
+/// and the notifications.
 #[derive(Debug)]
 pub(crate) struct Backups {
     store: Store<Runtime>,
     backups: AppBackups<Runtime>,
+    locks: Arc<AppLocks>,
     notifier: Notifier,
     /// The longest a backup runs, [`TIMEOUT`](Self::TIMEOUT) but in a test.
     timeout: Duration,
@@ -29,9 +33,14 @@ impl Backups {
     /// The longest a backup runs: it is canceled then, which removes what it wrote and starts again what it stopped.
     const TIMEOUT: Duration = Duration::from_secs(6 * 3600);
 
-    /// The backups of the server's settings, their compose commands run by `runtime`, their failures filed with
-    /// `notifier`.
-    pub(crate) fn new(settings: &Settings, runtime: Runtime, notifier: Notifier) -> Self {
+    /// The backups of the server's settings, their compose commands run by `runtime`, a backup that stops its services
+    /// holding its app in `locks`, their failures filed with `notifier`.
+    pub(crate) fn new(
+        settings: &Settings,
+        runtime: Runtime,
+        locks: Arc<AppLocks>,
+        notifier: Notifier,
+    ) -> Self {
         Self {
             store: Store::new(
                 settings.store_url.clone(),
@@ -39,6 +48,7 @@ impl Backups {
                 runtime.clone(),
             ),
             backups: AppBackups::new(settings.data_dir.clone(), runtime),
+            locks,
             notifier,
             timeout: Self::TIMEOUT,
         }
@@ -69,17 +79,30 @@ impl Backups {
     /// it does, as the core's backup says, and is no failure. A failure is notified, `backupFailed`, and a stop whose
     /// services did not start again `backupRestartFailed`, with the failure of the backup when it failed too.
     ///
+    /// A backup that stops the services holds its app from before it reads which run to after it starts them again: no
+    /// batch, install, uninstall or update of the apps recreates or takes down what it stopped meanwhile. It does not
+    /// wait for another command that holds the app.
+    ///
     /// # Errors
     ///
-    /// `backups.not_declared` when `hangar.yml` no longer declares it, `backups.timed_out` past its six hours, and the
-    /// code of its failure, logged.
+    /// `backups.not_declared` when `hangar.yml` no longer declares it, `compose.app_busy` when it stops the services
+    /// and another command holds the app, `backups.timed_out` past its six hours, and the code of its failure, logged.
     pub(crate) async fn back_up(
         &self,
         app: &str,
         cancel: &CancellationToken,
     ) -> Result<(), ErrorCode> {
-        let backup = match self.declared(app).await {
-            Ok(backup) => backup,
+        let held = self.declared(app).await.and_then(|backup| {
+            let claim = backup
+                .stop
+                .then(|| self.locks.claim_backup(app))
+                .transpose()?;
+
+            Ok((backup, claim))
+        });
+        // Held until the services stopped are started again, which the core's backup does before it ends.
+        let (backup, _claim) = match held {
+            Ok(held) => held,
             Err(code) => {
                 self.notify_failed(app, code.clone());
                 return Err(code);
@@ -230,6 +253,7 @@ mod tests {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
+    use std::sync::Arc;
     use std::time::Duration;
 
     use hangar_api::{ErrorCode, ErrorDetail, NotificationMessage};
@@ -237,6 +261,7 @@ mod tests {
 
     use super::Backups;
     use crate::Settings;
+    use crate::app_locks::AppLocks;
     use crate::notifications::Notifier;
 
     /// The fake `docker`: it logs its arguments, one call per line, after the app's compose file; answers `ps` with
@@ -256,6 +281,7 @@ esac
     struct Fixture {
         dir: tempfile::TempDir,
         settings: Settings,
+        locks: Arc<AppLocks>,
     }
 
     impl Fixture {
@@ -293,7 +319,11 @@ esac
             })
             .expect("the settings are valid");
 
-            Self { dir, settings }
+            Self {
+                dir,
+                settings,
+                locks: Arc::default(),
+            }
         }
 
         /// The backups, their fake `docker` taking `stop` seconds to stop and starting with the exit code `start`,
@@ -310,7 +340,12 @@ esac
                 ("HANGAR_TEST_START", start.to_string()),
             ]);
             let notifier = Notifier::load(&self.settings.data_dir).await;
-            let mut backups = Backups::new(&self.settings, runtime, notifier.clone());
+            let mut backups = Backups::new(
+                &self.settings,
+                runtime,
+                Arc::clone(&self.locks),
+                notifier.clone(),
+            );
 
             backups.timeout = timeout;
 
@@ -508,5 +543,58 @@ esac
                 },
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn fails_at_once_a_backup_that_stops_the_services_of_an_app_another_command_holds() {
+        let fixture = Fixture::new();
+        let (backups, notifier) = fixture.backups(0, 0, Backups::TIMEOUT).await;
+        let batch = fixture
+            .locks
+            .claim_batch(["alpha"])
+            .expect("nothing is held");
+        let busy = ErrorCode::AppBusy {
+            app: "alpha".to_owned(),
+        };
+
+        assert_eq!(
+            backups.back_up("alpha", &CancellationToken::new()).await,
+            Err(busy.clone())
+        );
+        assert!(fixture.calls().is_empty(), "nothing was stopped");
+        assert_eq!(
+            notified(&notifier),
+            [NotificationMessage::BackupFailed {
+                app: "alpha".to_owned(),
+                error: ErrorDetail::from(busy),
+            }]
+        );
+
+        drop(batch);
+        backups
+            .back_up("alpha", &CancellationToken::new())
+            .await
+            .expect("backed up once released");
+
+        assert!(
+            fixture.locks.claim_batch(["alpha"]).is_ok(),
+            "the backup let its app go once its services started again"
+        );
+    }
+
+    #[tokio::test]
+    async fn holds_nothing_for_a_backup_that_stops_no_service() {
+        let fixture = Fixture::new();
+        let (backups, _notifier) = fixture.backups(0, 0, Backups::TIMEOUT).await;
+        let _batch = fixture
+            .locks
+            .claim_batch(["beta"])
+            .expect("nothing is held");
+
+        // Beta's folder is not there: what fails is its backup, not a claim of its app.
+        assert!(matches!(
+            backups.back_up("beta", &CancellationToken::new()).await,
+            Err(ErrorCode::NoDataFolder { .. })
+        ));
     }
 }

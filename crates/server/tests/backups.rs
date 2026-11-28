@@ -1,18 +1,21 @@
 //! The backups' routes and their job, served on port 0 and called with a session by the client of the contract and by
-//! reqwest: a backup stops and starts its app's services with a fake `docker` first in the runtime's `PATH`.
+//! reqwest: a backup stops and starts its app's services with a fake `docker` first in the runtime's `PATH`, and the
+//! store is a clone of a bare repository, which a sync pulls.
 
 #![cfg(unix)]
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Duration;
 
 use cookie::Cookie;
 use futures::{Stream, StreamExt};
 use hangar_api::{
-    Api, ApiClient, BackupPlan, Backups as _, Config as _, ConfigSource, ErrorCode, ErrorDetail,
-    Job, JobQueue, NotificationEvent, NotificationMessage, Notifications as _,
+    Api, ApiClient, BackupPlan, Backups as _, Compose as _, ComposeAction, ComposeEvent,
+    ComposeRequest, Config as _, ConfigSource, ErrorCode, ErrorDetail, Job, JobQueue,
+    NotificationEvent, NotificationMessage, Notifications as _, Store as _, SyncState,
 };
 use hangar_core::{Docker, PasswordHash, Runtime};
 use hangar_server::{App, Settings};
@@ -33,14 +36,23 @@ const ARCHIVE: &str = "2026-10-18T03-30-00-000Z";
 const ARCHIVE_BYTES: &[u8] = b"PK\x05\x06 an archive, as far as the routes care";
 
 /// The fake `docker`: it logs its arguments, one call per line; answers `ps` with `web` running; and holds its stop
-/// until the file `HANGAR_TEST_RELEASE` exists, its child's wait and not the test's.
+/// and its `up` until the file `HANGAR_TEST_RELEASE` exists, its child's wait and not the test's. As it stops, it says
+/// so on `HANGAR_TEST_SIGNAL` when that is a FIFO, which the test reads, and waits for the test to.
 const FAKE_DOCKER: &str = r#"#!/bin/sh
 echo "$*" | sed 's/.* -f [^ ]* //' >> "$HANGAR_TEST_LOG"
 case " $* " in
   *" ps "*) echo '{"ID":"aaaaaaaaaaaa1111","Service":"web","State":"running"}' ;;
-  *" stop "*) while [ ! -e "$HANGAR_TEST_RELEASE" ]; do sleep 0.01; done ;;
+  *" stop "*)
+    if [ -p "$HANGAR_TEST_SIGNAL" ]; then echo stopping > "$HANGAR_TEST_SIGNAL"; fi
+    while [ ! -e "$HANGAR_TEST_RELEASE" ]; do sleep 0.01; done ;;
+  *" up "*) while [ ! -e "$HANGAR_TEST_RELEASE" ]; do sleep 0.01; done ;;
 esac
 "#;
+
+/// The backups of the `hangar.yml` of a test that says none: `alpha`'s, on a cron and with its services stopped, and
+/// `beta`'s, whose folder is not there.
+const BACKUPS: &str =
+    "backups:\n  - { app: alpha, schedule: '0 3 * * *', keep: 3, stop: true }\n  - { app: beta }\n";
 
 /// The users of `hangar.yml`, Ana alone.
 fn users() -> String {
@@ -49,8 +61,8 @@ fn users() -> String {
     format!("users:\n  - {{ name: Ana, email: ana@example.com, passwordHash: '{hash}' }}\n")
 }
 
-/// A data directory where `alpha` is installed, with a file in its data folder, which `hangar.yml` backs up, its
-/// services stopped, as it does `beta`, whose folder is not there; the fake `docker`.
+/// A data directory where `alpha` is installed, with a file in its data folder, its store a clone of a bare repository
+/// whose `hangar.yml` declares `backups`, [`BACKUPS`] unless the test says; the fake `docker`.
 struct Fixture {
     dir: tempfile::TempDir,
     data: PathBuf,
@@ -58,34 +70,49 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
+        Self::with_backups(BACKUPS)
+    }
+
+    fn with_backups(backups: &str) -> Self {
         let dir = tempfile::tempdir().expect("a temporary directory");
         let data = dir.path().join("data");
-        let store = data.join("app-store");
-        let installed = data.join("app-installed/alpha");
+        let work = dir.path().join("work");
         let bin = dir.path().join("bin");
 
         for folder in [
-            store.join(".git"),
-            store.join("config"),
-            installed.clone(),
+            work.join("config"),
+            work.join("store/alpha"),
+            data.join("app-installed"),
             data.join("app-data/alpha"),
             bin.clone(),
         ] {
             fs::create_dir_all(folder).expect("created");
         }
 
+        fs::write(work.join("config/hangar.yml"), Self::config(backups)).expect("written");
+        fs::write(work.join("store/alpha/compose.yml"), "services: {}\n").expect("written");
+        Self::git(&work, &["init", "--quiet", "--initial-branch=main"]);
+        Self::git(&work, &["add", "."]);
+        Self::git(&work, &["commit", "--quiet", "--message", "the store"]);
+        Self::git(
+            dir.path(),
+            &["clone", "--quiet", "--bare", "work", "remote.git"],
+        );
+        Self::git(
+            dir.path(),
+            &["clone", "--quiet", "remote.git", "data/app-store"],
+        );
+        std::os::unix::fs::symlink(
+            data.join("app-store/store/alpha"),
+            data.join("app-installed/alpha"),
+        )
+        .expect("linked");
         fs::write(data.join("app-data/alpha/app.ini"), "kept").expect("written");
-        fs::write(installed.join("compose.yml"), "services: {}\n").expect("written");
         fs::write(bin.join("docker"), FAKE_DOCKER).expect("written");
         fs::set_permissions(bin.join("docker"), fs::Permissions::from_mode(0o755))
             .expect("made executable");
 
-        let fixture = Self { dir, data };
-
-        fixture.write_config(
-            "backups:\n  - { app: alpha, schedule: '0 3 * * *', keep: 3, stop: true }\n  - { app: beta }\n",
-        );
-        fixture
+        Self { dir, data }
     }
 
     /// The `hangar.yml` of `backups`, and Ana.
@@ -93,12 +120,40 @@ impl Fixture {
         format!("categories: []\n{backups}{}", users())
     }
 
-    fn write_config(&self, backups: &str) {
-        fs::write(
-            self.data.join("app-store/config/hangar.yml"),
-            Self::config(backups),
-        )
-        .expect("written");
+    /// Runs git in `dir`, as a user of its own.
+    fn git(dir: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(["-c", "user.name=Test", "-c", "user.email=test@example.com"])
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .expect("git runs");
+
+        assert!(status.success(), "git {args:?}");
+    }
+
+    /// Pushes a `hangar.yml` that declares `backups` to the store's repository, which a sync pulls.
+    fn push_config(&self, backups: &str) {
+        let work = self.dir.path().join("work");
+
+        fs::write(work.join("config/hangar.yml"), Self::config(backups)).expect("written");
+        Self::git(
+            &work,
+            &["commit", "--quiet", "--all", "--message", "backups"],
+        );
+        Self::git(&work, &["push", "--quiet", "../remote.git", "main"]);
+    }
+
+    /// The FIFO the fake `docker` says on that it stops the services.
+    fn signal(&self) -> PathBuf {
+        let fifo = self.dir.path().join("signal");
+        let status = Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .expect("mkfifo runs");
+
+        assert!(status.success(), "mkfifo");
+        fifo
     }
 
     /// Writes the archive [`ARCHIVE`] of `alpha`.
@@ -126,9 +181,16 @@ impl Fixture {
     /// The server, served on port 0, and its state; Ana signed in.
     async fn serve(&self) -> (Server, App) {
         let data = self.data.to_str().expect("UTF-8").to_owned();
+        let remote = self
+            .dir
+            .path()
+            .join("remote.git")
+            .to_str()
+            .expect("UTF-8")
+            .to_owned();
         let settings = Settings::read(|name| match name {
             "HANGAR_DATA_DIR" => Some(data.clone()),
-            "HANGAR_STORE_URL" => Some("https://example.com/store.git".to_owned()),
+            "HANGAR_STORE_URL" => Some(remote.clone()),
             "DOMAIN" => Some("example.com".to_owned()),
             "HANGAR_URL" => Some(URL.to_owned()),
             "HANGAR_SECRET" => Some("0123456789abcdef0123456789abcdef".to_owned()),
@@ -148,6 +210,10 @@ impl Fixture {
             (
                 "HANGAR_TEST_RELEASE",
                 self.dir.path().join("release").display().to_string(),
+            ),
+            (
+                "HANGAR_TEST_SIGNAL",
+                self.dir.path().join("signal").display().to_string(),
             ),
         ]);
         // No daemon: the backups read none.
@@ -229,6 +295,40 @@ where
             return notification.message;
         }
     }
+}
+
+/// Waits, within [`PATIENCE`], for the fake `docker` to say on `fifo` that it stops the services.
+async fn stopping(fifo: PathBuf) {
+    let read = tokio::task::spawn_blocking(move || fs::read_to_string(fifo));
+    let said = tokio::time::timeout(PATIENCE, read)
+        .await
+        .expect("the services are stopped")
+        .expect("the read ends")
+        .expect("the FIFO reads");
+
+    assert_eq!(said.trim(), "stopping");
+}
+
+/// The next notification filed on `events` for `app`'s backup that failed, its error's code, within [`PATIENCE`]
+/// whatever the other backups notify meanwhile.
+async fn backup_failed<S>(events: &mut S, app: &str) -> ErrorCode
+where
+    S: Stream<Item = quoll::Result<NotificationEvent>> + Unpin,
+{
+    let failed = async {
+        loop {
+            if let NotificationMessage::BackupFailed { app: failed, error } =
+                next_filed(events).await
+                && failed == app
+            {
+                return error.code;
+            }
+        }
+    };
+
+    tokio::time::timeout(PATIENCE, failed)
+        .await
+        .unwrap_or_else(|_| panic!("the backup of {app} did not fail within {PATIENCE:?}"))
 }
 
 fn backup(app: &str) -> Job {
@@ -442,26 +542,165 @@ async fn removes_an_archive_and_answers_a_404_for_one_not_there() -> quoll::Resu
     Ok(())
 }
 
+/// Backups that fail each second, of apps whose folder is not there: `beta`'s and `apps`'.
+fn failing_every_second(apps: &[&str]) -> String {
+    let entries: String = apps
+        .iter()
+        .map(|app| format!("  - {{ app: {app}, schedule: '* * * * * *' }}\n"))
+        .collect();
+
+    format!("backups:\n  - {{ app: beta, schedule: '* * * * * *' }}\n{entries}")
+}
+
 #[tokio::test]
 async fn schedules_a_backup_hangar_yml_gives_a_cron_once_it_is_saved() -> quoll::Result<()> {
-    let fixture = Fixture::new();
+    let fixture = Fixture::with_backups(&failing_every_second(&[]));
     let (server, app) = fixture.serve().await;
     let api = server.api();
     let mut notifications = api.notifications().events(None, None).await?;
 
     app.start_jobs();
+
+    // Beta's backup fails within the second: the crons of the file as the jobs started are read.
+    backup_failed(&mut notifications, "beta").await;
     api.config()
         .save(&ConfigSource {
-            source: Fixture::config("backups:\n  - { app: beta, schedule: '* * * * * *' }\n"),
+            source: Fixture::config(&failing_every_second(&["gamma"])),
         })
         .await?;
 
-    // Its cron fires within the second: the backup of beta, whose folder is not there, fails.
-    loop {
-        let message = next_filed(&mut notifications).await;
+    // Gamma's cron fires within the second once the file is saved.
+    assert_eq!(
+        backup_failed(&mut notifications, "gamma").await,
+        ErrorCode::NoDataFolder {
+            app: "gamma".to_owned(),
+            folder: "gamma".to_owned(),
+        }
+    );
+    Ok(())
+}
 
-        if let NotificationMessage::BackupFailed { app, .. } = message {
-            assert_eq!(app, "beta");
+#[tokio::test]
+async fn schedules_a_backup_hangar_yml_gives_a_cron_once_the_store_is_synced() -> quoll::Result<()>
+{
+    let fixture = Fixture::with_backups(&failing_every_second(&[]));
+    let (server, app) = fixture.serve().await;
+    let api = server.api();
+    let mut notifications = api.notifications().events(None, None).await?;
+
+    app.start_jobs();
+    backup_failed(&mut notifications, "beta").await;
+    fixture.push_config(&failing_every_second(&["gamma"]));
+
+    assert_eq!(api.store().sync().await?.state, SyncState::Running);
+
+    // The pull brings gamma's cron, which fires within the second.
+    backup_failed(&mut notifications, "gamma").await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn holds_its_app_while_its_services_are_stopped_but_not_a_sync_of_the_store()
+-> quoll::Result<()> {
+    let fixture = Fixture::new();
+    let signal = fixture.signal();
+    let (server, _) = fixture.serve().await;
+    let api = server.api();
+    let mut notifications = api.notifications().events(None, None).await?;
+
+    api.backups().back_up("alpha").await?;
+    stopping(signal).await;
+
+    // While alpha's services are stopped, no batch recreates nor takes it down, and it is not uninstalled.
+    for action in [
+        ComposeAction::Up {
+            pull: false,
+            force_recreate: false,
+        },
+        ComposeAction::Down,
+    ] {
+        let refused = api
+            .compose()
+            .run(&ComposeRequest {
+                action,
+                apps: vec!["alpha".to_owned()],
+            })
+            .await
+            .expect_err("alpha is held");
+
+        assert_eq!(refused.status(), Some(StatusCode::CONFLICT));
+        assert_eq!(
+            ErrorCode::read(&refused),
+            Some(ErrorCode::AppBusy {
+                app: "alpha".to_owned()
+            })
+        );
+    }
+
+    let refused = reqwest::Client::new()
+        .post(format!("{}/api/store/apps/alpha/uninstall", server.url))
+        .header(COOKIE, &server.cookie)
+        .header(ORIGIN, URL)
+        .send()
+        .await
+        .expect("the server answers");
+
+    assert_eq!(refused.status(), StatusCode::CONFLICT);
+    assert!(fixture.data.join("app-installed/alpha").is_symlink());
+
+    // A sync of the store does not wait for the backup.
+    assert_eq!(api.store().sync().await?.state, SyncState::Running);
+
+    // Beta's waits its turn after alpha's: its failure says alpha's has ended.
+    api.backups().back_up("beta").await?;
+    fixture.release();
+    backup_failed(&mut notifications, "beta").await;
+
+    assert_eq!(
+        fixture.docker_calls(),
+        ["ps --status running --format json", "stop web", "start web"]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn fails_at_once_the_backup_of_an_app_a_batch_holds() -> quoll::Result<()> {
+    let fixture = Fixture::new();
+    let (server, _) = fixture.serve().await;
+    let api = server.api();
+    let mut notifications = api.notifications().events(None, None).await?;
+    // The fake `docker` holds its `up`: the batch holds alpha once it answers.
+    let mut batch = api
+        .compose()
+        .run(&ComposeRequest {
+            action: ComposeAction::Up {
+                pull: false,
+                force_recreate: false,
+            },
+            apps: vec!["alpha".to_owned()],
+        })
+        .await?;
+
+    api.backups().back_up("alpha").await?;
+
+    assert_eq!(
+        backup_failed(&mut notifications, "alpha").await,
+        ErrorCode::AppBusy {
+            app: "alpha".to_owned()
+        }
+    );
+    assert!(
+        !fixture
+            .docker_calls()
+            .iter()
+            .any(|call| call.starts_with("ps")),
+        "nothing was stopped"
+    );
+
+    fixture.release();
+
+    while let Some(event) = batch.next().await {
+        if let ComposeEvent::End(_) = event? {
             break;
         }
     }
