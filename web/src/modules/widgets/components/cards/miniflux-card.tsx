@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import type { MinifluxEntries } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
+import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -10,8 +11,26 @@ import {
   WidgetMetadata,
   WidgetTime,
 } from "#modules/widgets/components/widget.tsx";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
+import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { m } from "#paraglide/messages.js";
+
+/** `miniflux-entries`: Miniflux's newest entries. */
+export const minifluxWidget = defineWidget("miniflux-entries", {
+  icon: WidgetIcon.dashboard("miniflux", "miniflux-light"),
+  title: m.widgets_miniflux_entries_title,
+  errorDescription: m.widgets_miniflux_entries_error_description,
+  card: MinifluxWidget,
+});
+
+/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+function MinifluxWidget({ placement }: WidgetProps) {
+  return (
+    <LoadedWidget placement={placement} type="miniflux-entries" look={widgetLook(minifluxWidget)}>
+      {entries => <MinifluxCard entries={entries} link={placement.link} />}
+    </LoadedWidget>
+  );
+}
 
 type MinifluxCardProps = {
   entries: MinifluxEntries;
@@ -21,7 +40,7 @@ type MinifluxCardProps = {
 /** Miniflux's newest entries, each marked when not read yet, and how many are unread. */
 export function MinifluxCard({ entries: { unread, entries }, link }: MinifluxCardProps) {
   const now = useNow();
-  const look = widgetLook("miniflux-entries");
+  const look = widgetLook(minifluxWidget);
 
   return (
     <WidgetCard className={look.className}>

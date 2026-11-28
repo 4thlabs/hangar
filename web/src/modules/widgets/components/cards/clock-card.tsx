@@ -1,7 +1,19 @@
 import { cn } from "cn";
 import { useEffect, useState } from "react";
 import { WidgetCard, WidgetContent } from "#modules/widgets/components/widget.tsx";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { defineWidget } from "#modules/widgets/define-widget.ts";
+import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { m } from "#paraglide/messages.js";
+
+/** `clock`: the date and time, from the reader's own clock. */
+export const clockWidget = defineWidget("clock", {
+  // Dashboard Icons draws apps, not a plain clock: Fluent Emoji's alarm clock (MIT), served by Hangar itself.
+  icon: new WidgetIcon("/images/widgets/clock.svg"),
+  className: "h-20",
+  title: m.widgets_clock_title,
+  errorDescription: m.widgets_clock_error_description,
+  card: ClockCard,
+});
 
 // How the clock writes the time, the month and the day.
 
@@ -22,7 +34,7 @@ export function ClockCard() {
   }, []);
 
   return (
-    <WidgetCard className={cn(widgetLook("clock").className, "justify-center py-0 font-mono")}>
+    <WidgetCard className={cn(widgetLook(clockWidget).className, "justify-center py-0 font-mono")}>
       <WidgetContent className="flex items-center justify-between">
         <div className="flex flex-col gap-0">
           <p className="flex items-baseline gap-4 text-lg font-semibold">

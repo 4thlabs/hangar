@@ -296,42 +296,6 @@ pub struct MinifluxEntry {
     pub is_unread: bool,
 }
 
-/// The library of a Jellyfin server, and what was added to it last.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct JellyfinLatest {
-    /// What the whole server holds.
-    pub counts: JellyfinCounts,
-    /// The latest items the user of the widget may see, newest first: an episode as its series.
-    pub items: Vec<JellyfinItem>,
-}
-
-/// What a Jellyfin server holds, in every library.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
-pub struct JellyfinCounts {
-    /// Its movies.
-    pub movies: u64,
-    /// Its series.
-    pub series: u64,
-    /// Their episodes.
-    pub episodes: u64,
-    /// Its songs.
-    pub songs: u64,
-}
-
-/// An item of Jellyfin's, as its poster shows it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct JellyfinItem {
-    /// The item its poster opens: the series, for an episode.
-    pub id: String,
-    /// The item whose poster it shows, relayed by `GET /widgets/{key}/image/{id}`; `None` when it has none.
-    pub image_id: Option<String>,
-    /// Its title, or its series'.
-    pub title: String,
-    /// The artist of an album, or the year of another item.
-    pub subtitle: Option<String>,
-}
-
 /// The prices of the cards tcg-collector follows, in euros, from Cardmarket's price guides.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct TcgCollectorCards {
@@ -457,8 +421,6 @@ pub enum WidgetData {
     GluetunVpnStatus(GluetunVpnStatus),
     /// `miniflux-entries`.
     MinifluxEntries(MinifluxEntries),
-    /// `jellyfin-latest`.
-    JellyfinLatest(JellyfinLatest),
     /// `tcg-collector-cards`.
     TcgCollectorCards(TcgCollectorCards),
     /// `github-releases`.
@@ -480,8 +442,8 @@ quoll::group! {
         /// that loads nothing, the clock's or Docker's; a 502 when its service did not answer.
         GET "/widgets/{key}" => data(key: &str) -> WidgetData;
 
-        /// An image the widget placed as `key` shows, fetched from its service: a Frigate thumbnail, a Jellyfin
-        /// poster, a card of tcg-collector. Kept a day by the browser. A 404 for an id that is not letters, digits,
+        /// An image the widget placed as `key` shows, fetched from its service: a Frigate thumbnail, a card of
+        /// tcg-collector. Kept a day by the browser. A 404 for an id that is not letters, digits,
         /// `_`, `.` and `-`, or that its service does not have.
         GET "/widgets/{key}/image/{id}" => image(key: &str, id: &str) -> Bytes;
     }

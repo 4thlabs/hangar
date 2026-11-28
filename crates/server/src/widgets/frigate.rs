@@ -10,9 +10,9 @@ use quoll::{Bytes, client};
 use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
-use super::error::LoadError;
-use super::service::Service;
-use super::time::Moment;
+use crate::services::LoadError;
+use crate::services::Moment;
+use crate::services::Service;
 
 quoll::api! {
     /// Frigate's API, under `/api`.

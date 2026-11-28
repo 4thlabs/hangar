@@ -12,9 +12,19 @@ import {
   WidgetHeader,
   WidgetMetadata,
 } from "#modules/widgets/components/widget.tsx";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { defineWidget } from "#modules/widgets/define-widget.ts";
+import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { m } from "#paraglide/messages.js";
 import { HostMetrics } from "./host-metrics.tsx";
+
+/** `docker-general-stats`: the usage of the Docker host, read from the Docker routes. */
+export const dockerWidget = defineWidget("docker-general-stats", {
+  icon: WidgetIcon.dashboard("docker"),
+  className: "@container min-h-64",
+  title: m.widgets_docker_general_stats_title,
+  errorDescription: m.widgets_docker_general_stats_error_description,
+  card: DockerCard,
+});
 
 /**
  * The containers, images and volumes of the Docker host Hangar runs on, and the installed apps the image check found
@@ -22,7 +32,7 @@ import { HostMetrics } from "./host-metrics.tsx";
  * them again as they change. The card never asks a registry itself.
  */
 export function DockerCard() {
-  const look = widgetLook("docker-general-stats");
+  const look = widgetLook(dockerWidget);
   // Read together, above the region: the updates show once read, and none while they are not.
   const overview = useQuery(dockerQueries.overview());
   const { data: projects } = useQuery(dockerQueries.projects());
@@ -48,7 +58,7 @@ type DockerHostProps = {
 
 /** The card, once the host is read, and the installed apps the image check found an update for. */
 function DockerHost({ overview, projects }: DockerHostProps) {
-  const look = widgetLook("docker-general-stats");
+  const look = widgetLook(dockerWidget);
 
   const outdated = projects
     .filter(project => project.updateAvailable)

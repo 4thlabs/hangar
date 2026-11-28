@@ -110,7 +110,8 @@ decision of 2026-11-27. No suspense read in a card.
 A module imports only `common`, `#libs/...`, `#paraglide/...` and its own files, and `common` no other module: the
 routes compose the modules. ESLint holds it, with `#modules/...` imports and no `..` segment, along with rule 4 on
 `helpers/` (no React, no TanStack, only types from `api/`, `hooks/`, `components/`, `ui/`; `#paraglide/` allowed), no
-import of `messages/en.json` anywhere, and no file directly under a module.
+import of `messages/en.json` anywhere, and no file directly under `modules/`. A file may sit at a module's root, as
+`modules/widgets/widgets-registry.ts`, for what several of its levels use (#220); the level folders hold the rest.
 
 ## Import mapping
 

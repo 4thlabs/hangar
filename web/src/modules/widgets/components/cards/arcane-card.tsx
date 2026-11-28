@@ -1,4 +1,5 @@
 import type { ArcaneGeneralStats, ArcaneVersion } from "#libs/api";
+import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -6,10 +7,29 @@ import {
   WidgetHeader,
   WidgetMetadata,
 } from "#modules/widgets/components/widget.tsx";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
+import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { formatInteger } from "#modules/widgets/helpers/widget-format.ts";
 import { m } from "#paraglide/messages.js";
 import { HostMetrics } from "./host-metrics.tsx";
+
+/** `arcane-general-stats`: Arcane's view of the Docker host. */
+export const arcaneWidget = defineWidget("arcane-general-stats", {
+  icon: WidgetIcon.dashboard("arcane"),
+  className: "@container min-h-64",
+  title: m.widgets_arcane_general_stats_title,
+  errorDescription: m.widgets_arcane_general_stats_error_description,
+  card: ArcaneWidget,
+});
+
+/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+function ArcaneWidget({ placement }: WidgetProps) {
+  return (
+    <LoadedWidget placement={placement} type="arcane-general-stats" look={widgetLook(arcaneWidget)}>
+      {stats => <ArcaneCard stats={stats} link={placement.link} />}
+    </LoadedWidget>
+  );
+}
 
 /** The color of an item that needs attention, by how pressing it is. */
 function severityClassName(severity: string) {
@@ -55,7 +75,7 @@ type ArcaneCardProps = {
 
 /** The Docker host as Arcane reports it, and what it says needs attention. */
 export function ArcaneCard({ stats: { version, containers, images, volumes, actionItems }, link }: ArcaneCardProps) {
-  const look = widgetLook("arcane-general-stats");
+  const look = widgetLook(arcaneWidget);
 
   return (
     <WidgetCard className={look.className}>

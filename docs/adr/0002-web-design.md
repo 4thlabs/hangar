@@ -11,7 +11,9 @@
   [rule 15](#rule-15-route-preloading): loaders that warm with `prefetchQuery` and wait for nothing, and the bell's
   feed closed while the tab is hidden. On the maintainer's decision of 2026-11-27, also by #203, decision 4's regions
   and rule 15: `QueryRegion` over the caller's `useQuery` and `RenderRegion`, with no `Suspense`, and a warmed read
-  that keeps a `staleTime` at least the warm one.
+  that keeps a `staleTime` at least the warm one. By #220 on the maintainer's decision of 2026-11-28,
+  [decision 6](#decision-6-files) and [decision 10](#decision-10-the-migration)'s lint: a file may sit at a module's
+  root, as the widgets' registry.
 - **Deciders:** Thomas
 - **Study:** read-only, on `origin/main` at `d4eeec5` (#176 merged since, at `e37fd06`), and the web changes of
   `4thlabs/issue-176` and `4thlabs/issue-178`. The rewrite of two modules was made in a scratch worktree. Its patch
@@ -393,6 +395,13 @@ with no `_` escape, and the layout moves into its folder as `_app/route.tsx`. #1
 (`apps_.$project.tsx`, `store_.$id.edit.tsx`) without that decision. Paths, search params and behaviour did not
 change.
 
+Amended by #220 on 2026-11-28, on the maintainer's decision: a file may sit at a module's root, as
+`modules/widgets/widgets-registry.ts`, the table of the widgets' cards, and `define-widget.ts`, what each card's file
+writes its entry with. Such a file is the module's own, used by several of its levels, which no level folder names: the
+registry lists the cards of `components/`, typed by `define-widget.ts`, which the cards and the registry both import.
+The level folders stay for the rest. Lint no longer refuses a file directly under a module; it still refuses one
+directly under `modules/`, which is in no module.
+
 ```
 routes/
   __root.tsx
@@ -442,9 +451,9 @@ routes/
 - **The wiring** is at `src/`, with no `app/` folder: `main.tsx`, `page.ts` (`createPage`), `router.ts`
   (`createPageRouter`), `app-providers.tsx` and `theme-effects.tsx`, `routeTree.gen.ts`, and `mock/page.tsx`, the
   tests' page.
-- **In a module:** `api/`, `hooks/`, `components/`, `helpers/` for the domain `.ts`, and `messages.ts`, the one file
-  at its root, beside its test: lint refuses any other file directly under a module, and any file directly under
-  `modules/`. Tests sit next to their code
+- **In a module:** `api/`, `hooks/`, `components/`, `helpers/` for the domain `.ts`, and, since #220, a file of the
+  module's own at its root, which several of its levels use, as the widgets' registry. Lint refuses any file directly
+  under `modules/`. Tests sit next to their code
   (`helpers/apps-view.test.ts`, `helpers/store-sync.test.ts`).
 - **`libs/` against `modules/`.** `libs/` holds what has no React and no page domain: the API transport, formats,
   preferences. `modules/common/` holds what two modules or more share: `ui/`, and the generic hooks and components
@@ -688,7 +697,9 @@ specifier, which core `no-restricted-imports` reads as a regex, with `importName
    1: on `modules/<a>/`, no `#...` import but `#libs/`, `#modules/common/` and `#modules/<a>/` (`#mock/` too in a
    test), and no `..` segment anywhere in a specifier, in an `import` or an `import()` of a string or a template with
    no expression. Amended by #214 on 2026-11-27: `messages.ts` is gone, so no file stays at a module's root,
-   `#paraglide/` is allowed in every layer, and no file imports `messages/en.json`.
+   `#paraglide/` is allowed in every layer, and no file imports `messages/en.json`. Amended by #220 on 2026-11-28: a
+   file may sit at a module's root again, as the widgets' registry, and lint refuses only a file directly under
+   `modules/`.
 
 One trap: `.gitignore`-style patterns in `no-restricted-imports` treat a leading `#` as a comment, so `#modules/...`
 must be written with `regex`, not `group`.

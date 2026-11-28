@@ -17,6 +17,7 @@ quoll::api! {
         crate::jobs::Jobs,
         crate::backups::Backups,
         crate::widgets::Widgets,
+        crate::services::Services,
     };
 
 }

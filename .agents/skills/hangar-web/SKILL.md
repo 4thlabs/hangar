@@ -59,7 +59,8 @@ src/paraglide/                     what Paraglide compiles from messages/en.json
 - Modules by domain, pages by route. **A module never imports another**: the route files compose them. What two
   modules really share goes down into `common` (the compose vocabulary, the Docker changes feed), and only then.
 - No barrel. Tests sit next to their code; a page's beside its route file (`routes/_app/apps/index.test.tsx`).
-- No file sits directly under a module, nor directly under `modules/`: ESLint refuses them.
+- No file sits directly under `modules/`: ESLint refuses it. A file may sit at a module's root for what several of its
+  levels use, as `modules/widgets/widgets-registry.ts` and `define-widget.ts` (#220); the level folders hold the rest.
 - `libs/` holds what has no React and no page domain.
 - A file is named after its main export: `apps-view.ts` exports `appsView`.
 - The ADR's lint rules, which come with its PRs, are core ESLint (`no-restricted-syntax`, `no-restricted-imports`):

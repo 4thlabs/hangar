@@ -6,8 +6,8 @@ use hangar_api::{
 use quoll::client;
 use serde::Deserialize;
 
-use super::error::LoadError;
-use super::service::Service;
+use crate::services::LoadError;
+use crate::services::Service;
 
 quoll::api! {
     /// Arcane's API, under `/api`.

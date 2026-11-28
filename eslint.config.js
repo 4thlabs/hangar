@@ -234,16 +234,6 @@ const moduleBlocks = pageModules.flatMap(module => [
   },
 ]);
 
-/**
- * #207: a module holds a folder per level (`components/`, `hooks/`, `api/`, `helpers/`), and no file of its own: its
- * words are in `messages/en.json` since #214. Any file directly under it is refused, whatever it holds.
- */
-const looseModuleFile = {
-  selector: "Program",
-  message:
-    "A file directly under a module: put it in its components/, hooks/, api/ or helpers/ (ADR 0002, decision 6). Its words go in messages/en.json (#214).",
-};
-
 /** #207: a file directly under `web/src/modules/` belongs to no module, so no module block would hold its imports. */
 const looseModulesFile = {
   selector: "Program",
@@ -295,10 +285,6 @@ export default [
   {
     files: ["web/src/routes/**/*.{ts,tsx}", "web/src/*.{ts,tsx}"],
     rules: { "no-restricted-imports": ["error", { patterns: [orvalHooks, parentSegment, catalogFile] }] },
-  },
-  {
-    files: ["web/src/modules/*/*.{ts,tsx}"],
-    rules: { "no-restricted-syntax": ["error", staticOnlyClass, looseModuleFile] },
   },
   {
     files: ["web/src/modules/*.{ts,tsx}"],

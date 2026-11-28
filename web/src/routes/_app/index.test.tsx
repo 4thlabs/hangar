@@ -5,6 +5,7 @@ import {
   getWidgetsDataQueryKey,
   type DockerChange,
   type DockerOverview,
+  type JellyfinItem,
   type ProjectSummary,
   type WidgetData,
   type WidgetPlacement,
@@ -13,6 +14,7 @@ import {
   getDockerOverviewMockHandler,
   getDockerProjectsMockHandler,
   getJobsListMockHandler,
+  getServicesJellyfinMockHandler,
   getStoreStatusMockHandler,
   getWidgetsDataMockHandler,
   getWidgetsPlacementsMockHandler,
@@ -199,6 +201,57 @@ describe("/", () => {
 
     expect(await screen.findByText("Your VPN is connected!")).toBeDefined();
     expect(screen.getByText("203.0.113.7 - Amsterdam, Netherlands")).toBeDefined();
+  });
+
+  it("shows Jellyfin's counts and a poster per show, read from its service with the parts its card shows", async () => {
+    const asked: string[] = [];
+
+    const item = (id: string, kind: string, fields: Partial<JellyfinItem>): JellyfinItem => ({
+      id,
+      kind,
+      name: id,
+      seriesId: null,
+      seriesName: null,
+      albumArtist: null,
+      productionYear: null,
+      imageId: null,
+      ...fields,
+    });
+
+    network.use(
+      getWidgetsPlacementsMockHandler([
+        { key: "jellyfin-latest-1", type: "jellyfin-latest", column: 2, link: "https://jellyfin.example.com" },
+      ]),
+      getServicesJellyfinMockHandler(({ request }) => {
+        asked.push(new URL(request.url).search);
+
+        return {
+          counts: { movies: 120, series: 30, episodes: 900, songs: 4000 },
+          latest: [
+            item("e1", "Episode", { seriesId: "s1", seriesName: "A Show", imageId: "poster.s1" }),
+            item("e2", "Episode", { seriesId: "s1", seriesName: "A Show", imageId: "poster.s1" }),
+            item("m1", "Movie", { name: "A Film", productionYear: 2024, imageId: "poster.m1" }),
+          ],
+        };
+      }),
+    );
+
+    renderAt("/");
+
+    const jellyfin = await card("Jellyfin");
+    const posters = within(jellyfin).getAllByRole("listitem");
+
+    expect(within(jellyfin).getByText("120 movies")).toBeDefined();
+    expect(posters.map(poster => poster.textContent)).toEqual(["A Show", "A Film2024"]);
+    expect(posters[0]?.querySelector("img")?.getAttribute("src")).toBe(
+      "/api/services/images/jellyfin-latest-1/poster.s1",
+    );
+
+    expect(posters[0]?.querySelector("a")?.getAttribute("href")).toBe(
+      "https://jellyfin.example.com/web/#/details?id=s1",
+    );
+
+    expect(asked).toEqual(["?counts=true&latest=100"]);
   });
 
   it("shows Docker's host from the Docker routes", async () => {

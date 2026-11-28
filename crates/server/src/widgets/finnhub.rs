@@ -10,11 +10,11 @@ use jiff::Timestamp;
 use quoll::client;
 use serde::Deserialize;
 
-use super::cache::{Kept, Policy};
-use super::error::LoadError;
-use super::service::Service;
 use crate::Settings;
 use crate::failure::Failure;
+use crate::services::LoadError;
+use crate::services::Service;
+use crate::services::{Kept, Policy};
 
 quoll::api! {
     /// Finnhub's API, under `/api/v1`.
@@ -80,9 +80,9 @@ struct Candles {
 pub(super) struct Finnhub {
     /// `None` without a key, which Finnhub asks of every call.
     client: Option<FinnhubApiClient>,
-    quotes: Arc<Kept<Quoted>>,
-    profiles: Arc<Kept<Profile>>,
-    closes: Arc<Kept<Vec<f64>>>,
+    quotes: Arc<Kept<String, Quoted>>,
+    profiles: Arc<Kept<String, Profile>>,
+    closes: Arc<Kept<String, Vec<f64>>>,
 }
 
 impl Finnhub {
@@ -215,27 +215,31 @@ impl Calls<'_> {
 
         self.finnhub
             .quotes
-            .get(symbol, Finnhub::QUOTE_POLICY, move || async move {
-                let quote = client
-                    .quotes()
-                    .quote(&owned)
-                    .await
-                    .map_err(LoadError::call(format!("quote {owned} on Finnhub")))?;
+            .get(
+                symbol.to_owned(),
+                Finnhub::QUOTE_POLICY,
+                move || async move {
+                    let quote = client
+                        .quotes()
+                        .quote(&owned)
+                        .await
+                        .map_err(LoadError::call(format!("quote {owned} on Finnhub")))?;
 
-                let Some(change_percent) = quote.dp else {
-                    return Err(LoadError::refused(format!(
-                        "Finnhub knows no symbol {owned}"
-                    )));
-                };
+                    let Some(change_percent) = quote.dp else {
+                        return Err(LoadError::refused(format!(
+                            "Finnhub knows no symbol {owned}"
+                        )));
+                    };
 
-                Ok(Quoted {
-                    price: quote.c,
-                    change_percent,
-                    high: quote.h,
-                    low: quote.l,
-                    open: quote.o,
-                })
-            })
+                    Ok(Quoted {
+                        price: quote.c,
+                        change_percent,
+                        high: quote.h,
+                        low: quote.l,
+                        open: quote.o,
+                    })
+                },
+            )
             .await
     }
 
@@ -245,15 +249,19 @@ impl Calls<'_> {
 
         self.finnhub
             .profiles
-            .get(symbol, Finnhub::PROFILE_POLICY, move || async move {
-                client
-                    .quotes()
-                    .profile(&owned)
-                    .await
-                    .map_err(LoadError::call(format!(
-                        "read the profile of {owned} on Finnhub"
-                    )))
-            })
+            .get(
+                symbol.to_owned(),
+                Finnhub::PROFILE_POLICY,
+                move || async move {
+                    client
+                        .quotes()
+                        .profile(&owned)
+                        .await
+                        .map_err(LoadError::call(format!(
+                            "read the profile of {owned} on Finnhub"
+                        )))
+                },
+            )
             .await
     }
 
@@ -264,25 +272,29 @@ impl Calls<'_> {
         let kept = self
             .finnhub
             .closes
-            .get(symbol, Finnhub::CLOSES_POLICY, move || async move {
-                let to = Timestamp::now().as_second();
-                let from = to - Finnhub::CLOSES_PERIOD.as_secs() as i64;
-                let candles = client.quotes().candles(&owned, "D", from, to).await;
+            .get(
+                symbol.to_owned(),
+                Finnhub::CLOSES_POLICY,
+                move || async move {
+                    let to = Timestamp::now().as_second();
+                    let from = to - Finnhub::CLOSES_PERIOD.as_secs() as i64;
+                    let candles = client.quotes().candles(&owned, "D", from, to).await;
 
-                match candles {
-                    Ok(candles) if candles.s == "ok" => Ok(candles.c),
-                    Ok(_) => Ok(Vec::new()),
-                    Err(error) => {
-                        tracing::warn!(
-                            symbol = owned,
-                            error = %Failure::chain(&error),
-                            "showing a stock without its curve"
-                        );
+                    match candles {
+                        Ok(candles) if candles.s == "ok" => Ok(candles.c),
+                        Ok(_) => Ok(Vec::new()),
+                        Err(error) => {
+                            tracing::warn!(
+                                symbol = owned,
+                                error = %Failure::chain(&error),
+                                "showing a stock without its curve"
+                            );
 
-                        Ok(Vec::new())
+                            Ok(Vec::new())
+                        }
                     }
-                }
-            })
+                },
+            )
             .await;
 
         kept.unwrap_or_default()

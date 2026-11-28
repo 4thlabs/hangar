@@ -1,12 +1,32 @@
 import { cn } from "cn";
 import type { GluetunVpnStatus } from "#libs/api";
+import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
 import { WidgetCard, WidgetContent, WidgetHeader } from "#modules/widgets/components/widget.tsx";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
+import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { m } from "#paraglide/messages.js";
+
+/** `gluetun-vpn-status`: whether gluetun's tunnel is up, and where it exits. */
+export const gluetunWidget = defineWidget("gluetun-vpn-status", {
+  icon: WidgetIcon.dashboard("gluetun"),
+  className: "min-h-32",
+  title: m.widgets_gluetun_vpn_status_title,
+  errorDescription: m.widgets_gluetun_vpn_status_error_description,
+  card: GluetunWidget,
+});
+
+/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+function GluetunWidget({ placement }: WidgetProps) {
+  return (
+    <LoadedWidget placement={placement} type="gluetun-vpn-status" look={widgetLook(gluetunWidget)}>
+      {status => <GluetunCard status={status} />}
+    </LoadedWidget>
+  );
+}
 
 /** Whether gluetun's tunnel is up, and where it comes out. No link: gluetun has no web page. */
 export function GluetunCard({ status: { publicIp, city, country } }: { status: GluetunVpnStatus }) {
-  const look = widgetLook("gluetun-vpn-status");
+  const look = widgetLook(gluetunWidget);
   // gluetun answers without an address while the tunnel is down.
   const isConnected = publicIp.length > 0;
   const location = [city, country].filter(part => part.length > 0).join(", ");

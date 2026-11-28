@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Mutex;
 
-use super::error::LoadError;
-use super::service::Service;
+use crate::services::LoadError;
+use crate::services::Service;
 
 /// The clients of the placements, by their key, each with the service it was built for.
 #[derive(Default)]
@@ -87,7 +87,7 @@ mod tests {
     use std::cell::Cell;
 
     use super::Clients;
-    use crate::widgets::service::Service;
+    use crate::services::Service;
 
     fn service(key: &str) -> Service {
         Service {

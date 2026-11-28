@@ -7,8 +7,8 @@ use http::StatusCode;
 use quoll::Bytes;
 use serde::Deserialize;
 
-use super::error::LoadError;
-use super::service::Service;
+use crate::services::LoadError;
+use crate::services::Service;
 
 quoll::api! {
     /// The API of tcg-collector's web server, under `/api`. It takes no key.

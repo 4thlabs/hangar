@@ -14,6 +14,7 @@ mod error;
 mod health;
 mod jobs;
 mod notifications;
+mod services;
 mod store;
 mod widgets;
 
@@ -29,5 +30,6 @@ pub use error::*;
 pub use health::*;
 pub use jobs::*;
 pub use notifications::*;
+pub use services::*;
 pub use store::*;
 pub use widgets::*;

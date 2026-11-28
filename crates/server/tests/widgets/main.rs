@@ -1,4 +1,4 @@
-//! The widgets' routes, served on port 0 and called with a session by the client of the contract and by reqwest, on
+//! The widgets' and their services' routes, served on port 0 and called with a session by the client of the contract and by reqwest, on
 //! fake services served on port 0 too, whose answers each test writes.
 
 mod arcane;
@@ -226,6 +226,8 @@ async fn the_widget_routes_take_a_session() {
         "/api/widgets",
         "/api/widgets/clock-1",
         "/api/widgets/clock-1/image/a",
+        "/api/services/jellyfin/clock-1",
+        "/api/services/images/clock-1/poster.a",
     ] {
         let response = reqwest::get(format!("{}{path}", server.url))
             .await

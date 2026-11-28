@@ -1,5 +1,6 @@
 import type { TcgCollectorCards, TcgDailyPrices, TcgFollowedCard } from "#libs/api";
 import { Badge } from "#modules/common/ui/badge.tsx";
+import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
 import { WidgetSparkline } from "#modules/widgets/components/widget-sparkline.tsx";
 import {
   WidgetCard,
@@ -9,10 +10,29 @@ import {
   WidgetListItem,
   WidgetMetadata,
 } from "#modules/widgets/components/widget.tsx";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
+import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
+import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { placementImageUrl } from "#modules/widgets/helpers/widget-image.ts";
 import { widgetsLabels } from "#modules/widgets/helpers/widgets-labels.ts";
 import { m } from "#paraglide/messages.js";
+
+/** `tcg-collector-cards`: the prices of the cards tcg-collector follows. */
+export const tcgCollectorWidget = defineWidget("tcg-collector-cards", {
+  icon: new WidgetIcon("/images/widgets/tcg-collector.svg"),
+  className: "min-h-48",
+  title: m.widgets_tcg_collector_cards_title,
+  errorDescription: m.widgets_tcg_collector_cards_error_description,
+  card: TcgCollectorWidget,
+});
+
+/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+function TcgCollectorWidget({ placement }: WidgetProps) {
+  return (
+    <LoadedWidget placement={placement} type="tcg-collector-cards" look={widgetLook(tcgCollectorWidget)}>
+      {cards => <TcgCollectorCard cards={cards} placementKey={placement.key} link={placement.link} />}
+    </LoadedWidget>
+  );
+}
 
 // How the card writes prices and days.
 
@@ -162,7 +182,7 @@ function CardRow({ followed, priceWindow, link, placementKey }: CardRowProps) {
           className={thumbnailClassName}
         >
           <img
-            src={widgetImageUrl(placementKey, followed.imageId)}
+            src={placementImageUrl(placementKey, followed.imageId)}
             alt=""
             loading="lazy"
             className="size-full object-cover"
@@ -207,7 +227,7 @@ type TcgCollectorCardProps = {
 
 /** The cards tcg-collector follows: their prices, and the curve of each over the widget's days. */
 export function TcgCollectorCard({ cards: { days, cards }, placementKey, link }: TcgCollectorCardProps) {
-  const look = widgetLook("tcg-collector-cards");
+  const look = widgetLook(tcgCollectorWidget);
   const latestDay = latestPriceDay(cards);
   const priceWindow = latestDay === undefined ? undefined : { days, lastDay: latestDay };
 

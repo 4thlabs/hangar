@@ -3,8 +3,8 @@
 use hangar_api::{BeszelServerStats, BeszelSystem};
 use serde::Deserialize;
 
-use super::error::LoadError;
-use super::service::Service;
+use crate::services::LoadError;
+use crate::services::Service;
 
 quoll::api! {
     /// The PocketBase of a Beszel hub, under `/api`. Its key, a Beszel API token, goes in `Authorization` as it is:

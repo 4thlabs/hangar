@@ -1,5 +1,6 @@
 import type { FrigateEvents } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
+import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -9,9 +10,28 @@ import {
   WidgetMetadata,
   WidgetTime,
 } from "#modules/widgets/components/widget.tsx";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
+import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
+import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { placementImageUrl } from "#modules/widgets/helpers/widget-image.ts";
 import { m } from "#paraglide/messages.js";
+
+/** `frigate-events`: Frigate's latest events. */
+export const frigateWidget = defineWidget("frigate-events", {
+  icon: WidgetIcon.dashboard("frigate", "frigate-light"),
+  className: "min-h-88",
+  title: m.widgets_frigate_events_title,
+  errorDescription: m.widgets_frigate_events_error_description,
+  card: FrigateWidget,
+});
+
+/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+function FrigateWidget({ placement }: WidgetProps) {
+  return (
+    <LoadedWidget placement={placement} type="frigate-events" look={widgetLook(frigateWidget)}>
+      {events => <FrigateCard events={events} placementKey={placement.key} link={placement.link} />}
+    </LoadedWidget>
+  );
+}
 
 /** How the card names a camera: `frigate_front_door` is `front door`. */
 function cameraName(camera: string) {
@@ -32,7 +52,7 @@ export function FrigateCard({
   link,
 }: FrigateCardProps) {
   const now = useNow();
-  const look = widgetLook("frigate-events");
+  const look = widgetLook(frigateWidget);
 
   return (
     <WidgetCard className={look.className}>
@@ -60,7 +80,7 @@ export function FrigateCard({
               key={event.id}
               media={
                 <img
-                  src={widgetImageUrl(placementKey, event.id)}
+                  src={placementImageUrl(placementKey, event.id)}
                   alt=""
                   loading="lazy"
                   className="aspect-video w-16 shrink-0 rounded-sm object-cover"
