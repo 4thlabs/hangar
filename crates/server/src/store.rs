@@ -39,6 +39,8 @@ pub(crate) struct StoreState {
     locks: Arc<AppLocks>,
     /// Told when what is installed may have changed, for the Docker pages, which list the installed apps.
     docker_changes: DockerChanges,
+    /// Told when `hangar.yml` may have changed: saved, or pulled with the store.
+    config_changes: watch::Sender<()>,
 }
 
 impl StoreState {
@@ -65,6 +67,7 @@ impl StoreState {
             notifier,
             locks,
             docker_changes,
+            config_changes: watch::Sender::new(()),
         })
     }
 
@@ -80,6 +83,16 @@ impl StoreState {
             .enter()
             .await
             .ok_or_else(|| ErrorCode::SyncRunning.into())
+    }
+
+    /// Tells the followers of `hangar.yml`, the crons of the backups, that it may have changed: they read it again.
+    pub(crate) fn config_changed(&self) {
+        self.config_changes.send_replace(());
+    }
+
+    /// What tells each time `hangar.yml` may have changed, from now on.
+    pub(crate) fn config_changes(&self) -> watch::Receiver<()> {
+        self.config_changes.subscribe()
     }
 
     /// Tells the Docker pages that the installed apps may have changed: they read them again.

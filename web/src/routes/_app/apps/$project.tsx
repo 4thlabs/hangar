@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { BoxIcon, CpuIcon, HardDriveIcon, MemoryStickIcon, NetworkIcon } from "lucide-react";
 import { ApiError, type ProjectDetail } from "#libs/api";
+import { BackupsCard } from "#modules/apps/components/backups-card.tsx";
 import { ComposeDialogs } from "#modules/apps/components/compose-operations.tsx";
 import { ProjectActions } from "#modules/apps/components/project-actions.tsx";
 import { ReconnectingNotice } from "#modules/apps/components/reconnecting-notice.tsx";
@@ -128,8 +129,8 @@ function AppNotFound({ project }: { project: string }) {
 
 /**
  * `/apps/:project`: an installed app as Docker runs it, its services and containers, read again when the server says
- * the daemon changed them, their usage live, its compose commands, and the badge of an update the last image check
- * found. Its backups come with #177, and the link to its editor with #172.
+ * the daemon changed them, their usage live, its compose commands, the badge of an update the last image check found,
+ * and its backups, which show whatever Docker answers. The link to its editor comes with #172.
  */
 function AppDetailPage() {
   const { project } = useParams({ from: "/_app/apps/$project" });
@@ -171,6 +172,7 @@ function AppDetail({ project }: { project: string }) {
         </>
       )}
       {isPending && <p className="text-sm text-muted-foreground">{m.apps_detail_reading()}</p>}
+      <BackupsCard project={project} />
       <ComposeDialogs compose={compose} subject={project} count={1} />
     </main>
   );

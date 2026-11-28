@@ -151,6 +151,40 @@
   "apps_logs_resume": "Resume following",
   "apps_logs_waiting": "Waiting for logs…",
   "apps_feed_reconnecting": "Reconnecting to the server: what this page shows may be out of date.",
+  "apps_backups_title": "Backups",
+  "apps_backups_read_failed": "Could not read the backups",
+  "apps_backups_undeclared": "hangar.yml no longer declares a backup for this app.",
+  "apps_backups_scheduled": "Scheduled: {cron}",
+  "apps_backups_manual_only": "Manual only",
+  "apps_backups_kept": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} archive kept",
+        "countPlural=other": "{count} archives kept"
+      }
+    }
+  ],
+  "apps_backups_stopped": "stopped during the backup",
+  "apps_backups_back_up_now": "Back up now",
+  "apps_backups_running": "Backup running…",
+  "apps_backups_none": "No archives yet.",
+  "apps_backups_date": "Date",
+  "apps_backups_size": "Size",
+  "apps_backups_actions": "Actions",
+  "apps_backups_download": "Download",
+  "apps_backups_download_archive": "Download the archive {archive}",
+  "apps_backups_delete": "Delete",
+  "apps_backups_delete_archive": "Delete the archive {archive}",
+  "apps_backups_confirm_title": "Delete this archive?",
+  "apps_backups_confirm_description": "The archive is deleted from the disk; it can no longer be downloaded or restored.",
+  "apps_backups_started": "Backup",
+  "apps_backups_launched": "The backup of {app} was started.",
+  "apps_backups_start_failed": "Backup failed",
+  "apps_backups_deleted": "Archive deleted",
+  "apps_backups_archive_deleted": "The archive was deleted.",
+  "apps_backups_delete_failed": "Delete failed",
   "auth_sign_in_document_title": "Sign in | Hangar",
   "auth_sign_in_title": "Sign in to Hangar",
   "auth_sign_in_description": "Enter your email and password to access your account.",
@@ -328,6 +362,20 @@
   "common_jobs_unknown_run": "This run of a job is no longer kept: read the jobs again.",
   "common_jobs_ended": "This run of a job has ended already.",
   "common_jobs_crashed": "The job stopped short.",
+  "common_backups_not_declared": "hangar.yml declares no backup for {app}.",
+  "common_backups_queued": "A backup of {app} is already running.",
+  "common_backups_unknown_archive": "This archive no longer exists.",
+  "common_backups_unreadable": "The archives of {app} could not be read.",
+  "common_backups_remove_failed": "The archive {archive} of {app} could not be deleted.",
+  "common_backups_no_data_folder": "{app} has no data folder to back up at app-data/{folder}.",
+  "common_backups_linked_folder": "The data folder of {app} goes through a symbolic link: app-data/{folder}.",
+  "common_backups_outside_app_data": "The data folder of {app} leads out of app-data: {folder}.",
+  "common_backups_invalid_glob": "{glob} is not a valid glob.",
+  "common_backups_runs_hangar": "{app} runs Hangar itself: stopping it would stop its own backup.",
+  "common_backups_not_stopped": "The services of {app} could not be stopped for its backup.",
+  "common_backups_not_restarted": "{app} did not start again after its backup: {services}.",
+  "common_backups_timed_out": "The backup of {app} took more than six hours and was stopped.",
+  "common_backups_failed": "The backup of {app} failed.",
   "common_widgets_unknown_placement": "This widget is no longer on the dashboard: reload the page.",
   "common_widgets_unavailable": "Its service did not answer.",
   "common_widgets_unknown_image": "The widget has no such image.",
@@ -393,6 +441,10 @@
       }
     }
   ],
+  "notifications_backup_failed_title": "Backup failed",
+  "notifications_backup_failed_description": "The backup of {app} failed: {error}",
+  "notifications_backup_restart_failed_title": "App stopped",
+  "notifications_backup_restart_failed_description": "{app} did not restart after its backup: {services}.",
   "settings_page_document_title": "Settings | Hangar",
   "settings_page_title": "Settings",
   "settings_page_description": "Manage the configuration of your Hangar installation.",
@@ -443,7 +495,7 @@
   "settings_config_saved": "Configuration saved",
   "settings_config_saved_description": "The configuration was saved.",
   "settings_jobs_title": "JOBS",
-  "settings_jobs_description": "The last 50 runs of the server's jobs: the image check, every four hours and as the server starts, and the update of the apps, every night.",
+  "settings_jobs_description": "The last 50 runs of the server's jobs: the image check, every four hours and as the server starts, the update of the apps, every night, and the backups of the apps, on their schedules.",
   "settings_jobs_read_failed": "Could not read the jobs",
   "settings_jobs_empty": "No jobs",
   "settings_jobs_empty_description": "No job has run since the server started.",
@@ -454,29 +506,15 @@
   "settings_columns_ended": "Ended",
   "settings_columns_actions": "Actions",
   "settings_jobs_run_again": "Run again",
-  "settings_jobs_run_again_label": [
-    {
-      "declarations": ["input job"],
-      "selectors": ["job"],
-      "match": {
-        "job=image_check": "Run the image check again",
-        "job=auto_update": "Run the update of the apps again",
-        "job=*": "Run the {job} again"
-      }
-    }
-  ],
+  "settings_jobs_run_again_image_check": "Run the image check again",
+  "settings_jobs_run_again_auto_update": "Run the update of the apps again",
+  "settings_jobs_run_again_backup": "Run the backup of {app} again",
+  "settings_jobs_run_again_unknown": "Run the {job} again",
   "settings_jobs_cancel": "Cancel",
-  "settings_jobs_cancel_label": [
-    {
-      "declarations": ["input job"],
-      "selectors": ["job"],
-      "match": {
-        "job=image_check": "Cancel the image check",
-        "job=auto_update": "Cancel the update of the apps",
-        "job=*": "Cancel the {job}"
-      }
-    }
-  ],
+  "settings_jobs_cancel_image_check": "Cancel the image check",
+  "settings_jobs_cancel_auto_update": "Cancel the update of the apps",
+  "settings_jobs_cancel_backup": "Cancel the backup of {app}",
+  "settings_jobs_cancel_unknown": "Cancel the {job}",
   "settings_jobs_asked_again": "Job asked for again",
   "settings_jobs_runs": "{job} runs.",
   "settings_jobs_waits": "{job} waits its turn.",
@@ -486,6 +524,7 @@
   "settings_jobs_cancel_failed": "Cancel failed",
   "settings_names_image_check": "Image check",
   "settings_names_auto_update": "Update of the apps",
+  "settings_names_backup": "Backup of {app}",
   "settings_states_waiting": "Waiting",
   "settings_states_running": "Running",
   "settings_states_completed": "Completed",

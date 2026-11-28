@@ -17,6 +17,7 @@ import {
   isRunActive,
   jobName,
   jobStateLabel,
+  jobWords,
   runFailure,
 } from "#modules/settings/helpers/job-text.ts";
 import { m } from "#paraglide/messages.js";
@@ -122,12 +123,12 @@ type JobRowProps = {
 
 /** A run: its job, its queue, its state and why it failed, its times, and its buttons. */
 function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
-  const name = jobName(run.job);
+  const words = jobWords(run.job);
   const failure = runFailure(run);
 
   return (
     <TableRow>
-      <TableCell className="font-medium">{name}</TableCell>
+      <TableCell className="font-medium">{words.name}</TableCell>
       <TableCell>{run.queue}</TableCell>
       <TableCell>
         <div className="flex flex-col items-start gap-1">
@@ -144,7 +145,7 @@ function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
             size="icon-sm"
             variant="outline"
             title={m.settings_jobs_run_again()}
-            aria-label={m.settings_jobs_run_again_label({ job: run.job })}
+            aria-label={words.runAgain}
             disabled={isPending}
             onClick={onRunAgain}
           >
@@ -156,7 +157,7 @@ function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
               size="icon-sm"
               variant="ghost"
               title={m.settings_jobs_cancel()}
-              aria-label={m.settings_jobs_cancel_label({ job: run.job })}
+              aria-label={words.cancel}
               disabled={isPending}
               onClick={onCancel}
             >

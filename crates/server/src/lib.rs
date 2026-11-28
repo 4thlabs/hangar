@@ -13,6 +13,7 @@
 mod app;
 mod app_locks;
 mod auth;
+mod backups;
 mod compose;
 mod docker;
 mod failure;

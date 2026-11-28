@@ -1,5 +1,6 @@
 import type { NotificationMessage } from "#libs/api";
 import { composeActionOfNotification, composeLabel, composeOutcome } from "#modules/common/helpers/compose-actions.ts";
+import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
 import { m } from "#paraglide/messages.js";
 
 /** What a notification says once worded. */
@@ -15,6 +16,9 @@ type Words = { [Key in NotificationKey]: (message: Extract<NotificationMessage, 
 // place that words each key, typed by the keys of the contract, so that a key without words is a type error, and that a
 // catalog will word in another language. A key this page does not know, from a server newer than it, reads as a plain
 // notification.
+
+/** A list of names, as `web and db`. */
+const names = new Intl.ListFormat("en", { type: "conjunction" });
 
 /** The words of each key. */
 const wordsByKey: Words = {
@@ -67,6 +71,14 @@ const wordsByKey: Words = {
     description: failed
       ? m.notifications_auto_update_failed_description({ updated, failed })
       : m.notifications_auto_update_description({ updated }),
+  }),
+  backupFailed: ({ params: { app, error } }) => ({
+    title: m.notifications_backup_failed_title(),
+    description: m.notifications_backup_failed_description({ app, error: describeErrorDetail(error) }),
+  }),
+  backupRestartFailed: ({ params: { app, services } }) => ({
+    title: m.notifications_backup_restart_failed_title(),
+    description: m.notifications_backup_restart_failed_description({ app, services: names.format(services) }),
   }),
 };
 

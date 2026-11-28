@@ -41,10 +41,30 @@ describe("describeNotification", () => {
     });
   });
 
+  it("words a backup that failed by the code of its error, and the services a backup left down", () => {
+    const error = {
+      code: "backups.no_data_folder",
+      params: { app: "alpha", folder: "alpha/config" },
+      message: "alpha has no data folder to back up at app-data/alpha/config",
+    } as const;
+
+    expect(describeNotification({ key: "backupFailed", params: { app: "alpha", error } })).toEqual({
+      title: "Backup failed",
+      description: "The backup of alpha failed: alpha has no data folder to back up at app-data/alpha/config.",
+    });
+
+    expect(
+      describeNotification({ key: "backupRestartFailed", params: { app: "alpha", services: ["web", "db"] } }),
+    ).toEqual({
+      title: "App stopped",
+      description: "alpha did not restart after its backup: web and db.",
+    });
+  });
+
   it("says a key it does not know, from a newer server, as a plain notification", () => {
     const newer = {
-      key: "backupFailed",
-      params: { app: "alpha", error: "disk full" },
+      key: "pruneFailed",
+      params: { app: "alpha" },
     } as unknown as NotificationMessage;
 
     expect(describeNotification(newer)).toEqual({ title: "Notification" });

@@ -1,6 +1,12 @@
 import type { Job, JobRun, JobState } from "#libs/api";
 import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
-import { settingsLabels } from "#modules/settings/helpers/settings-labels.ts";
+import {
+  settingsLabels,
+  type JobKind,
+  type JobOf,
+  type JobWords,
+  type JobWordsByKind,
+} from "#modules/settings/helpers/settings-labels.ts";
 import { m } from "#paraglide/messages.js";
 
 // What the jobs' card says of the server's jobs and their runs.
@@ -22,9 +28,32 @@ export function jobsPollDelay(runs: readonly JobRun[]): number {
 /** A time of a run, in English. */
 const runTimeFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "medium" });
 
-/** The name of `job`; the one the server gives for a job this page does not know, from a newer server. */
-export function jobName(job: string): string {
-  return Object.hasOwn(settingsLabels.jobNames, job) ? settingsLabels.jobNames[job as Job]() : job;
+/** A job of the kind `Kind`, which ties its kind to its params for the table of words. */
+type JobEntry<Kind extends JobKind = JobKind> = { [K in Kind]: JobOf<K> & { kind: K } }[Kind];
+
+/** The words of `job`; for a kind this page does not know, from a newer server, its kind as the server gives it. */
+export function jobWords(job: Job): JobWords {
+  if (!Object.hasOwn(settingsLabels.jobs, job.kind)) {
+    return {
+      name: job.kind,
+      runAgain: m.settings_jobs_run_again_unknown({ job: job.kind }),
+      cancel: m.settings_jobs_cancel_unknown({ job: job.kind }),
+    };
+  }
+
+  return wordsOfKind(job);
+}
+
+/** The name of `job`, as [`jobWords`](jobWords) gives it. */
+export function jobName(job: Job): string {
+  return jobWords(job).name;
+}
+
+/** The words of `job`, from the table of its kind. */
+function wordsOfKind<Kind extends JobKind>(job: JobEntry<Kind>): JobWords {
+  const words: JobWordsByKind = settingsLabels.jobs;
+
+  return words[job.kind](job);
 }
 
 /** The label of `state`; the one the server gives for a state this page does not know. */

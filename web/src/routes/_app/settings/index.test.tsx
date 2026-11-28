@@ -547,7 +547,7 @@ describe("/settings#config", () => {
 describe("/settings#jobs", () => {
   const check: JobRun = {
     id: 1,
-    job: "image_check",
+    job: { kind: "image_check" },
     queue: "default",
     state: "failed",
     createdAt: "2026-11-26T12:17:00.000Z",
@@ -556,7 +556,7 @@ describe("/settings#jobs", () => {
     error: { code: "docker.unavailable", message: "the Docker daemon could not be read. See the server's log." },
   };
 
-  const update: JobRun = { ...check, id: 2, job: "auto_update", state: "completed", error: null };
+  const update: JobRun = { ...check, id: 2, job: { kind: "auto_update" }, state: "completed", error: null };
 
   /** The job of each row the table lists, in its order. */
   const rows = () =>
@@ -600,15 +600,36 @@ describe("/settings#jobs", () => {
     expect(await screen.findByText("Running")).toBeDefined();
   });
 
+  it("names a backup by its app, in the queue of the backups", async () => {
+    const backup: JobRun = {
+      ...check,
+      id: 4,
+      job: { kind: "backup", params: { app: "alpha" } },
+      queue: "backups",
+      state: "running",
+      endedAt: null,
+      error: null,
+    };
+
+    settingsPage();
+    network.use(getJobsListMockHandler([backup]));
+    renderAt("/settings#jobs");
+
+    expect(await screen.findByText("Backup of alpha")).toBeDefined();
+    expect(screen.getByText("backups")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Run the backup of alpha again" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Cancel the backup of alpha" })).toBeDefined();
+  });
+
   it("names a job it does not know as the server does", async () => {
-    const newer = { ...check, job: "backup" } as unknown as JobRun;
+    const newer = { ...check, job: { kind: "prune" } } as unknown as JobRun;
 
     settingsPage();
     network.use(getJobsListMockHandler([newer]));
     renderAt("/settings#jobs");
 
-    expect(await screen.findByText("backup")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Run the backup again" })).toBeDefined();
+    expect(await screen.findByText("prune")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Run the prune again" })).toBeDefined();
   });
 
   it("reads the runs again once a job is asked for again, then once a run is canceled", async () => {

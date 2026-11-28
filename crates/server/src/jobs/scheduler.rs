@@ -37,10 +37,17 @@ pub(crate) struct Scheduler<R> {
     runs: Mutex<Runs>,
     /// What tells each queue's worker that a run joined it, by queue; a queue has its worker from its first run.
     queues: Mutex<HashMap<JobQueue, Arc<Notify>>>,
-    /// The task of each cron, by the job it asks for.
-    crons: Mutex<HashMap<Job, AbortHandle>>,
+    /// The cron of each job that has one, and its task.
+    crons: Mutex<HashMap<Job, Cron>>,
     /// Told each time a run is asked for, starts, ends or is canceled.
     changed: watch::Sender<()>,
+}
+
+/// A cron of a job, and the task that asks for the job each time it fires.
+#[derive(Debug)]
+struct Cron {
+    schedule: CronSchedule,
+    task: AbortHandle,
 }
 
 /// The runs kept, by id, and the id of the next.
@@ -90,15 +97,45 @@ impl<R: JobRunner> Scheduler<R> {
         })
     }
 
-    /// Asks for `job` each time `cron` fires, in the time of the clock, from now on, in place of its cron before: a run
-    /// of it that waits or runs then is not asked for twice. A cron that never fires again ends.
+    /// Asks for `job` each time `cron` fires, in the time of the clock, from now on, in place of another cron before:
+    /// a run of it that waits or runs then is not asked for twice. The same cron as before is left as it is. A cron
+    /// that never fires again ends.
     pub(crate) fn schedule(self: &Arc<Self>, job: Job, cron: CronSchedule) {
-        let this = Arc::clone(self);
-        let task = tokio::spawn(async move { this.fire(job, &cron).await });
+        let mut crons = self.crons();
 
-        if let Some(previous) = self.crons().insert(job, task.abort_handle()) {
-            previous.abort();
+        if crons
+            .get(&job)
+            .is_some_and(|scheduled| scheduled.schedule == cron)
+        {
+            return;
         }
+
+        let this = Arc::clone(self);
+        let task = tokio::spawn({
+            let (job, cron) = (job.clone(), cron.clone());
+
+            async move { this.fire(job, &cron).await }
+        });
+        let scheduled = Cron {
+            schedule: cron,
+            task: task.abort_handle(),
+        };
+
+        if let Some(previous) = crons.insert(job, scheduled) {
+            previous.task.abort();
+        }
+    }
+
+    /// Stops the cron of `job`, if it has one: a run of it that waits or runs goes on.
+    pub(crate) fn unschedule(&self, job: &Job) {
+        if let Some(cron) = self.crons().remove(job) {
+            cron.task.abort();
+        }
+    }
+
+    /// The jobs that have a cron.
+    pub(crate) fn scheduled(&self) -> Vec<Job> {
+        self.crons().keys().cloned().collect()
     }
 
     /// Asks for `job` each time `cron` fires.
@@ -128,7 +165,7 @@ impl<R: JobRunner> Scheduler<R> {
             }
 
             tracing::info!(?job, %cron, "a job's cron fires");
-            self.enqueue(job);
+            self.enqueue(job.clone());
             fired = Some(next);
         }
     }
@@ -146,17 +183,25 @@ impl<R: JobRunner> Scheduler<R> {
 
     /// Asks for `job` now: a new run, which waits its turn in its queue, or the run of it that waits or runs already.
     pub(crate) fn enqueue(self: &Arc<Self>, job: Job) -> JobRun {
-        let queue = Self::queue(job);
+        self.ask(job).0
+    }
+
+    /// Asks for `job` now, in a new run, which waits its turn in its queue; `None` when a run of it waits or runs
+    /// already, and none is asked for.
+    pub(crate) fn try_enqueue(self: &Arc<Self>, job: Job) -> Option<JobRun> {
+        let (run, is_new) = self.ask(job);
+
+        is_new.then_some(run)
+    }
+
+    /// Asks for `job` now: a new run, and `true`, or the run of it that waits or runs already, and `false`.
+    fn ask(self: &Arc<Self>, job: Job) -> (JobRun, bool) {
+        let queue = Self::queue(&job);
         let run = {
             let mut runs = self.runs();
-            let active = runs
-                .kept
-                .iter()
-                .find(|(_, run)| run.job == job && run.is_active())
-                .map(|(id, run)| Self::view(*id, run));
 
-            if let Some(active) = active {
-                return active;
+            if let Some(active) = Self::active_in(&runs, &job) {
+                return (active, false);
             }
 
             let id = runs.next_id;
@@ -179,7 +224,21 @@ impl<R: JobRunner> Scheduler<R> {
 
         self.changed.send_replace(());
         self.queued(queue).notify_one();
-        run
+
+        (run, true)
+    }
+
+    /// The run of `job` that waits or runs, if one does.
+    pub(crate) fn active(&self, job: &Job) -> Option<JobRun> {
+        Self::active_in(&self.runs(), job)
+    }
+
+    /// The run of `job` that waits or runs in `runs`, if one does.
+    fn active_in(runs: &Runs, job: &Job) -> Option<JobRun> {
+        runs.kept
+            .iter()
+            .find(|(_, run)| run.job == *job && run.is_active())
+            .map(|(id, run)| Self::view(*id, run))
     }
 
     /// The runs kept, the newest first.
@@ -198,7 +257,7 @@ impl<R: JobRunner> Scheduler<R> {
     ///
     /// `jobs.unknown_run` when no run `id` is kept.
     pub(crate) fn run_again(self: &Arc<Self>, id: u64) -> Result<JobRun, ErrorCode> {
-        let job = self.runs().kept.get(&id).map(|run| run.job);
+        let job = self.runs().kept.get(&id).map(|run| run.job.clone());
         let Some(job) = job else {
             return Err(ErrorCode::UnknownJobRun { run: id });
         };
@@ -242,10 +301,49 @@ impl<R: JobRunner> Scheduler<R> {
         Ok(view)
     }
 
+    /// Stops the jobs, as the server stops: the crons end, the runs that wait are canceled, and those that run are told
+    /// to stop, which this waits for. A job is never dropped while it runs: a backup would leave the services it
+    /// stopped down.
+    pub(crate) async fn stop(&self) {
+        for (_, cron) in self.crons().drain() {
+            cron.task.abort();
+        }
+
+        let ids: Vec<u64> = self
+            .runs()
+            .kept
+            .iter()
+            .filter(|(_, run)| run.is_active())
+            .map(|(id, _)| *id)
+            .collect();
+
+        for id in ids {
+            // A run that ended meanwhile is no failure.
+            let _ = self.cancel(id);
+        }
+
+        let mut changed = self.changed.subscribe();
+
+        while self.is_running() {
+            if changed.changed().await.is_err() {
+                return;
+            }
+        }
+    }
+
+    /// Whether a run runs.
+    fn is_running(&self) -> bool {
+        self.runs()
+            .kept
+            .values()
+            .any(|run| run.state == JobState::Running)
+    }
+
     /// The queue `job` waits its turn in.
-    fn queue(job: Job) -> JobQueue {
+    fn queue(job: &Job) -> JobQueue {
         match job {
             Job::ImageCheck | Job::AutoUpdate => JobQueue::Default,
+            Job::Backup { .. } => JobQueue::Backups,
         }
     }
 
@@ -290,12 +388,12 @@ impl<R: JobRunner> Scheduler<R> {
         let (id, run) = runs
             .kept
             .iter_mut()
-            .find(|(_, run)| run.state == JobState::Waiting && Self::queue(run.job) == queue)?;
+            .find(|(_, run)| run.state == JobState::Waiting && Self::queue(&run.job) == queue)?;
 
         run.state = JobState::Running;
         run.started_at = Some(now);
 
-        let started = (*id, run.job, run.cancel.clone());
+        let started = (*id, run.job.clone(), run.cancel.clone());
 
         drop(runs);
         self.changed.send_replace(());
@@ -340,8 +438,8 @@ impl<R: JobRunner> Scheduler<R> {
     fn view(id: u64, run: &Run) -> JobRun {
         JobRun {
             id,
-            job: run.job,
-            queue: Self::queue(run.job),
+            job: run.job.clone(),
+            queue: Self::queue(&run.job),
             state: run.state,
             created_at: Timestamp::format(run.created_at),
             started_at: run.started_at.map(Timestamp::format),
@@ -355,8 +453,8 @@ impl<R: JobRunner> Scheduler<R> {
         self.runs.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// The task of each cron, whatever a panic left them.
-    fn crons(&self) -> MutexGuard<'_, HashMap<Job, AbortHandle>> {
+    /// The cron of each job, whatever a panic left them.
+    fn crons(&self) -> MutexGuard<'_, HashMap<Job, Cron>> {
         self.crons.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
@@ -704,5 +802,93 @@ mod tests {
         for job in [Job::ImageCheck, Job::ImageCheck, Job::AutoUpdate] {
             assert_eq!(starts.recv().await, Some(job));
         }
+    }
+
+    /// The job of the backup of `app`.
+    fn backup(app: &str) -> Job {
+        Job::Backup {
+            app: app.to_owned(),
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn runs_the_backups_in_a_queue_of_their_own_one_run_per_app() {
+        let (scheduler, mut starts) = scheduler();
+
+        let check = scheduler.enqueue(Job::ImageCheck);
+
+        assert_eq!(starts.recv().await, Some(Job::ImageCheck));
+
+        // The image check runs, and the backup of alpha starts beside it, in its own queue.
+        let alpha = scheduler.enqueue(backup("alpha"));
+
+        assert_eq!(alpha.queue, JobQueue::Backups);
+        assert_eq!(starts.recv().await, Some(backup("alpha")));
+
+        // Beta's waits for alpha's, as they share their queue; alpha's is not asked for twice.
+        let beta = scheduler.enqueue(backup("beta"));
+
+        assert_ne!(beta.id, alpha.id);
+        assert_eq!(scheduler.try_enqueue(backup("alpha")), None);
+        assert_eq!(scheduler.enqueue(backup("alpha")).id, alpha.id);
+        assert_eq!(
+            scheduler.active(&backup("beta")).map(|run| run.state),
+            Some(JobState::Waiting)
+        );
+        assert_eq!(scheduler.active(&backup("gamma")), None);
+        assert_eq!(run(&scheduler, check.id).state, JobState::Running);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn leaves_an_unchanged_cron_as_it_is_and_stops_one_unscheduled() {
+        let (scheduler, _starts) = scheduler();
+        let daily = CronSchedule::parse("0 3 * * *").expect("a valid cron");
+
+        scheduler.schedule(backup("alpha"), daily.clone());
+
+        let task = scheduler.crons()[&backup("alpha")].task.clone();
+
+        scheduler.schedule(backup("alpha"), daily);
+
+        assert!(
+            !task.is_finished(),
+            "the same cron again keeps its task, and the time it waits for"
+        );
+
+        scheduler.schedule(
+            backup("alpha"),
+            CronSchedule::parse("0 4 * * *").expect("a valid cron"),
+        );
+        tokio::task::yield_now().await;
+
+        assert!(task.is_finished(), "another cron replaces it");
+
+        scheduler.schedule(
+            Job::ImageCheck,
+            CronSchedule::parse("17 */4 * * *").expect("a valid cron"),
+        );
+        scheduler.unschedule(&backup("alpha"));
+
+        assert_eq!(scheduler.scheduled(), vec![Job::ImageCheck]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn stops_by_canceling_its_runs_and_waiting_for_the_end_of_those_that_run() {
+        let (scheduler, mut starts) = scheduler();
+
+        scheduler.schedule(
+            Job::ImageCheck,
+            CronSchedule::parse("17 */4 * * *").expect("a valid cron"),
+        );
+
+        let running = scheduler.enqueue(backup("alpha"));
+        let waiting = scheduler.enqueue(backup("beta"));
+
+        starts.recv().await;
+        scheduler.stop().await;
+
+        assert_eq!(run(&scheduler, running.id).state, JobState::Canceled);
+        assert_eq!(run(&scheduler, waiting.id).state, JobState::Canceled);
+        assert!(scheduler.scheduled().is_empty());
     }
 }

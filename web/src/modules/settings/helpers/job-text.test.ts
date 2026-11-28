@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Job, type JobRun } from "#libs/api";
+import type { Job, JobRun } from "#libs/api";
 import {
   askedAgainText,
   formatRunTime,
@@ -7,13 +7,13 @@ import {
   jobName,
   jobsPollDelay,
   jobStateLabel,
+  jobWords,
   runFailure,
 } from "#modules/settings/helpers/job-text.ts";
-import { m } from "#paraglide/messages.js";
 
 const run: JobRun = {
   id: 1,
-  job: "image_check",
+  job: { kind: "image_check" },
   queue: "default",
   state: "waiting",
   createdAt: "2026-11-26T12:17:00.000Z",
@@ -52,24 +52,25 @@ describe("the jobs' words", () => {
     expect(formatRunTime(run.createdAt)).toContain("2026");
   });
 
+  it("names each job, a backup by its app", () => {
+    expect(jobName({ kind: "image_check" })).toBe("Image check");
+    expect(jobWords({ kind: "backup", params: { app: "alpha" } })).toEqual({
+      name: "Backup of alpha",
+      runAgain: "Run the backup of alpha again",
+      cancel: "Cancel the backup of alpha",
+    });
+  });
+
   it("names a job or a state it does not know, from a newer server, as the server does", () => {
-    expect(jobName("image_check")).toBe("Image check");
-    expect(jobName("backup")).toBe("backup");
+    // What a newer server may send, which the contract of this page does not have.
+    const newer = { kind: "prune" } as unknown as Job;
+
+    expect(jobWords(newer)).toEqual({ name: "prune", runAgain: "Run the prune again", cancel: "Cancel the prune" });
     expect(jobStateLabel("paused")).toBe("paused");
   });
 
   it("says whether the job asked for again waits or runs", () => {
     expect(askedAgainText(run)).toBe("Image check waits its turn.");
-    expect(askedAgainText({ ...run, job: "auto_update", state: "running" })).toBe("Update of the apps runs.");
-  });
-});
-
-describe("the jobs' buttons", () => {
-  it("word the run-again and cancel of every job of the contract, not by its id", () => {
-    // `messages/en.json` names each job in these two variants: a job the contract adds falls back to its id, here.
-    for (const job of Object.values(Job)) {
-      expect(m.settings_jobs_run_again_label({ job })).not.toBe(`Run the ${job} again`);
-      expect(m.settings_jobs_cancel_label({ job })).not.toBe(`Cancel the ${job}`);
-    }
+    expect(askedAgainText({ ...run, job: { kind: "auto_update" }, state: "running" })).toBe("Update of the apps runs.");
   });
 });

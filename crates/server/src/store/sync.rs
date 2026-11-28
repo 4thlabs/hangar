@@ -162,8 +162,9 @@ impl StoreState {
                 }
             });
         });
-        // A sync links the apps `hangar.yml` lists, even one that failed past its clone or pull.
+        // A sync links the apps `hangar.yml` lists, even one that failed past its clone or pull, and may pull another.
         self.installed_changed();
+        self.config_changed();
         self.notifier.notify(Notification {
             level,
             message,

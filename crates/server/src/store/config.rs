@@ -31,8 +31,9 @@ impl ConfigServer for App {
 
         match self.store.store.save_config(&config.source).await {
             Ok(_) => {
-                // It links the apps it lists, and files them in other categories.
+                // It links the apps it lists, and files them in other categories, and declares the backups.
                 self.store.installed_changed();
+                self.store.config_changed();
 
                 Ok(Response::new(()))
             }
