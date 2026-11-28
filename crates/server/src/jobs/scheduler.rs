@@ -50,11 +50,13 @@ struct Cron {
     task: AbortHandle,
 }
 
-/// The runs kept, by id, and the id of the next.
+/// The runs kept, by id, the id of the next, and whether the scheduler stopped.
 #[derive(Debug)]
 struct Runs {
     kept: BTreeMap<u64, Run>,
     next_id: u64,
+    /// Set once [`Scheduler::stop`] runs: no cron is scheduled from then on, and a run asked for is canceled at once.
+    is_stopped: bool,
 }
 
 /// A run of a job.
@@ -90,6 +92,7 @@ impl<R: JobRunner> Scheduler<R> {
             runs: Mutex::new(Runs {
                 kept: BTreeMap::new(),
                 next_id: first_id.max(1),
+                is_stopped: false,
             }),
             queues: Mutex::new(HashMap::new()),
             crons: Mutex::new(HashMap::new()),
@@ -99,13 +102,15 @@ impl<R: JobRunner> Scheduler<R> {
 
     /// Asks for `job` each time `cron` fires, in the time of the clock, from now on, in place of another cron before:
     /// a run of it that waits or runs then is not asked for twice. The same cron as before is left as it is. A cron
-    /// that never fires again ends.
+    /// that never fires again ends, and none is scheduled once the scheduler [stopped](Self::stop).
     pub(crate) fn schedule(self: &Arc<Self>, job: Job, cron: CronSchedule) {
+        // Read with the crons held, which `stop` drains once it is set: no cron is left behind it.
         let mut crons = self.crons();
 
-        if crons
-            .get(&job)
-            .is_some_and(|scheduled| scheduled.schedule == cron)
+        if self.runs().is_stopped
+            || crons
+                .get(&job)
+                .is_some_and(|scheduled| scheduled.schedule == cron)
         {
             return;
         }
@@ -194,7 +199,8 @@ impl<R: JobRunner> Scheduler<R> {
         is_new.then_some(run)
     }
 
-    /// Asks for `job` now: a new run, and `true`, or the run of it that waits or runs already, and `false`.
+    /// Asks for `job` now: a new run, and `true`, or the run of it that waits or runs already, and `false`. Once the
+    /// scheduler [stopped](Self::stop), the new run is canceled at once, and never starts.
     fn ask(self: &Arc<Self>, job: Job) -> (JobRun, bool) {
         let queue = Self::queue(&job);
         let run = {
@@ -205,12 +211,20 @@ impl<R: JobRunner> Scheduler<R> {
             }
 
             let id = runs.next_id;
+            let now = self.clock.now().timestamp();
+            let (state, ended_at) = if runs.is_stopped {
+                tracing::info!(?job, "a job asked for once the jobs stopped is canceled");
+
+                (JobState::Canceled, Some(now))
+            } else {
+                (JobState::Waiting, None)
+            };
             let run = Run {
                 job,
-                state: JobState::Waiting,
-                created_at: self.clock.now().timestamp(),
+                state,
+                created_at: now,
                 started_at: None,
-                ended_at: None,
+                ended_at,
                 error: None,
                 cancel: CancellationToken::new(),
             };
@@ -303,8 +317,11 @@ impl<R: JobRunner> Scheduler<R> {
 
     /// Stops the jobs, as the server stops: the crons end, the runs that wait are canceled, and those that run are told
     /// to stop, which this waits for. A job is never dropped while it runs: a backup would leave the services it
-    /// stopped down.
+    /// stopped down. From then on, no cron is scheduled, and a run asked for, by a cron that fired as it ended or by
+    /// anything else, is canceled at once.
     pub(crate) async fn stop(&self) {
+        self.runs().is_stopped = true;
+
         for (_, cron) in self.crons().drain() {
             cron.task.abort();
         }
@@ -890,5 +907,26 @@ mod tests {
         assert_eq!(run(&scheduler, running.id).state, JobState::Canceled);
         assert_eq!(run(&scheduler, waiting.id).state, JobState::Canceled);
         assert!(scheduler.scheduled().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn schedules_and_starts_nothing_once_it_stopped() {
+        let (scheduler, mut starts) = scheduler();
+
+        scheduler.stop().await;
+        scheduler.schedule(
+            backup("alpha"),
+            CronSchedule::parse("* * * * * *").expect("a valid cron"),
+        );
+
+        let asked = scheduler.enqueue(backup("alpha"));
+
+        assert!(scheduler.scheduled().is_empty(), "no cron after the stop");
+        assert_eq!(asked.state, JobState::Canceled);
+        assert!(asked.ended_at.is_some());
+
+        tokio::time::sleep(Duration::from_secs(3600)).await;
+
+        assert!(starts.try_recv().is_err(), "nothing started");
     }
 }

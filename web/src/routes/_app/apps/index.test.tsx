@@ -555,6 +555,30 @@ describe("the backups of /apps/:project", () => {
     expect(asked).toEqual(["alpha"]);
   });
 
+  it("reads the backups again every two seconds while one runs, and shows its archive once it ends", async () => {
+    // The polling alone moves on: the page reads nothing else again meanwhile.
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+
+    const newer = "2026-11-28T09-00-00-000Z";
+    let status: BackupStatus = { ...backedUp, run: { ...running, state: "running" } };
+
+    appsPages();
+    network.use(getBackupsStatusMockHandler(() => status));
+    renderAt("/apps/alpha");
+
+    await screen.findByRole("button", { name: /Backup running…/ });
+
+    status = {
+      ...backedUp,
+      archives: [{ name: newer, size: 4096, createdAt: "2026-11-28T09:00:00.000Z" }, ...backedUp.archives],
+    };
+
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+
+    expect(await screen.findByRole("link", { name: `Download the archive ${newer}` })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Back up now" }).hasAttribute("disabled")).toBe(false);
+  });
+
   it("says why a backup was refused, and reads the backups again", async () => {
     let status = backedUp;
 

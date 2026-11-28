@@ -61,7 +61,12 @@ impl App {
             notifier.clone(),
             Arc::clone(&locks),
         );
-        let backups = Arc::new(Backups::new(settings, runtime.clone(), notifier.clone()));
+        let backups = Arc::new(Backups::new(
+            settings,
+            runtime.clone(),
+            Arc::clone(&locks),
+            notifier.clone(),
+        ));
 
         Self {
             auth: Arc::new(Auth::new(settings)),
