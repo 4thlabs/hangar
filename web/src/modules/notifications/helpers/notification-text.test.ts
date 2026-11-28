@@ -33,14 +33,35 @@ describe("describeNotification", () => {
       description: "1 app has a newer image in the registry.",
     });
 
-    expect(describeNotification({ key: "autoUpdate", params: { updated: 2, failed: [] } })).toEqual({
+    expect(describeNotification({ key: "autoUpdate", params: { updated: 2, failed: [], skipped: [] } })).toEqual({
       title: "Automatic update",
       description: "2 apps were updated.",
     });
 
-    expect(describeNotification({ key: "autoUpdate", params: { updated: 1, failed: ["alpha", "gamma"] } })).toEqual({
+    expect(
+      describeNotification({ key: "autoUpdate", params: { updated: 1, failed: ["alpha", "gamma"], skipped: [] } }),
+    ).toEqual({
       title: "Automatic update",
       description: "1 app was updated. Failed for: alpha and gamma.",
+    });
+  });
+
+  it("names the apps the update of the apps skipped, as another command held them", () => {
+    expect(describeNotification({ key: "autoUpdate", params: { updated: 2, failed: [], skipped: ["alpha"] } })).toEqual(
+      {
+        title: "Automatic update",
+        description: "2 apps were updated. Skipped, as another command held them: alpha.",
+      },
+    );
+
+    expect(
+      describeNotification({
+        key: "autoUpdate",
+        params: { updated: 1, failed: ["gamma"], skipped: ["alpha", "beta"] },
+      }),
+    ).toEqual({
+      title: "Automatic update",
+      description: "1 app was updated. Failed for: gamma. Skipped, as another command held them: alpha and beta.",
     });
   });
 

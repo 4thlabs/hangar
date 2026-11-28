@@ -19,6 +19,7 @@ import {
   jobStateLabel,
   jobWords,
   runFailure,
+  runResult,
 } from "#modules/settings/helpers/job-text.ts";
 import { m } from "#paraglide/messages.js";
 
@@ -121,10 +122,11 @@ type JobRowProps = {
   onCancel: () => void;
 };
 
-/** A run: its job, its queue, its state and why it failed, its times, and its buttons. */
+/** A run: its job, its queue, its state and why it failed or what it did, its times, and its buttons. */
 function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
   const words = jobWords(run.job);
   const failure = runFailure(run);
+  const result = runResult(run);
 
   return (
     <TableRow>
@@ -134,6 +136,11 @@ function JobRow({ run, isPending, onRunAgain, onCancel }: JobRowProps) {
         <div className="flex flex-col items-start gap-1">
           <Badge variant={run.state === "failed" ? "destructive" : "secondary"}>{jobStateLabel(run.state)}</Badge>
           {failure && <span className="text-xs whitespace-normal text-muted-foreground">{failure}</span>}
+          {result.map(sentence => (
+            <span key={sentence} className="text-xs whitespace-normal text-muted-foreground">
+              {sentence}
+            </span>
+          ))}
         </div>
       </TableCell>
       <TableCell>{formatRunTime(run.createdAt)}</TableCell>

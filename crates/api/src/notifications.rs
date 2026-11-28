@@ -70,6 +70,8 @@ pub enum NotificationMessage {
         updated: u64,
         /// The apps it failed to update, in the order it tried them; none when none failed.
         failed: Vec<String>,
+        /// The apps it skipped, as another command held them, in the order of `hangar.yml`: a later run updates them.
+        skipped: Vec<String>,
     },
     /// A backup of an app failed.
     BackupFailed {
@@ -187,6 +189,7 @@ mod tests {
         let updated = NotificationMessage::AutoUpdate {
             updated: 1,
             failed: vec!["alpha".to_owned(), "gamma".to_owned()],
+            skipped: vec!["beta".to_owned()],
         };
 
         assert_eq!(
@@ -201,7 +204,10 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_value(&updated).expect("JSON"),
-            json!({ "key": "autoUpdate", "params": { "updated": 1, "failed": ["alpha", "gamma"] } })
+            json!({
+                "key": "autoUpdate",
+                "params": { "updated": 1, "failed": ["alpha", "gamma"], "skipped": ["beta"] },
+            })
         );
 
         for message in [succeeded, updated] {

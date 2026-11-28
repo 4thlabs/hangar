@@ -3787,6 +3787,56 @@
           }
         ]
       },
+      "JobResult": {
+        "description": "What a run of a job did: its kind, the job's, and its params, as `{ \"kind\": \"auto_update\", \"params\": { \"updated\":\n[\"gamma\"], \"failed\": [], \"skipped\": [\"alpha\"] } }`.\n\n```\nuse hangar_api::JobResult;\n\nassert_eq!(\n    serde_json::to_value(JobResult::AutoUpdate {\n        updated: vec![\"gamma\".to_owned()],\n        failed: Vec::new(),\n        skipped: vec![\"alpha\".to_owned()],\n    })\n    .expect(\"JSON\"),\n    serde_json::json!({\n        \"kind\": \"auto_update\",\n        \"params\": { \"updated\": [\"gamma\"], \"failed\": [], \"skipped\": [\"alpha\"] },\n    })\n);\n```",
+        "oneOf": [
+          {
+            "description": "The update of the apps: the apps the registry has moved past, each in one list, in the order of `hangar.yml`.",
+            "properties": {
+              "kind": {
+                "const": "auto_update",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "failed": {
+                    "description": "The apps it failed to update.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "skipped": {
+                    "description": "The apps another command held, a backup, a batch, an install or an uninstall: a later run updates them.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "updated": {
+                    "description": "The apps it updated.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "updated",
+                  "failed",
+                  "skipped"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          }
+        ]
+      },
       "JobRun": {
         "description": "A run of a job.",
         "properties": {
@@ -3834,6 +3884,17 @@
             ],
             "description": "The queue it waits in."
           },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobResult"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What it did, for a job that says so, as the update of the apps; `None` while it waits or runs, for one that\nfailed, and for a job that says nothing. A run canceled says what it did before it stopped."
+          },
           "startedAt": {
             "description": "When it started, in RFC 3339; `None` while it waits, and for one canceled before.",
             "type": [
@@ -3858,7 +3919,8 @@
           "createdAt",
           "startedAt",
           "endedAt",
-          "error"
+          "error",
+          "result"
         ],
         "type": "object"
       },
@@ -4331,6 +4393,13 @@
                     },
                     "type": "array"
                   },
+                  "skipped": {
+                    "description": "The apps it skipped, as another command held them, in the order of `hangar.yml`: a later run updates them.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
                   "updated": {
                     "description": "How many apps it updated.",
                     "format": "uint64",
@@ -4340,7 +4409,8 @@
                 },
                 "required": [
                   "updated",
-                  "failed"
+                  "failed",
+                  "skipped"
                 ],
                 "type": "object"
               }

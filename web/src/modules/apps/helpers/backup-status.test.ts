@@ -13,6 +13,7 @@ const run: JobRun = {
   startedAt: "2026-11-28T09:00:00.000Z",
   endedAt: null,
   error: null,
+  result: null,
 };
 
 describe("the backups of an app's page", () => {

@@ -425,6 +425,26 @@
       }
     }
   ],
+  "notifications_auto_update_skipped_description": [
+    {
+      "declarations": ["input updated", "input skipped", "local updatedPlural = updated: plural"],
+      "selectors": ["updatedPlural"],
+      "match": {
+        "updatedPlural=one": "{updated} app was updated. Skipped, as another command held them: {skipped}.",
+        "updatedPlural=other": "{updated} apps were updated. Skipped, as another command held them: {skipped}."
+      }
+    }
+  ],
+  "notifications_auto_update_failed_skipped_description": [
+    {
+      "declarations": ["input updated", "input failed", "input skipped", "local updatedPlural = updated: plural"],
+      "selectors": ["updatedPlural"],
+      "match": {
+        "updatedPlural=one": "{updated} app was updated. Failed for: {failed}. Skipped, as another command held them: {skipped}.",
+        "updatedPlural=other": "{updated} apps were updated. Failed for: {failed}. Skipped, as another command held them: {skipped}."
+      }
+    }
+  ],
   "notifications_backup_failed_title": "Backup failed",
   "notifications_backup_failed_description": "The backup of {app} failed: {error}",
   "notifications_backup_restart_failed_title": "App stopped",
@@ -514,6 +534,10 @@
   "settings_states_completed": "Completed",
   "settings_states_failed": "Failed",
   "settings_states_canceled": "Canceled",
+  "settings_results_updated": "Updated: {apps}.",
+  "settings_results_failed": "Failed: {apps}.",
+  "settings_results_skipped": "Skipped, as another command held them: {apps}.",
+  "settings_results_nothing": "No app had an update.",
   "store_filter_installed": "Installed",
   "store_filter_available": "Not installed",
   "store_filter_menu": "Installation",

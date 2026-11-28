@@ -9,6 +9,7 @@ import {
   jobStateLabel,
   jobWords,
   runFailure,
+  runResult,
 } from "#modules/settings/helpers/job-text.ts";
 
 const run: JobRun = {
@@ -20,6 +21,7 @@ const run: JobRun = {
   startedAt: null,
   endedAt: null,
   error: null,
+  result: null,
 };
 
 describe("the jobs' words", () => {
@@ -39,6 +41,31 @@ describe("the jobs' words", () => {
 
     expect(runFailure(failed)).toBe("The Docker daemon could not be read. See the server's log.");
     expect(runFailure(run)).toBeUndefined();
+  });
+
+  it("says what the update of the apps did: the apps it updated, failed for and skipped", () => {
+    const update: JobRun = { ...run, job: { kind: "auto_update" }, state: "completed" };
+
+    const did = (updated: string[], failed: string[], skipped: string[]): JobRun => ({
+      ...update,
+      result: { kind: "auto_update", params: { updated, failed, skipped } },
+    });
+
+    expect(runResult(did(["gamma", "epsilon"], [], ["alpha"]))).toEqual([
+      "Updated: gamma and epsilon.",
+      "Skipped, as another command held them: alpha.",
+    ]);
+
+    expect(runResult(did([], ["gamma"], []))).toEqual(["Failed: gamma."]);
+    expect(runResult(did([], [], []))).toEqual(["No app had an update."]);
+    expect(runResult(update)).toEqual([]);
+  });
+
+  it("says nothing of what a newer server says a run did that it does not know", () => {
+    // What a newer server may send, which the contract of this page does not have.
+    const newer = { ...run, result: { kind: "prune", params: { removed: 3 } } } as unknown as JobRun;
+
+    expect(runResult(newer)).toEqual([]);
   });
 
   it("reads the runs again each second while one waits or runs, every 30 seconds otherwise", () => {

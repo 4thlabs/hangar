@@ -272,12 +272,17 @@ notifies `updatesAvailable` when apps have an update, in place of its notificati
 
 The update of the apps checks the images again, then runs `docker compose up -d --pull always` on each app the
 registry has moved past. It runs them one at a time, in the order of `hangar.yml`, carries on after one that fails, and
-notifies `autoUpdate` once for them all, naming those that failed. It holds its apps as a compose batch does: an
-install, an uninstall or a batch of one of them is refused while it runs. It fails with `compose.app_busy`, and updates
-no app, when another command holds one of them or a sync of the store runs.
+notifies `autoUpdate` once for them all, naming those that failed and those it skipped. It skips an app another
+command holds, a backup with `stop`, a batch, an install or an uninstall, and updates the others: the app skipped is
+updated by a later run, once nobody holds it. It holds the apps it updates as a compose batch does: an install, an
+uninstall or a batch of one of them is refused while it runs. A batch of the page is not so: it is refused whole when
+another command holds one of its apps. The notification is an error when an app failed, a warning when one was skipped,
+and a success otherwise. The update fails with `compose.app_busy`, and updates no app, when a sync of the store runs.
 
 **Settings → Jobs** lists the last 50 runs, the newest first, from `GET /api/jobs`: the job, its queue and its state,
-when it was asked for and when it ended, and why it failed, as a code. The ids count from the time the server
+when it was asked for and when it ended, why it failed, as a code, and what it did, for a job that says so. The update
+of the apps says, in its run's `result`, the apps it updated, failed to update and skipped, each by name in the order
+of `hangar.yml`; a run canceled says what it did before it stopped. The ids count from the time the server
 started, in milliseconds, so that a page opened before a restart names no run of the new server. **Run again** asks
 for the job of a run again, `POST /api/jobs/<id>/run`. **Cancel**, `POST /api/jobs/<id>/cancel`, takes a run that
 waits out of its queue, and tells one that runs to stop: the image check stops at once, the update of the apps once
@@ -308,12 +313,13 @@ or removed meanwhile, by a sync, the editor or a shared file it includes, cannot
 checked with Docker Compose 5.7, Alpine 3.24's `docker-cli-compose`, which the image ships.
 
 A backup with `stop` holds its app, from before it reads which services run to after it starts them again, as a
-compose batch holds its own: a batch, an install, an uninstall of it, or the update of the apps, is refused meanwhile
+compose batch holds its own: a batch, an install or an uninstall of it is refused meanwhile
 with a 409, `compose.app_busy`, as a batch's `up` would recreate the containers and zip a live database, and a `down`
 would remove the containers it starts again. A backup with `stop` of an app another command holds fails at once with
 `compose.app_busy`, without waiting. A sync of the store does not wait for a backup, nor a backup for a sync: a backup
 may run for hours. A backup without `stop` holds nothing. While a backup with `stop` holds an app the update of the
-apps would update, that night's update fails and updates none.
+apps would update, that night's update skips it, updates the others, and names it in its notification and its run's
+result: the next night's updates it.
 
 It runs as the job `backup` of its app, in the queue `backups`, on its cron, and when **Back up now** asks for it on the
 app's page, `POST /api/backups/<app>`: a 404, `backups.not_declared`, when `hangar.yml` declares no backup of it, and

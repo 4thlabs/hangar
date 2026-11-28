@@ -554,9 +554,17 @@ describe("/settings#jobs", () => {
     startedAt: "2026-11-26T12:17:00.000Z",
     endedAt: "2026-11-26T12:17:01.000Z",
     error: { code: "docker.unavailable", message: "the Docker daemon could not be read. See the server's log." },
+    result: null,
   };
 
-  const update: JobRun = { ...check, id: 2, job: { kind: "auto_update" }, state: "completed", error: null };
+  const update: JobRun = {
+    ...check,
+    id: 2,
+    job: { kind: "auto_update" },
+    state: "completed",
+    error: null,
+    result: { kind: "auto_update", params: { updated: ["gamma"], failed: [], skipped: ["alpha"] } },
+  };
 
   /** The job of each row the table lists, in its order. */
   const rows = () =>
@@ -569,7 +577,7 @@ describe("/settings#jobs", () => {
     vi.useRealTimers();
   });
 
-  it("lists the runs, the newest first, and says why one failed", async () => {
+  it("lists the runs, the newest first, and says why one failed and what one did", async () => {
     settingsPage();
     network.use(getJobsListMockHandler([update, check]));
     renderAt("/settings#jobs");
@@ -579,6 +587,8 @@ describe("/settings#jobs", () => {
     expect(rows()).toEqual(["Update of the apps", "Image check"]);
     expect(screen.getByText("Failed")).toBeDefined();
     expect(screen.getByText("The Docker daemon could not be read. See the server's log.")).toBeDefined();
+    expect(screen.getByText("Updated: gamma.")).toBeDefined();
+    expect(screen.getByText("Skipped, as another command held them: alpha.")).toBeDefined();
     // A run that ended cannot be canceled.
     expect(screen.queryByRole("button", { name: "Cancel the image check" })).toBeNull();
   });
@@ -676,7 +686,7 @@ describe("/settings#jobs", () => {
   it("says why a cancel was refused, and reads the runs again", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
 
-    let runs: JobRun[] = [{ ...update, state: "running", endedAt: null }];
+    let runs: JobRun[] = [{ ...update, state: "running", endedAt: null, result: null }];
 
     settingsPage();
     network.use(
