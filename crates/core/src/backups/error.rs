@@ -41,9 +41,19 @@ pub enum BackupError {
         folder: PathBuf,
     },
 
-    /// The folder to back up leads out of `app-data/` through a link: `hangar.yml` only checks its path as written.
+    /// The path of the folder to back up has an empty, `.` or `..` folder, which could lead out of `app-data/`.
     #[error("the data folder of {app} leads out of app-data: {}", folder.display())]
     OutsideAppData {
+        /// The app.
+        app: String,
+        /// The folder, as `hangar.yml` names it.
+        folder: PathBuf,
+    },
+
+    /// A symbolic link is in the path of the folder to back up: a backup follows none, as one could lead to another
+    /// app's data or out of `app-data/`.
+    #[error("the data folder of {app} goes through a symbolic link: {}", folder.display())]
+    LinkedFolder {
         /// The app.
         app: String,
         /// The folder, as `hangar.yml` names it.

@@ -4,7 +4,7 @@
 use std::ffi::{CString, OsStr};
 use std::fs::File;
 use std::io;
-use std::os::fd::{AsFd, OwnedFd};
+use std::os::fd::AsFd;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
@@ -13,6 +13,8 @@ use nix::dir::Dir;
 use nix::errno::Errno;
 use nix::fcntl::{self, AtFlags, OFlag};
 use nix::sys::stat::{self, FileStat, Mode, SFlag};
+
+use tokio_util::sync::CancellationToken;
 
 use super::BackupError;
 
@@ -53,7 +55,8 @@ pub(super) enum Opened<T> {
 /// read otherwise, a negation (`!media/**`) and an extglob (`+(a|b)`), are refused rather than read another way.
 ///
 /// The walk opens each folder and each file through the descriptor of the folder it is in, never following a link:
-/// one put in place of a folder or a file while the app runs is left out, as one there from the start, and counted.
+/// one put in place of a folder or a file while the app runs is left out, as one there from the start, and counted. No
+/// link is followed in the path of the backed-up folder either.
 /// A FIFO, a socket or a device is left out too, and counted, as it has nothing to read.
 #[derive(Debug)]
 pub(super) struct BackupFiles {
@@ -65,6 +68,14 @@ pub(super) struct BackupFiles {
     exclude: GlobSet,
     skipped_links: u64,
     skipped_special: u64,
+}
+
+/// A folder the walk is in: its descriptor, the names left to see in it, and where its path ends.
+#[derive(Debug)]
+struct Walked {
+    folder: Dir,
+    names: std::vec::IntoIter<CString>,
+    path_len: usize,
 }
 
 impl BackupFiles {
@@ -98,78 +109,54 @@ impl BackupFiles {
         })
     }
 
-    /// Opens the folder `prefix` of `app_data`, the folder to back up, once: a link in its path is followed only while
-    /// it stays under `app_data`, by a relative path, and no other system call reads the path again after.
-    ///
-    /// On Linux, `openat2` resolves the path beneath `app_data`. Elsewhere, or where a sandbox refuses `openat2`, each
-    /// folder of the path is opened without following a link, and a link is refused.
+    /// Opens the folder `prefix` of `app_data`, the folder to back up, one folder of its path at a time, each through
+    /// the descriptor of the one before and without following a link: no other system call reads the path again
+    /// after. `app_data` itself, Hangar's own, is opened by its path.
     ///
     /// # Errors
     ///
-    /// [`BackupError::NoDataFolder`] when the folder is not there or is not a folder, [`BackupError::OutsideAppData`]
-    /// when it leads out of `app_data` or is `app_data` itself, and [`BackupError::Io`] when it cannot be opened.
+    /// [`BackupError::NoDataFolder`] when the folder is not there or is not a folder, [`BackupError::LinkedFolder`]
+    /// when a link is anywhere in its path, [`BackupError::OutsideAppData`] for a path with an empty, `.` or `..`
+    /// folder, which `hangar.yml` refuses already, and [`BackupError::Io`] when a folder cannot be opened.
     pub(super) fn open_root(app_data: &Path, app: &str, prefix: &str) -> Result<Dir, BackupError> {
         let folder = app_data.join(prefix);
-        let refused = |errno: Errno| match errno {
-            Errno::ENOENT | Errno::ENOTDIR => BackupError::NoDataFolder {
-                app: app.to_owned(),
-                folder: folder.clone(),
-            },
-            Errno::EXDEV | Errno::ELOOP => BackupError::OutsideAppData {
-                app: app.to_owned(),
-                folder: folder.clone(),
-            },
-            errno => BackupError::io("open", &folder, errno.into()),
+        let missing = || BackupError::NoDataFolder {
+            app: app.to_owned(),
+            folder: folder.clone(),
         };
-        let parent = fcntl::open(app_data, Self::FOLDER, Mode::empty()).map_err(refused)?;
-        let opened = Self::beneath(&parent, prefix).map_err(refused)?;
-        let (parent_stat, opened_stat) = (
-            stat::fstat(&parent).map_err(refused)?,
-            stat::fstat(&opened).map_err(refused)?,
-        );
 
-        if (parent_stat.st_dev, parent_stat.st_ino) == (opened_stat.st_dev, opened_stat.st_ino) {
+        if prefix
+            .split('/')
+            .any(|segment| matches!(segment, "" | "." | ".."))
+        {
             return Err(BackupError::OutsideAppData {
                 app: app.to_owned(),
                 folder,
             });
         }
 
-        Dir::from_fd(opened).map_err(refused)
-    }
+        let mut current =
+            Dir::open(app_data, Self::FOLDER, Mode::empty()).map_err(|errno| match errno {
+                Errno::ENOENT | Errno::ENOTDIR => missing(),
+                errno => BackupError::io("open", app_data, errno.into()),
+            })?;
 
-    /// Opens the folder `path` of `parent`, resolved beneath it.
-    #[cfg(target_os = "linux")]
-    fn beneath(parent: &OwnedFd, path: &str) -> nix::Result<OwnedFd> {
-        use nix::fcntl::{OpenHow, ResolveFlag};
+        for segment in prefix.split('/') {
+            // A name with a NUL byte names no file.
+            let name = CString::new(segment).map_err(|_| missing())?;
 
-        let how = OpenHow::new()
-            .flags(Self::FOLDER)
-            .resolve(ResolveFlag::RESOLVE_BENEATH | ResolveFlag::RESOLVE_NO_MAGICLINKS);
-
-        match fcntl::openat2(parent, path, how) {
-            // Before Linux 5.6, or a sandbox that does not let it through.
-            Err(Errno::ENOSYS | Errno::EPERM) => Self::folder_by_folder(parent, path),
-            opened => opened,
-        }
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    fn beneath(parent: &OwnedFd, path: &str) -> nix::Result<OwnedFd> {
-        Self::folder_by_folder(parent, path)
-    }
-
-    /// Opens the folder `path` of `parent` one folder at a time, without following a link: `ELOOP` for one.
-    fn folder_by_folder(parent: &OwnedFd, path: &str) -> nix::Result<OwnedFd> {
-        let mut current = nix::unistd::dup(parent)?;
-
-        for segment in path.split('/') {
-            current = fcntl::openat(
-                &current,
-                segment,
-                Self::FOLDER | OFlag::O_NOFOLLOW,
-                Mode::empty(),
-            )?;
+            current = match Self::open_folder(&current, &name)
+                .map_err(|errno| BackupError::io("open", &folder, errno.into()))?
+            {
+                Opened::Open(next) => next,
+                Opened::Link => {
+                    return Err(BackupError::LinkedFolder {
+                        app: app.to_owned(),
+                        folder,
+                    });
+                }
+                Opened::Special | Opened::Gone => return Err(missing()),
+            };
         }
 
         Ok(current)
@@ -186,77 +173,71 @@ impl BackupFiles {
     }
 
     /// Gives each file to archive to `visit`, open, folder by folder, in the order of their names, until `visit`
-    /// fails.
+    /// fails or `cancel` is cancelled, which it checks at each folder. The folders being walked wait on a stack of the
+    /// heap, whatever their depth: each holds its descriptor and the names left to see.
     ///
     /// # Errors
     ///
-    /// [`BackupError::Io`] for a folder or a file that cannot be read, and the errors of `visit`.
+    /// [`BackupError::Io`] for a folder or a file that cannot be read, and once canceled: the caller tells that one by
+    /// its token. And the errors of `visit`.
     pub(super) fn walk(
         &mut self,
+        cancel: &CancellationToken,
         visit: &mut impl FnMut(BackupFile) -> Result<(), BackupError>,
     ) -> Result<(), BackupError> {
         let root = nix::unistd::dup(&self.root)
             .and_then(Dir::from_fd)
             .map_err(|errno| BackupError::io("read", &self.root_path, errno.into()))?;
+        // The path of the name being seen, relative to the root: each folder on the stack keeps where its own ends.
+        let mut path = Vec::new();
+        let mut stack = vec![self.folder(root, 0, &path, cancel)?];
 
-        self.walk_folder(root, &[], visit)
-    }
-
-    fn walk_folder(
-        &mut self,
-        mut folder: Dir,
-        relative_folder: &[u8],
-        visit: &mut impl FnMut(BackupFile) -> Result<(), BackupError>,
-    ) -> Result<(), BackupError> {
-        let mut names = Vec::new();
-
-        for entry in folder.iter() {
-            let entry = entry.map_err(|errno| {
-                BackupError::io("read", self.path_of(relative_folder), errno.into())
-            })?;
-            let name = entry.file_name().to_owned();
-
-            if !matches!(name.as_bytes(), b"." | b"..") {
-                names.push(name);
-            }
-        }
-
-        names.sort();
-
-        for name in names {
-            let relative = if relative_folder.is_empty() {
-                name.as_bytes().to_vec()
-            } else {
-                [relative_folder, b"/", name.as_bytes()].concat()
+        while let Some(top) = stack.last_mut() {
+            let Some(name) = top.names.next() else {
+                stack.pop();
+                continue;
             };
-            let matched = |globs: &GlobSet| globs.is_match(Path::new(OsStr::from_bytes(&relative)));
+
+            path.truncate(top.path_len);
+
+            if top.path_len > 0 {
+                path.push(b'/');
+            }
+
+            path.extend_from_slice(name.as_bytes());
+
+            let matched = |globs: &GlobSet| globs.is_match(Path::new(OsStr::from_bytes(&path)));
 
             if matched(&self.exclude) {
                 continue;
             }
 
             let is_included = matched(&self.include);
-            let read =
-                |errno: Errno| BackupError::io("read", self.path_of(&relative), errno.into());
-            let stat = match stat::fstatat(&folder, name.as_c_str(), AtFlags::AT_SYMLINK_NOFOLLOW) {
-                Ok(stat) => stat,
-                // Gone since the folder was read: a live app removes files at any time, a journal, a temporary file.
-                Err(Errno::ENOENT) => continue,
-                Err(errno) => return Err(read(errno)),
-            };
+            let read = |errno: Errno| BackupError::io("read", self.path_of(&path), errno.into());
+            let stat =
+                match stat::fstatat(&top.folder, name.as_c_str(), AtFlags::AT_SYMLINK_NOFOLLOW) {
+                    Ok(stat) => stat,
+                    // Gone since the folder was read: a live app removes files at any time, a journal, a temporary file.
+                    Err(Errno::ENOENT) => continue,
+                    Err(errno) => return Err(read(errno)),
+                };
 
             match Self::kind(&stat) {
                 SFlag::S_IFLNK => self.skipped_links += 1,
-                SFlag::S_IFDIR => match Self::open_folder(&folder, &name).map_err(read)? {
-                    Opened::Open(child) => self.walk_folder(child, &relative, visit)?,
+                SFlag::S_IFDIR => match Self::open_folder(&top.folder, &name).map_err(read)? {
+                    Opened::Open(child) => {
+                        let folder = self.folder(child, path.len(), &path, cancel)?;
+
+                        stack.push(folder);
+                    }
                     Opened::Link => self.skipped_links += 1,
                     Opened::Special | Opened::Gone => {}
                 },
                 SFlag::S_IFREG if is_included => {
-                    match Self::open_file(&folder, &name).map_err(read)? {
+                    match Self::open_file(&top.folder, &name).map_err(read)? {
                         Opened::Open((file, stat)) => visit(BackupFile {
                             file,
-                            relative,
+                            relative: path.clone(),
                             size: u64::try_from(stat.st_size).unwrap_or(0),
                             mode: Self::mode(&stat),
                             modified: stat.st_mtime,
@@ -274,6 +255,43 @@ impl BackupFiles {
         }
 
         Ok(())
+    }
+
+    /// The folder `folder`, open, at `path`, which ends at `path_len`, with its names in order, `.` and `..` left out;
+    /// once `cancel` is cancelled, the error that stops the walk.
+    fn folder(
+        &self,
+        mut folder: Dir,
+        path_len: usize,
+        path: &[u8],
+        cancel: &CancellationToken,
+    ) -> Result<Walked, BackupError> {
+        let read = |error| BackupError::io("read", self.path_of(path), error);
+
+        if cancel.is_cancelled() {
+            return Err(read(io::Error::other("the backup was canceled")));
+        }
+
+        let mut names = Vec::new();
+
+        for entry in folder.iter() {
+            let name = entry
+                .map_err(|errno| read(errno.into()))?
+                .file_name()
+                .to_owned();
+
+            if !matches!(name.as_bytes(), b"." | b"..") {
+                names.push(name);
+            }
+        }
+
+        names.sort();
+
+        Ok(Walked {
+            folder,
+            names: names.into_iter(),
+            path_len,
+        })
     }
 
     /// Opens the folder `name` of `folder`, unless it is a link or no folder any more.
@@ -300,12 +318,17 @@ impl BackupFiles {
     }
 
     /// Opens the file `name` of `folder` to read, with what `fstat` says of it, unless it is a link or no regular file
-    /// any more. `O_NONBLOCK`, so that a FIFO put in its place does not wait for a writer: it is then left out.
+    /// any more. Opened `O_NONBLOCK`, so that a FIFO put in its place does not wait for a writer, which `fstat` then
+    /// leaves out, and read without it once `fstat` says it is a regular file.
     pub(super) fn open_file(
         folder: &impl AsFd,
         name: &CString,
     ) -> nix::Result<Opened<(File, FileStat)>> {
-        let flags = OFlag::O_RDONLY | OFlag::O_NOFOLLOW | OFlag::O_NONBLOCK | OFlag::O_CLOEXEC;
+        let flags = OFlag::O_RDONLY
+            | OFlag::O_NOFOLLOW
+            | OFlag::O_NONBLOCK
+            | OFlag::O_NOCTTY
+            | OFlag::O_CLOEXEC;
         let fd = match fcntl::openat(folder, name.as_c_str(), flags, Mode::empty()) {
             Ok(fd) => fd,
             Err(Errno::ELOOP) => return Ok(Opened::Link),
@@ -318,6 +341,9 @@ impl BackupFiles {
         if Self::kind(&stat) != SFlag::S_IFREG {
             return Ok(Opened::Special);
         }
+
+        // Read without it: FUSE may answer EAGAIN to a read that would wait.
+        fcntl::fcntl(&fd, fcntl::FcntlArg::F_SETFL(OFlag::empty()))?;
 
         Ok(Opened::Open((File::from(fd), stat)))
     }
@@ -408,6 +434,7 @@ mod tests {
 
     use nix::dir::Dir;
     use nix::sys::stat::Mode;
+    use tokio_util::sync::CancellationToken;
 
     use super::{BackupError, BackupFiles, Opened};
 
@@ -435,7 +462,7 @@ mod tests {
         let mut kept = Vec::new();
 
         files
-            .walk(&mut |file| {
+            .walk(&CancellationToken::new(), &mut |file| {
                 kept.push(String::from_utf8(file.relative).expect("UTF-8"));
                 Ok(())
             })
@@ -590,6 +617,37 @@ mod tests {
     }
 
     #[test]
+    fn stops_walking_once_canceled_even_where_no_file_is_kept() {
+        let dir = folder(&["a/b/c.txt", "d/e.txt"]);
+        let canceled = CancellationToken::new();
+        let mut files = BackupFiles::new(
+            open(dir.path()),
+            dir.path().to_owned(),
+            &["*.db".to_owned()],
+            &[],
+        )
+        .expect("valid globs");
+
+        canceled.cancel();
+
+        assert!(files.walk(&canceled, &mut |_| Ok(())).is_err());
+    }
+
+    #[test]
+    fn reads_a_regular_file_without_o_nonblock() {
+        let dir = folder(&["data.db"]);
+        let root = open(dir.path());
+        let Ok(Opened::Open((file, _))) = BackupFiles::open_file(&root, &name("data.db")) else {
+            panic!("a regular file opens");
+        };
+        let flags = nix::fcntl::fcntl(&file, nix::fcntl::FcntlArg::F_GETFL).expect("its flags");
+
+        assert!(
+            !nix::fcntl::OFlag::from_bits_truncate(flags).contains(nix::fcntl::OFlag::O_NONBLOCK)
+        );
+    }
+
+    #[test]
     fn gives_a_name_that_is_not_utf8_as_its_bytes() {
         let dir = folder(&[]);
         let bytes = [b'a', 0xff, b'.', b't', b'x', b't'];
@@ -606,7 +664,7 @@ mod tests {
         let mut names = Vec::new();
 
         files
-            .walk(&mut |file| {
+            .walk(&CancellationToken::new(), &mut |file| {
                 names.push(file.relative);
                 Ok(())
             })
