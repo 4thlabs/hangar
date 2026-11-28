@@ -53,7 +53,7 @@ use crate::{Backup, CommandRunner, Compose, DataDir};
 use archive::Archive;
 use files::BackupFiles;
 use names::ArchiveName;
-use services::{Services, Stopped};
+use services::Services;
 
 /// What one backup wrote.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,7 +99,7 @@ pub struct ArchiveFile {
 
 /// The backups of a data directory's apps: each archives the app's data folder, stopping its running services first
 /// when it says so, and starting them again whatever the outcome, but never the container Hangar runs in. Its compose
-/// and docker commands run through a [`CommandRunner`]; its work on the disk runs on Tokio's blocking threads.
+/// commands run through a [`CommandRunner`]; its work on the disk runs on Tokio's blocking threads.
 ///
 /// The backups of one app take turns, whoever asks for them: a second waits for the first to end, as they would
 /// remove each other's partial archive and stop and start the same services. Its clones share the turns.
@@ -130,8 +130,9 @@ impl<R: CommandRunner> AppBackups<R> {
     }
 
     /// Archives the data folder of `backup`'s app, then removes its archives beyond `keep`, the oldest first. With
-    /// `stop`, the containers that run or restart are stopped while their files are read, and started again whatever
-    /// the outcome, by their ids: a compose file changed meanwhile cannot keep them from starting.
+    /// `stop`, the services that run or restart are stopped while their files are read, and started again whatever
+    /// the outcome, by the project's name: in the order of their dependencies, and whatever their compose file says by
+    /// then.
     /// Once `cancel` is cancelled, it stops at its next file or read, removes what it wrote of the archive, and
     /// starts again what it stopped.
     ///
@@ -184,7 +185,7 @@ impl<R: CommandRunner> AppBackups<R> {
         let stopped = if backup.stop {
             self.services.stop(&self.compose, &app).await?
         } else {
-            Stopped::default()
+            Vec::new()
         };
         let archived = Self::blocking(&app, {
             let cancel = cancel.clone();
@@ -198,11 +199,11 @@ impl<R: CommandRunner> AppBackups<R> {
         });
 
         if !stopped.is_empty()
-            && let Err(source) = Services::start(&self.compose, &stopped).await
+            && let Err(source) = Services::start(&self.compose, &app, &stopped).await
         {
             return Err(BackupError::NotRestarted {
                 app,
-                services: stopped.into_services(),
+                services: stopped,
                 source: Box::new(source),
                 failure: archived.err().map(Box::new),
             });
@@ -210,7 +211,7 @@ impl<R: CommandRunner> AppBackups<R> {
 
         let mut summary = archived?;
 
-        summary.stopped = stopped.into_services();
+        summary.stopped = stopped;
         tracing::info!(
             %app,
             archive = %summary.archive,
@@ -597,7 +598,7 @@ mod tests {
         names
     }
 
-    /// The fake runner, which also notes, at each `docker start`, how many archives are written by then.
+    /// The fake runner, which also notes, at each `docker compose start`, how many archives are written by then.
     struct CountsArchivesAtStart<'a> {
         fake: &'a FakeRunner,
         folder: PathBuf,
@@ -633,7 +634,7 @@ mod tests {
         }
     }
 
-    /// A runner that removes `alpha`'s compose file once its containers are stopped, as a sync or an edit may.
+    /// A runner that removes `alpha`'s compose file once its services are stopped, as a sync or an edit may.
     struct RemovesComposeFileAtStop<'a> {
         fake: &'a FakeRunner,
         file: PathBuf,
@@ -647,7 +648,7 @@ mod tests {
         async fn capture(&self, command: &Command) -> Result<String, RunError> {
             let captured = self.fake.capture(command).await;
 
-            if command.args.first().is_some_and(|arg| arg == "stop") {
+            if command.args.iter().any(|arg| arg == "stop") {
                 fs::remove_file(&self.file).expect("removed");
             }
 
@@ -655,12 +656,22 @@ mod tests {
         }
     }
 
-    /// What each call ran: a compose call after the app's project and file, a `docker` call on containers whole.
+    /// What each compose call ran, after the app's project, and its file when it names one.
     fn compose_calls(runs: &[Command]) -> Vec<String> {
         runs.iter()
-            .map(|run| match run.args.iter().position(|arg| arg == "-f") {
-                Some(at) => run.args[at + 2..].join(" "),
-                None => run.args.join(" "),
+            .map(|run| {
+                let after = match run.args.iter().position(|arg| arg == "-f") {
+                    Some(file) => file + 2,
+                    None => {
+                        run.args
+                            .iter()
+                            .position(|arg| arg == "-p")
+                            .expect("a project")
+                            + 2
+                    }
+                };
+
+                run.args[after..].join(" ")
             })
             .collect()
     }
@@ -843,8 +854,8 @@ mod tests {
             compose_calls(&fake.runs()),
             [
                 "ps --status running --status restarting --format json",
-                "stop aaaaaaaaaaaa1111 bbbbbbbbbbbb2222 cccccccccccc3333",
-                "start aaaaaaaaaaaa1111 bbbbbbbbbbbb2222 cccccccccccc3333"
+                "stop web db",
+                "start web db"
             ]
         );
         assert_eq!(
@@ -892,8 +903,8 @@ mod tests {
                 compose_calls(&runner.runs()),
                 [
                     "ps --status running --status restarting --format json",
-                    "stop aaaaaaaaaaaa1111 bbbbbbbbbbbb2222 cccccccccccc3333",
-                    "start aaaaaaaaaaaa1111 bbbbbbbbbbbb2222 cccccccccccc3333"
+                    "stop web db",
+                    "start web db"
                 ]
             );
 
@@ -1032,8 +1043,8 @@ mod tests {
                 compose_calls(&runner.runs()),
                 [
                     "ps --status running --status restarting --format json",
-                    "stop aaaaaaaaaaaa1111 bbbbbbbbbbbb2222 cccccccccccc3333",
-                    "start aaaaaaaaaaaa1111 bbbbbbbbbbbb2222 cccccccccccc3333"
+                    "stop web db",
+                    "start web db"
                 ]
             );
             assert!(
@@ -1156,7 +1167,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn starts_again_the_containers_it_stopped_whatever_their_compose_file_says_by_then() {
+    async fn stops_and_starts_by_the_project_s_name_whatever_its_compose_file_says_by_then() {
         let (_dir, data_dir) = data_dir(&["data.db"]);
         let fake = FakeRunner::new();
         let runner = RemovesComposeFileAtStop {
@@ -1178,18 +1189,20 @@ mod tests {
                 &CancellationToken::new(),
             )
             .await
-            .expect("backed up and started again");
+            .expect("backed up and started again, with no compose file left");
+        let runs = fake.runs();
 
         assert_eq!(summary.stopped, ["web", "db"]);
-        assert_eq!(
-            compose_calls(&fake.runs()),
-            [
-                "ps --status running --status restarting --format json",
-                "stop aaaaaaaaaaaa1111 bbbbbbbbbbbb2222 cccccccccccc3333",
-                "start aaaaaaaaaaaa1111 bbbbbbbbbbbb2222 cccccccccccc3333"
-            ],
-            "started by the ids compose listed, with no compose file left"
-        );
+
+        // Compose orders the stop and the start of a project by its containers' labels: no file is read.
+        for (run, command) in runs[1..].iter().zip(["stop", "start"]) {
+            assert_eq!(run.program, "docker");
+            assert_eq!(run.args, ["compose", "-p", "alpha", command, "web", "db"]);
+            assert_eq!(run.current_dir.as_deref(), Some(Path::new("/")));
+            assert!(run.env_removed.contains("COMPOSE_FILE"));
+        }
+
+        assert_eq!(runs.len(), 3);
     }
 
     #[tokio::test]
@@ -1225,8 +1238,8 @@ mod tests {
 
         let one = [
             "ps --status running --status restarting --format json",
-            "stop aaaaaaaaaaaa1111 bbbbbbbbbbbb2222 cccccccccccc3333",
-            "start aaaaaaaaaaaa1111 bbbbbbbbbbbb2222 cccccccccccc3333",
+            "stop web db",
+            "start web db",
         ];
 
         assert_eq!(compose_calls(&runner.runs()), [one, one].concat());

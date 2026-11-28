@@ -264,11 +264,12 @@ mod tests {
     use crate::app_locks::AppLocks;
     use crate::notifications::Notifier;
 
-    /// The fake `docker`: it logs its arguments, one call per line, after the app's compose file; answers `ps` with
+    /// The fake `docker`: it logs its arguments, one call per line, after the app's compose file or its project; answers
+    /// `ps` with
     /// `web` running; takes `HANGAR_TEST_STOP` seconds to stop it; and starts it again with the exit code
     /// `HANGAR_TEST_START`.
     const FAKE_DOCKER: &str = r#"#!/bin/sh
-echo "$*" | sed 's/.* -f [^ ]* //' >> "$HANGAR_TEST_LOG"
+echo "$*" | sed -e 's/.* -f [^ ]* //' -e 's/^compose -p [^ ]* //' >> "$HANGAR_TEST_LOG"
 case " $* " in
   *" ps "*) echo '{"ID":"aaaaaaaaaaaa1111","Service":"web","State":"running"}' ;;
   *" stop "*) sleep "${HANGAR_TEST_STOP:-0}" ;;
@@ -404,8 +405,8 @@ esac
     fn stopped_and_started() -> Vec<String> {
         [
             "ps --status running --status restarting --format json",
-            "stop aaaaaaaaaaaa1111",
-            "start aaaaaaaaaaaa1111",
+            "stop web",
+            "start web",
         ]
         .map(str::to_owned)
         .to_vec()
@@ -600,28 +601,5 @@ esac
             backups.back_up("beta", &CancellationToken::new()).await,
             Err(ErrorCode::NoDataFolder { .. })
         ));
-    }
-
-    #[tokio::test]
-    async fn fails_at_once_a_backup_that_stops_the_services_while_the_store_is_synced() {
-        let fixture = Fixture::new();
-        let (backups, notifier) = fixture.backups(0, 0, Backups::TIMEOUT).await;
-        let _sync = fixture.locks.claim_sync().expect("nothing is held");
-        let busy = ErrorCode::AppBusy {
-            app: "alpha".to_owned(),
-        };
-
-        assert_eq!(
-            backups.back_up("alpha", &CancellationToken::new()).await,
-            Err(busy.clone())
-        );
-        assert!(fixture.calls().is_empty(), "nothing was stopped");
-        assert_eq!(
-            notified(&notifier),
-            [NotificationMessage::BackupFailed {
-                app: "alpha".to_owned(),
-                error: ErrorDetail::from(busy),
-            }]
-        );
     }
 }

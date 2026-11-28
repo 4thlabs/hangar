@@ -36,11 +36,11 @@ const PATIENCE: Duration = Duration::from_secs(30);
 const ARCHIVE: &str = "2026-10-18T03-30-00-000Z";
 const ARCHIVE_BYTES: &[u8] = b"PK\x05\x06 an archive, as far as the routes care";
 
-/// The fake `docker`: it logs its arguments, one call per line; answers `ps` with `web` running; and holds its stop
+/// The fake `docker`: it logs its arguments, one call per line, after the app's compose file or its project; answers `ps` with `web` running; and holds its stop
 /// and its `up` until the file `HANGAR_TEST_RELEASE` exists, its child's wait and not the test's. As it stops, it says
 /// so on `HANGAR_TEST_SIGNAL` when that is a FIFO, which the test reads, and waits for the test to.
 const FAKE_DOCKER: &str = r#"#!/bin/sh
-echo "$*" | sed 's/.* -f [^ ]* //' >> "$HANGAR_TEST_LOG"
+echo "$*" | sed -e 's/.* -f [^ ]* //' -e 's/^compose -p [^ ]* //' >> "$HANGAR_TEST_LOG"
 case " $* " in
   *" ps "*) echo '{"ID":"aaaaaaaaaaaa1111","Service":"web","State":"running"}' ;;
   *" stop "*)
@@ -437,8 +437,8 @@ async fn backs_an_app_up_when_asked_one_run_at_a_time_and_lists_its_new_archive(
         fixture.docker_calls(),
         [
             "ps --status running --status restarting --format json",
-            "stop aaaaaaaaaaaa1111",
-            "start aaaaaaaaaaaa1111"
+            "stop web",
+            "start web"
         ]
     );
     Ok(())
@@ -612,7 +612,7 @@ async fn schedules_a_backup_hangar_yml_gives_a_cron_once_the_store_is_synced() -
 }
 
 #[tokio::test]
-async fn holds_its_app_while_its_services_are_stopped_and_runs_beside_no_sync_of_the_store()
+async fn holds_its_app_while_its_services_are_stopped_but_not_a_sync_of_the_store()
 -> quoll::Result<()> {
     let fixture = Fixture::new();
     let signal = fixture.signal();
@@ -660,16 +660,8 @@ async fn holds_its_app_while_its_services_are_stopped_and_runs_beside_no_sync_of
     assert_eq!(refused.status(), StatusCode::CONFLICT);
     assert!(fixture.data.join("app-installed/alpha").is_symlink());
 
-    // Nor is the store synced, which could rewrite the compose.yml its services are started again from.
-    let refused = api.store().sync().await.expect_err("a backup stops alpha");
-
-    assert_eq!(refused.status(), Some(StatusCode::CONFLICT));
-    assert_eq!(
-        ErrorCode::read(&refused),
-        Some(ErrorCode::BatchRunning {
-            apps: vec!["alpha".to_owned()]
-        })
-    );
+    // A sync of the store does not wait for the backup: its services start again by the project's name.
+    assert_eq!(api.store().sync().await?.state, SyncState::Running);
 
     // Beta's waits its turn after alpha's: its failure says alpha's has ended.
     api.backups().back_up("beta").await?;
@@ -680,8 +672,8 @@ async fn holds_its_app_while_its_services_are_stopped_and_runs_beside_no_sync_of
         fixture.docker_calls(),
         [
             "ps --status running --status restarting --format json",
-            "stop aaaaaaaaaaaa1111",
-            "start aaaaaaaaaaaa1111"
+            "stop web",
+            "start web"
         ]
     );
     Ok(())

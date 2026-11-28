@@ -1,6 +1,6 @@
 //! A command to run: the program, its arguments and its options.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use tokio_util::sync::CancellationToken;
@@ -27,6 +27,8 @@ pub struct Command {
     pub(crate) program: String,
     pub(crate) args: Vec<String>,
     pub(crate) env: BTreeMap<String, String>,
+    /// The variables the child does not inherit, whatever this process's environment or the runtime's set.
+    pub(crate) env_removed: BTreeSet<String>,
     pub(crate) current_dir: Option<PathBuf>,
     pub(crate) cancellation: Option<CancellationToken>,
 }
@@ -38,6 +40,7 @@ impl Command {
             program: program.into(),
             args: Vec::new(),
             env: BTreeMap::new(),
+            env_removed: BTreeSet::new(),
             current_dir: None,
             cancellation: None,
         }
@@ -60,7 +63,10 @@ impl Command {
     /// Sets a variable for the child, on top of this process's environment, which it otherwise inherits as it is.
     #[must_use]
     pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.env.insert(key.into(), value.into());
+        let key = key.into();
+
+        self.env_removed.remove(&key);
+        self.env.insert(key, value.into());
         self
     }
 
@@ -70,11 +76,21 @@ impl Command {
         mut self,
         variables: impl IntoIterator<Item = (impl Into<String>, impl Into<String>)>,
     ) -> Self {
-        self.env.extend(
-            variables
-                .into_iter()
-                .map(|(key, value)| (key.into(), value.into())),
-        );
+        for (key, value) in variables {
+            self = self.env(key, value);
+        }
+
+        self
+    }
+
+    /// Leaves the variable `key` out of the child's environment, whatever this process's environment, the runtime's or
+    /// this command's set: `COMPOSE_FILE`, as one that names no file must not be read a file.
+    #[must_use]
+    pub fn env_remove(mut self, key: impl Into<String>) -> Self {
+        let key = key.into();
+
+        self.env.remove(&key);
+        self.env_removed.insert(key);
         self
     }
 

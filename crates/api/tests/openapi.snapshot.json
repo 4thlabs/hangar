@@ -2226,7 +2226,7 @@
             "type": "object"
           },
           {
-            "description": "A sync of the store, while compose batches, or backups that stop the services, run on the files it pulls and\nlinks.",
+            "description": "A sync of the store, while compose batches run on the files it pulls and links.",
             "properties": {
               "code": {
                 "const": "store.batch_running",
@@ -2235,7 +2235,7 @@
               "params": {
                 "properties": {
                   "apps": {
-                    "description": "The apps the batches and those backups hold, by id.",
+                    "description": "The apps the batches hold, by id.",
                     "items": {
                       "type": "string"
                     },
