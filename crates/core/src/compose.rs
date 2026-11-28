@@ -96,6 +96,12 @@ impl<R: CommandRunner> Compose<R> {
         ProjectName::is_valid(name)
     }
 
+    /// The runner of its commands, lent to what runs `docker` itself on an app's containers, as a backup stops and
+    /// starts them by their ids.
+    pub(crate) fn runner(&self) -> &R {
+        &self.runner
+    }
+
     /// Runs `command` on the installed app `app`, its output going where `output` says, and waits for its end.
     ///
     /// # Errors

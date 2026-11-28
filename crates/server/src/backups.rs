@@ -404,8 +404,8 @@ esac
     fn stopped_and_started() -> Vec<String> {
         [
             "ps --status running --status restarting --format json",
-            "stop web",
-            "start web",
+            "stop aaaaaaaaaaaa1111",
+            "start aaaaaaaaaaaa1111",
         ]
         .map(str::to_owned)
         .to_vec()
