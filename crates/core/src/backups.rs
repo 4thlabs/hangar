@@ -522,11 +522,12 @@ mod tests {
     use crate::runtime::fake::{FakeRunner, Reply};
     use crate::{Backup, Command, CommandRunner, DataDir, Output, RunError};
 
-    /// What `docker compose ps --status running --format json` prints for `web`, in two containers, and `db`.
+    /// What `docker compose ps --status running --status restarting --format json` prints for `web`, in two containers
+    /// running, and `db`, between two attempts of its restart policy.
     const RUNNING: &str = concat!(
         "{\"ID\":\"aaaaaaaaaaaa1111\",\"Service\":\"web\",\"State\":\"running\"}\n",
         "{\"ID\":\"bbbbbbbbbbbb2222\",\"Service\":\"web\",\"State\":\"running\"}\n",
-        "{\"ID\":\"cccccccccccc3333\",\"Service\":\"db\",\"State\":\"running\"}\n",
+        "{\"ID\":\"cccccccccccc3333\",\"Service\":\"db\",\"State\":\"restarting\"}\n",
     );
 
     /// A data directory where `alpha` is installed, its data folder holding `files`, each with its own path in it.
@@ -819,7 +820,7 @@ mod tests {
         assert_eq!(
             compose_calls(&fake.runs()),
             [
-                "ps --status running --format json",
+                "ps --status running --status restarting --format json",
                 "stop web db",
                 "start web db"
             ]
@@ -868,7 +869,7 @@ mod tests {
             assert_eq!(
                 compose_calls(&runner.runs()),
                 [
-                    "ps --status running --format json",
+                    "ps --status running --status restarting --format json",
                     "stop web db",
                     "start web db"
                 ]
@@ -911,7 +912,7 @@ mod tests {
         assert!(matches!(refused, Err(BackupError::RunsHangar { app }) if app == "alpha"));
         assert_eq!(
             compose_calls(&runner.runs()),
-            ["ps --status running --format json"]
+            ["ps --status running --status restarting --format json"]
         );
         assert!(!data_dir.backups().join("alpha").exists());
     }
@@ -1008,7 +1009,7 @@ mod tests {
             assert_eq!(
                 compose_calls(&runner.runs()),
                 [
-                    "ps --status running --format json",
+                    "ps --status running --status restarting --format json",
                     "stop web db",
                     "start web db"
                 ]
@@ -1164,7 +1165,7 @@ mod tests {
         second.expect("backed up");
 
         let one = [
-            "ps --status running --format json",
+            "ps --status running --status restarting --format json",
             "stop web db",
             "start web db",
         ];

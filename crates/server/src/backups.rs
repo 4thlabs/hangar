@@ -402,9 +402,13 @@ esac
 
     /// The compose commands a backup that stops `web` runs, in order.
     fn stopped_and_started() -> Vec<String> {
-        ["ps --status running --format json", "stop web", "start web"]
-            .map(str::to_owned)
-            .to_vec()
+        [
+            "ps --status running --status restarting --format json",
+            "stop web",
+            "start web",
+        ]
+        .map(str::to_owned)
+        .to_vec()
     }
 
     #[tokio::test]

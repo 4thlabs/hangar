@@ -101,7 +101,8 @@ impl Services {
             .map(drop)
     }
 
-    /// The services of `app` that have a container running, each once.
+    /// The services of `app` that have a container running, or restarting between the attempts of its restart policy,
+    /// each once: one left out would come back on its own and write while its files are read.
     async fn running<R: CommandRunner>(
         &self,
         compose: &Compose<R>,
@@ -111,9 +112,17 @@ impl Services {
             .capture(
                 app,
                 ComposeCommand::Args(
-                    ["ps", "--status", "running", "--format", "json"]
-                        .map(str::to_owned)
-                        .into(),
+                    [
+                        "ps",
+                        "--status",
+                        "running",
+                        "--status",
+                        "restarting",
+                        "--format",
+                        "json",
+                    ]
+                    .map(str::to_owned)
+                    .into(),
                 ),
             )
             .await;
