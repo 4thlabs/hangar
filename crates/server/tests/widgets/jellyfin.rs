@@ -35,8 +35,16 @@ impl Calls {
 
 /// A Jellyfin on port 0, which answers its key alone and counts its calls; its URL.
 async fn jellyfin(calls: Calls) -> String {
+    jellyfin_holding(calls, 120).await
+}
+
+/// A Jellyfin on port 0 that holds `movies` movies, which answers its key alone and counts its calls; its URL.
+async fn jellyfin_holding(calls: Calls, movies: u64) -> String {
     let router = axum::Router::new()
-        .route("/Items/Counts", get(counts))
+        .route(
+            "/Items/Counts",
+            get(move |state, headers| counts(state, headers, movies)),
+        )
         .route("/Users", get(users))
         .route("/Items/Latest", get(latest))
         .route("/Items/{id}/Images/Primary", get(poster))
@@ -51,14 +59,14 @@ fn refused(headers: &HeaderMap) -> bool {
         .is_none_or(|key| key != AUTHORIZATION)
 }
 
-async fn counts(State(calls): State<Calls>, headers: HeaderMap) -> Response {
+async fn counts(State(calls): State<Calls>, headers: HeaderMap, movies: u64) -> Response {
     if refused(&headers) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
     calls.push("counts");
 
-    Json(json!({ "MovieCount": 120, "SeriesCount": 30, "EpisodeCount": 900, "SongCount": 4000, "BookCount": 2 }))
+    Json(json!({ "MovieCount": movies, "SeriesCount": 30, "EpisodeCount": 900, "SongCount": 4000, "BookCount": 2 }))
         .into_response()
 }
 
@@ -82,8 +90,7 @@ async fn latest(
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
-    calls.push(format!("latest {}", query["limit"]));
-    assert_eq!(query["userId"], "u-ana");
+    calls.push(format!("latest {} {}", query["userId"], query["limit"]));
     assert_eq!(query["includeItemTypes"], "Movie,Episode,MusicAlbum");
     assert_eq!(query["groupItems"], "true");
 
@@ -207,7 +214,7 @@ async fn gives_the_parts_a_read_asks_and_only_those() -> quoll::Result<()> {
             latest: Some(items()),
         }
     );
-    assert_eq!(calls.all(), ["counts", "users", "latest 100"]);
+    assert_eq!(calls.all(), ["counts", "users", "latest u-ana 100"]);
     Ok(())
 }
 
@@ -229,7 +236,7 @@ async fn makes_one_call_for_two_reads_of_it_and_another_for_another_limit() -> q
     let mut made = calls.all();
 
     made.sort();
-    assert_eq!(made, ["counts", "latest 10", "users"]);
+    assert_eq!(made, ["counts", "latest u-ana 10", "users"]);
 
     services.services().jellyfin(&key, read(20)).await?;
 
@@ -238,7 +245,13 @@ async fn makes_one_call_for_two_reads_of_it_and_another_for_another_limit() -> q
     made.sort();
     assert_eq!(
         made,
-        ["counts", "latest 10", "latest 20", "users", "users"],
+        [
+            "counts",
+            "latest u-ana 10",
+            "latest u-ana 20",
+            "users",
+            "users"
+        ],
         "the counts kept, the latest items asked again for 20"
     );
     Ok(())
@@ -277,6 +290,62 @@ async fn serves_a_fresh_call_without_reading_the_store_and_resolves_the_service_
         ),
         "a call not kept resolves the service"
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn shares_the_calls_of_one_service_and_keeps_two_services_and_two_users_apart()
+-> quoll::Result<()> {
+    let (first, second) = (Calls::default(), Calls::default());
+    let one = jellyfin_holding(first.clone(), 120).await;
+    let two = jellyfin_holding(second.clone(), 7).await;
+    // The second declaration calls the first Jellyfin, at its `url`, and links to the second: a service is where the
+    // server calls it, its `url` before its `link`.
+    let fixture = Fixture::new(&format!(
+        "  - {{ type: jellyfin-latest, column: 1, user: ana, url: '{one}', link: 'https://a.example.com' }}\n  - {{ \
+         type: jellyfin-latest, column: 2, user: ana, url: '{one}', link: '{two}' }}\n  - {{ type: jellyfin-latest, \
+         column: 3, user: ben, url: '{one}' }}\n  - {{ type: jellyfin-latest, column: 1, user: ana, url: '{two}' }}\n"
+    ));
+
+    fixture.env("JELLYFIN_API_KEY=jellyfin-key\n");
+
+    let server = fixture.serve().await;
+    let read = JellyfinRead {
+        counts: true,
+        latest: limit(10),
+    };
+    let mut movies = Vec::new();
+
+    for placement in server.placements().await {
+        let data = server
+            .api()
+            .services()
+            .jellyfin(&placement.key, read)
+            .await?;
+
+        movies.push(data.counts.map(|counts| counts.movies));
+    }
+
+    let made = |calls: &Calls| {
+        let mut made = calls.all();
+
+        made.sort();
+        made
+    };
+
+    assert_eq!(movies, [Some(120), Some(120), Some(120), Some(7)]);
+    assert_eq!(
+        made(&first),
+        [
+            "counts",
+            "latest u-ana 10",
+            "latest u-ben 10",
+            "users",
+            "users"
+        ],
+        "one counts for the three declarations of one url, a latest call per user"
+    );
+    assert_eq!(made(&second), ["counts", "latest u-ana 10", "users"]);
     Ok(())
 }
 

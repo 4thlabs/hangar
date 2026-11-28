@@ -20,11 +20,11 @@ impl ServicesServer for App {
             .read(
                 &widget,
                 |declared| {
-                    let Declared::Jellyfin { at, user } = declared else {
+                    let Declared::Jellyfin { user, .. } = declared else {
                         return None;
                     };
 
-                    Some((at, user.to_owned()))
+                    Some((*user).to_owned())
                 },
                 async |locator, user| services.jellyfin.read(&locator, &user, read).await,
             )

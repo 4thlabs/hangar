@@ -22,6 +22,7 @@ use quoll::Route;
 use quoll::client::{self, Builder, Contract};
 use reqwest::Request;
 use reqwest_middleware::Middleware;
+use tokio::sync::OnceCell;
 
 use crate::Settings;
 use crate::failure::Failure;
@@ -39,6 +40,10 @@ pub(crate) struct ServicesState {
     store: Arc<Store<Runtime>>,
     /// The domain the apps are served under, which a service's default address is under.
     domain: Arc<str>,
+    /// GitHub's public API, at the address and with the token of the server's settings.
+    github: FixedService,
+    /// Finnhub's public API, at the address and with the key of the server's settings.
+    finnhub: FixedService,
     jellyfin: Jellyfin,
 }
 
@@ -52,17 +57,33 @@ impl ServicesState {
                 runtime,
             )),
             domain: settings.domain.as_str().into(),
+            github: FixedService {
+                name: "github",
+                api: settings.github_api_url.clone(),
+                key: settings
+                    .github_token
+                    .as_ref()
+                    .map(|token| token.expose().to_owned()),
+            },
+            finnhub: FixedService {
+                name: "finnhub",
+                api: settings.finnhub_api_url.clone(),
+                key: settings
+                    .finnhub_api_key
+                    .as_ref()
+                    .map(|key| key.expose().to_owned()),
+            },
             jellyfin: Jellyfin::new(),
         })
     }
 
-    /// What a service's route answers for the widget placed as `key`. `pick` takes from its declaration the service
-    /// and what the read needs of it, `None` for a widget of another service, a 404; `read` reads the parts, a 502 when
-    /// one asked failed with no value kept. The service is resolved inside a part's load, never before the cache.
+    /// What a service's route answers for the widget placed as `key`. `pick` takes from its declaration what the read
+    /// needs of it, `None` for a widget of another service, a 404; `read` reads the parts, a 502 when one asked failed
+    /// with no value kept. The service is resolved inside a part's load, never before the cache, and once per read.
     async fn read<Needs, T, F>(
         &self,
         key: &str,
-        pick: impl for<'a> FnOnce(Declared<'a>) -> Option<(ServiceAt<'a>, Needs)>,
+        pick: impl for<'a> FnOnce(&Declared<'a>) -> Option<Needs>,
         read: impl FnOnce(Locator, Needs) -> F,
     ) -> quoll::Result<T>
     where
@@ -70,9 +91,10 @@ impl ServicesState {
     {
         let (placement, declared) = self.placement(key).await?;
         let found = Declared::of(&placement.widget.kind);
-        let policy = found.policy();
-        let (at, needs) = pick(found).ok_or_else(|| Self::unknown(key))?;
-        let locator = self.locator(at, policy, declared);
+        let needs = pick(&found).ok_or_else(|| Self::unknown(key))?;
+        let locator = self
+            .locator(&found, declared)
+            .ok_or_else(|| Self::unknown(key))?;
 
         read(locator, needs)
             .await
@@ -90,7 +112,8 @@ impl ServicesState {
         let declared = config
             .widgets
             .iter()
-            .filter_map(|widget| Declared::of(&widget.kind).service().map(ServiceAt::key))
+            .filter_map(|widget| self.origin(&Declared::of(&widget.kind)))
+            .map(|origin| origin.key())
             .collect();
         let placement = Placement::all(config.widgets)
             .into_iter()
@@ -100,21 +123,41 @@ impl ServicesState {
         Ok((placement, Arc::new(declared)))
     }
 
-    /// What finds the service `at`, kept by `policy`, among the services `declared`.
-    fn locator(
-        &self,
-        at: ServiceAt<'_>,
-        policy: Policy,
-        declared: Arc<HashSet<ServiceKey>>,
-    ) -> Locator {
-        Locator {
+    /// Where the service `found` reads is: a store app, or one of the server's settings; `None` for a widget that
+    /// reads none.
+    fn origin(&self, found: &Declared<'_>) -> Option<Origin> {
+        let app = |at: &ServiceAt<'_>| Origin::App {
             app: at.app,
             options: at.options.clone(),
-            policy,
             store: Arc::clone(&self.store),
             domain: Arc::clone(&self.domain),
-            declared,
+        };
+
+        match found {
+            Declared::Nothing => None,
+            Declared::Arcane(at)
+            | Declared::Backrest(at)
+            | Declared::Beszel(at)
+            | Declared::Forgejo(at)
+            | Declared::Frigate(at)
+            | Declared::Gluetun(at)
+            | Declared::Miniflux(at)
+            | Declared::Jellyfin { at, .. }
+            | Declared::TcgCollector(at) => Some(app(at)),
+            Declared::Github { .. } => Some(Origin::Settings(self.github.clone())),
+            Declared::Finnhub { .. } => Some(Origin::Settings(self.finnhub.clone())),
         }
+    }
+
+    /// What finds the service `found` reads, among the services `declared`, its calls kept by its policy; `None` for
+    /// a widget that reads none.
+    fn locator(&self, found: &Declared<'_>, declared: Arc<HashSet<ServiceKey>>) -> Option<Locator> {
+        Some(Locator {
+            origin: self.origin(found)?,
+            policy: found.policy(),
+            declared,
+            resolved: Arc::new(OnceCell::new()),
+        })
     }
 
     /// The answer to a key that places no widget of the service asked: none at all, or one of another service.
@@ -276,46 +319,101 @@ impl<'a> ServiceAt<'a> {
     fn new(app: &'static str, options: &'a ServiceOptions) -> Self {
         Self { app, options }
     }
-
-    /// Where it is, as the declaration writes it.
-    pub(crate) fn key(&self) -> ServiceKey {
-        ServiceKey {
-            app: self.app,
-            address: self
-                .options
-                .url
-                .clone()
-                .or_else(|| self.options.link.clone()),
-        }
-    }
 }
 
-/// Where a service is, as its declaration writes it, read without the store: its app, and the address the server calls
-/// it at, `url`, else `link`, `None` for the default one under the domain. Two declarations of one key read one service:
-/// it keys the service's client and its calls.
+/// Where a service is, as the server knows it without reading the store: a store app's, by its app and the address
+/// its declaration writes, `url`, else `link`, `None` for the default one under the domain; one of the server's
+/// settings, by its name and address. Two declarations of one key read one service: it keys the service's client and
+/// its calls.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct ServiceKey {
     app: &'static str,
     address: Option<String>,
 }
 
-/// What a read takes of its service: where its declaration says it is, how long its calls are kept, and what resolves
-/// its address and key, which a part does only when it loads: on a miss or a stale value, never for a fresh one.
+/// Where a read finds its service.
+#[derive(Debug, Clone)]
+pub(crate) enum Origin {
+    /// A store app's, where its declaration says: the store's apps give its container, so its default address, and
+    /// `.env.global` its key.
+    App {
+        app: &'static str,
+        options: ServiceOptions,
+        store: Arc<Store<Runtime>>,
+        domain: Arc<str>,
+    },
+    /// One the server's settings give, as GitHub's public API.
+    Settings(FixedService),
+}
+
+impl Origin {
+    /// Where the service is, read without the store.
+    fn key(&self) -> ServiceKey {
+        match self {
+            Self::App { app, options, .. } => ServiceKey {
+                app,
+                address: options.url.clone().or_else(|| options.link.clone()),
+            },
+            Self::Settings(fixed) => ServiceKey {
+                app: fixed.name,
+                address: Some(fixed.api.clone()),
+            },
+        }
+    }
+
+    /// The service, with its key, resolved now.
+    async fn resolve(&self) -> Result<Service, LoadError> {
+        match self {
+            Self::App {
+                app,
+                options,
+                store,
+                domain,
+            } => Service::resolve(store, domain, app, options).await,
+            Self::Settings(fixed) => Ok(Service {
+                api: fixed.api.clone(),
+                key: fixed.key.clone(),
+            }),
+        }
+    }
+}
+
+/// A service at the address, and with the key, of the server's settings.
+#[derive(Clone)]
+pub(crate) struct FixedService {
+    /// What it is, as `github`.
+    name: &'static str,
+    api: String,
+    key: Option<String>,
+}
+
+/// Shows whether there is a key, never the key.
+impl fmt::Debug for FixedService {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FixedService")
+            .field("name", &self.name)
+            .field("api", &self.api)
+            .field("has_key", &self.key.is_some())
+            .finish()
+    }
+}
+
+/// What a read takes of its service: where it is, how long its calls are kept, and the service resolved, at most once
+/// for the read, by the first of its parts that loads: on a miss or a stale value, never for a fresh one.
 #[derive(Debug, Clone)]
 pub(crate) struct Locator {
-    app: &'static str,
-    options: ServiceOptions,
+    origin: Origin,
     policy: Policy,
-    store: Arc<Store<Runtime>>,
-    domain: Arc<str>,
     /// Where every declaration of `hangar.yml` says its service is, as it was read for this read.
     declared: Arc<HashSet<ServiceKey>>,
+    /// The service, once a part resolved it; shared by the clones the parts' loads take.
+    resolved: Arc<OnceCell<Service>>,
 }
 
 impl Locator {
-    /// Where the service is, as its declaration writes it.
+    /// Where the service is, read without the store.
     pub(crate) fn key(&self) -> ServiceKey {
-        ServiceAt::new(self.app, &self.options).key()
+        self.origin.key()
     }
 
     /// How long its calls are kept.
@@ -328,23 +426,25 @@ impl Locator {
         self.declared.contains(key)
     }
 
-    /// The service, with its key, resolved now: the store's apps give its container, `.env.global` its key.
+    /// The service, with its key: resolved by the first call of the read, then the same for the others. A failure is
+    /// not kept: the next part tries again.
     ///
     /// # Errors
     ///
     /// When the store's apps or `.env.global` cannot be read.
     pub(crate) async fn service(&self) -> Result<Service, LoadError> {
-        Service::resolve(&self.store, &self.domain, self.app, &self.options).await
+        self.resolved
+            .get_or_try_init(|| self.origin.resolve())
+            .await
+            .cloned()
     }
 }
 
-/// The service a widget reads: a store app's.
+/// The service a widget reads, resolved: where the server calls it, and its key.
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Service {
-    /// Where the server calls it: `url`, else the link.
+    /// Where the server calls it: a store app's `url`, else its link, `link` or `https://<container>.<DOMAIN>`.
     pub(crate) api: String,
-    /// Where the browser opens it: `link`, else `https://<container>.<DOMAIN>`.
-    pub(crate) link: String,
     /// Its key, `<CONTAINER>_API_KEY` of `.env.global`; `None` when it takes none, and then none is sent.
     pub(crate) key: Option<String>,
 }
@@ -465,13 +565,12 @@ impl Service {
                 what: "global environment",
                 source,
             })?;
-        let link = Self::link(&container, domain, options);
+        let api = options
+            .url
+            .clone()
+            .unwrap_or_else(|| Self::link(&container, domain, options));
 
-        Ok(Self {
-            api: options.url.clone().unwrap_or_else(|| link.clone()),
-            link,
-            key,
-        })
+        Ok(Self { api, key })
     }
 
     /// The key, for a route that sends it in a header of its own when there is one.
@@ -485,7 +584,6 @@ impl fmt::Debug for Service {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Service")
             .field("api", &self.api)
-            .field("link", &self.link)
             .field("has_key", &self.key.is_some())
             .finish()
     }
@@ -495,9 +593,13 @@ impl fmt::Debug for Service {
 mod tests {
     use std::time::Duration;
 
-    use hangar_core::Config;
+    use std::collections::HashSet;
+    use std::sync::Arc;
 
-    use super::{Declared, ServiceAt};
+    use hangar_core::{Config, DataDir, Runtime, Store};
+    use tokio::sync::OnceCell;
+
+    use super::{Declared, FixedService, Locator, Origin, ServiceAt, ServiceKey};
 
     fn config(widgets: &str) -> Config {
         Config::parse(&format!("categories: []\nwidgets:\n{widgets}"))
@@ -550,5 +652,100 @@ mod tests {
         assert_eq!(at.options.url.as_deref(), Some("http://jellyfin:8096"));
         assert_eq!(declared[1].service(), Some(&at));
         assert_eq!(declared[0].service(), None::<&ServiceAt<'_>>);
+    }
+
+    /// A store in a directory of its own, with no app: its apps' containers are their ids.
+    fn store(dir: &tempfile::TempDir) -> Arc<Store<Runtime>> {
+        let data_dir = DataDir::new(dir.path()).expect("a data directory");
+
+        Arc::new(Store::new(
+            "https://example.com/store.git",
+            data_dir,
+            Runtime::new(),
+        ))
+    }
+
+    fn app(options: &str, store: &Arc<Store<Runtime>>) -> Origin {
+        let config = config(&format!(
+            "  - {{ type: jellyfin-latest, column: 1, user: ana{options} }}\n"
+        ));
+        let Declared::Jellyfin { at, .. } = Declared::of(&config.widgets[0].kind) else {
+            panic!("a Jellyfin");
+        };
+
+        Origin::App {
+            app: at.app,
+            options: at.options.clone(),
+            store: Arc::clone(store),
+            domain: "example.com".into(),
+        }
+    }
+
+    fn locator(origin: Origin) -> Locator {
+        Locator {
+            origin,
+            policy: Declared::Nothing.policy(),
+            declared: Arc::new(HashSet::new()),
+            resolved: Arc::new(OnceCell::new()),
+        }
+    }
+
+    #[test]
+    fn keys_a_store_app_s_service_by_its_url_else_its_link_and_one_of_the_settings_by_its_address()
+    {
+        let dir = tempfile::tempdir().expect("a directory");
+        let store = store(&dir);
+        let address = |options: &str| app(options, &store).key().address;
+        let fixed = Origin::Settings(FixedService {
+            name: "github",
+            api: "https://api.github.com".to_owned(),
+            key: None,
+        });
+
+        assert_eq!(
+            address(", url: 'http://u', link: 'https://l'").as_deref(),
+            Some("http://u")
+        );
+        assert_eq!(address(", link: 'https://l'").as_deref(), Some("https://l"));
+        assert_eq!(address(""), None);
+        assert_eq!(
+            fixed.key(),
+            ServiceKey {
+                app: "github",
+                address: Some("https://api.github.com".to_owned()),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn resolves_a_service_of_the_settings_as_they_give_it() {
+        let fixed = locator(Origin::Settings(FixedService {
+            name: "finnhub",
+            api: "https://finnhub.io".to_owned(),
+            key: Some("key".to_owned()),
+        }));
+        let service = fixed.service().await.expect("resolved");
+
+        assert_eq!(service.api, "https://finnhub.io");
+        assert_eq!(service.key(), Some("key"));
+    }
+
+    #[tokio::test]
+    async fn resolves_a_store_app_s_service_once_per_read() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let store = store(&dir);
+        let read = locator(app("", &store));
+        let first = read.service().await.expect("resolved");
+
+        // `.env.global` can no longer be read: a read that resolves the service now fails.
+        std::fs::create_dir(dir.path().join(".env.global")).expect("created");
+
+        assert_eq!(first.api, "https://jellyfin.example.com");
+        assert_eq!(
+            read.clone().service().await.expect("the same").api,
+            first.api,
+            "the read's other parts take the service it resolved"
+        );
+        assert!(locator(app("", &store)).service().await.is_err());
     }
 }
