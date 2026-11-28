@@ -11,6 +11,7 @@ use hangar_core::{Docker, Runtime};
 use crate::Settings;
 use crate::app_locks::AppLocks;
 use crate::auth::{Auth, AuthBodyLimit, OriginCheck};
+use crate::backups::Backups;
 use crate::compose::ComposeState;
 use crate::docker::{DockerChanges, DockerState};
 use crate::jobs::{Clock, HangarJobs, Jobs, Updates};
@@ -28,6 +29,7 @@ pub struct App {
     pub(crate) notifier: Notifier,
     pub(crate) compose: Arc<ComposeState>,
     pub(crate) jobs: Arc<Jobs>,
+    pub(crate) backups: Arc<Backups>,
     pub(crate) widgets: Arc<WidgetsState>,
 }
 
@@ -59,6 +61,7 @@ impl App {
             notifier.clone(),
             Arc::clone(&locks),
         );
+        let backups = Arc::new(Backups::new(settings, runtime.clone(), notifier.clone()));
 
         Self {
             auth: Arc::new(Auth::new(settings)),
@@ -79,7 +82,8 @@ impl App {
             ),
             docker: docker_state,
             notifier,
-            jobs: HangarJobs::scheduler(updates, Clock::System),
+            jobs: HangarJobs::scheduler(updates, Arc::clone(&backups), Clock::System),
+            backups,
         }
     }
 
@@ -90,15 +94,22 @@ impl App {
         self.auth.start().await;
     }
 
-    /// Starts the jobs' crons, and an image check at once: apart from [`start`](Self::start), so that a test of the
-    /// routes runs no job it does not ask for.
+    /// Starts the jobs' crons, those of the backups read from `hangar.yml` and again each time it is saved or pulled,
+    /// and an image check at once: apart from [`start`](Self::start), so that a test of the routes runs no job it does
+    /// not ask for.
     pub fn start_jobs(&self) {
-        HangarJobs::start(&self.jobs);
+        HangarJobs::start(
+            &self.jobs,
+            Arc::clone(&self.backups),
+            self.store.config_changes(),
+        );
     }
 
-    /// Ends the state once the server has stopped serving: what was changed of the notifications and is not saved yet
+    /// Ends the state once the server has stopped serving: the jobs are stopped, those that run waited for, as a
+    /// backup ends by starting again what it stopped; then what was changed of the notifications and is not saved yet
     /// is saved, the saves running waited for.
     pub async fn stop(&self) {
+        self.jobs.stop().await;
         self.notifier.flush().await;
     }
 }
@@ -116,6 +127,7 @@ pub fn router(app: App) -> axum::Router {
         notifications: app.clone(),
         compose: app.clone(),
         jobs: app.clone(),
+        backups: app.clone(),
         widgets: app,
     })
 }

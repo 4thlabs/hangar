@@ -212,8 +212,8 @@ shows, and no longer reloads every 30 seconds. When that stream is lost, the pag
 wait from a second doubled up to 30 seconds, then reads everything again. The stats of the installed apps' containers, a frame a second, and the log of a
 container, its last 200 lines then followed, are streamed from the daemon, never kept; a log ends with an `end` event
 once its container stops, and an app Hangar did not install, or an id that is not one of a container of the app, is a 404. A daemon that does not answer is a 503, `docker.unavailable`. An app the last image check found an update for has
-the badge **Update**, and the filter **Update** keeps those apps or the others (see [Jobs](#jobs)). The backups come
-with #177, and a container's console with the terminal.
+the badge **Update**, and the filter **Update** keeps those apps or the others (see [Jobs](#jobs)). An app's page shows its
+backups (see [Backups](#backups)), and a container's console comes with the terminal.
 
 **Apps → Up**, **Restart** and **Down** run `docker compose up -d`, with `--pull always` and `--force-recreate` as Up's
 menu ticks them, `restart` or `down` on the apps selected, or on an app from its page, as a batch: `POST
@@ -241,9 +241,12 @@ its last MiB, the most a batch keeps.
 
 The server runs its jobs in its own process, in memory, with no Sidequest, worker or table, on crons read in its time
 zone, `TZ`, else `/etc/localtime`, else UTC. The **image check** runs as the server starts, then every four hours at
-the 17th minute, `17 */4 * * *`; the **update of the apps** runs every night at 04:47, `47 4 * * *`. A job waits its
-turn in its queue, `default` for both, which runs one job at a time, in the order they were asked for: a job asked
-for while a run of it waits or runs gets that run. The crons are read as node-cron 4.6 reads them, and checked as the
+the 17th minute, `17 */4 * * *`; the **update of the apps** runs every night at 04:47, `47 4 * * *`; the **backup**
+of an app runs on the `schedule` of its entry in `hangar.yml` (see [Backups](#backups)). A job is its kind and its
+params, `{ "kind": "backup", "params": { "app": "alpha" } }`: the backup of each app is a job of its own, with its own
+cron and its own run. A job waits its turn in its queue, which runs one job at a time, in the order they were asked
+for: `default` for the image check and the update of the apps, `backups` for the backups, so that a long backup holds
+up no check. A job asked for while a run of it waits or runs gets that run. The crons are read as node-cron 4.6 reads them, and checked as the
 `schedule` of a backup in `hangar.yml` is: five fields or six, the names, the nicknames, `L`, `W` and `#`, and the
 day of the month and the day of the week both asked for. A time the clock skips or repeats is read as node-cron reads
 it: a time skipped reads as the one an hour after, and a time repeated fires once, at its later occurrence east of
@@ -280,7 +283,34 @@ for the job of a run again, `POST /api/jobs/<id>/run`. **Cancel**, `POST /api/jo
 waits out of its queue, and tells one that runs to stop: the image check stops at once, the update of the apps once
 the app it updates is updated. The tab reads the runs again each second while one waits or runs, and every 30 seconds
 otherwise, so that a run a cron asks for shows. A restart forgets the runs and the registries' answers, and the check
-at the start brings the answers back.
+at the start brings the answers back. When the server stops, on `SIGTERM`, the crons end, the runs that wait are
+canceled, and those that run are told to stop and waited for: a backup starts again what it stopped before it ends.
+
+### Backups
+
+A backup zips the data folder of an app, `app-data/<path>` or `app-data/<app>`, as its entry in `hangar.yml`'s
+`backups` says (see [the store's docs](store.md#backups)), into `app-backups/<app>/<time>.zip`, the Waku version's
+archives: written as `.zip.partial`, renamed once complete, and the oldest removed beyond `keep`. Its include and
+exclude globs match dotfiles, and it follows no symbolic link. With `stop`, it stops the services that run, never the
+container Hangar runs in, then starts them again whatever the outcome. Its work on the disk runs on Tokio's blocking
+threads, and the backups of one app take turns.
+
+It runs as the job `backup` of its app, in the queue `backups`, on its cron, and when **Back up now** asks for it on the
+app's page, `POST /api/backups/<app>`: a 404, `backups.not_declared`, when `hangar.yml` declares no backup of it, and
+a 409, `backups.queued`, while a run of it waits or runs. The crons are read from `hangar.yml` as the jobs start, and
+again once it is saved or the store synced: the backup of an app it no longer gives a `schedule` has no cron. A
+backup that runs six hours is canceled, `backups.timed_out`: it removes what it wrote, and starts again what it
+stopped, which it is always given time for. A **Cancel** in **Settings → Jobs** stops it so too, and is no failure.
+
+A failed backup is notified, `backupFailed`, with the code of its error, which the page words; a service it stopped
+that did not start again, `backupRestartFailed`, naming the services. Its run keeps the code, for **Settings → Jobs**.
+
+The app's page reads `GET /api/backups/<app>`: the plan `hangar.yml` declares, `null` for an app it no longer backs
+up, the archives, the newest first, and the run of its backup that waits or runs, read again every two seconds while
+there is one. Nothing for a name that is no app id. `GET /api/backups/<app>/<archive>` sends an archive, its name
+without `.zip`, as `application/zip`, its `Content-Length` given and never compressed, saved as
+`<app>-<archive>.zip`; `DELETE` removes it. Both answer a 404, `backups.unknown_archive`, for an archive that is not
+there. The card shows whatever Docker answers, and nothing for an app with no backup and no archive.
 
 ### Widgets
 

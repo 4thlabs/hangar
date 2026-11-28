@@ -387,6 +387,102 @@ pub enum ErrorCode {
     /// A run of a job stopped short: the server failed it, and its log says how.
     #[serde(rename = "jobs.crashed")]
     JobCrashed,
+    /// `hangar.yml` declares no backup of this app.
+    #[serde(rename = "backups.not_declared")]
+    BackupNotDeclared {
+        /// The app.
+        app: String,
+    },
+    /// A backup of this app waits or runs already.
+    #[serde(rename = "backups.queued")]
+    BackupQueued {
+        /// The app.
+        app: String,
+    },
+    /// The app has no archive of this name.
+    #[serde(rename = "backups.unknown_archive")]
+    UnknownArchive {
+        /// The app.
+        app: String,
+        /// The archive asked for.
+        archive: String,
+    },
+    /// The archives of an app could not be read.
+    #[serde(rename = "backups.unreadable")]
+    BackupsUnreadable {
+        /// The app.
+        app: String,
+    },
+    /// An archive could not be removed.
+    #[serde(rename = "backups.remove_failed")]
+    ArchiveRemoveFailed {
+        /// The app.
+        app: String,
+        /// The archive.
+        archive: String,
+    },
+    /// The folder a backup archives is not there.
+    #[serde(rename = "backups.no_data_folder")]
+    NoDataFolder {
+        /// The app.
+        app: String,
+        /// The folder, under `app-data/`.
+        folder: String,
+    },
+    /// The path of the folder a backup archives goes through a symbolic link, which a backup never follows.
+    #[serde(rename = "backups.linked_folder")]
+    LinkedDataFolder {
+        /// The app.
+        app: String,
+        /// The folder, under `app-data/`.
+        folder: String,
+    },
+    /// The path of the folder a backup archives could lead out of `app-data/`.
+    #[serde(rename = "backups.outside_app_data")]
+    DataFolderOutside {
+        /// The app.
+        app: String,
+        /// The folder, as `hangar.yml` names it.
+        folder: String,
+    },
+    /// A glob of a backup that is not one.
+    #[serde(rename = "backups.invalid_glob")]
+    InvalidGlob {
+        /// The glob.
+        glob: String,
+    },
+    /// A backup that stops its app's services, one of which runs Hangar itself.
+    #[serde(rename = "backups.runs_hangar")]
+    RunsHangar {
+        /// The app.
+        app: String,
+    },
+    /// The services of an app could not be stopped for its backup: nothing was archived.
+    #[serde(rename = "backups.not_stopped")]
+    NotStopped {
+        /// The app.
+        app: String,
+    },
+    /// The services stopped for a backup did not start again: the app is left down.
+    #[serde(rename = "backups.not_restarted")]
+    NotRestarted {
+        /// The app.
+        app: String,
+        /// The services stopped, by name.
+        services: Vec<String>,
+    },
+    /// A backup ran past its six hours: what it had written is removed, and what it stopped started again.
+    #[serde(rename = "backups.timed_out")]
+    BackupTimedOut {
+        /// The app.
+        app: String,
+    },
+    /// A backup could not write its archive: the server's log says why.
+    #[serde(rename = "backups.failed")]
+    BackupFailed {
+        /// The app.
+        app: String,
+    },
     /// No widget that loads is placed under this key: none at all, the clock, or Docker's stats, which the page reads
     /// itself.
     #[serde(rename = "widgets.unknown_placement")]
@@ -562,6 +658,20 @@ impl ErrorCode {
             Self::UnknownJobRun { .. } => "jobs.unknown_run",
             Self::JobEnded { .. } => "jobs.ended",
             Self::JobCrashed => "jobs.crashed",
+            Self::BackupNotDeclared { .. } => "backups.not_declared",
+            Self::BackupQueued { .. } => "backups.queued",
+            Self::UnknownArchive { .. } => "backups.unknown_archive",
+            Self::BackupsUnreadable { .. } => "backups.unreadable",
+            Self::ArchiveRemoveFailed { .. } => "backups.remove_failed",
+            Self::NoDataFolder { .. } => "backups.no_data_folder",
+            Self::LinkedDataFolder { .. } => "backups.linked_folder",
+            Self::DataFolderOutside { .. } => "backups.outside_app_data",
+            Self::InvalidGlob { .. } => "backups.invalid_glob",
+            Self::RunsHangar { .. } => "backups.runs_hangar",
+            Self::NotStopped { .. } => "backups.not_stopped",
+            Self::NotRestarted { .. } => "backups.not_restarted",
+            Self::BackupTimedOut { .. } => "backups.timed_out",
+            Self::BackupFailed { .. } => "backups.failed",
             Self::UnknownPlacement { .. } => "widgets.unknown_placement",
             Self::WidgetUnavailable { .. } => "widgets.unavailable",
             Self::UnknownImage { .. } => "widgets.unknown_image",
@@ -587,6 +697,8 @@ impl ErrorCode {
             | Self::UnknownJobRun { .. }
             | Self::UnknownPlacement { .. }
             | Self::UnknownImage { .. }
+            | Self::BackupNotDeclared { .. }
+            | Self::UnknownArchive { .. }
             | Self::NoOidcProvider => StatusCode::NOT_FOUND,
             Self::WidgetUnavailable { .. } => StatusCode::BAD_GATEWAY,
             Self::InvalidCredentials
@@ -604,7 +716,8 @@ impl ErrorCode {
             | Self::FileAppeared { .. }
             | Self::AppBusy { .. }
             | Self::BatchRunning { .. }
-            | Self::JobEnded { .. } => StatusCode::CONFLICT,
+            | Self::JobEnded { .. }
+            | Self::BackupQueued { .. } => StatusCode::CONFLICT,
             Self::ConfigSyntax { .. }
             | Self::ConfigInvalid { .. }
             | Self::InvalidVariableName { .. }
@@ -624,7 +737,12 @@ impl ErrorCode {
             | Self::InvalidFile { .. }
             | Self::ComposeRejected { .. }
             | Self::InvalidProject { .. }
-            | Self::NoApps => StatusCode::BAD_REQUEST,
+            | Self::NoApps
+            | Self::NoDataFolder { .. }
+            | Self::LinkedDataFolder { .. }
+            | Self::DataFolderOutside { .. }
+            | Self::InvalidGlob { .. }
+            | Self::RunsHangar { .. } => StatusCode::BAD_REQUEST,
             Self::AppsUnreadable
             | Self::InstallFailed { .. }
             | Self::UninstallFailed { .. }
@@ -642,7 +760,13 @@ impl ErrorCode {
             | Self::AppCreateFailed { .. }
             | Self::ComposeFailed { .. }
             | Self::BatchUnchecked { .. }
-            | Self::JobCrashed => StatusCode::INTERNAL_SERVER_ERROR,
+            | Self::JobCrashed
+            | Self::BackupsUnreadable { .. }
+            | Self::ArchiveRemoveFailed { .. }
+            | Self::NotStopped { .. }
+            | Self::NotRestarted { .. }
+            | Self::BackupTimedOut { .. }
+            | Self::BackupFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -739,6 +863,39 @@ impl ErrorCode {
             Self::UnknownJobRun { run } => format!("no run {run} of a job is kept"),
             Self::JobEnded { run } => format!("the run {run} of a job has ended already"),
             Self::JobCrashed => Self::hinted("the job stopped short"),
+            Self::BackupNotDeclared { app } => format!("hangar.yml declares no backup of {app}"),
+            Self::BackupQueued { app } => format!("a backup of {app} waits or runs already"),
+            Self::UnknownArchive { app, archive } => format!("{app} has no archive {archive}"),
+            Self::BackupsUnreadable { app } => {
+                Self::hinted(&format!("the archives of {app} could not be read"))
+            }
+            Self::ArchiveRemoveFailed { app, archive } => Self::hinted(&format!(
+                "the archive {archive} of {app} could not be removed"
+            )),
+            Self::NoDataFolder { app, folder } => {
+                format!("{app} has no data folder to back up at app-data/{folder}")
+            }
+            Self::LinkedDataFolder { app, folder } => {
+                format!("the data folder of {app} goes through a symbolic link: app-data/{folder}")
+            }
+            Self::DataFolderOutside { app, folder } => {
+                format!("the data folder of {app} leads out of app-data: {folder}")
+            }
+            Self::InvalidGlob { glob } => format!("{glob} is not a valid glob"),
+            Self::RunsHangar { app } => {
+                format!("{app} runs Hangar itself: stopping it would stop its own backup")
+            }
+            Self::NotStopped { app } => Self::hinted(&format!(
+                "the services of {app} could not be stopped for its backup"
+            )),
+            Self::NotRestarted { app, services } => Self::hinted(&format!(
+                "{app} did not start again after its backup: {}",
+                services.join(", ")
+            )),
+            Self::BackupTimedOut { app } => {
+                format!("the backup of {app} took more than six hours and was stopped")
+            }
+            Self::BackupFailed { app } => Self::hinted(&format!("the backup of {app} failed")),
             Self::UnknownPlacement { key } => format!("no widget that loads is placed as {key}"),
             Self::WidgetUnavailable { widget } => {
                 Self::hinted(&format!("the {widget} widget could not be loaded"))
@@ -907,6 +1064,40 @@ mod tests {
             ErrorCode::UnknownJobRun { run: 7 },
             ErrorCode::JobEnded { run: 7 },
             ErrorCode::JobCrashed,
+            ErrorCode::BackupNotDeclared { app: app() },
+            ErrorCode::BackupQueued { app: app() },
+            ErrorCode::UnknownArchive {
+                app: app(),
+                archive: "2026-10-18T03-30-00-000Z".to_owned(),
+            },
+            ErrorCode::BackupsUnreadable { app: app() },
+            ErrorCode::ArchiveRemoveFailed {
+                app: app(),
+                archive: "2026-10-18T03-30-00-000Z".to_owned(),
+            },
+            ErrorCode::NoDataFolder {
+                app: app(),
+                folder: "alpha/config".to_owned(),
+            },
+            ErrorCode::LinkedDataFolder {
+                app: app(),
+                folder: "alpha/config".to_owned(),
+            },
+            ErrorCode::DataFolderOutside {
+                app: app(),
+                folder: "alpha/../beta".to_owned(),
+            },
+            ErrorCode::InvalidGlob {
+                glob: "{**".to_owned(),
+            },
+            ErrorCode::RunsHangar { app: app() },
+            ErrorCode::NotStopped { app: app() },
+            ErrorCode::NotRestarted {
+                app: app(),
+                services: vec!["web".to_owned(), "db".to_owned()],
+            },
+            ErrorCode::BackupTimedOut { app: app() },
+            ErrorCode::BackupFailed { app: app() },
             ErrorCode::UnknownPlacement {
                 key: "frigate-events-1x2y3z".to_owned(),
             },

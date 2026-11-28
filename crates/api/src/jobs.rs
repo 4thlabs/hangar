@@ -7,9 +7,23 @@ use serde::{Deserialize, Serialize};
 
 use crate::ErrorDetail;
 
-/// A job the server runs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+/// A job the server runs: its kind, and the params of a kind that takes some, as `{ "kind": "backup", "params": { "app":
+/// "alpha" } }`. The whole job tells its runs apart: one run of it waits or runs at a time, and it has one cron.
+///
+/// ```
+/// use hangar_api::Job;
+///
+/// assert_eq!(
+///     serde_json::to_value(Job::Backup { app: "alpha".to_owned() }).expect("JSON"),
+///     serde_json::json!({ "kind": "backup", "params": { "app": "alpha" } })
+/// );
+/// assert_eq!(
+///     serde_json::to_value(Job::ImageCheck).expect("JSON"),
+///     serde_json::json!({ "kind": "image_check" })
+/// );
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", content = "params", rename_all = "snake_case")]
 pub enum Job {
     /// Asks the registries what they serve for the images the installed apps run, which tells the apps that have an
     /// update: every four hours, at the 17th minute, and once the server starts.
@@ -17,6 +31,12 @@ pub enum Job {
     /// Checks the images again, then updates each app the registry has moved past, `docker compose up -d --pull
     /// always`, one at a time: every night at 04:47.
     AutoUpdate,
+    /// Archives the data folder of an app, as its `backups:` entry in `hangar.yml` says: on its `schedule`, and when
+    /// a user asks. It fails after six hours.
+    Backup {
+        /// The app.
+        app: String,
+    },
 }
 
 /// The queue a job waits its turn in: each runs one job at a time.
@@ -25,6 +45,8 @@ pub enum Job {
 pub enum JobQueue {
     /// The image check and the update of the apps.
     Default,
+    /// The backups of the apps, apart, so that a long one holds up no image check.
+    Backups,
 }
 
 /// Where a run is.

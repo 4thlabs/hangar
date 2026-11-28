@@ -363,6 +363,99 @@
         ],
         "type": "object"
       },
+      "BackupArchive": {
+        "description": "An archive of an app.",
+        "properties": {
+          "createdAt": {
+            "description": "When its backup started, in RFC 3339.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Its name, the time its backup started at, as `2026-10-18T03-30-00-000Z`: what the routes of an archive take.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Its size, in bytes.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "size",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "BackupPlan": {
+        "description": "When and how an app is backed up, as `hangar.yml` declares it.",
+        "properties": {
+          "keep": {
+            "description": "How many archives are kept: the oldest go once a new one is written.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "schedule": {
+            "description": "Its cron, as `0 3 * * *`; `None` for an app backed up only when a user asks.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stop": {
+            "description": "Whether its running services are stopped while their files are read, then started again.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "schedule",
+          "keep",
+          "stop"
+        ],
+        "type": "object"
+      },
+      "BackupStatus": {
+        "description": "The backups of an app, as its page shows them.",
+        "properties": {
+          "archives": {
+            "description": "Its archives, the newest first.",
+            "items": {
+              "$ref": "#/components/schemas/BackupArchive"
+            },
+            "type": "array"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupPlan"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its backup as `hangar.yml` declares it; `None` when it declares none, as for an app no longer backed up whose\narchives are still there."
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobRun"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The run of its backup that waits or runs; `None` when none does."
+          }
+        },
+        "required": [
+          "plan",
+          "archives",
+          "run"
+        ],
+        "type": "object"
+      },
       "BeszelServerStats": {
         "description": "The systems a Beszel hub monitors, as its agents last reported them.",
         "properties": {
@@ -2342,6 +2435,403 @@
             "type": "object"
           },
           {
+            "description": "`hangar.yml` declares no backup of this app.",
+            "properties": {
+              "code": {
+                "const": "backups.not_declared",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A backup of this app waits or runs already.",
+            "properties": {
+              "code": {
+                "const": "backups.queued",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The app has no archive of this name.",
+            "properties": {
+              "code": {
+                "const": "backups.unknown_archive",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  },
+                  "archive": {
+                    "description": "The archive asked for.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app",
+                  "archive"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The archives of an app could not be read.",
+            "properties": {
+              "code": {
+                "const": "backups.unreadable",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "An archive could not be removed.",
+            "properties": {
+              "code": {
+                "const": "backups.remove_failed",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  },
+                  "archive": {
+                    "description": "The archive.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app",
+                  "archive"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The folder a backup archives is not there.",
+            "properties": {
+              "code": {
+                "const": "backups.no_data_folder",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  },
+                  "folder": {
+                    "description": "The folder, under `app-data/`.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app",
+                  "folder"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The path of the folder a backup archives goes through a symbolic link, which a backup never follows.",
+            "properties": {
+              "code": {
+                "const": "backups.linked_folder",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  },
+                  "folder": {
+                    "description": "The folder, under `app-data/`.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app",
+                  "folder"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The path of the folder a backup archives could lead out of `app-data/`.",
+            "properties": {
+              "code": {
+                "const": "backups.outside_app_data",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  },
+                  "folder": {
+                    "description": "The folder, as `hangar.yml` names it.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app",
+                  "folder"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A glob of a backup that is not one.",
+            "properties": {
+              "code": {
+                "const": "backups.invalid_glob",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "glob": {
+                    "description": "The glob.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "glob"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A backup that stops its app's services, one of which runs Hangar itself.",
+            "properties": {
+              "code": {
+                "const": "backups.runs_hangar",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The services of an app could not be stopped for its backup: nothing was archived.",
+            "properties": {
+              "code": {
+                "const": "backups.not_stopped",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The services stopped for a backup did not start again: the app is left down.",
+            "properties": {
+              "code": {
+                "const": "backups.not_restarted",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  },
+                  "services": {
+                    "description": "The services stopped, by name.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "app",
+                  "services"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A backup ran past its six hours: what it had written is removed, and what it stopped started again.",
+            "properties": {
+              "code": {
+                "const": "backups.timed_out",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A backup could not write its archive: the server's log says why.",
+            "properties": {
+              "code": {
+                "const": "backups.failed",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
             "description": "No widget that loads is placed under this key: none at all, the clock, or Docker's stats, which the page reads\nitself.",
             "properties": {
               "code": {
@@ -2970,17 +3460,59 @@
         "type": "object"
       },
       "Job": {
-        "description": "A job the server runs.",
+        "description": "A job the server runs: its kind, and the params of a kind that takes some, as `{ \"kind\": \"backup\", \"params\": { \"app\":\n\"alpha\" } }`. The whole job tells its runs apart: one run of it waits or runs at a time, and it has one cron.\n\n```\nuse hangar_api::Job;\n\nassert_eq!(\n    serde_json::to_value(Job::Backup { app: \"alpha\".to_owned() }).expect(\"JSON\"),\n    serde_json::json!({ \"kind\": \"backup\", \"params\": { \"app\": \"alpha\" } })\n);\nassert_eq!(\n    serde_json::to_value(Job::ImageCheck).expect(\"JSON\"),\n    serde_json::json!({ \"kind\": \"image_check\" })\n);\n```",
         "oneOf": [
           {
-            "const": "image_check",
             "description": "Asks the registries what they serve for the images the installed apps run, which tells the apps that have an\nupdate: every four hours, at the 17th minute, and once the server starts.",
-            "type": "string"
+            "properties": {
+              "kind": {
+                "const": "image_check",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
           },
           {
-            "const": "auto_update",
             "description": "Checks the images again, then updates each app the registry has moved past, `docker compose up -d --pull\nalways`, one at a time: every night at 04:47.",
-            "type": "string"
+            "properties": {
+              "kind": {
+                "const": "auto_update",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Archives the data folder of an app, as its `backups:` entry in `hangar.yml` says: on its `schedule`, and when\na user asks. It fails after six hours.",
+            "properties": {
+              "kind": {
+                "const": "backup",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "app"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -2990,6 +3522,11 @@
           {
             "const": "default",
             "description": "The image check and the update of the apps.",
+            "type": "string"
+          },
+          {
+            "const": "backups",
+            "description": "The backups of the apps, apart, so that a long one holds up no image check.",
             "type": "string"
           }
         ]
@@ -3541,6 +4078,75 @@
                 "required": [
                   "updated",
                   "failed"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "key",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A backup of an app failed.",
+            "properties": {
+              "key": {
+                "const": "backupFailed",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  },
+                  "error": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ErrorDetail"
+                      }
+                    ],
+                    "description": "Why, as the run of its job keeps it."
+                  }
+                },
+                "required": [
+                  "app",
+                  "error"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "key",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The services a backup stopped did not start again: the app is left down.",
+            "properties": {
+              "key": {
+                "const": "backupRestartFailed",
+                "type": "string"
+              },
+              "params": {
+                "properties": {
+                  "app": {
+                    "description": "The app.",
+                    "type": "string"
+                  },
+                  "services": {
+                    "description": "The services stopped, by name.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "app",
+                  "services"
                 ],
                 "type": "object"
               }
@@ -4938,6 +5544,190 @@
         "summary": "The signed-in user. A session past a day is renewed for seven more, so that one in use does not expire.",
         "tags": [
           "Auth"
+        ]
+      }
+    },
+    "/api/backups/{app}": {
+      "get": {
+        "operationId": "backups_status",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The backups of `app`: its plan, its archives and the run of its backup that waits or runs. Nothing for a name that is no app's, which could have no backup.",
+        "tags": [
+          "Backups"
+        ]
+      },
+      "post": {
+        "operationId": "backups_back_up",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRun"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Backs `app` up now, in a run of the job `backup` that waits its turn in the queue of the backups. A 404 when `hangar.yml` declares no backup of it, a 409 while a run of it waits or runs.",
+        "tags": [
+          "Backups"
+        ]
+      }
+    },
+    "/api/backups/{app}/{archive}": {
+      "delete": {
+        "operationId": "backups_remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "archive",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "Removes the archive `archive` of `app`. A 404 for an archive that is not there.",
+        "tags": [
+          "Backups"
+        ]
+      },
+      "get": {
+        "operationId": "backups_download",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "archive",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {}
+            },
+            "description": "Bytes of the media type `Content-Type` says, sent as they come: a stream, which may not end. A failure aborts the body."
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "summary": "The archive `archive` of `app`, a zip, saved as `<app>-<archive>.zip`. A 404 for an archive that is not there.",
+        "tags": [
+          "Backups"
         ]
       }
     },
@@ -6475,6 +7265,10 @@
     {
       "description": "The jobs of the server, run on their schedules or when asked: the last 50 runs, kept in memory.",
       "name": "Jobs"
+    },
+    {
+      "description": "The backups of the apps' data folders.",
+      "name": "Backups"
     },
     {
       "description": "The dashboard, as `hangar.yml` places its widgets. A widget's data is kept per placement: fresh for its `ttl`,\n60 seconds unless `hangar.yml` says, then served while it reloads behind the reader for 15 minutes more, which\nis also how long a service that stops answering keeps its last card. Nothing is loaded without a reader.",

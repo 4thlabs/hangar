@@ -4,6 +4,7 @@
 
 mod api;
 mod auth;
+mod backups;
 mod compose;
 mod config;
 mod docker;
@@ -18,6 +19,7 @@ mod widgets;
 
 pub use api::*;
 pub use auth::*;
+pub use backups::*;
 pub use compose::*;
 pub use config::*;
 pub use docker::*;

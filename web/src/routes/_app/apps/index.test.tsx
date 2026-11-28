@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
+  BackupStatus,
   ComposeAction,
   ComposeBatch,
   ComposeEvent,
@@ -9,6 +10,7 @@ import type {
   ContainerMetrics,
   DockerChange,
   DockerOverview,
+  JobRun,
   LogEvent,
   ProjectDetail,
   ProjectStatus,
@@ -16,6 +18,9 @@ import type {
   StatsFrame,
 } from "#libs/api";
 import {
+  getBackupsBackUpMockHandler,
+  getBackupsRemoveMockHandler,
+  getBackupsStatusMockHandler,
   getComposeBatchesMockHandler,
   getComposeOutputMockHandler,
   getComposeRunMockHandler,
@@ -112,10 +117,13 @@ const host: DockerOverview = {
   volumes: { total: 0, inUse: 0, unused: 0 },
 };
 
+/** The backups of an app `hangar.yml` does not back up, and that has no archive. */
+const noBackups: BackupStatus = { plan: null, archives: [], run: null };
+
 /**
- * What the apps' pages call: `projects` as the apps, `alpha` as the page of any of them, Docker's host, no compose
- * batch, and the Docker changes, opened once `changesOpened` resolves, and the containers' usage: two feeds the test
- * sends on. A test's own handlers, added after, win.
+ * What the apps' pages call: `projects` as the apps, `alpha` as the page of any of them, with no backup, Docker's host,
+ * no compose batch, and the Docker changes, opened once `changesOpened` resolves, and the containers' usage: two feeds
+ * the test sends on. A test's own handlers, added after, win.
  */
 function appsPages({ changesOpened }: { changesOpened?: Promise<void> } = {}) {
   const changes = feed<DockerChange>("/api/docker/changes", changesOpened);
@@ -126,6 +134,7 @@ function appsPages({ changesOpened }: { changesOpened?: Promise<void> } = {}) {
     getDockerProjectMockHandler(alpha),
     getDockerOverviewMockHandler(host),
     getComposeBatchesMockHandler([]),
+    getBackupsStatusMockHandler(noBackups),
     changes.handler,
     stats.handler,
   );
@@ -447,6 +456,151 @@ describe("/apps/:project", () => {
     fireEvent.click(await screen.findByRole("button", { name: "View the logs of alpha-web-1" }));
 
     expect(await screen.findByText(`The app alpha has no container ${alphaId}.`)).toBeDefined();
+  });
+});
+
+describe("the backups of /apps/:project", () => {
+  const archive = "2026-10-18T03-30-00-000Z";
+
+  const backedUp: BackupStatus = {
+    plan: { schedule: "0 3 * * *", keep: 7, stop: true },
+    archives: [{ name: archive, size: 2048, createdAt: "2026-10-18T03:30:00.000Z" }],
+    run: null,
+  };
+
+  const running: JobRun = {
+    id: 9,
+    job: { kind: "backup", params: { app: "alpha" } },
+    queue: "backups",
+    state: "waiting",
+    createdAt: "2026-11-28T09:00:00.000Z",
+    startedAt: null,
+    endedAt: null,
+    error: null,
+  };
+
+  it("says when and how the app is backed up, and lists its archives to download", async () => {
+    appsPages();
+    network.use(getBackupsStatusMockHandler(backedUp));
+    renderAt("/apps/alpha");
+
+    expect(await screen.findByText("Scheduled: 0 3 * * * · 7 archives kept · stopped during the backup")).toBeDefined();
+    expect(screen.getByText("2 KiB")).toBeDefined();
+    expect(screen.getByRole("link", { name: `Download the archive ${archive}` }).getAttribute("href")).toBe(
+      `/api/backups/alpha/${archive}`,
+    );
+  });
+
+  it("shows no backups for an app hangar.yml does not back up and that has no archive", async () => {
+    const calls = countCalls();
+
+    appsPages();
+    renderAt("/apps/alpha");
+
+    await screen.findByRole("heading", { name: "alpha" });
+    await waitFor(() => expect(calls("GET /api/backups/alpha")).toBe(1));
+
+    expect(screen.queryByText("Backups")).toBeNull();
+  });
+
+  it("shows the archives an app no longer backed up left, with no button to back it up", async () => {
+    appsPages();
+    network.use(getBackupsStatusMockHandler({ ...backedUp, plan: null }));
+    renderAt("/apps/alpha");
+
+    expect(await screen.findByText("hangar.yml no longer declares a backup for this app.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Back up now" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("shows its backups when Docker does not answer", async () => {
+    appsPages();
+    network.use(
+      getBackupsStatusMockHandler(backedUp),
+      getDockerProjectMockHandler(() => {
+        throw problem(503, "the Docker daemon could not be read");
+      }),
+    );
+
+    renderAt("/apps/alpha");
+
+    // Docker's read is tried again meanwhile.
+    expect(await screen.findByText("Backups")).toBeDefined();
+    expect(screen.queryByRole("heading", { name: "alpha" })).toBeNull();
+  });
+
+  it("backs the app up now, then shows the backup running", async () => {
+    let status = backedUp;
+    const asked: string[] = [];
+
+    appsPages();
+    network.use(
+      getBackupsStatusMockHandler(() => status),
+      getBackupsBackUpMockHandler(({ params }) => {
+        asked.push(params.app);
+        status = { ...backedUp, run: running };
+
+        return running;
+      }),
+    );
+
+    renderAt("/apps/alpha");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Back up now" }));
+
+    expect(await screen.findByText("The backup of alpha was started.")).toBeDefined();
+
+    const button = await screen.findByRole("button", { name: /Backup running…/ });
+
+    expect(button.hasAttribute("disabled")).toBe(true);
+    expect(asked).toEqual(["alpha"]);
+  });
+
+  it("says why a backup was refused, and reads the backups again", async () => {
+    let status = backedUp;
+
+    appsPages();
+    network.use(
+      getBackupsStatusMockHandler(() => status),
+      getBackupsBackUpMockHandler(() => {
+        status = { ...backedUp, run: { ...running, state: "running" } };
+
+        throw coded(409, {
+          code: "backups.queued",
+          params: { app: "alpha" },
+          message: "a backup of alpha waits or runs already",
+        });
+      }),
+    );
+
+    renderAt("/apps/alpha");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Back up now" }));
+
+    expect(await screen.findByText("A backup of alpha is already running.")).toBeDefined();
+    expect(await screen.findByRole("button", { name: /Backup running…/ })).toBeDefined();
+  });
+
+  it("deletes an archive once asked to confirm, and reads the backups again", async () => {
+    let status = backedUp;
+    const removed: string[] = [];
+
+    appsPages();
+    network.use(
+      getBackupsStatusMockHandler(() => status),
+      getBackupsRemoveMockHandler(({ params }) => {
+        removed.push(`${params.app}/${params.archive}`);
+        status = { ...backedUp, archives: [] };
+      }),
+    );
+
+    renderAt("/apps/alpha");
+
+    fireEvent.click(await screen.findByRole("button", { name: `Delete the archive ${archive}` }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByText("The archive was deleted.")).toBeDefined();
+    expect(await screen.findByText("No archives yet.")).toBeDefined();
+    expect(removed).toEqual([`alpha/${archive}`]);
   });
 });
 

@@ -6,6 +6,8 @@ use quoll::Events;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::ErrorDetail;
+
 /// How a notification reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -73,6 +75,20 @@ pub enum NotificationMessage {
         updated: u64,
         /// The apps it failed to update, comma-separated, as `alpha, gamma`; empty for none.
         failed: String,
+    },
+    /// A backup of an app failed.
+    BackupFailed {
+        /// The app.
+        app: String,
+        /// Why, as the run of its job keeps it.
+        error: ErrorDetail,
+    },
+    /// The services a backup stopped did not start again: the app is left down.
+    BackupRestartFailed {
+        /// The app.
+        app: String,
+        /// The services stopped, by name.
+        services: Vec<String>,
     },
 }
 
