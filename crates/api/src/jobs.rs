@@ -87,7 +87,8 @@ pub struct JobRun {
     /// Why it failed; `None` for one that did not.
     pub error: Option<ErrorDetail>,
     /// What it did, for a job that says so, as the update of the apps; `None` while it waits or runs, for one that
-    /// failed, and for a job that says nothing. A run canceled says what it did before it stopped.
+    /// failed, for one canceled before it did anything, as while it waited, and for a job that says nothing. A run
+    /// canceled once it did something says what it did before it stopped.
     pub result: Option<JobResult>,
 }
 
@@ -113,7 +114,8 @@ pub struct JobRun {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", content = "params", rename_all = "snake_case")]
 pub enum JobResult {
-    /// The update of the apps: the apps the registry has moved past, each in one list, in the order of `hangar.yml`.
+    /// The update of the apps: the apps the registry has moved past, by what it did with them, in the order of
+    /// `hangar.yml`. A run that ended lists each of them once; one canceled lists none of those it did not try.
     AutoUpdate {
         /// The apps it updated.
         updated: Vec<String>,

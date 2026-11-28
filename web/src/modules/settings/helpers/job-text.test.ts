@@ -61,6 +61,23 @@ describe("the jobs' words", () => {
     expect(runResult(update)).toEqual([]);
   });
 
+  it("says no app had an update only of a run that completed", () => {
+    const canceled: JobRun = {
+      ...run,
+      job: { kind: "auto_update" },
+      state: "canceled",
+      result: { kind: "auto_update", params: { updated: [], failed: [], skipped: [] } },
+    };
+
+    expect(runResult(canceled)).toEqual([]);
+    expect(
+      runResult({
+        ...canceled,
+        result: { kind: "auto_update", params: { updated: ["gamma"], failed: [], skipped: [] } },
+      }),
+    ).toEqual(["Updated: gamma."]);
+  });
+
   it("says nothing of what a newer server says a run did that it does not know", () => {
     // What a newer server may send, which the contract of this page does not have.
     const newer = { ...run, result: { kind: "prune", params: { removed: 3 } } } as unknown as JobRun;

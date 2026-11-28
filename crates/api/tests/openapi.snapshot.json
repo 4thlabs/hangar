@@ -3791,7 +3791,7 @@
         "description": "What a run of a job did: its kind, the job's, and its params, as `{ \"kind\": \"auto_update\", \"params\": { \"updated\":\n[\"gamma\"], \"failed\": [], \"skipped\": [\"alpha\"] } }`.\n\n```\nuse hangar_api::JobResult;\n\nassert_eq!(\n    serde_json::to_value(JobResult::AutoUpdate {\n        updated: vec![\"gamma\".to_owned()],\n        failed: Vec::new(),\n        skipped: vec![\"alpha\".to_owned()],\n    })\n    .expect(\"JSON\"),\n    serde_json::json!({\n        \"kind\": \"auto_update\",\n        \"params\": { \"updated\": [\"gamma\"], \"failed\": [], \"skipped\": [\"alpha\"] },\n    })\n);\n```",
         "oneOf": [
           {
-            "description": "The update of the apps: the apps the registry has moved past, each in one list, in the order of `hangar.yml`.",
+            "description": "The update of the apps: the apps the registry has moved past, by what it did with them, in the order of\n`hangar.yml`. A run that ended lists each of them once; one canceled lists none of those it did not try.",
             "properties": {
               "kind": {
                 "const": "auto_update",
@@ -3893,7 +3893,7 @@
                 "type": "null"
               }
             ],
-            "description": "What it did, for a job that says so, as the update of the apps; `None` while it waits or runs, for one that\nfailed, and for a job that says nothing. A run canceled says what it did before it stopped."
+            "description": "What it did, for a job that says so, as the update of the apps; `None` while it waits or runs, for one that\nfailed, for one canceled before it did anything, as while it waited, and for a job that says nothing. A run\ncanceled once it did something says what it did before it stopped."
           },
           "startedAt": {
             "description": "When it started, in RFC 3339; `None` while it waits, and for one canceled before.",

@@ -31,14 +31,17 @@ const apps = new Intl.ListFormat("en", { type: "conjunction" });
 /** A kind of what a run did, as `auto_update`. */
 type JobResultKind = JobResult["kind"];
 
-/** What a run of each kind did, a sentence each, from what it says. */
-type ResultWordsByKind = { [Kind in JobResultKind]: (result: Extract<JobResult, { kind: Kind }>) => string[] };
+/** What a run of each kind did, a sentence each, from what it says and the run's state. */
+type ResultWordsByKind = {
+  [Kind in JobResultKind]: (result: Extract<JobResult, { kind: Kind }>, state: JobState) => string[];
+};
 
 /** What a run of each kind did. */
 const resultWords: ResultWordsByKind = {
-  auto_update: ({ params: { updated, failed, skipped } }) => {
+  auto_update: ({ params: { updated, failed, skipped } }, state) => {
     if (updated.length === 0 && failed.length === 0 && skipped.length === 0) {
-      return [m.settings_results_nothing()];
+      // Only a run that ended as it should found no app to update: a canceled one may not have looked.
+      return state === "completed" ? [m.settings_results_nothing()] : [];
     }
 
     return [
@@ -109,7 +112,7 @@ export function runResult(run: JobRun): string[] {
     return [];
   }
 
-  return resultWords[run.result.kind](run.result);
+  return resultWords[run.result.kind](run.result, run.state);
 }
 
 /** What the toast of a job asked for again says: its run waits its turn, or already runs. */

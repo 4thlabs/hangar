@@ -44,7 +44,7 @@ impl Updates {
         force_recreate: false,
     });
 
-    /// What an update of the apps that found none to update did.
+    /// What an update of the apps that found no app to update did.
     const NOTHING_UPDATED: JobResult = JobResult::AutoUpdate {
         updated: Vec::new(),
         failed: Vec::new(),
@@ -107,7 +107,8 @@ impl Updates {
     /// carrying on after one that fails, and notifies `autoUpdate` once for them all. It skips an app another command
     /// holds, a backup, a batch, an install or an uninstall, which a later run updates. The others are held until it
     /// ends, as a compose batch holds its own; once canceled, it ends the app it updates and starts no other. It gives
-    /// the apps it updated, failed to update and skipped.
+    /// the apps it updated, failed to update and skipped; nothing, and notifies nothing, when it was canceled before it
+    /// tried an app.
     ///
     /// # Errors
     ///
@@ -116,14 +117,14 @@ impl Updates {
     pub(crate) async fn update_apps(
         &self,
         cancel: &CancellationToken,
-    ) -> Result<JobResult, ErrorCode> {
+    ) -> Result<Option<JobResult>, ErrorCode> {
         let Some(checked) = self.check(cancel).await? else {
-            return Ok(Self::NOTHING_UPDATED);
+            return Ok(None);
         };
 
         if checked.outdated.is_empty() {
             tracing::info!("no app to update: the registries serve what they run");
-            return Ok(Self::NOTHING_UPDATED);
+            return Ok(Some(Self::NOTHING_UPDATED));
         }
 
         let apps = Self::in_order(&checked.outdated, &checked.config);
@@ -159,6 +160,13 @@ impl Updates {
         }
 
         drop(claim);
+
+        // Its lists would say an app it never tried was neither updated nor failed.
+        if cancel.is_cancelled() && updated.is_empty() && failed.is_empty() {
+            tracing::info!("the update of the apps was canceled before it tried an app");
+            return Ok(None);
+        }
+
         tracing::info!(
             updated = %updated.join(", "),
             failed = %failed.join(", "),
@@ -188,11 +196,11 @@ impl Updates {
             });
         }
 
-        Ok(JobResult::AutoUpdate {
+        Ok(Some(JobResult::AutoUpdate {
             updated,
             failed,
             skipped,
-        })
+        }))
     }
 
     /// Asks the registries what they serve for the images the installed apps run, as `hangar.yml` spaces the calls,
@@ -590,7 +598,8 @@ done
             .updates
             .update_apps(&CancellationToken::new())
             .await
-            .expect("updated");
+            .expect("updated")
+            .expect("it tried the apps");
 
         assert_eq!(fixture.updated(), ["gamma", "alpha", "epsilon"]);
         assert_eq!(
@@ -624,7 +633,8 @@ done
             .updates
             .update_apps(&CancellationToken::new())
             .await
-            .expect("updated");
+            .expect("updated")
+            .expect("it tried the apps");
 
         let (level, message, _, _) = fixture.notified().remove(0);
 
@@ -657,7 +667,7 @@ done
 
         let result = fixture.updates.update_apps(&cancel).await.expect("ended");
 
-        assert_eq!(result, Updates::NOTHING_UPDATED);
+        assert_eq!(result, None, "it says nothing of the apps it never tried");
         assert!(fixture.updated().is_empty());
         assert!(fixture.notified().is_empty());
     }
@@ -671,7 +681,8 @@ done
             .updates
             .update_apps(&CancellationToken::new())
             .await
-            .expect("updated");
+            .expect("updated")
+            .expect("it tried the apps");
 
         assert_eq!(fixture.updated(), ["gamma", "epsilon"]);
         assert_eq!(
@@ -728,7 +739,8 @@ done
             .updates
             .update_apps(&CancellationToken::new())
             .await
-            .expect("updated");
+            .expect("updated")
+            .expect("it tried the apps");
 
         assert!(fixture.updated().is_empty());
         assert_eq!(
@@ -746,6 +758,49 @@ done
                 failed: Vec::new(),
                 skipped: names(&["gamma", "alpha", "epsilon"]),
             }
+        );
+
+        // The update's claim, released, leaves the holds of the others.
+        for app in ["alpha", "gamma", "epsilon"] {
+            assert!(
+                fixture.updates.locks.claim_change(app).is_err(),
+                "{app} is still held"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn notifies_an_error_when_an_app_failed_and_another_was_skipped() {
+        let fixture = Fixture::new(Some("gamma")).await;
+        let _backup = fixture.updates.locks.claim_backup("alpha").expect("held");
+
+        let result = fixture
+            .updates
+            .update_apps(&CancellationToken::new())
+            .await
+            .expect("updated")
+            .expect("it tried the apps");
+
+        assert_eq!(
+            result,
+            JobResult::AutoUpdate {
+                updated: names(&["epsilon"]),
+                failed: names(&["gamma"]),
+                skipped: names(&["alpha"]),
+            }
+        );
+        assert_eq!(
+            fixture.notified(),
+            [(
+                NotificationLevel::Error,
+                NotificationMessage::AutoUpdate {
+                    updated: 1,
+                    failed: names(&["gamma"]),
+                    skipped: names(&["alpha"]),
+                },
+                Some("/apps".to_owned()),
+                Some("auto-update".to_owned()),
+            )]
         );
     }
 

@@ -132,7 +132,7 @@ impl JobRunner for HangarJobs {
     ) -> Result<Option<JobResult>, ErrorCode> {
         match job {
             Job::ImageCheck => self.updates.check_images(&cancel).await.map(|()| None),
-            Job::AutoUpdate => self.updates.update_apps(&cancel).await.map(Some),
+            Job::AutoUpdate => self.updates.update_apps(&cancel).await,
             Job::Backup { app } => self.backups.back_up(&app, &cancel).await.map(|()| None),
         }
     }
