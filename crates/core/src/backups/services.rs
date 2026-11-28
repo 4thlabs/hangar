@@ -1,6 +1,7 @@
-//! The services a backup stops while it reads their files, and starts again after: the very containers `docker compose
-//! ps` listed, stopped and started by their ids, so that a compose file changed or removed meanwhile, by a sync of the
-//! store, the editor, or a shared file it includes, cannot keep them from starting again.
+//! The services a backup stops while it reads their files, and starts again after: by the project's name alone, with no
+//! compose file, so that compose stops and starts them in the order of their dependencies, as their containers' labels
+//! say, and a compose file changed or removed meanwhile, by a sync of the store, the editor, or a shared file it
+//! includes, cannot keep them from starting again.
 
 use std::sync::LazyLock;
 
@@ -8,7 +9,7 @@ use regex::Regex;
 use serde::Deserialize;
 
 use super::BackupError;
-use crate::{Command, CommandRunner, Compose, ComposeCommand, ComposeError, RunError};
+use crate::{CommandRunner, Compose, ComposeCommand, ComposeError};
 
 /// A container `docker compose ps` lists.
 #[derive(Debug, Deserialize)]
@@ -26,26 +27,6 @@ pub(super) struct Services {
     /// container Hangar runs in. `None` out of a container, or in one on the host's network or given a hostname of its
     /// own, which Hangar cannot tell.
     own_container: Option<String>,
-}
-
-/// The containers a backup stopped, which it starts again: their ids, in the order compose listed them, and their
-/// services, each once, which a failure names.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(super) struct Stopped {
-    ids: Vec<String>,
-    services: Vec<String>,
-}
-
-impl Stopped {
-    /// Whether no container was stopped.
-    pub(super) fn is_empty(&self) -> bool {
-        self.ids.is_empty()
-    }
-
-    /// The services stopped, each once.
-    pub(super) fn into_services(self) -> Vec<String> {
-        self.services
-    }
 }
 
 impl Services {
@@ -67,28 +48,32 @@ impl Services {
             .and_then(|name| name.into_string().ok())
     }
 
-    /// Stops the containers of `app` that run or restart, with `docker stop`, each with the grace and the signal
-    /// compose gave it, and gives them: the ones to start again. None for an app compose runs nothing of. A `stop`
-    /// that fails may have stopped some of them already: they are all started again before it fails.
+    /// Stops the services of `app` that have a container running or restarting, by the project's name, the dependents
+    /// before what they depend on, and gives them, in the order compose listed them: the ones to start again. None for
+    /// an app compose runs nothing of. A `stop` that fails may have stopped some of them already: they are all started
+    /// again before it fails.
     ///
     /// # Errors
     ///
     /// [`BackupError::RunsHangar`] when one runs in the container Hangar runs in, before anything is stopped,
     /// [`BackupError::UnreadableServices`] when compose's list does not read, [`BackupError::NotStopped`] when compose
-    /// fails to list them or docker to stop them, and [`BackupError::NotRestarted`], its failure the
-    /// [`BackupError::NotStopped`], when they do not start again after a `stop` that failed.
+    /// fails to list or stop them, and [`BackupError::NotRestarted`], its failure the [`BackupError::NotStopped`], when
+    /// they do not start again after a `stop` that failed.
     pub(super) async fn stop<R: CommandRunner>(
         &self,
         compose: &Compose<R>,
         app: &str,
-    ) -> Result<Stopped, BackupError> {
+    ) -> Result<Vec<String>, BackupError> {
         let running = self.running(compose, app).await?;
 
         if running.is_empty() {
             return Ok(running);
         }
 
-        let Err(stop) = Self::docker(compose.runner(), "stop", &running.ids).await else {
+        let Err(stop) = compose
+            .capture_by_name(app, Self::command("stop", &running))
+            .await
+        else {
             return Ok(running);
         };
         let not_stopped = BackupError::NotStopped {
@@ -96,49 +81,41 @@ impl Services {
             source: Box::new(stop),
         };
 
-        match Self::start(compose, &running).await {
+        match Self::start(compose, app, &running).await {
             Ok(()) => Err(not_stopped),
             Err(start) => Err(BackupError::NotRestarted {
                 app: app.to_owned(),
-                services: running.into_services(),
+                services: running,
                 source: Box::new(start),
                 failure: Some(Box::new(not_stopped)),
             }),
         }
     }
 
-    /// Starts again the containers a backup `stopped`, with `docker start`, by their ids: whatever their compose file
-    /// says by now.
+    /// Starts again the `services` of `app` a backup stopped, by the project's name: their dependencies first, those
+    /// with a health check waited for, whatever their compose file says by now.
     ///
     /// # Errors
     ///
-    /// The failed `docker start` when they do not start.
+    /// The compose error when they do not start.
     pub(super) async fn start<R: CommandRunner>(
         compose: &Compose<R>,
-        stopped: &Stopped,
-    ) -> Result<(), RunError> {
-        Self::docker(compose.runner(), "start", &stopped.ids).await
-    }
-
-    /// Runs `docker <name> <ids...>`.
-    async fn docker<R: CommandRunner>(
-        runner: &R,
-        name: &str,
-        ids: &[String],
-    ) -> Result<(), RunError> {
-        runner
-            .capture(&Command::new("docker").arg(name).args(ids))
+        app: &str,
+        services: &[String],
+    ) -> Result<(), ComposeError> {
+        compose
+            .capture_by_name(app, Self::command("start", services))
             .await
             .map(drop)
     }
 
-    /// The containers of `app` that run, or restart between the attempts of their restart policy, and their services:
-    /// one left out would come back on its own and write while its files are read.
+    /// The services of `app` that have a container running, or restarting between the attempts of its restart policy,
+    /// each once: one left out would come back on its own and write while its files are read.
     async fn running<R: CommandRunner>(
         &self,
         compose: &Compose<R>,
         app: &str,
-    ) -> Result<Stopped, BackupError> {
+    ) -> Result<Vec<String>, BackupError> {
         let listed = compose
             .capture(
                 app,
@@ -161,7 +138,7 @@ impl Services {
             Ok(stdout) => stdout,
             // Compose can run nothing of an app it cannot take as a project, or that is not installed.
             Err(ComposeError::InvalidProject { .. } | ComposeError::NotInstalled { .. }) => {
-                return Ok(Stopped::default());
+                return Ok(Vec::new());
             }
             Err(source) => {
                 return Err(BackupError::NotStopped {
@@ -187,17 +164,15 @@ impl Services {
             });
         }
 
-        let mut stopped = Stopped::default();
+        let mut services: Vec<String> = Vec::new();
 
         for container in containers {
-            if !stopped.services.contains(&container.service) {
-                stopped.services.push(container.service);
+            if !services.contains(&container.service) {
+                services.push(container.service);
             }
-
-            stopped.ids.push(container.id);
         }
 
-        Ok(stopped)
+        Ok(services)
     }
 
     /// The containers of `docker compose ps --format json`: one JSON object per line since compose 2.21, an array
@@ -214,6 +189,15 @@ impl Services {
             .filter(|line| !line.trim().is_empty())
             .map(serde_json::from_str)
             .collect()
+    }
+
+    /// `docker compose <name> <services...>`.
+    fn command(name: &str, services: &[String]) -> ComposeCommand {
+        ComposeCommand::Args(
+            std::iter::once(name.to_owned())
+                .chain(services.iter().cloned())
+                .collect(),
+        )
     }
 }
 

@@ -285,31 +285,35 @@ the app it updates is updated. The tab reads the runs again each second while on
 otherwise, so that a run a cron asks for shows. A restart forgets the runs and the registries' answers, and the check
 at the start brings the answers back. When the server stops, on `SIGTERM`, the crons end, the runs that wait are
 canceled, and those that run are told to stop and waited for, with no limit of its own: a backup starts again what it
-stopped before it ends. A job asked for from then on is canceled at once. A compose command that runs is not
-interrupted, though: a backup that is stopping its app's containers ends its `docker stop`, then runs its
-`docker start`. Docker gives a container 10 seconds after `SIGTERM`, then kills it, which would leave those containers
-down: the container of Hangar needs a stop grace period longer than the `stop_grace_period` of the services it backs up
-with `stop`, as `stop_grace_period: 2m` in its compose file.
+stopped before it ends. A job asked for from then on is canceled at once. A backup's `docker compose stop` or `start`
+that runs is not interrupted, though: Docker gives a container 10 seconds after `SIGTERM`, then kills it, which would
+leave the services it stopped down. The container of Hangar needs a stop grace period longer than the
+`stop_grace_period` of the services it backs up with `stop`, as `stop_grace_period: 2m` in its compose file.
 
 ### Backups
 
 A backup zips the data folder of an app, `app-data/<path>` or `app-data/<app>`, as its entry in `hangar.yml`'s
 `backups` says (see [the store's docs](store.md#backups)), into `app-backups/<app>/<time>.zip`, the Waku version's
 archives: written as `.zip.partial`, renamed once complete, and the oldest removed beyond `keep`. Its include and
-exclude globs match dotfiles, and it follows no symbolic link. With `stop`, it stops the containers that run, or that
-restart between the attempts of their restart policy, as `docker compose ps` lists them, never the container Hangar
-runs in, then starts them again whatever the outcome. It stops and starts them by their ids, `docker stop` then
-`docker start`, each with the grace and the signal compose gave it: a compose file changed or removed meanwhile, by a
-sync, the editor or a shared file it includes, cannot keep them from starting. Its work on the disk runs on Tokio's blocking threads, and the backups of one app take turns.
+exclude globs match dotfiles, and it follows no symbolic link. Its work on the disk runs on Tokio's blocking threads,
+and the backups of one app take turns.
+
+With `stop`, it stops the services that run, or that restart between the attempts of their restart policy, as
+`docker compose ps` lists them, never the container Hangar runs in, then starts them again whatever the outcome. It
+stops and starts them by the project's name alone, `docker compose -p <app> stop` then `start`, run from `/` with no
+compose file and no `COMPOSE_FILE`: compose takes the project from its containers' labels. It stops the dependents
+before what they depend on, starts them in the order of their dependencies, a service with a health check waited for
+before those that need it healthy, each with the grace and the signal it was created with; and a compose file changed
+or removed meanwhile, by a sync, the editor or a shared file it includes, cannot keep them from starting. This was
+checked with Docker Compose 5.7, Alpine 3.24's `docker-cli-compose`, which the image ships.
 
 A backup with `stop` holds its app, from before it reads which services run to after it starts them again, as a
 compose batch holds its own: a batch, an install, an uninstall of it, or the update of the apps, is refused meanwhile
 with a 409, `compose.app_busy`, as a batch's `up` would recreate the containers and zip a live database, and a `down`
-would remove the containers it starts again. A sync of the store is refused too, `store.batch_running` naming the app,
-as it is beside a batch. A backup with `stop` of an app another
-command holds, or while a sync runs, fails at once with `compose.app_busy`, without waiting. A backup without `stop`
-holds nothing. While a backup with `stop` holds an app the update of the apps would update, that night's update fails
-and updates none.
+would remove the containers it starts again. A backup with `stop` of an app another command holds fails at once with
+`compose.app_busy`, without waiting. A sync of the store does not wait for a backup, nor a backup for a sync: a backup
+may run for hours. A backup without `stop` holds nothing. While a backup with `stop` holds an app the update of the
+apps would update, that night's update fails and updates none.
 
 It runs as the job `backup` of its app, in the queue `backups`, on its cron, and when **Back up now** asks for it on the
 app's page, `POST /api/backups/<app>`: a 404, `backups.not_declared`, when `hangar.yml` declares no backup of it, and

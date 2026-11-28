@@ -288,6 +288,10 @@ impl Runtime {
             .envs(&command.env)
             .kill_on_drop(true);
 
+        for key in &command.env_removed {
+            process.env_remove(key);
+        }
+
         if let Some(dir) = &command.current_dir {
             process.current_dir(dir);
         }
@@ -436,6 +440,35 @@ mod tests {
             grace,
             ..Runtime::new()
         }
+    }
+
+    #[tokio::test]
+    async fn leaves_out_a_variable_the_command_removes_whoever_set_it() {
+        let runtime = Runtime::new().envs([("HANGAR_TEST_REMOVED", "runtime")]);
+        let echo = |command: Command| {
+            let runtime = runtime.clone();
+
+            async move { runtime.capture(&command).await.expect("echoed") }
+        };
+        let command = || Command::new("sh").args(["-c", "echo ${HANGAR_TEST_REMOVED-unset}"]);
+
+        assert_eq!(echo(command()).await.trim(), "runtime");
+        assert_eq!(
+            echo(command().env_remove("HANGAR_TEST_REMOVED"))
+                .await
+                .trim(),
+            "unset"
+        );
+        assert_eq!(
+            echo(
+                command()
+                    .env("HANGAR_TEST_REMOVED", "command")
+                    .env_remove("HANGAR_TEST_REMOVED")
+            )
+            .await
+            .trim(),
+            "unset"
+        );
     }
 
     #[tokio::test]

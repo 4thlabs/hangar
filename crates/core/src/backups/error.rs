@@ -3,7 +3,7 @@
 use std::io;
 use std::path::PathBuf;
 
-use crate::RunError;
+use crate::ComposeError;
 
 /// A backup that failed, or an archive that could not be listed, read or removed.
 #[derive(Debug, thiserror::Error)]
@@ -77,14 +77,14 @@ pub enum BackupError {
         app: String,
     },
 
-    /// Compose could not tell the services that run, or docker could not stop their containers.
+    /// Compose could not tell the services that run, or could not stop them.
     #[error("could not stop the services of {app}")]
     NotStopped {
         /// The app.
         app: String,
-        /// The `docker compose ps` or the `docker stop` that failed.
+        /// The compose command that failed.
         #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
+        source: Box<ComposeError>,
     },
 
     /// `docker compose ps` answered what is not its JSON.
@@ -105,9 +105,9 @@ pub enum BackupError {
         app: String,
         /// The services stopped, which did not start.
         services: Vec<String>,
-        /// The failed `docker start` of their containers.
+        /// The failed `docker compose start`.
         #[source]
-        source: Box<RunError>,
+        source: Box<ComposeError>,
         /// Why the backup failed, when it did; `None` when its archive was written.
         failure: Option<Box<BackupError>>,
     },
