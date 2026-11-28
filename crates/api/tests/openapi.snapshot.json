@@ -3791,7 +3791,7 @@
         "description": "What a run of a job did: its kind, the job's, and its params, as `{ \"kind\": \"auto_update\", \"params\": { \"updated\":\n[\"gamma\"], \"failed\": [], \"skipped\": [\"alpha\"] } }`.\n\n```\nuse hangar_api::JobResult;\n\nassert_eq!(\n    serde_json::to_value(JobResult::AutoUpdate {\n        updated: vec![\"gamma\".to_owned()],\n        failed: Vec::new(),\n        skipped: vec![\"alpha\".to_owned()],\n    })\n    .expect(\"JSON\"),\n    serde_json::json!({\n        \"kind\": \"auto_update\",\n        \"params\": { \"updated\": [\"gamma\"], \"failed\": [], \"skipped\": [\"alpha\"] },\n    })\n);\n```",
         "oneOf": [
           {
-            "description": "The update of the apps: the apps the registry has moved past, by what it did with them, in the order of\n`hangar.yml`. A run that ended lists each of them once; one canceled lists none of those it did not try.",
+            "description": "The update of the apps: the apps the registry has moved past, by what it did with them, in the order of\n`hangar.yml`. A run that completed lists each of them once; one canceled leaves out the apps it had not\nreached.",
             "properties": {
               "kind": {
                 "const": "auto_update",
