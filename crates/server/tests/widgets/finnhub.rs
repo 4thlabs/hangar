@@ -1,4 +1,4 @@
-//! `stock-prices`, on a fake Finnhub.
+//! Finnhub's route, `stock-prices`' service, on a fake Finnhub.
 
 use std::collections::HashMap;
 
@@ -7,8 +7,8 @@ use axum::extract::Query;
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use hangar_api::Widgets as _;
-use hangar_api::{Stock, StockPrices, WidgetData};
+use hangar_api::Services as _;
+use hangar_api::{FinnhubCloses, FinnhubData, FinnhubProfile, FinnhubQuote, FinnhubRead};
 use hangar_server::Settings;
 use http::StatusCode;
 use serde_json::{Value, json};
@@ -105,36 +105,67 @@ async fn quotes_each_symbol_in_its_order_and_leaves_out_one_finnhub_does_not_kno
     let server = serve(&fixture, url, &[("FINNHUB_API_KEY", "finnhub-key")]).await;
     let key = server.key("stock-prices").await;
 
-    let data = server.api().widgets().data(&key).await?;
+    let read = FinnhubRead {
+        quotes: true,
+        profiles: true,
+        closes: true,
+    };
+    let data = server.api().services().finnhub(&key, read).await?;
+    let profile = |symbol: &str, name: Option<&str>, currency: Option<&str>| FinnhubProfile {
+        symbol: symbol.to_owned(),
+        name: name.map(str::to_owned),
+        currency: currency.map(str::to_owned),
+    };
+    let closes = |symbol: &str, closes: Vec<f64>| FinnhubCloses {
+        symbol: symbol.to_owned(),
+        closes,
+    };
 
     assert_eq!(
         data,
-        WidgetData::StockPrices(StockPrices {
-            stocks: vec![
-                Stock {
+        FinnhubData {
+            quotes: Some(vec![
+                FinnhubQuote {
                     symbol: "AIR.PA".to_owned(),
-                    name: None,
-                    currency: None,
                     price: 140.0,
                     change_percent: -0.5,
                     high: 141.0,
                     low: 139.0,
                     open: 140.5,
-                    closes: vec![],
                 },
-                Stock {
+                FinnhubQuote {
                     symbol: "AAPL".to_owned(),
-                    name: Some("Apple Inc".to_owned()),
-                    currency: Some("USD".to_owned()),
                     price: 190.5,
                     change_percent: 1.06,
                     high: 191.0,
                     low: 187.0,
                     open: 188.0,
-                    closes: vec![180.0, 185.0, 190.5],
                 },
-            ],
-        })
+            ]),
+            profiles: Some(vec![
+                profile("AIR.PA", None, None),
+                profile("NOPE", None, None),
+                profile("AAPL", Some("Apple Inc"), Some("USD")),
+            ]),
+            closes: Some(vec![
+                closes("AIR.PA", vec![]),
+                closes("NOPE", vec![]),
+                closes("AAPL", vec![180.0, 185.0, 190.5]),
+            ]),
+        }
+    );
+
+    let quotes = FinnhubRead {
+        quotes: true,
+        profiles: false,
+        closes: false,
+    };
+    let quoted = server.api().services().finnhub(&key, quotes).await?;
+
+    assert_eq!(
+        (quoted.profiles, quoted.closes),
+        (None, None),
+        "the parts not asked are not read"
     );
     Ok(())
 }
@@ -152,7 +183,9 @@ async fn fails_without_a_key_or_when_no_symbol_is_quoted() {
         let key = server.key("stock-prices").await;
 
         assert_eq!(
-            server.problem(&format!("/api/widgets/{key}")).await,
+            server
+                .problem(&format!("/api/services/finnhub/{key}?quotes=true"))
+                .await,
             (
                 StatusCode::BAD_GATEWAY,
                 Some("widgets.unavailable".to_owned())

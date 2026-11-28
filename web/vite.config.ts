@@ -14,9 +14,10 @@ const firstLoad = ["index.html", "src/routes/_app/route.tsx?tsr-split=component"
 /**
  * The most `firstLoad` may weigh, minified, in kB as Vite prints them: their chunks, the chunks these import, and their
  * CSS, a little above their size once the page is split by route (758 kB). A change that brings a page's code into the
- * entry or the frame fails the build, which says by how much.
+ * entry or the frame fails the build, which says by how much. Raised to 795 by #220: the options and fetchers orval
+ * writes for the routes of the services stay in `generated.ts`, the module the shell imports, whichever page uses them.
  */
-const firstLoadBudgetKb = 790;
+const firstLoadBudgetKb = 795;
 
 /** The chunk `fileName` and every chunk it imports statically, which the browser loads with it, added to `loaded`. */
 function loadedWith(bundle: Rolldown.OutputBundle, fileName: string, loaded: Set<string>): Set<string> {

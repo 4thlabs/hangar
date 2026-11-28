@@ -16,6 +16,10 @@ use super::{Declared, ServicesState};
 pub(crate) enum Image {
     /// `poster.<item>`: a Jellyfin item's primary image.
     JellyfinPoster(String),
+    /// `thumbnail.<event>`: a Frigate event's thumbnail.
+    FrigateThumbnail(String),
+    /// `card.<game>-<product>`: a card's image, at tcg-collector.
+    TcgCard(String),
 }
 
 impl Image {
@@ -55,6 +59,8 @@ impl Image {
     fn with_service_id(self, id: String) -> Self {
         match self {
             Self::JellyfinPoster(_) => Self::JellyfinPoster(id),
+            Self::FrigateThumbnail(_) => Self::FrigateThumbnail(id),
+            Self::TcgCard(_) => Self::TcgCard(id),
         }
     }
 
@@ -62,13 +68,15 @@ impl Image {
     fn kind(&self) -> &'static str {
         match self {
             Self::JellyfinPoster(_) => "poster",
+            Self::FrigateThumbnail(_) => "thumbnail",
+            Self::TcgCard(_) => "card",
         }
     }
 
     /// The service's id of the image.
     fn service_id(&self) -> &str {
         match self {
-            Self::JellyfinPoster(item) => item,
+            Self::JellyfinPoster(id) | Self::FrigateThumbnail(id) | Self::TcgCard(id) => id,
         }
     }
 
@@ -129,15 +137,21 @@ impl ServicesState {
         let found = Declared::of(&placement.widget.kind);
         // Exhaustive on the image: one of another service than the widget's is not the widget's to relay. The service is
         // resolved as the image is fetched: an image is not kept, the browser keeps it a day.
-        let fetched = match &image {
-            Image::JellyfinPoster(item) => {
-                let Declared::Jellyfin { .. } = found else {
-                    return Err(unknown().into());
-                };
-                let locator = self.locator(&found, declared).ok_or_else(unknown)?;
+        let is_the_widget_s = match &image {
+            Image::JellyfinPoster(_) => matches!(found, Declared::Jellyfin { .. }),
+            Image::FrigateThumbnail(_) => matches!(found, Declared::Frigate(_)),
+            Image::TcgCard(_) => matches!(found, Declared::TcgCollector { .. }),
+        };
 
-                self.jellyfin.poster(&locator, item).await
-            }
+        if !is_the_widget_s {
+            return Err(unknown().into());
+        }
+
+        let locator = self.locator(&found, declared).ok_or_else(unknown)?;
+        let fetched = match &image {
+            Image::JellyfinPoster(item) => self.jellyfin.poster(&locator, item).await,
+            Image::FrigateThumbnail(event) => self.frigate.thumbnail(&locator, event).await,
+            Image::TcgCard(card) => self.tcg_collector.image(&locator, card).await,
         };
         let fetched = fetched.map_err(|error| Self::unavailable(&placement, &error))?;
 
@@ -171,7 +185,7 @@ mod tests {
             "",
             "6c1e2f0a9b",
             "poster.",
-            "thumbnail.1",
+            "icon.1",
             "poster.a/b",
             "poster..",
             "Poster.a",

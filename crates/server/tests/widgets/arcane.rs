@@ -1,14 +1,14 @@
-//! `arcane-general-stats`, on a fake Arcane.
+//! Arcane's route, `arcane-general-stats`'s service, on a fake Arcane.
 
 use axum::Json;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use hangar_api::Widgets as _;
+use hangar_api::Services as _;
 use hangar_api::{
-    ArcaneActionItem, ArcaneGeneralStats, ArcaneVersion, ContainerCounts, ImageCounts,
-    VolumeCounts, WidgetData,
+    ArcaneActionItem, ArcaneDashboard, ArcaneData, ArcaneRead, ArcaneVersion, ContainerCounts,
+    ImageCounts, VolumeCounts,
 };
 use http::StatusCode;
 use serde_json::{Value, json};
@@ -35,8 +35,8 @@ async fn dashboard(State(answer): State<Value>, headers: HeaderMap) -> Response 
     Json(answer).into_response()
 }
 
-/// What the widget loads from an Arcane whose dashboard answers `answer`.
-async fn stats(answer: Value) -> quoll::Result<WidgetData> {
+/// What a read of `read` gives of an Arcane whose dashboard answers `answer`.
+async fn read(answer: Value, read: ArcaneRead) -> quoll::Result<ArcaneData> {
     let url = arcane(answer).await;
     let fixture = Fixture::new(&format!(
         "  - {{ type: arcane-general-stats, column: 1, url: '{url}' }}\n"
@@ -47,7 +47,22 @@ async fn stats(answer: Value) -> quoll::Result<WidgetData> {
     let server = fixture.serve().await;
     let key = server.key("arcane-general-stats").await;
 
-    server.api().widgets().data(&key).await
+    server.api().services().arcane(&key, read).await
+}
+
+/// The dashboard of an Arcane whose dashboard answers `answer`.
+async fn stats(answer: Value) -> quoll::Result<ArcaneDashboard> {
+    let data = read(answer, ArcaneRead { dashboard: true }).await?;
+
+    Ok(data.dashboard.expect("the dashboard asked"))
+}
+
+#[tokio::test]
+async fn reads_no_dashboard_unless_asked() -> quoll::Result<()> {
+    let data = read(json!({ "success": false }), ArcaneRead { dashboard: false }).await?;
+
+    assert_eq!(data, ArcaneData { dashboard: None });
+    Ok(())
 }
 
 #[tokio::test]
@@ -72,7 +87,7 @@ async fn reads_the_host_of_arcane_s_own_environment() -> quoll::Result<()> {
 
     assert_eq!(
         data,
-        WidgetData::ArcaneGeneralStats(ArcaneGeneralStats {
+        ArcaneDashboard {
             version: ArcaneVersion {
                 current: "v1.1.0".to_owned(),
                 newest: Some("v1.2.0".to_owned()),
@@ -101,7 +116,7 @@ async fn reads_the_host_of_arcane_s_own_environment() -> quoll::Result<()> {
                 severity: "warning".to_owned(),
                 count: 4,
             }],
-        })
+        }
     );
     Ok(())
 }
@@ -119,14 +134,11 @@ fn a_dashboard(version_info: Value) -> Value {
 #[tokio::test]
 async fn reads_a_version_with_no_newest_nor_release_as_no_update() -> quoll::Result<()> {
     // As Arcane answers with its update checks off, or when GitHub failed it.
-    let data = stats(json!({
+    let stats = stats(json!({
         "success": true,
         "data": a_dashboard(json!({ "updateAvailable": false, "displayVersion": "v1.1.0-next" })),
     }))
     .await?;
-    let WidgetData::ArcaneGeneralStats(stats) = data else {
-        panic!("Arcane's data: {data:?}");
-    };
 
     assert_eq!(
         stats.version,

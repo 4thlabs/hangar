@@ -1,12 +1,12 @@
-//! `gluetun-vpn-status`, on a fake gluetun.
+//! gluetun's route, `gluetun-vpn-status`'s service, on a fake gluetun.
 
 use axum::Json;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use hangar_api::Widgets as _;
-use hangar_api::{GluetunVpnStatus, WidgetData};
+use hangar_api::Services as _;
+use hangar_api::{GluetunData, GluetunPublicIp, GluetunRead};
 use http::StatusCode;
 use serde_json::{Value, json};
 
@@ -32,8 +32,8 @@ async fn answer(State(public_ip): State<Value>, headers: HeaderMap) -> Response 
     Json(public_ip).into_response()
 }
 
-/// What the widget loads from a gluetun that answers `public_ip`.
-async fn status(public_ip: Value) -> quoll::Result<WidgetData> {
+/// What a read of `read` gives of a gluetun that answers `public_ip`.
+async fn read(public_ip: Value, read: GluetunRead) -> quoll::Result<GluetunData> {
     let url = gluetun(public_ip).await;
     let fixture = Fixture::new(&format!(
         "  - {{ type: gluetun-vpn-status, column: 1, url: '{url}' }}\n"
@@ -44,7 +44,22 @@ async fn status(public_ip: Value) -> quoll::Result<WidgetData> {
     let server = fixture.serve().await;
     let key = server.key("gluetun-vpn-status").await;
 
-    server.api().widgets().data(&key).await
+    server.api().services().gluetun(&key, read).await
+}
+
+/// Where the tunnel of a gluetun that answers `public_ip` exits.
+async fn status(public_ip: Value) -> quoll::Result<GluetunPublicIp> {
+    let data = read(public_ip, GluetunRead { public_ip: true }).await?;
+
+    Ok(data.public_ip.expect("the address asked"))
+}
+
+#[tokio::test]
+async fn reads_no_address_unless_asked() -> quoll::Result<()> {
+    let data = read(json!(null), GluetunRead { public_ip: false }).await?;
+
+    assert_eq!(data, GluetunData { public_ip: None });
+    Ok(())
 }
 
 #[tokio::test]
@@ -59,22 +74,22 @@ async fn reads_where_the_tunnel_exits() -> quoll::Result<()> {
 
     assert_eq!(
         data,
-        WidgetData::GluetunVpnStatus(GluetunVpnStatus {
+        GluetunPublicIp {
             public_ip: "203.0.113.7".to_owned(),
             city: "Amsterdam".to_owned(),
             country: "Netherlands".to_owned(),
-        })
+        }
     );
     Ok(())
 }
 
 #[tokio::test]
 async fn reads_a_field_left_out_or_of_another_kind_as_empty() -> quoll::Result<()> {
-    let empty = WidgetData::GluetunVpnStatus(GluetunVpnStatus {
+    let empty = GluetunPublicIp {
         public_ip: String::new(),
         city: String::new(),
         country: String::new(),
-    });
+    };
 
     assert_eq!(status(json!(null)).await?, empty);
     assert_eq!(
@@ -108,10 +123,15 @@ async fn tries_a_call_again_once_after_a_503() -> quoll::Result<()> {
     let server = fixture.serve().await;
     let key = server.key("gluetun-vpn-status").await;
 
-    let data = server.api().widgets().data(&key).await?;
+    let data = server
+        .api()
+        .services()
+        .gluetun(&key, GluetunRead { public_ip: true })
+        .await?;
 
-    assert!(
-        matches!(data, WidgetData::GluetunVpnStatus(status) if status.public_ip == "203.0.113.7")
+    assert_eq!(
+        data.public_ip.map(|status| status.public_ip).as_deref(),
+        Some("203.0.113.7")
     );
     assert_eq!(calls.get(), 2, "the 503, then the call tried again");
     Ok(())
@@ -139,8 +159,8 @@ async fn fails_after_a_second_503() {
 
     let error = server
         .api()
-        .widgets()
-        .data(&key)
+        .services()
+        .gluetun(&key, GluetunRead { public_ip: true })
         .await
         .expect_err("gluetun failed twice");
 

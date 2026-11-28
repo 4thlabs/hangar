@@ -2,12 +2,22 @@
 //! reads a declaration of `hangar.yml` into its service and its options; the client of each service, with its key;
 //! each part of a service, a call of it, kept by the call; and the images the parts name, relayed.
 
+mod arcane;
+mod backrest;
+mod beszel;
 mod cache;
 mod clients;
 mod error;
+mod finnhub;
+mod forgejo;
+mod frigate;
+mod github;
+mod gluetun;
 mod images;
 mod jellyfin;
+mod miniflux;
 mod routes;
+mod tcg_collector;
 mod time;
 
 use std::collections::HashSet;
@@ -16,7 +26,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use hangar_api::ErrorCode;
-use hangar_core::{Runtime, ServiceOptions, Store, WidgetKind};
+use hangar_core::{FollowedCard, Runtime, ServiceOptions, Store, WidgetKind};
 use http::header::{AUTHORIZATION, HeaderValue};
 use quoll::Route;
 use quoll::client::{self, Builder, Contract};
@@ -27,11 +37,21 @@ use tokio::sync::OnceCell;
 use crate::Settings;
 use crate::failure::Failure;
 use crate::widgets::Placement;
-pub(crate) use cache::{Kept, Policy};
-pub(crate) use error::LoadError;
-pub(crate) use images::Image;
+use arcane::Arcane;
+use backrest::Backrest;
+use beszel::Beszel;
+use cache::Policy;
+use error::LoadError;
+use finnhub::Finnhub;
+use forgejo::Forgejo;
+use frigate::Frigate;
+use github::Github;
+use gluetun::Gluetun;
+use images::Image;
 use jellyfin::Jellyfin;
-pub(crate) use time::Moment;
+use miniflux::Miniflux;
+use tcg_collector::TcgCollector;
+use time::Moment;
 
 /// What the services' routes run on: the store, whose `hangar.yml` places the widgets and whose `.env.global` holds
 /// the services' keys, and each service, with its clients and its calls kept.
@@ -41,10 +61,20 @@ pub(crate) struct ServicesState {
     /// The domain the apps are served under, which a service's default address is under.
     domain: Arc<str>,
     /// GitHub's public API, at the address and with the token of the server's settings.
-    github: FixedService,
+    github_api: FixedService,
     /// Finnhub's public API, at the address and with the key of the server's settings.
-    finnhub: FixedService,
+    finnhub_api: FixedService,
+    arcane: Arcane,
+    backrest: Backrest,
+    beszel: Beszel,
+    finnhub: Finnhub,
+    forgejo: Forgejo,
+    frigate: Frigate,
+    github: Github,
+    gluetun: Gluetun,
     jellyfin: Jellyfin,
+    miniflux: Miniflux,
+    tcg_collector: TcgCollector,
 }
 
 impl ServicesState {
@@ -57,7 +87,7 @@ impl ServicesState {
                 runtime,
             )),
             domain: settings.domain.as_str().into(),
-            github: FixedService {
+            github_api: FixedService {
                 name: "github",
                 api: settings.github_api_url.clone(),
                 key: settings
@@ -65,7 +95,7 @@ impl ServicesState {
                     .as_ref()
                     .map(|token| token.expose().to_owned()),
             },
-            finnhub: FixedService {
+            finnhub_api: FixedService {
                 name: "finnhub",
                 api: settings.finnhub_api_url.clone(),
                 key: settings
@@ -73,7 +103,17 @@ impl ServicesState {
                     .as_ref()
                     .map(|key| key.expose().to_owned()),
             },
+            arcane: Arcane::new(),
+            backrest: Backrest::new(),
+            beszel: Beszel::new(),
+            finnhub: Finnhub::new(),
+            forgejo: Forgejo::new(),
+            frigate: Frigate::new(),
+            github: Github::new(),
+            gluetun: Gluetun::new(),
             jellyfin: Jellyfin::new(),
+            miniflux: Miniflux::new(),
+            tcg_collector: TcgCollector::new(),
         })
     }
 
@@ -138,14 +178,14 @@ impl ServicesState {
             Declared::Arcane(at)
             | Declared::Backrest(at)
             | Declared::Beszel(at)
-            | Declared::Forgejo(at)
+            | Declared::Forgejo { at, .. }
             | Declared::Frigate(at)
             | Declared::Gluetun(at)
             | Declared::Miniflux(at)
             | Declared::Jellyfin { at, .. }
-            | Declared::TcgCollector(at) => Some(app(at)),
-            Declared::Github { .. } => Some(Origin::Settings(self.github.clone())),
-            Declared::Finnhub { .. } => Some(Origin::Settings(self.finnhub.clone())),
+            | Declared::TcgCollector { at, .. } => Some(app(at)),
+            Declared::Github { .. } => Some(Origin::Settings(self.github_api.clone())),
+            Declared::Finnhub { .. } => Some(Origin::Settings(self.finnhub_api.clone())),
         }
     }
 
@@ -191,8 +231,13 @@ pub(crate) enum Declared<'a> {
     Backrest(ServiceAt<'a>),
     /// Beszel.
     Beszel(ServiceAt<'a>),
-    /// Forgejo.
-    Forgejo(ServiceAt<'a>),
+    /// Forgejo, and the owners whose repositories are read.
+    Forgejo {
+        /// Where it is.
+        at: ServiceAt<'a>,
+        /// The users and organizations; `None`, every repository the key sees.
+        owners: Option<&'a [String]>,
+    },
     /// Frigate.
     Frigate(ServiceAt<'a>),
     /// Gluetun.
@@ -206,17 +251,28 @@ pub(crate) enum Declared<'a> {
         /// The user.
         user: &'a str,
     },
-    /// tcg-collector.
-    TcgCollector(ServiceAt<'a>),
-    /// GitHub's public API, at the server's own address.
+    /// tcg-collector, and the cards followed.
+    TcgCollector {
+        /// Where it is.
+        at: ServiceAt<'a>,
+        /// How many days the price curves cover.
+        days: u16,
+        /// The cards.
+        cards: &'a [FollowedCard],
+    },
+    /// GitHub's public API, at the server's own address, and the repositories read.
     Github {
         /// How long its calls stay fresh; `None`, the default.
         ttl: Option<Duration>,
+        /// The repositories, `owner/repo`.
+        repositories: &'a [String],
     },
-    /// Finnhub's public API, at the server's own address, with the server's key.
+    /// Finnhub's public API, at the server's own address, with the server's key, and the symbols read.
     Finnhub {
         /// How long its calls stay fresh; `None`, the default.
         ttl: Option<Duration>,
+        /// The symbols.
+        tickers: &'a [String],
     },
 }
 
@@ -242,9 +298,10 @@ impl<'a> Declared<'a> {
             WidgetKind::BeszelServerStats { service } => {
                 Self::Beszel(ServiceAt::new("beszel", service))
             }
-            WidgetKind::ForgejoCi { service, .. } => {
-                Self::Forgejo(ServiceAt::new("forgejo", service))
-            }
+            WidgetKind::ForgejoCi { service, owners } => Self::Forgejo {
+                at: ServiceAt::new("forgejo", service),
+                owners: owners.as_deref(),
+            },
             WidgetKind::FrigateEvents { service } => {
                 Self::Frigate(ServiceAt::new("frigate", service))
             }
@@ -258,11 +315,20 @@ impl<'a> Declared<'a> {
                 at: ServiceAt::new("jellyfin", service),
                 user,
             },
-            WidgetKind::TcgCollectorCards { service, .. } => {
-                Self::TcgCollector(ServiceAt::new("tcg-collector", service))
-            }
-            WidgetKind::GithubReleases { ttl, .. } => Self::Github { ttl: *ttl },
-            WidgetKind::StockPrices { ttl, .. } => Self::Finnhub { ttl: *ttl },
+            WidgetKind::TcgCollectorCards {
+                service,
+                days,
+                cards,
+            } => Self::TcgCollector {
+                at: ServiceAt::new("tcg-collector", service),
+                days: *days,
+                cards,
+            },
+            WidgetKind::GithubReleases { ttl, repositories } => Self::Github {
+                ttl: *ttl,
+                repositories,
+            },
+            WidgetKind::StockPrices { ttl, tickers } => Self::Finnhub { ttl: *ttl, tickers },
         }
     }
 
@@ -272,12 +338,12 @@ impl<'a> Declared<'a> {
             Self::Arcane(at)
             | Self::Backrest(at)
             | Self::Beszel(at)
-            | Self::Forgejo(at)
+            | Self::Forgejo { at, .. }
             | Self::Frigate(at)
             | Self::Gluetun(at)
             | Self::Miniflux(at)
             | Self::Jellyfin { at, .. }
-            | Self::TcgCollector(at) => Some(at),
+            | Self::TcgCollector { at, .. } => Some(at),
             Self::Nothing | Self::Github { .. } | Self::Finnhub { .. } => None,
         }
     }
@@ -285,17 +351,17 @@ impl<'a> Declared<'a> {
     /// How long the calls it makes are kept: fresh for its `ttl`, else a minute, then stale for 15 minutes.
     pub(crate) fn policy(&self) -> Policy {
         let ttl = match self {
-            Self::Github { ttl } | Self::Finnhub { ttl } => *ttl,
+            Self::Github { ttl, .. } | Self::Finnhub { ttl, .. } => *ttl,
             Self::Nothing => None,
             Self::Arcane(at)
             | Self::Backrest(at)
             | Self::Beszel(at)
-            | Self::Forgejo(at)
+            | Self::Forgejo { at, .. }
             | Self::Frigate(at)
             | Self::Gluetun(at)
             | Self::Miniflux(at)
             | Self::Jellyfin { at, .. }
-            | Self::TcgCollector(at) => at.options.ttl,
+            | Self::TcgCollector { at, .. } => at.options.ttl,
         };
 
         Policy {

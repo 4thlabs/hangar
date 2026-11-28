@@ -1,8 +1,9 @@
 import { cn } from "cn";
-import type { BeszelServerStats } from "#libs/api";
+import type { BeszelSystem, ServicesBeszelParams } from "#libs/api";
 import { compactRelativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
+import { servicesQueries } from "#modules/widgets/api/services-queries.ts";
+import { ServiceWidget } from "#modules/widgets/components/service-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -15,6 +16,9 @@ import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.t
 import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { m } from "#paraglide/messages.js";
 
+/** What the card reads of Beszel: the systems the hub monitors. */
+const systemsRead = { systems: true } as const satisfies ServicesBeszelParams;
+
 /** `beszel-server-stats`: the systems a Beszel hub monitors. */
 export const beszelWidget = defineWidget("beszel-server-stats", {
   icon: WidgetIcon.dashboard("beszel", "beszel-light"),
@@ -24,12 +28,14 @@ export const beszelWidget = defineWidget("beszel-server-stats", {
   card: BeszelWidget,
 });
 
-/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+/** The card, read from its service in its own region. */
 function BeszelWidget({ placement }: WidgetProps) {
+  const look = widgetLook(beszelWidget);
+
   return (
-    <LoadedWidget placement={placement} type="beszel-server-stats" look={widgetLook(beszelWidget)}>
-      {stats => <BeszelCard stats={stats} link={placement.link} />}
-    </LoadedWidget>
+    <ServiceWidget query={servicesQueries.beszel} placement={placement} read={systemsRead} look={look}>
+      {({ systems }) => <BeszelCard systems={systems} link={placement.link} />}
+    </ServiceWidget>
   );
 }
 
@@ -60,12 +66,12 @@ function Gauge({ label, value }: { label: string; value: number }) {
 }
 
 type BeszelCardProps = {
-  stats: BeszelServerStats;
+  systems: readonly BeszelSystem[];
   link: string | null;
 };
 
 /** The systems a Beszel hub monitors, with their CPU, memory and disk. */
-export function BeszelCard({ stats: { systems }, link }: BeszelCardProps) {
+export function BeszelCard({ systems, link }: BeszelCardProps) {
   const now = useNow();
   const look = widgetLook(beszelWidget);
   const down = systems.filter(system => !system.up).length;

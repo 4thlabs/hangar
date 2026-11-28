@@ -1,10 +1,14 @@
 import { cn } from "cn";
-import type { GluetunVpnStatus } from "#libs/api";
-import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
+import type { GluetunPublicIp, ServicesGluetunParams } from "#libs/api";
+import { servicesQueries } from "#modules/widgets/api/services-queries.ts";
+import { ServiceWidget } from "#modules/widgets/components/service-widget.tsx";
 import { WidgetCard, WidgetContent, WidgetHeader } from "#modules/widgets/components/widget.tsx";
 import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
 import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { m } from "#paraglide/messages.js";
+
+/** What the card reads of gluetun: where its tunnel exits. */
+const publicIpRead = { publicIp: true } as const satisfies ServicesGluetunParams;
 
 /** `gluetun-vpn-status`: whether gluetun's tunnel is up, and where it exits. */
 export const gluetunWidget = defineWidget("gluetun-vpn-status", {
@@ -15,17 +19,19 @@ export const gluetunWidget = defineWidget("gluetun-vpn-status", {
   card: GluetunWidget,
 });
 
-/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+/** The card, read from its service in its own region. */
 function GluetunWidget({ placement }: WidgetProps) {
+  const look = widgetLook(gluetunWidget);
+
   return (
-    <LoadedWidget placement={placement} type="gluetun-vpn-status" look={widgetLook(gluetunWidget)}>
-      {status => <GluetunCard status={status} />}
-    </LoadedWidget>
+    <ServiceWidget query={servicesQueries.gluetun} placement={placement} read={publicIpRead} look={look}>
+      {({ publicIp }) => <GluetunCard status={publicIp} />}
+    </ServiceWidget>
   );
 }
 
 /** Whether gluetun's tunnel is up, and where it comes out. No link: gluetun has no web page. */
-export function GluetunCard({ status: { publicIp, city, country } }: { status: GluetunVpnStatus }) {
+export function GluetunCard({ status: { publicIp, city, country } }: { status: GluetunPublicIp }) {
   const look = widgetLook(gluetunWidget);
   // gluetun answers without an address while the tunnel is down.
   const isConnected = publicIp.length > 0;

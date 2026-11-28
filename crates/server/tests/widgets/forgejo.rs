@@ -1,4 +1,4 @@
-//! `forgejo-ci`, on a fake Forgejo.
+//! Forgejo's route, `forgejo-ci`'s service, on a fake Forgejo.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -8,8 +8,8 @@ use axum::extract::{Path, Query, RawQuery, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use hangar_api::Widgets as _;
-use hangar_api::{ForgejoCi, ForgejoRepository, ForgejoRun, WidgetData};
+use hangar_api::Services as _;
+use hangar_api::{ForgejoData, ForgejoRead, ForgejoRepository, ForgejoRun};
 use http::StatusCode;
 use serde_json::{Value, json};
 
@@ -156,7 +156,6 @@ async fn runs(
         })
     };
 
-    // Run 2 was queued before run 3, and started after it: by when they were created, 3 comes first.
     Json(json!({
         "total_count": 3,
         "workflow_runs": [
@@ -168,8 +167,14 @@ async fn runs(
     .into_response()
 }
 
-/// What the widget loads from the Forgejo of `url`, for `owners` if given.
-async fn ci(url: &str, owners: Option<&str>) -> quoll::Result<WidgetData> {
+/// Both parts.
+const BOTH: ForgejoRead = ForgejoRead {
+    repositories: true,
+    runs: true,
+};
+
+/// What `read` gives of the Forgejo of `url`, for `owners` if given.
+async fn ci(url: &str, owners: Option<&str>, read: ForgejoRead) -> quoll::Result<ForgejoData> {
     let owners = owners.map_or_else(String::new, |owners| format!(", owners: {owners}"));
     let fixture = Fixture::new(&format!(
         "  - {{ type: forgejo-ci, column: 2, url: '{url}'{owners} }}\n"
@@ -180,35 +185,56 @@ async fn ci(url: &str, owners: Option<&str>) -> quoll::Result<WidgetData> {
     let server = fixture.serve().await;
     let key = server.key("forgejo-ci").await;
 
-    server.api().widgets().data(&key).await
+    server.api().services().forgejo(&key, read).await
 }
 
-/// The runs of `ana/hangar`, running first, then by when they were created, newest first.
+/// The runs of `ana/hangar` that have not finished, as Forgejo lists them.
 fn active_runs() -> Vec<ForgejoRun> {
-    let run = |id: u64, status: &str, since: &str| ForgejoRun {
+    let run = |id: u64, status: &str, created: &str, started: Option<&str>| ForgejoRun {
         id,
         repository: "ana/hangar".to_owned(),
         title: format!("Run {id}"),
         status: status.to_owned(),
-        is_queued: status != "running",
         reference: "main".to_owned(),
         url: format!("https://forgejo.example.com/ana/hangar/actions/runs/{id}"),
-        since: since.to_owned(),
+        created_at: created.to_owned(),
+        started_at: started.map(str::to_owned),
     };
 
     vec![
-        run(3, "running", "2026-11-26T08:31:00.000Z"),
-        run(2, "running", "2026-11-26T08:40:00.000Z"),
-        run(1, "waiting", "2026-11-26T09:00:00.000Z"),
+        run(1, "waiting", "2026-11-26T09:00:00.000Z", None),
+        run(
+            2,
+            "running",
+            "2026-11-26T08:00:00.000Z",
+            Some("2026-11-26T08:40:00.000Z"),
+        ),
+        run(
+            3,
+            "running",
+            "2026-11-26T08:30:00.000Z",
+            Some("2026-11-26T08:31:00.000Z"),
+        ),
     ]
 }
 
-fn recent(full_name: &str, updated_at: &str) -> ForgejoRepository {
+fn listed(full_name: &str, updated_at: &str, archived: bool) -> ForgejoRepository {
     ForgejoRepository {
         full_name: full_name.to_owned(),
         url: format!("https://forgejo.example.com/{full_name}"),
         updated_at: updated_at.to_owned(),
+        archived,
     }
+}
+
+/// `ana`'s repositories, as Forgejo lists them.
+fn anas() -> Vec<ForgejoRepository> {
+    vec![
+        listed("ana/hangar", "2026-11-25T09:00:00.000Z", false),
+        listed("ana/old", "2026-11-26T10:00:00.000Z", true),
+        listed("ana/notes", "2026-11-20T10:00:00.000Z", false),
+        listed("ana/empty", "2026-11-01T10:00:00.000Z", false),
+    ]
 }
 
 #[tokio::test]
@@ -217,19 +243,14 @@ async fn reads_the_runs_of_the_repositories_of_its_owners_that_run_actions_and_s
     let asked = Asked::default();
     let url = forgejo(asked.clone()).await;
 
-    let data = ci(&url, Some("[ana, ben]")).await?;
+    let data = ci(&url, Some("[ana, ben]"), BOTH).await?;
 
     assert_eq!(
         data,
-        WidgetData::ForgejoCi(ForgejoCi {
-            repository_count: 4,
-            active_runs: active_runs(),
-            recent_repositories: vec![
-                recent("ana/hangar", "2026-11-25T09:00:00.000Z"),
-                recent("ana/notes", "2026-11-20T10:00:00.000Z"),
-                recent("ana/empty", "2026-11-01T10:00:00.000Z"),
-            ],
-        })
+        ForgejoData {
+            repositories: Some(anas()),
+            runs: Some(active_runs()),
+        }
     );
     assert_eq!(
         asked.sorted(),
@@ -244,21 +265,50 @@ async fn reads_every_repository_the_key_sees_and_skips_one_whose_runs_fail() -> 
     let asked = Asked::default();
     let url = forgejo(asked.clone()).await;
 
-    let data = ci(&url, None).await?;
+    let data = ci(&url, None, BOTH).await?;
+    let mut every = anas();
+
+    every.push(listed("cleo/site", "2026-11-24T10:00:00.000Z", false));
 
     assert_eq!(
         data,
-        WidgetData::ForgejoCi(ForgejoCi {
-            repository_count: 5,
-            active_runs: active_runs(),
-            recent_repositories: vec![
-                recent("ana/hangar", "2026-11-25T09:00:00.000Z"),
-                recent("cleo/site", "2026-11-24T10:00:00.000Z"),
-                recent("ana/notes", "2026-11-20T10:00:00.000Z"),
-            ],
-        })
+        ForgejoData {
+            repositories: Some(every),
+            runs: Some(active_runs()),
+        }
     );
     assert_eq!(asked.sorted(), ["ana/hangar", "cleo/site"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn reads_the_repositories_alone_without_their_runs_and_the_runs_alone() -> quoll::Result<()> {
+    let asked = Asked::default();
+    let url = forgejo(asked.clone()).await;
+    let repositories = ForgejoRead {
+        repositories: true,
+        runs: false,
+    };
+    let runs = ForgejoRead {
+        repositories: false,
+        runs: true,
+    };
+
+    assert_eq!(
+        ci(&url, Some("[ana]"), repositories).await?,
+        ForgejoData {
+            repositories: Some(anas()),
+            runs: None,
+        }
+    );
+    assert!(asked.sorted().is_empty(), "no run asked");
+    assert_eq!(
+        ci(&url, Some("[ana]"), runs).await?,
+        ForgejoData {
+            repositories: None,
+            runs: Some(active_runs()),
+        }
+    );
     Ok(())
 }
 
@@ -266,7 +316,7 @@ async fn reads_every_repository_the_key_sees_and_skips_one_whose_runs_fail() -> 
 async fn fails_when_no_owner_can_be_read() {
     let url = forgejo(Asked::default()).await;
 
-    let error = ci(&url, Some("[ben]"))
+    let error = ci(&url, Some("[ben]"), BOTH)
         .await
         .expect_err("ben's repositories are not found");
 

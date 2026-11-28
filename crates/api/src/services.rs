@@ -7,7 +7,17 @@
 //! a list of repositories, comes from the declaration, never from the request. The images the parts name are relayed
 //! by one route for every service, which takes the id the server wrote, as it wrote it.
 
+mod arcane;
+mod backrest;
+mod beszel;
+mod finnhub;
+mod forgejo;
+mod frigate;
+mod github;
+mod gluetun;
 mod jellyfin;
+mod miniflux;
+mod tcg_collector;
 
 use std::borrow::Cow;
 
@@ -16,7 +26,17 @@ use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 
+pub use arcane::*;
+pub use backrest::*;
+pub use beszel::*;
+pub use finnhub::*;
+pub use forgejo::*;
+pub use frigate::*;
+pub use github::*;
+pub use gluetun::*;
 pub use jellyfin::*;
+pub use miniflux::*;
+pub use tcg_collector::*;
 
 /// How many items a part gives at most, from 1 to `MAX`: a read asks no more than its part allows, and the server
 /// refuses any other number as it reads the query.
@@ -92,8 +112,39 @@ quoll::group! {
     /// a 502 when the service did not answer a part asked.
     #[auth(crate::Session)]
     pub group Services {
+        /// Arcane's dashboard of the Docker host.
+        GET "/services/arcane/{widget}" => arcane(widget: &str, query read: ArcaneRead) -> ArcaneData;
+
+        /// Backrest's repositories, and how their backups went.
+        GET "/services/backrest/{widget}" => backrest(widget: &str, query read: BackrestRead) -> BackrestData;
+
+        /// The systems a Beszel hub monitors.
+        GET "/services/beszel/{widget}" => beszel(widget: &str, query read: BeszelRead) -> BeszelData;
+
+        /// Stock quotes from Finnhub's public API, for the widget's symbols.
+        GET "/services/finnhub/{widget}" => finnhub(widget: &str, query read: FinnhubRead) -> FinnhubData;
+
+        /// Forgejo's repositories, and the runs of Forgejo Actions that have not finished.
+        GET "/services/forgejo/{widget}" => forgejo(widget: &str, query read: ForgejoRead) -> ForgejoData;
+
+        /// How Frigate's detection runs, and its latest events.
+        GET "/services/frigate/{widget}" => frigate(widget: &str, query read: FrigateRead) -> FrigateData;
+
+        /// The latest release of the widget's repositories, from GitHub's public API.
+        GET "/services/github/{widget}" => github(widget: &str, query read: GithubRead) -> GithubData;
+
+        /// Where gluetun's tunnel exits.
+        GET "/services/gluetun/{widget}" => gluetun(widget: &str, query read: GluetunRead) -> GluetunData;
+
         /// What a Jellyfin server holds, and what was added to it last.
         GET "/services/jellyfin/{widget}" => jellyfin(widget: &str, query read: JellyfinRead) -> JellyfinData;
+
+        /// How many of Miniflux's entries are unread, and the newest.
+        GET "/services/miniflux/{widget}" => miniflux(widget: &str, query read: MinifluxRead) -> MinifluxData;
+
+        /// The cards tcg-collector follows for the widget, and their prices.
+        GET "/services/tcg-collector/{widget}"
+            => tcg_collector(widget: &str, query read: TcgCollectorRead) -> TcgCollectorData;
 
         /// An image a part named, by the id the server wrote, as `poster.6c1e2f0a9b`, fetched from the service of the
         /// widget placed as `widget`. Kept a day by the browser. A 404 for an id the server would not write, for an

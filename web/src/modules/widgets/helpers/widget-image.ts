@@ -6,8 +6,3 @@
 export function widgetImageUrl(placementKey: string, imageId: string) {
   return `/api/services/images/${encodeURIComponent(placementKey)}/${encodeURIComponent(imageId)}`;
 }
-
-/** Where a card that still reads `GET /widgets/{key}` points an `<img>`: the relay of that route, by the service's id. */
-export function placementImageUrl(placementKey: string, id: string) {
-  return `/api/widgets/${encodeURIComponent(placementKey)}/image/${encodeURIComponent(id)}`;
-}

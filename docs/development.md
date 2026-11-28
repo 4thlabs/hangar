@@ -414,15 +414,24 @@ down in [`AGENTS.md`](../AGENTS.md). Read it before adding a library or a module
 The existing widgets each come with tests next to them, against a mocked service; follow one of
 them.
 
-On the Rust server, a widget is:
+On the Rust server, the server knows the services and the page the widgets. A widget is:
 
-1. Its options in the core's `WidgetKind`, read from `hangar.yml` in `crates/core/src/store/config/widget.rs`.
-2. Its data in the contract, a variant of `hangar_api::WidgetData`, and its type in `WidgetType`.
-3. Its service's contract and its load in `crates/server/src/widgets/<app>.rs`, `#[server(none)]`, its key a scheme
-   of the contract, `client::key` or `client::bearer` in its `Client::new`, listed in `Loader::load`, and in
-   `Service::options` for a widget of a store app. A key that goes in `Authorization` in a form of its own, as
-   Beszel's raw token and Jellyfin's `MediaBrowser Token="..."`, goes through `Service::authorization`: quoll's header
-   schemes leave that header to its `Bearer` and `Basic`.
-4. Its card in `web/src/modules/widgets/components/cards/`, its title and icon in `helpers/widget-appearance.ts`, placed by
-   `DashboardPage`.
-5. A test in `crates/server/tests/widgets/`, against its service faked on port 0.
+1. Its options in the core's `WidgetKind`, read from `hangar.yml` in `crates/core/src/store/config/widget.rs`, its type
+   in the contract's `WidgetType`, and its service in `Declared::of` (`crates/server/src/services.rs`), whose `match`
+   rustc checks whole.
+2. Its card in `web/src/modules/widgets/components/cards/<x>-card.tsx`, which exports its entry with `defineWidget`
+   and reads the parts it shows with `ServiceWidget`, its read `as const satisfies` its service's params, listed in
+   `web/src/modules/widgets/widgets-registry.ts`. Its display choices, how many and in which order, are a helper of
+   `helpers/`, `<service>-view.ts`, tested by vitest.
+
+A widget on known parts needs nothing more. A new service, or a new part of one, is:
+
+1. Its read and its data in `crates/api/src/services/<service>.rs`, one field per part, and its route in the group
+   `Services` of `crates/api/src/services.rs`.
+2. Its contract and its parts in `crates/server/src/services/<service>.rs`, `#[server(none)]`, its key sent by
+   `client::key` or `client::bearer` in its `client`, each part a `Part` kept by its call. A key that goes in
+   `Authorization` in a form of its own, as Beszel's raw token and Jellyfin's `MediaBrowser Token="..."`, goes through
+   `Service::authorization`: quoll's header schemes leave that header to its `Bearer` and `Basic`. An image it names is
+   a variant of `Image`, relayed by `GET /services/images/{widget}/{id}`.
+3. Its route in `crates/server/src/services/routes.rs`, through `ServicesState::read`.
+4. A test in `crates/server/tests/widgets/`, against its service faked on port 0.

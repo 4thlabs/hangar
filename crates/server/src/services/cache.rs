@@ -45,20 +45,11 @@ pub(crate) struct Policy {
 pub(crate) struct Kept<K, T> {
     /// What the values are, in the log.
     name: &'static str,
-    entries: Mutex<Entries<K, T>>,
+    by_key: Mutex<HashMap<K, Entry<T>>>,
 }
 
-/// The entries, and the generation the next one takes.
-struct Entries<K, T> {
-    by_key: HashMap<K, Entry<T>>,
-    next_generation: u64,
-}
-
-/// A key's value, and its load.
+/// A key's value, and its load. It is never forgotten while its load runs, so the load always finds it.
 struct Entry<T> {
-    /// Which entry of its key it is: one forgotten and made again is another, which the load of the first leaves
-    /// alone.
-    generation: u64,
     /// The last good value, and when it was loaded.
     value: Option<(Arc<T>, Instant)>,
     loading: Option<Loading<T>>,
@@ -88,10 +79,7 @@ where
     pub(crate) fn new(name: &'static str) -> Arc<Self> {
         Arc::new(Self {
             name,
-            entries: Mutex::new(Entries {
-                by_key: HashMap::new(),
-                next_generation: 0,
-            }),
+            by_key: Mutex::new(HashMap::new()),
         })
     }
 
@@ -112,12 +100,7 @@ where
         F: Future<Output = Result<T, LoadError>> + Send + 'static,
     {
         let loading = {
-            let mut entries = self.lock();
-            let Entries {
-                by_key,
-                next_generation,
-            } = &mut *entries;
-
+            let mut by_key = self.lock();
             let served_for = policy.fresh + policy.stale;
 
             // This reader's policy counts before the others' entries are judged, its own among them.
@@ -127,15 +110,10 @@ where
 
             by_key.retain(|_, entry| entry.is_live());
 
-            let entry = by_key.entry(key.clone()).or_insert_with(|| {
-                *next_generation += 1;
-
-                Entry {
-                    generation: *next_generation,
-                    value: None,
-                    loading: None,
-                    served_for,
-                }
+            let entry = by_key.entry(key.clone()).or_insert_with(|| Entry {
+                value: None,
+                loading: None,
+                served_for,
             });
 
             if let Some((value, loaded_at)) = &entry.value {
@@ -165,18 +143,12 @@ where
         loading.await
     }
 
-    /// Forgets the values whose key `is_kept` refuses; their loads running end unheard.
-    pub(crate) fn retain(&self, is_kept: impl Fn(&K) -> bool) {
-        self.lock().by_key.retain(|key, _| is_kept(key));
-    }
-
     /// Starts `load` as the load of `entry`, the entry of `key`, in a task of its own.
     fn start<F>(self: &Arc<Self>, entry: &mut Entry<T>, key: K, load: F) -> Loading<T>
     where
         F: Future<Output = Result<T, LoadError>> + Send + 'static,
     {
         let this = Arc::clone(self);
-        let generation = entry.generation;
         let loading = async move {
             // A load that panics fails as any other, rather than leave its shared future to panic every reader.
             let loaded = match AssertUnwindSafe(load).catch_unwind().await {
@@ -185,7 +157,7 @@ where
                 Err(_) => Err(Arc::new(LoadError::Panicked { name: this.name })),
             };
 
-            this.finish(&key, generation, &loaded);
+            this.finish(&key, &loaded);
 
             loaded
         }
@@ -198,15 +170,10 @@ where
         loading
     }
 
-    /// Keeps what the load of `key` gave, in the entry of `generation` it was started for: one forgotten meanwhile,
-    /// and maybe made again, is left alone. A key whose first load failed is forgotten.
-    fn finish(&self, key: &K, generation: u64, loaded: &Loaded<T>) {
-        let mut entries = self.lock();
-        let Some(entry) = entries
-            .by_key
-            .get_mut(key)
-            .filter(|entry| entry.generation == generation)
-        else {
+    /// Keeps what the load of `key` gave. A key whose first load failed is forgotten.
+    fn finish(&self, key: &K, loaded: &Loaded<T>) {
+        let mut by_key = self.lock();
+        let Some(entry) = by_key.get_mut(key) else {
             return;
         };
 
@@ -221,13 +188,13 @@ where
                 "could not reload a value: the last one is kept"
             ),
             Err(_) => {
-                entries.by_key.remove(key);
+                by_key.remove(key);
             }
         }
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Entries<K, T>> {
-        self.entries
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<K, Entry<T>>> {
+        self.by_key
             .lock()
             .expect("no code panics while it holds the kept values")
     }
@@ -487,46 +454,6 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn leaves_alone_the_entry_made_again_after_the_one_a_load_was_for_was_forgotten() {
-        let kept = Kept::new("test");
-        let gate = Arc::new(Semaphore::new(0));
-        let source = Arc::new(Source {
-            gate: Some(Arc::clone(&gate)),
-            ..Source::default()
-        });
-        let reader = |kept: &Arc<Kept<String, usize>>, source: &Arc<Source>| {
-            let (kept, source) = (Arc::clone(kept), Arc::clone(source));
-
-            tokio::spawn(async move { get(&kept, &source).await })
-        };
-
-        let first = reader(&kept, &source);
-
-        settle().await;
-        kept.retain(|_| false);
-
-        let second = reader(&kept, &source);
-
-        settle().await;
-        // The first load ends: the entry the second made is not its own.
-        gate.add_permits(1);
-        assert_eq!(first.await.expect("no panic"), Ok(1));
-
-        let third = reader(&kept, &source);
-
-        settle().await;
-        gate.add_permits(1);
-
-        assert_eq!(second.await.expect("no panic"), Ok(2));
-        assert_eq!(
-            third.await.expect("no panic"),
-            Ok(2),
-            "it joined the second load"
-        );
-        assert_eq!(source.loads(), 2);
-    }
-
-    #[tokio::test(start_paused = true)]
     async fn forgets_an_entry_once_it_would_no_longer_be_served() {
         let kept = Kept::new("test");
         let source = Arc::new(Source::default());
@@ -537,7 +464,7 @@ mod tests {
         kept.get("other".to_owned(), POLICY, other.load())
             .await
             .expect("loaded");
-        assert_eq!(kept.lock().by_key.len(), 2, "still served, stale");
+        assert_eq!(kept.lock().len(), 2, "still served, stale");
 
         tokio::time::advance(Duration::from_secs(1)).await;
         kept.get("other".to_owned(), POLICY, other.load())
@@ -545,7 +472,7 @@ mod tests {
             .expect("fresh");
 
         assert_eq!(
-            kept.lock().by_key.keys().collect::<Vec<_>>(),
+            kept.lock().keys().collect::<Vec<_>>(),
             ["other"],
             "unread for fresh and stale together, it is gone"
         );
@@ -604,16 +531,5 @@ mod tests {
 
         assert_eq!(reader.await.expect("no panic"), Ok(1));
         assert_eq!(get(&kept, &source).await, Ok(1), "kept by its load");
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn forgets_the_values_it_is_told_to() {
-        let kept = Kept::new("test");
-        let source = Arc::new(Source::default());
-
-        get(&kept, &source).await.expect("loaded");
-        kept.retain(|key| key != "key");
-
-        assert_eq!(get(&kept, &source).await, Ok(2));
     }
 }

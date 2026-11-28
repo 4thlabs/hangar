@@ -1,9 +1,9 @@
-//! `backrest-summary`, on a fake Backrest.
+//! Backrest's route, `backrest-summary`'s service, on a fake Backrest.
 
 use axum::Json;
 use axum::routing::post;
-use hangar_api::Widgets as _;
-use hangar_api::{BackrestHealth, BackrestRepository, BackrestSummary, WidgetData};
+use hangar_api::Services as _;
+use hangar_api::{BackrestData, BackrestHealth, BackrestRead, BackrestRepository};
 use serde_json::{Value, json};
 
 use super::Fixture;
@@ -49,12 +49,16 @@ async fn reads_each_repository_and_its_last_backup() -> quoll::Result<()> {
     let server = fixture.serve().await;
     let key = server.key("backrest-summary").await;
 
-    let data = server.api().widgets().data(&key).await?;
+    let data = server
+        .api()
+        .services()
+        .backrest(&key, BackrestRead { repositories: true })
+        .await?;
 
     assert_eq!(
         data,
-        WidgetData::BackrestSummary(BackrestSummary {
-            repositories: vec![
+        BackrestData {
+            repositories: Some(vec![
                 BackrestRepository {
                     id: "nas".to_owned(),
                     status: Some("SUCCESS".to_owned()),
@@ -85,8 +89,22 @@ async fn reads_each_repository_and_its_last_backup() -> quoll::Result<()> {
                     protected_bytes: 0,
                     next_backup_at: None,
                 },
-            ],
-        })
+            ]),
+        }
+    );
+    assert_eq!(
+        server
+            .api()
+            .services()
+            .backrest(
+                &key,
+                BackrestRead {
+                    repositories: false
+                }
+            )
+            .await?,
+        BackrestData { repositories: None },
+        "a part not asked is not read"
     );
     Ok(())
 }

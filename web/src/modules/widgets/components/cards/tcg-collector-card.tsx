@@ -1,6 +1,7 @@
-import type { TcgCollectorCards, TcgDailyPrices, TcgFollowedCard } from "#libs/api";
+import type { ServicesTcgCollectorParams, TcgDailyPrices } from "#libs/api";
 import { Badge } from "#modules/common/ui/badge.tsx";
-import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
+import { servicesQueries } from "#modules/widgets/api/services-queries.ts";
+import { ServiceWidget } from "#modules/widgets/components/service-widget.tsx";
 import { WidgetSparkline } from "#modules/widgets/components/widget-sparkline.tsx";
 import {
   WidgetCard,
@@ -11,10 +12,18 @@ import {
   WidgetMetadata,
 } from "#modules/widgets/components/widget.tsx";
 import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
+import {
+  tcgCollectorView,
+  type TcgCardView,
+  type TcgCollectorView,
+} from "#modules/widgets/helpers/tcg-collector-view.ts";
 import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
-import { placementImageUrl } from "#modules/widgets/helpers/widget-image.ts";
+import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
 import { widgetsLabels } from "#modules/widgets/helpers/widgets-labels.ts";
 import { m } from "#paraglide/messages.js";
+
+/** What the card reads of tcg-collector: each card followed, and its prices. */
+const cardsRead = { cards: true, prices: true } as const satisfies ServicesTcgCollectorParams;
 
 /** `tcg-collector-cards`: the prices of the cards tcg-collector follows. */
 export const tcgCollectorWidget = defineWidget("tcg-collector-cards", {
@@ -25,12 +34,16 @@ export const tcgCollectorWidget = defineWidget("tcg-collector-cards", {
   card: TcgCollectorWidget,
 });
 
-/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+/** The card, read from its service in its own region. */
 function TcgCollectorWidget({ placement }: WidgetProps) {
+  const look = widgetLook(tcgCollectorWidget);
+
   return (
-    <LoadedWidget placement={placement} type="tcg-collector-cards" look={widgetLook(tcgCollectorWidget)}>
-      {cards => <TcgCollectorCard cards={cards} placementKey={placement.key} link={placement.link} />}
-    </LoadedWidget>
+    <ServiceWidget query={servicesQueries.tcgCollector} placement={placement} read={cardsRead} look={look}>
+      {({ cards, prices }) => (
+        <TcgCollectorCard cards={tcgCollectorView(cards, prices)} placementKey={placement.key} link={placement.link} />
+      )}
+    </ServiceWidget>
   );
 }
 
@@ -114,7 +127,7 @@ export function describePriceSeries({ label, prices }: PriceSeries) {
 }
 
 /** The latest day any card has a price for, `YYYY-MM-DD`; `undefined` when none has one. */
-export function latestPriceDay(cards: readonly TcgFollowedCard[]) {
+export function latestPriceDay(cards: readonly TcgCardView[]) {
   // ISO dates sort as text.
   return cards
     .flatMap(({ history }) => history.at(-1)?.day ?? [])
@@ -136,7 +149,7 @@ function dayNumber(day: string) {
  * The sheet of one card on tcg-collector's page, which opens it from its address. A link written with a final slash
  * would otherwise give `//?game=…`, which the page does not serve.
  */
-function cardPageUrl(link: string, { game, product }: TcgFollowedCard) {
+function cardPageUrl(link: string, { game, product }: TcgCardView) {
   return `${link.replace(/\/+$/, "")}/?game=${game}&card=${product}`;
 }
 
@@ -144,7 +157,7 @@ function cardPageUrl(link: string, { game, product }: TcgFollowedCard) {
 const thumbnailClassName = "block aspect-5/7 w-10 shrink-0 overflow-hidden rounded-sm bg-muted";
 
 type CardRowProps = {
-  followed: TcgFollowedCard;
+  followed: TcgCardView;
   /** The curves' common window; none while no card has a price. */
   priceWindow: PriceWindow | undefined;
   link: string | null;
@@ -182,7 +195,7 @@ function CardRow({ followed, priceWindow, link, placementKey }: CardRowProps) {
           className={thumbnailClassName}
         >
           <img
-            src={placementImageUrl(placementKey, followed.imageId)}
+            src={widgetImageUrl(placementKey, followed.imageId)}
             alt=""
             loading="lazy"
             className="size-full object-cover"
@@ -219,7 +232,7 @@ function CardRow({ followed, priceWindow, link, placementKey }: CardRowProps) {
 }
 
 type TcgCollectorCardProps = {
-  cards: TcgCollectorCards;
+  cards: TcgCollectorView;
   /** The placement's key, which its images are relayed by. */
   placementKey: string;
   link: string | null;

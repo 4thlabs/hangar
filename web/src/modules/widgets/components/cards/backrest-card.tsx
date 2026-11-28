@@ -1,8 +1,9 @@
 import { cn } from "cn";
-import type { BackrestHealth, BackrestSummary } from "#libs/api";
+import type { BackrestHealth, BackrestRepository, ServicesBackrestParams } from "#libs/api";
 import { compactRelativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
-import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
+import { servicesQueries } from "#modules/widgets/api/services-queries.ts";
+import { ServiceWidget } from "#modules/widgets/components/service-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -17,6 +18,9 @@ import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearan
 import { formatBytes } from "#modules/widgets/helpers/widget-format.ts";
 import { m } from "#paraglide/messages.js";
 
+/** What the card reads of Backrest: its repositories. */
+const repositoriesRead = { repositories: true } as const satisfies ServicesBackrestParams;
+
 /** `backrest-summary`: Backrest's repositories and their last backups. */
 export const backrestWidget = defineWidget("backrest-summary", {
   icon: WidgetIcon.dashboard("backrest"),
@@ -26,12 +30,14 @@ export const backrestWidget = defineWidget("backrest-summary", {
   card: BackrestWidget,
 });
 
-/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+/** The card, read from its service in its own region. */
 function BackrestWidget({ placement }: WidgetProps) {
+  const look = widgetLook(backrestWidget);
+
   return (
-    <LoadedWidget placement={placement} type="backrest-summary" look={widgetLook(backrestWidget)}>
-      {summary => <BackrestCard summary={summary} link={placement.link} />}
-    </LoadedWidget>
+    <ServiceWidget query={servicesQueries.backrest} placement={placement} read={repositoriesRead} look={look}>
+      {({ repositories }) => <BackrestCard repositories={repositories} link={placement.link} />}
+    </ServiceWidget>
   );
 }
 
@@ -43,12 +49,12 @@ const healthDotClasses: Readonly<Record<BackrestHealth, string>> = {
 };
 
 type BackrestCardProps = {
-  summary: BackrestSummary;
+  repositories: readonly BackrestRepository[];
   link: string | null;
 };
 
 /** Each repository of Backrest's, and how its last backup went. */
-export function BackrestCard({ summary: { repositories }, link }: BackrestCardProps) {
+export function BackrestCard({ repositories, link }: BackrestCardProps) {
   const now = useNow();
   const look = widgetLook(backrestWidget);
   const protectedBytes = repositories.reduce((total, repository) => total + repository.protectedBytes, 0);

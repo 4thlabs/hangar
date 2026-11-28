@@ -1,4 +1,4 @@
-//! `miniflux-entries`, on a fake Miniflux.
+//! Miniflux's route, `miniflux-entries`'s service, on a fake Miniflux.
 
 use std::collections::HashMap;
 
@@ -7,8 +7,8 @@ use axum::extract::Query;
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use hangar_api::Widgets as _;
-use hangar_api::{MinifluxEntries, MinifluxEntry, WidgetData};
+use hangar_api::Services as _;
+use hangar_api::{Limit, MinifluxData, MinifluxEntry, MinifluxRead};
 use http::StatusCode;
 use serde_json::json;
 
@@ -75,7 +75,15 @@ async fn reads_the_newest_entries_and_counts_the_unread_ones() -> quoll::Result<
     let server = fixture.serve().await;
     let key = server.key("miniflux-entries").await;
 
-    let data = server.api().widgets().data(&key).await?;
+    let read = |unread, entries: Option<u32>| MinifluxRead {
+        unread,
+        entries: entries.map(|count| Limit::new(count).expect("within the cap")),
+    };
+    let data = server
+        .api()
+        .services()
+        .miniflux(&key, read(true, Some(8)))
+        .await?;
     let entry = |id: u64, is_unread: bool| MinifluxEntry {
         id,
         title: format!("Entry {id}"),
@@ -87,10 +95,37 @@ async fn reads_the_newest_entries_and_counts_the_unread_ones() -> quoll::Result<
 
     assert_eq!(
         data,
-        WidgetData::MinifluxEntries(MinifluxEntries {
-            unread: 42,
-            entries: vec![entry(9, true), entry(8, false)],
-        })
+        MinifluxData {
+            unread: Some(42),
+            entries: Some(vec![entry(9, true), entry(8, false)]),
+        }
+    );
+    assert_eq!(
+        server
+            .api()
+            .services()
+            .miniflux(&key, read(true, None))
+            .await?,
+        MinifluxData {
+            unread: Some(42),
+            entries: None,
+        },
+        "the entries, not asked, are not read"
     );
     Ok(())
+}
+
+#[tokio::test]
+async fn refuses_more_entries_than_its_part_gives() {
+    let url = miniflux().await;
+    let fixture = Fixture::new(&format!(
+        "  - {{ type: miniflux-entries, column: 2, url: '{url}' }}\n"
+    ));
+    let server = fixture.serve().await;
+    let key = server.key("miniflux-entries").await;
+    let (status, _, _) = server
+        .get(&format!("/api/services/miniflux/{key}?entries=101"))
+        .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }

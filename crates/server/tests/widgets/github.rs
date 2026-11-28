@@ -1,12 +1,12 @@
-//! `github-releases`, on a fake GitHub.
+//! GitHub's route, `github-releases`' service, on a fake GitHub.
 
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use hangar_api::Widgets as _;
-use hangar_api::{GithubRelease, GithubReleases, WidgetData};
+use hangar_api::Services as _;
+use hangar_api::{GithubData, GithubRead, GithubRelease};
 use hangar_server::Settings;
 use http::StatusCode;
 use serde_json::json;
@@ -64,7 +64,7 @@ fn release(repository: &str, tag: &str, published_at: &str) -> GithubRelease {
 }
 
 #[tokio::test]
-async fn reads_the_latest_release_of_each_repository_newest_first_and_leaves_one_without_out()
+async fn reads_the_latest_release_of_each_repository_in_its_order_and_leaves_one_without_out()
 -> quoll::Result<()> {
     let calls = Calls::default();
     let url = github(calls.clone()).await;
@@ -82,27 +82,36 @@ async fn reads_the_latest_release_of_each_repository_newest_first_and_leaves_one
         .await;
     let placements = server.placements().await;
 
-    let first = server.api().widgets().data(&placements[0].key).await?;
-    let second = server.api().widgets().data(&placements[1].key).await?;
+    let read = GithubRead { releases: true };
+    let first = server
+        .api()
+        .services()
+        .github(&placements[0].key, read)
+        .await?;
+    let second = server
+        .api()
+        .services()
+        .github(&placements[1].key, read)
+        .await?;
 
     assert_eq!(
         first,
-        WidgetData::GithubReleases(GithubReleases {
-            releases: vec![
-                release("glanceapp/glance", "v0.9.0", "2026-11-25T10:00:00Z"),
+        GithubData {
+            releases: Some(vec![
                 release("4thlabs/hangar", "v1.0.0", "2026-11-20T10:00:00Z"),
-            ],
-        })
+                release("glanceapp/glance", "v0.9.0", "2026-11-25T10:00:00Z"),
+            ]),
+        }
     );
     assert_eq!(
         second,
-        WidgetData::GithubReleases(GithubReleases {
-            releases: vec![release(
+        GithubData {
+            releases: Some(vec![release(
                 "glanceapp/glance",
                 "v0.9.0",
                 "2026-11-25T10:00:00Z"
-            )],
-        })
+            )]),
+        }
     );
     assert_eq!(
         calls.get(),
