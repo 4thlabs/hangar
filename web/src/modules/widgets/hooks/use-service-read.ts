@@ -6,9 +6,12 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 
-/** The parts `Read` asks for: those it gives `true` or a limit, not those it leaves out or gives `false`. */
+/**
+ * The parts `Read` surely asks for: those whose type holds none of `false`, `null` and `undefined`. A part read as a
+ * `boolean`, or a limit that may be `undefined`, may not be asked, so it stays possibly `null`.
+ */
 type AskedParts<Read> = {
-  [Part in keyof Read]-?: Read[Part] extends false | null | undefined ? never : Part;
+  [Part in keyof Read]-?: [Extract<Read[Part], false | null | undefined>] extends [never] ? Part : never;
 }[keyof Read];
 
 /** What a read of `Read` gives of a service's `Data`: each part it asked, never null; the others as the server sent them. */
@@ -17,7 +20,7 @@ export type ServiceParts<Data, Read> = Omit<Data, AskedParts<Read> & keyof Data>
 };
 
 /** A service's read, as `servicesQueries` writes it: the query options of the placement `widget`, asked `read`. */
-type ServiceQuery<Data, Failure, Params> = (
+export type ServiceQuery<Data, Failure, Params> = (
   widget: string,
   read: Params,
 ) => UseQueryOptions<Data, Failure, Data> & { queryKey: DataTag<QueryKey, Data, Failure> };
@@ -41,18 +44,19 @@ export function hasParts<Data extends object, Read extends object>(
 /**
  * What the service of the widget placed as `widget` answers to `read`, through its options in `servicesQueries`: each
  * part the read asks is there, typed so, with no `?`, `!` or cast; a part it did not ask is possibly `null` (TS18047).
- * An answer that leaves out a part asked fails the query, which the card's region shows.
+ * An answer that leaves out a part asked fails the query with an `Error`, beside the service's own failures, which the
+ * card's region shows.
  *
  * Write the read as a constant, `as const satisfies` the service's params (`ServicesJellyfinParams`). The `satisfies` is
  * needed: a read written in the call is inferred, and inference does not refuse a part the service does not have, which
  * would then fail at run time. And the service is checked only by the parts' names: a read of another service that
  * names a part of the same name is refused where its data is read (TS2339), not at the call.
  */
-export function useServiceRead<Data extends object, Failure, Params extends object, Read extends Params>(
+export function useServiceRead<Data extends object, Failure extends Error, Params extends object, Read extends Params>(
   query: ServiceQuery<Data, Failure, Params>,
   widget: string,
   read: Read,
-): UseQueryResult<ServiceParts<Data, Read>, Failure> {
+): UseQueryResult<ServiceParts<Data, Read>, Failure | Error> {
   return useQuery({
     ...query(widget, read),
     select: (data: Data) => {

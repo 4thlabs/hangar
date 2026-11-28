@@ -1,54 +1,82 @@
-//! The clients of a service, one per address, built with its credential, and built again when the service at that
-//! address changes: a key changed in `.env.global`, a `link` in `hangar.yml`.
+//! The clients of a service, one per service as its declarations write it, built with its address and its credential,
+//! and built again when either changes: a key changed in `.env.global`, the address of a container renamed.
 
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-use super::Service;
 use super::error::LoadError;
+use super::{Locator, Service, ServiceKey};
 
-/// The clients of one service's contract, `C`, by the address the server calls, each with the service it was built
-/// for.
+/// The clients of one service's contract, `C`, by where the declarations say the service is, each with the address and
+/// the key it was built for.
 pub(crate) struct Clients<C> {
-    built: Mutex<HashMap<String, (Service, C)>>,
+    build: fn(&Service) -> Result<C, LoadError>,
+    built: Mutex<HashMap<ServiceKey, Built<C>>>,
+}
+
+/// A client, and what it calls with.
+struct Built<C> {
+    api: String,
+    key: Option<String>,
+    client: C,
 }
 
 impl<C: Clone> Clients<C> {
-    /// No client yet.
-    pub(crate) fn new() -> Self {
-        Self {
+    /// No client yet; `build` builds each.
+    pub(crate) fn new(build: fn(&Service) -> Result<C, LoadError>) -> Arc<Self> {
+        Arc::new(Self {
+            build,
             built: Mutex::new(HashMap::new()),
-        }
+        })
     }
 
-    /// The client of `service`: the one built for it before, unless the service at its address changed since, or one
-    /// `build` builds now, kept.
+    /// The client of the service `locator` finds, resolved now: the one built for it before, unless its address or its
+    /// key changed since, or one built now, kept. The clients of services no declaration names any more are dropped.
     ///
     /// # Errors
     ///
-    /// The error of `build`.
-    pub(crate) fn get(
+    /// When the service cannot be resolved, or its client built.
+    pub(crate) async fn of(&self, locator: &Locator) -> Result<C, LoadError> {
+        let service = locator.service().await?;
+        let key = locator.key();
+
+        self.get(key, &service, |kept| locator.is_declared(kept))
+    }
+
+    /// The client of `service`, declared as `key`, among those whose key `is_declared` keeps.
+    fn get(
         &self,
+        key: ServiceKey,
         service: &Service,
-        build: impl FnOnce(&Service) -> Result<C, LoadError>,
+        is_declared: impl Fn(&ServiceKey) -> bool,
     ) -> Result<C, LoadError> {
         let mut built = self.lock();
 
-        if let Some((kept, client)) = built.get(&service.api)
-            && kept == service
+        built.retain(|kept, _| is_declared(kept));
+
+        if let Some(kept) = built.get(&key)
+            && kept.api == service.api
+            && kept.key == service.key
         {
-            return Ok(client.clone());
+            return Ok(kept.client.clone());
         }
 
-        let client = build(service)?;
+        let client = (self.build)(service)?;
 
-        built.insert(service.api.clone(), (service.clone(), client.clone()));
+        built.insert(
+            key,
+            Built {
+                api: service.api.clone(),
+                key: service.key.clone(),
+                client: client.clone(),
+            },
+        );
 
         Ok(client)
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, (Service, C)>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<ServiceKey, Built<C>>> {
         self.built
             .lock()
             .expect("no code panics while it holds the clients")
@@ -70,38 +98,77 @@ impl<C> fmt::Debug for Clients<C> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::Clients;
-    use crate::services::Service;
+    use crate::services::{Service, ServiceKey};
 
-    fn service(api: &str, key: &str) -> Service {
+    static BUILDS: AtomicUsize = AtomicUsize::new(0);
+
+    fn build(service: &Service) -> Result<Option<String>, crate::services::LoadError> {
+        BUILDS.fetch_add(1, Ordering::SeqCst);
+
+        Ok(service.key.clone())
+    }
+
+    fn service(api: &str, link: &str, key: &str) -> Service {
         Service {
             api: api.to_owned(),
-            link: "https://jellyfin.example.com".to_owned(),
+            link: link.to_owned(),
             key: Some(key.to_owned()),
         }
     }
 
+    fn key(address: &str) -> ServiceKey {
+        ServiceKey {
+            app: "jellyfin",
+            address: Some(address.to_owned()),
+        }
+    }
+
     #[test]
-    fn builds_a_client_per_address_once_and_again_when_its_service_changes() {
-        let clients = Clients::new();
-        let builds = Cell::new(0);
-        let build = |service: &Service| {
-            builds.set(builds.get() + 1);
+    fn builds_a_client_once_and_again_when_its_address_or_key_changes_and_forgets_one_no_longer_declared()
+     {
+        let clients = Clients::new(build);
+        let declared = |kept: &ServiceKey| *kept == key("a");
+        let get = |service: &Service| clients.get(key("a"), service, declared).ok().flatten();
 
-            Ok(service.key.clone())
-        };
-        let key = |service: &Service| clients.get(service, build).ok().flatten();
+        assert_eq!(
+            get(&service("http://a", "https://a", "one")),
+            Some("one".to_owned())
+        );
+        assert_eq!(
+            get(&service("http://a", "https://other", "one")),
+            Some("one".to_owned())
+        );
+        assert_eq!(
+            BUILDS.load(Ordering::SeqCst),
+            1,
+            "the link is not the client's"
+        );
 
-        assert_eq!(key(&service("http://a", "one")), Some("one".to_owned()));
-        assert_eq!(key(&service("http://a", "one")), Some("one".to_owned()));
-        assert_eq!(builds.get(), 1);
+        assert_eq!(
+            get(&service("http://a", "https://a", "two")),
+            Some("two".to_owned())
+        );
+        assert_eq!(BUILDS.load(Ordering::SeqCst), 2, "a new key, a new client");
 
-        assert_eq!(key(&service("http://b", "one")), Some("one".to_owned()));
-        assert_eq!(builds.get(), 2, "another address, another client");
+        get(&service("http://b", "https://a", "two"));
+        assert_eq!(
+            BUILDS.load(Ordering::SeqCst),
+            3,
+            "a new address, a new client"
+        );
 
-        assert_eq!(key(&service("http://a", "two")), Some("two".to_owned()));
-        assert_eq!(builds.get(), 3, "a new key, a new client");
+        clients
+            .get(key("b"), &service("http://b", "https://b", "two"), |kept| {
+                *kept == key("b")
+            })
+            .expect("built");
+        assert_eq!(
+            clients.lock().keys().collect::<Vec<_>>(),
+            [&key("b")],
+            "a dropped"
+        );
     }
 }

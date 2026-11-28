@@ -4,29 +4,9 @@ use hangar_api::{JellyfinData, JellyfinRead, ServicesServer};
 use http::header::CACHE_CONTROL;
 use quoll::{Bytes, Response, Result};
 
-use super::{Declared, Image, ServicesState};
+use super::{Declared, Image};
 use crate::App;
 use crate::auth::SignedIn;
-
-impl ServicesState {
-    /// What `read` asks of the Jellyfin of the widget placed as `key`.
-    async fn jellyfin(&self, key: &str, read: JellyfinRead) -> Result<JellyfinData> {
-        let placement = self.placement(key).await?;
-        let declared = Declared::of(&placement.widget.kind);
-        let Declared::Jellyfin { at, user } = declared else {
-            return Err(Self::unknown(key));
-        };
-        let service = self
-            .service(&at)
-            .await
-            .map_err(|error| Self::unavailable(&placement, &error))?;
-
-        self.jellyfin
-            .read(&service, declared.policy(), user, read)
-            .await
-            .map_err(|error| Self::unavailable(&placement, &error))
-    }
-}
 
 impl ServicesServer for App {
     async fn jellyfin(
@@ -35,7 +15,22 @@ impl ServicesServer for App {
         widget: String,
         read: JellyfinRead,
     ) -> Result<Response<JellyfinData>> {
-        Ok(Response::new(self.services.jellyfin(&widget, read).await?))
+        let services = &self.services;
+        let data = services
+            .read(
+                &widget,
+                |declared| {
+                    let Declared::Jellyfin { at, user } = declared else {
+                        return None;
+                    };
+
+                    Some((at, user.to_owned()))
+                },
+                async |locator, user| services.jellyfin.read(&locator, &user, read).await,
+            )
+            .await?;
+
+        Ok(Response::new(data))
     }
 
     async fn image(&self, _: &SignedIn, widget: String, id: String) -> Result<Response<Bytes>> {

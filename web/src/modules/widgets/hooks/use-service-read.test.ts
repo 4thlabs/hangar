@@ -58,6 +58,17 @@ describe("useServiceRead", () => {
     expect(readsLatest).toThrow(TypeError);
   });
 
+  it("types a part a computed read may leave out as possibly null", () => {
+    // A read written from a flag, `{ counts: show } as const`, whose `show` is a `boolean`.
+    const data: ServiceParts<JellyfinData, { readonly counts: boolean }> = { counts: null, latest: null };
+
+    // Kept as a type test: `counts` may not be asked, so tsc refuses it as possibly null (TS18047).
+    // @ts-expect-error -- `counts` may not be asked.
+    const readsCounts = () => data.counts.movies;
+
+    expect(readsCounts).toThrow(TypeError);
+  });
+
   it("fails the read when the server left out a part asked", async () => {
     const read = { counts: true, latest: 10 } as const satisfies ServicesJellyfinParams;
 

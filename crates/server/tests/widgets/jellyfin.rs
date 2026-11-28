@@ -245,6 +245,42 @@ async fn makes_one_call_for_two_reads_of_it_and_another_for_another_limit() -> q
 }
 
 #[tokio::test]
+async fn serves_a_fresh_call_without_reading_the_store_and_resolves_the_service_to_make_one()
+-> quoll::Result<()> {
+    let calls = Calls::default();
+    let url = jellyfin(calls.clone()).await;
+    let (fixture, server) = serve(&url, "ana").await;
+    let key = server.key("jellyfin-latest").await;
+    let counted = JellyfinRead {
+        counts: true,
+        latest: None,
+    };
+    let first = server.api().services().jellyfin(&key, counted).await?;
+    let env = fixture.data.join(".env.global");
+
+    // `.env.global` can no longer be read: the service, its key, cannot be resolved.
+    std::fs::remove_file(&env).expect("removed");
+    std::fs::create_dir(&env).expect("created");
+
+    assert_eq!(
+        server.api().services().jellyfin(&key, counted).await?,
+        first
+    );
+    assert_eq!(calls.all(), ["counts"]);
+    assert_eq!(
+        server
+            .problem(&format!("/api/services/jellyfin/{key}?latest=10"))
+            .await,
+        (
+            StatusCode::BAD_GATEWAY,
+            Some("widgets.unavailable".to_owned())
+        ),
+        "a call not kept resolves the service"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn refuses_a_limit_past_its_part_s_cap() {
     let url = jellyfin(Calls::default()).await;
     let (_fixture, server) = serve(&url, "ana").await;
