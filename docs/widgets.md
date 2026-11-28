@@ -39,8 +39,9 @@ reads the `frigate` app. From that app Hangar takes the `container_name` of its 
 - **API key:** `<CONTAINER>_API_KEY` from `.env.global`, for instance `MINIFLUX_API_KEY`. The key
   is optional: without one, the request is sent unauthenticated.
 
-When a service cannot be reached, the card keeps its last good answer for 15 minutes past its
-`ttl`, 45 minutes from when it was read by default, then shows an error.
+When a service cannot be reached, Hangar serves its last good answer for 15 minutes past the
+widget's `ttl`, 45 minutes from when it was read by default. A card already on screen keeps what
+it shows; past that time, a card opened anew, on a new visit, shows the error.
 
 ## Available widgets
 
