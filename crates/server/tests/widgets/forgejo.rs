@@ -322,3 +322,35 @@ async fn fails_when_no_owner_can_be_read() {
 
     assert_eq!(error.status(), Some(StatusCode::BAD_GATEWAY));
 }
+
+#[tokio::test]
+async fn keeps_the_runs_by_the_repositories_they_are_asked_of() -> quoll::Result<()> {
+    let asked = Asked::default();
+    let url = forgejo(asked.clone()).await;
+    // ben has no repository Forgejo shows: both declarations ask the runs of ana's alone.
+    let fixture = Fixture::new(&format!(
+        "  - {{ type: forgejo-ci, column: 2, url: '{url}', owners: [ana] }}\n  - {{ type: forgejo-ci, column: 3, \
+         url: '{url}', owners: [ana, ben] }}\n"
+    ));
+
+    fixture.env("FORGEJO_API_KEY=forgejo-token\n");
+
+    let server = fixture.serve().await;
+
+    for placement in server.placements().await {
+        let data = server
+            .api()
+            .services()
+            .forgejo(&placement.key, BOTH)
+            .await?;
+
+        assert_eq!(data.runs, Some(active_runs()));
+    }
+
+    assert_eq!(
+        asked.sorted(),
+        ["ana/hangar"],
+        "one call of the same repositories' runs"
+    );
+    Ok(())
+}

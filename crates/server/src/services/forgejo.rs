@@ -105,7 +105,9 @@ type Owners = Option<Vec<String>>;
 pub(super) struct Forgejo {
     clients: Arc<Clients<ForgejoApiClient>>,
     repositories: Part<Owners, Vec<Repository>>,
-    runs: Part<Owners, Vec<ForgejoRun>>,
+    /// The runs not finished, by the repositories they are asked of, `owner/name`: a list changed since is another
+    /// call, and two declarations whose lists are the same share one.
+    runs: Part<Vec<String>, Vec<ForgejoRun>>,
 }
 
 impl Forgejo {
@@ -137,7 +139,7 @@ impl Forgejo {
         }
 
         let listed = self.repositories(locator, &owners).await?;
-        let runs = OptionFuture::from(runs.then(|| self.runs(locator, &owners, &listed))).await;
+        let runs = OptionFuture::from(runs.then(|| self.runs(locator, &listed))).await;
 
         Ok(ForgejoData {
             repositories: repositories.then(|| listed.iter().map(Repository::public).collect()),
@@ -191,7 +193,6 @@ impl Forgejo {
     async fn runs(
         &self,
         locator: &Locator,
-        owners: &Owners,
         listed: &[Repository],
     ) -> Result<Vec<ForgejoRun>, Arc<LoadError>> {
         let listed: Vec<Repository> = listed
@@ -199,27 +200,28 @@ impl Forgejo {
             .filter(|repository| repository.runs_actions())
             .cloned()
             .collect();
+        let mut asked: Vec<String> = listed
+            .iter()
+            .map(|repository| repository.full_name.clone())
+            .collect();
+
+        asked.sort();
 
         self.runs
-            .get(
-                locator,
-                &self.clients,
-                owners.clone(),
-                move |client| async move {
-                    let forgejo = Calls { client: &client };
-                    let fetches = listed
-                        .iter()
-                        .map(|repository| {
-                            fetch(
-                                format!("the runs of {}", repository.full_name),
-                                forgejo.active_runs(repository),
-                            )
-                        })
-                        .collect();
+            .get(locator, &self.clients, asked, move |client| async move {
+                let forgejo = Calls { client: &client };
+                let fetches = listed
+                    .iter()
+                    .map(|repository| {
+                        fetch(
+                            format!("the runs of {}", repository.full_name),
+                            forgejo.active_runs(repository),
+                        )
+                    })
+                    .collect();
 
-                    settle(fetches).await
-                },
-            )
+                settle(fetches).await
+            })
             .await
     }
 }
