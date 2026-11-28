@@ -208,9 +208,13 @@ impl Backups {
             BackupError::NotStopped { .. } | BackupError::UnreadableServices { .. } => {
                 ErrorCode::NotStopped { app: app() }
             }
-            // The core's error is non-exhaustive, so a wildcard is needed: what it adds, and an archive that could
-            // not be written, is the backup failed, which the log says.
-            _ => ErrorCode::BackupFailed { app: app() },
+            // An archive that could not be written, or anything else the backup ran into, is the backup failed, which
+            // the log says.
+            BackupError::InvalidApp { .. }
+            | BackupError::InvalidArchive { .. }
+            | BackupError::UnknownArchive { .. }
+            | BackupError::Io { .. }
+            | BackupError::Crashed { .. } => ErrorCode::BackupFailed { app: app() },
         };
 
         Some(code)

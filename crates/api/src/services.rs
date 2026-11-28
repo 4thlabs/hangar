@@ -105,7 +105,7 @@ quoll::group! {
     /// The services the widgets read, one route each. A route takes the key of a placement of `GET /widgets` and a
     /// read, the parts of the service its card shows: each part asked is in the answer, the others are `null`. Each
     /// part is one call of the service, kept by the call: the service and its parameters, a limit included. Two cards
-    /// that make the same call share it. A call is fresh for the widget's `ttl`, 60 seconds unless `hangar.yml` says,
+    /// that make the same call share it. A call is fresh for the widget's `ttl`, 30 minutes unless `hangar.yml` says,
     /// then served while it is made again behind the reader for 15 minutes more, which is also how long a service that
     /// stops answering keeps its last answer. Nothing is called without a reader. A 404 for a key the dashboard does not
     /// place, or that of a widget of another service; a 400 for a read the query cannot hold, as a limit past its part's;

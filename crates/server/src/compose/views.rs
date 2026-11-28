@@ -31,34 +31,6 @@ impl ComposeViews {
         }
     }
 
-    /// The operation of `action`, as a notification names it: `up`, `restart` or `down`.
-    pub(crate) fn operation(action: ComposeAction) -> &'static str {
-        match action {
-            ComposeAction::Up { .. } => "up",
-            ComposeAction::Restart => "restart",
-            ComposeAction::Down => "down",
-        }
-    }
-
-    /// The options of `action`, as a notification names them, comma-separated in the order of the command's
-    /// arguments: `pull,forceRecreate`; empty for none.
-    pub(crate) fn flags(action: ComposeAction) -> String {
-        let ComposeAction::Up {
-            pull,
-            force_recreate,
-        } = action
-        else {
-            return String::new();
-        };
-        let flags = [(pull, "pull"), (force_recreate, "forceRecreate")];
-
-        flags
-            .into_iter()
-            .filter_map(|(is_set, flag)| is_set.then_some(flag))
-            .collect::<Vec<_>>()
-            .join(",")
-    }
-
     /// `event` of a batch of `command`, the command line, as the page reads it, a line masked of `secrets` and of the
     /// credentials of a URL, as compose's complaint about a file is.
     pub(crate) fn event(event: BatchEvent, command: &str, secrets: &Secrets) -> ComposeEvent {
@@ -130,16 +102,12 @@ mod tests {
     use super::ComposeViews;
 
     #[test]
-    fn names_the_options_of_up_as_the_waku_version_s_notifications() {
+    fn writes_the_command_of_each_action() {
         let up = |pull, force_recreate| ComposeAction::Up {
             pull,
             force_recreate,
         };
 
-        assert_eq!(ComposeViews::flags(up(true, true)), "pull,forceRecreate");
-        assert_eq!(ComposeViews::flags(up(false, true)), "forceRecreate");
-        assert_eq!(ComposeViews::flags(up(false, false)), "");
-        assert_eq!(ComposeViews::flags(ComposeAction::Down), "");
         assert_eq!(
             ComposeViews::command(up(true, true)).to_string(),
             "docker compose up -d --pull always --force-recreate"

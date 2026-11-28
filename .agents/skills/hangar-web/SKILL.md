@@ -51,6 +51,7 @@ src/paraglide/                     what Paraglide compiles from messages/en.json
 | `api/`              | `#libs/api` options, keys, URLs; `helpers/`                                       | React, orval's `use*` hooks, `hooks/`, `components/`                                                           |
 | `hooks/`            | `api/`, `helpers/`, `common/hooks`                                                | orval's `use*` hooks                                                                                           |
 | `components/`       | everything above, `ui/`                                                           | orval's `use*` hooks                                                                                           |
+| a file at a module's root | as `components/`; `api/` takes nothing of it, `helpers/` its types alone (#220) | orval's `use*` hooks |
 | a module, any layer | its own folders, `common`, `#libs/...`, `#paraglide/...`                          | another module, `#routes/`, the wiring; `common` imports no other module                                       |
 | `routes/`           | every module, the wiring's types                                                  | orval's `use*` hooks                                                                                           |
 
@@ -390,7 +391,7 @@ export function JobsSettingsCard() {
 }
 
 export function DockerCard() {
-  const look = widgetLook("docker-general-stats");
+  const look = widgetLook(dockerWidget);
   const overview = useQuery(dockerQueries.overview());
   const { data: projects } = useQuery(dockerQueries.projects());
 
@@ -593,17 +594,19 @@ export const appsLabels = {
   page's its section's module's.
 - **Calls**: `m.<id>()` where the words are shown. No alias of a group (`const words = …`), no call at a module's top
   level: a table holds `m`'s functions. No `m[key]()`: `tsc` refuses it (TS7053), and every message would ship.
-- **Params**: one object. No message is built from another's words: a compose outcome is one variant of
-  `common_compose_outcome` on the operation and its two options, not fragments joined. A standalone label, a name or a
+- **Params**: one object. No message is built from another's words: a compose outcome is a flat message of its own,
+  `common_compose_outcome_pulled_recreated`, picked from `commonLabels.outcomes` by the command's case, not fragments
+  joined. No message has a selector but a plural's (#220). A standalone label, a name or a
   whole sentence may be a param. A list of names is joined by the caller with `Intl.ListFormat`.
-- **Types**: `tsc` checks the ids, the params' names and the missing ones, and types a selector of exact variants by
-  them (`pull: "false" | "true"`). Any other param is `NonNullable<unknown>`: a wrong type compiles.
+- **Types**: `tsc` checks the ids, the params' names and the missing ones. A param is `NonNullable<unknown>`: a wrong
+  type compiles.
 - **Plurals**: a message that counts takes the number; its forms are variants on it (`countPlural=one`, `=other`),
   and an exact `countExact=0` variant where English says 0 apart. No caller picks a form. A grouped number is
   `{count: number maximumFractionDigits=0}`.
 - **Tables**: an enum's labels in the module's `helpers/<d>-labels.ts`, `satisfies Record<Enum, () => string>`. The
   tables keyed by code keep their place and call `m`: `error-message.ts` by `ErrorCode`, `notification-text.ts` by
-  key, `upFlagSpecs`, `widgetLook`.
+  key, `upFlagSpecs`. The widgets' table by `WidgetType` is `widgets` in `modules/widgets/widgets-registry.ts`, each
+  entry, its icon, size and words, written by `defineWidget` in its card's file (#220).
 - **Adding one**: write it in `messages/en.json` beside its module's, then call it. The Vite plugin compiles it in
   `vite` and the tests, as virtual modules; `typecheck`, `lint` and `build` run `paraglide-js compile` first, to disk,
   so a missing id or param is a `tsc` error. Nothing imports `messages/en.json` itself: ESLint refuses it.

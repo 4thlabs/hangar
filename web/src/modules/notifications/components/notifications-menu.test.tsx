@@ -2,6 +2,7 @@ import { focusManager } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
+  ComposeAction,
   Notification,
   NotificationEvent,
   NotificationMessage,
@@ -279,23 +280,25 @@ describe("the notifications' bell", () => {
   });
 
   it("words each compose command's outcome as the server files it", async () => {
-    /** A run of `operation` with `flags` on jellyfin that succeeded, seen and read. */
-    const succeeded = (id: number, operation: string, flags: string) =>
+    /** A run of `action` on jellyfin that succeeded, seen and read. */
+    const succeeded = (id: number, action: ComposeAction) =>
       notification(
         id,
-        { key: "composeSucceeded", params: { project: "jellyfin", operation, flags } },
+        { key: "composeSucceeded", params: { project: "jellyfin", action } },
         { seen: true, read: true },
       );
+
+    const up = (pull: boolean, forceRecreate: boolean): ComposeAction => ({ operation: "up", pull, forceRecreate });
 
     bell(() => ({
       epoch: "first",
       notifications: [
-        succeeded(6, "up", ""),
-        succeeded(5, "up", "pull"),
-        succeeded(4, "up", "forceRecreate"),
-        succeeded(3, "up", "pull,forceRecreate"),
-        succeeded(2, "restart", ""),
-        succeeded(1, "down", ""),
+        succeeded(6, up(false, false)),
+        succeeded(5, up(true, false)),
+        succeeded(4, up(false, true)),
+        succeeded(3, up(true, true)),
+        succeeded(2, { operation: "restart" }),
+        succeeded(1, { operation: "down" }),
       ],
     }));
 

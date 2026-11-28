@@ -172,7 +172,9 @@ Amended by #207 on 2026-11-26, to follow TanStack Router's own examples (`kitche
 layout route `_app.tsx`, the wiring is a few files at `src/`, and the domain `.ts` of a module is in its `helpers/`.
 Amended again by #210 on 2026-11-27: the routes are in one folder per section, and the layout is `_app/route.tsx`
 (decision 6). Amended by #214 on 2026-11-27: the words leave `messages.ts` for Paraglide's `messages/en.json`, and a
-module's enum labels are in its `helpers/<d>-labels.ts` (decision 5); `#paraglide/` is allowed in every layer.
+module's enum labels are in its `helpers/<d>-labels.ts` (decision 5); `#paraglide/` is allowed in every layer. Amended by #220
+on 2026-11-28: a file at a module's root, as the widgets' registry, is of the level of its components, which rules 3
+and 4 hold.
 
 ```
 src/main.tsx, page.ts, router.ts   the wiring: createPage (QueryClient, Session, Preferences, router), the router,
@@ -189,14 +191,15 @@ src/libs/                          the API client, formats, preferences
 src/paraglide/                     Paraglide's entries, compiled from messages/en.json (decision 5): gitignored
 ```
 
-| Layer               | May import                                                                        | Must not import                                                                                           |
-| ------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `helpers/`          | types and enums of `#libs/api`, `helpers/` of its own and `common`, `#paraglide/` | React, `@tanstack/*`, orval's hooks/keys/fetchers, `api/`, `hooks/`, `components/`, `ui/` (types allowed) |
-| `api/`              | `#libs/api` options, keys, URLs; `helpers/`                                       | React, orval's `use*` hooks, `hooks/`, `components/`                                                      |
-| `hooks/`            | `api/`, `helpers/`, `common/hooks`                                                | orval's `use*` hooks                                                                                      |
-| `components/`       | everything above, `ui/`                                                           | orval's `use*` hooks                                                                                      |
-| a module, any layer | its own folders, `common`, `#libs/...`, `#paraglide/...`                          | another module, `routes/`, the wiring; `common` imports no other module                                   |
-| `routes/`           | every module, the wiring's types                                                  | orval's `use*` hooks                                                                                      |
+| Layer                     | May import                                                                        | Must not import                                                                                           |
+| ------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `helpers/`                | types and enums of `#libs/api`, `helpers/` of its own and `common`, `#paraglide/` | React, `@tanstack/*`, orval's hooks/keys/fetchers, `api/`, `hooks/`, `components/`, `ui/` (types allowed) |
+| `api/`                    | `#libs/api` options, keys, URLs; `helpers/`                                       | React, orval's `use*` hooks, `hooks/`, `components/`                                                      |
+| `hooks/`                  | `api/`, `helpers/`, `common/hooks`                                                | orval's `use*` hooks                                                                                      |
+| `components/`             | everything above, `ui/`                                                           | orval's `use*` hooks                                                                                      |
+| a file at a module's root | as `components/`; `api/` takes nothing of it, `helpers/` its types alone (#220)   | orval's `use*` hooks                                                                                      |
+| a module, any layer       | its own folders, `common`, `#libs/...`, `#paraglide/...`                          | another module, `routes/`, the wiring; `common` imports no other module                                   |
+| `routes/`                 | every module, the wiring's types                                                  | orval's `use*` hooks                                                                                      |
 
 Every one of these is a lint rule (decision 10), checked on probe files and on the violations it finds in the code.
 A module goes down into `common` only when two modules really use it: the compose vocabulary (`compose-actions.ts`,
@@ -366,19 +369,24 @@ web/
   gives 0 apart, as "this app" for 0 and 1, takes an exact variant before the plural ones.
 - **Params.** One params object. No message is built from another's words: "1 app selected" is one message, no longer
   `appCount` and " selected", and each outcome and combined label of a compose command is a message of its own, with
-  variants on the operation and its two options. A standalone label, a name or a whole sentence may still be a param,
+  variants on the operation and its two options. Amended by #220 on 2026-11-28: each case is a flat message of its
+  own, `common_compose_outcome_pulled_recreated`, picked from a table by the command's case, so that the words stay
+  plain functions whatever library writes them: no message has a selector but a plural's. A standalone label, a name or a whole sentence may still be a param,
   as a confirmation's `{ label, subject }`, decided with the maintainer as the code moved. A list of names is joined by
   the caller with `Intl.ListFormat`.
 - **Types.** `tsc` refuses an id `en.json` does not have, a param a message does not take and a missing one. A
-  selector of exact variants with no `*` is typed by them (`pull: "false" | "true"`). Any other param is
-  `NonNullable<unknown>`: a number or a string where the other is meant compiles.
+  selector of exact variants with no `*` was typed by them (`pull: "false" | "true"`), until #220 made those messages
+  flat. Any other param is `NonNullable<unknown>`: a number or a string where the other is meant compiles.
 - **Tables.** The tables keyed by a code keep their shape and call `m`: `describeError` by `ErrorCode`, the
-  notifications by key, `upFlagSpecs` and the widget looks. The labels of an enum, which were groups of a module's
+  notifications by key, `upFlagSpecs`. Amended by #220 on 2026-11-28: the widget looks left `widgets-labels.ts` for
+  each widget's entry, in its card's file, and the table of the entries by `WidgetType` is `widgets`, in
+  `modules/widgets/widgets-registry.ts`. The labels of an enum, which were groups of a module's
   `messages.ts`, are a table of `m`'s functions in one file per module, `helpers/<d>-labels.ts`, decided with the
   maintainer as the code moved: `appsLabels.status[status]()`, `satisfies Record<ProjectStatus, () => string>`, so
   that a new value of the contract is still a type error.
 - **Lint.** Rule 4 allows `#paraglide/` in `helpers/`, and the isolation allows it in every layer. Nothing imports
-  `messages/en.json`, whose ids `tsc` would not check. No file stays directly under a module.
+  `messages/en.json`, whose ids `tsc` would not check. No file stays directly under a module. Amended by #220 on
+  2026-11-28: a file may sit at a module's root again, as the widgets' registry (decision 6).
 - **A second locale, later.** `setLocale` keeps its default, a reload of the page: the React compiler caches what
   `m.x()` returned in each component, which a locale changed in place would leave stale.
 

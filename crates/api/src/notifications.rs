@@ -6,7 +6,7 @@ use quoll::Events;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::ErrorDetail;
+use crate::{ComposeAction, ErrorDetail};
 
 /// How a notification reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
@@ -36,7 +36,6 @@ pub enum NotificationLevel {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "key", content = "params", rename_all = "camelCase")]
-#[non_exhaustive]
 pub enum NotificationMessage {
     /// The store was cloned.
     StoreInstalled,
@@ -50,19 +49,15 @@ pub enum NotificationMessage {
     ComposeSucceeded {
         /// The app.
         project: String,
-        /// `up`, `restart` or `down`.
-        operation: String,
-        /// The options of `up`, comma-separated, as `pull,forceRecreate`; empty for none.
-        flags: String,
+        /// The command, with its options.
+        action: ComposeAction,
     },
     /// A compose command failed on an app: why is in its output, and in the server's log.
     ComposeFailed {
         /// The app.
         project: String,
-        /// `up`, `restart` or `down`.
-        operation: String,
-        /// The options of `up`, comma-separated, as `pull,forceRecreate`; empty for none.
-        flags: String,
+        /// The command, with its options.
+        action: ComposeAction,
     },
     /// An image check found apps whose registry serves a newer image.
     UpdatesAvailable {
@@ -73,8 +68,8 @@ pub enum NotificationMessage {
     AutoUpdate {
         /// How many apps it updated.
         updated: u64,
-        /// The apps it failed to update, comma-separated, as `alpha, gamma`; empty for none.
-        failed: String,
+        /// The apps it failed to update, in the order it tried them; none when none failed.
+        failed: Vec<String>,
     },
     /// A backup of an app failed.
     BackupFailed {
@@ -170,5 +165,52 @@ quoll::group! {
 
         /// Marks every notification as read.
         POST "/notifications/read" => read();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::NotificationMessage;
+    use crate::ComposeAction;
+
+    #[test]
+    fn writes_its_params_as_values_of_the_contract() {
+        let succeeded = NotificationMessage::ComposeSucceeded {
+            project: "gamma".to_owned(),
+            action: ComposeAction::Up {
+                pull: true,
+                force_recreate: false,
+            },
+        };
+        let updated = NotificationMessage::AutoUpdate {
+            updated: 1,
+            failed: vec!["alpha".to_owned(), "gamma".to_owned()],
+        };
+
+        assert_eq!(
+            serde_json::to_value(&succeeded).expect("JSON"),
+            json!({
+                "key": "composeSucceeded",
+                "params": {
+                    "project": "gamma",
+                    "action": { "operation": "up", "pull": true, "forceRecreate": false },
+                },
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(&updated).expect("JSON"),
+            json!({ "key": "autoUpdate", "params": { "updated": 1, "failed": ["alpha", "gamma"] } })
+        );
+
+        for message in [succeeded, updated] {
+            let json = serde_json::to_value(&message).expect("JSON");
+
+            assert_eq!(
+                serde_json::from_value::<NotificationMessage>(json).ok(),
+                Some(message)
+            );
+        }
     }
 }

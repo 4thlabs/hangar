@@ -139,8 +139,10 @@ offline, in CI and locally.
   string key (TS7053), and the bundle would keep every message.
 - **Params.** A message that interpolates takes one params object: `m.apps_list_selected({ count })`. No message is
   built from another message's words: each says its whole text, as `apps_list_selected` says "1 app selected" on its
-  own, and each outcome of a compose command, "jellyfin was updated from its registry and recreated.", is one variant
-  of `common_compose_outcome` on the operation and its two options. A standalone label, a name or a whole sentence may
+  own, and each outcome of a compose command, "jellyfin was updated from its registry and recreated.", is a flat
+  message of its own, `common_compose_outcome_pulled_recreated`, picked from a table by the command's case
+  (`commonLabels.outcomes[composeCase(action)]`). The words stay plain functions, whatever library writes them: no
+  message has a selector but a plural's (#220). A standalone label, a name or a whole sentence may
   be a param, as a confirmation's `{ label, subject }`. A list of names is joined by the caller with
   `Intl.ListFormat`, as `store.batch_running`'s apps.
 - **Plurals.** A message that counts takes the number, and its forms are Paraglide's variants on it. No caller picks a
@@ -163,12 +165,12 @@ offline, in CI and locally.
 - **Labels.** The labels of an enum are a table of `m`'s functions, one file per module in its `helpers/`,
   `<module>-labels.ts`, typed by the contract so that a new value is a type error:
   `appsLabels.status[status]()`, `satisfies Record<ProjectStatus, () => string>`. The tables keyed by a code keep
-  their place and call `m`: `describeError` by `ErrorCode`, `describeNotification` by key, `upFlagSpecs`,
-  `widgetLook`.
-- **Types.** `tsc` refuses an id `en.json` does not have, a param a message does not take, and a missing one. A
-  selector whose variants are all exact, with no `*`, is typed by them: `common_compose_outcome` takes
-  `pull: "false" | "true"`. Any other param is `NonNullable<unknown>`: `null` is refused, but a string where a count is
-  meant compiles, so the caller's types are the check.
+  their place and call `m`: `describeError` by `ErrorCode`, `describeNotification` by key, `upFlagSpecs`. A widget's
+  words are its entry's, in its card's file, and `widgets`, in `modules/widgets/widgets-registry.ts`, is the table of
+  the entries by `WidgetType` (#220): its titles left `widgets-labels.ts`.
+- **Types.** `tsc` refuses an id `en.json` does not have, a param a message does not take, and a missing one. A param
+  is `NonNullable<unknown>`, a plural's count too: `null` is refused, but a string where a count is meant compiles, so
+  the caller's types are the check.
 - **Adding a message.** Write it in `messages/en.json`, beside its module's, then call `m.<id>()`. The Vite plugin
   compiles the file in `vite` and the tests, again as it changes; `npm run typecheck --prefix web`, `lint` and `build`
   compile it first with `paraglide-js compile`, so that `tsc` reads its types.
@@ -211,6 +213,20 @@ offline, in CI and locally.
   it). No `useSuspenseQuery` and no `throwOnError` in a card: a reader that throws to a boundary is unmounted with its
   observer, and the card no longer comes back on an invalidation or a focus.
 - One tree, never one per breakpoint: AGENTS.md's "Responsive layouts".
+
+## The dashboard
+
+The server knows the services, the page the widgets (#220):
+
+- **A route of a service makes no display choice.** `GET /services/<service>/{widget}` gives what its service says,
+  one part per call of it. How many, in which order, which of them, a count or a join, is the card's: a helper of
+  `modules/widgets/helpers/`, `<service>-view.ts`, tested by vitest.
+- **A card reads what it shows** through `ServiceWidget`, its read a constant `as const satisfies` its service's
+  params. A limit the card chooses is that constant, which the dashboard's test pins.
+- **A read holds booleans and limits only.** What names data, a user, the symbols, the repositories, comes from
+  `hangar.yml`, never from the page.
+- **A widget on known parts touches the page alone**: its card's file, which writes its entry with `defineWidget`, and
+  its line in `modules/widgets/widgets-registry.ts`.
 
 ## Readability
 

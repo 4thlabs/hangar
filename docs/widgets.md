@@ -2,8 +2,8 @@
 
 The dashboard is declared in the `widgets:` section of the store's [`hangar.yml`](store.md#widgets).
 Widgets render in three columns, top to bottom in the order they are declared. A type can be
-placed more than once, for instance two `github-releases` blocks watching different repositories:
-each card loads and caches its own data.
+placed more than once, for instance two `github-releases` blocks watching different repositories.
+Cards that read the same service share its calls: two cards on one Jellyfin ask it once.
 
 ```yaml
 widgets:
@@ -26,7 +26,7 @@ in column 3.
 | `column` | every widget      | `1`, `2` or `3`.                                                                                                    |
 | `url`    | service widgets   | Where Hangar calls the service from, server side. Prefer a container-network address such as `http://frigate:5000`. |
 | `link`   | service widgets   | Where the card links to in your browser. Only needed when the app is not served at `https://<container>.<DOMAIN>`.  |
-| `ttl`    | widgets that load | How long the loaded data stays fresh, in seconds. Default 60.                                                       |
+| `ttl`    | widgets that load | How long what the card reads stays fresh, in seconds. Default 1800, 30 minutes.                                     |
 
 ## How a service widget finds its service
 
@@ -174,6 +174,8 @@ The latest release of each repository, newest first.
 
 `repositories` is **required**, at least one, each written `owner/repo`. Anonymous calls to the
 GitHub API are limited to 60 an hour; set `GITHUB_TOKEN` in Hangar's own environment to lift that.
+GitHub limits calls (60 an hour without a token): each repository is asked once per `ttl`, and a
+longer `ttl` keeps the card under it.
 
 ### `stock-prices`
 
@@ -196,6 +198,34 @@ still show.
 
 The widget reads the public Finnhub API, not a store app: no `url` or `link`. Set
 `FINNHUB_API_KEY` in Hangar's own environment, a key from a free Finnhub account; without one the
-card shows an error. The free plan allows 60 calls a minute, which the widget spares by keeping
-each quote 30 seconds, each company profile a day and each curve an hour. It does not include the
-daily closes: on that plan the card shows no curves.
+card shows an error. The free plan does not include the daily closes: on that plan the card shows
+no curves.
+Finnhub limits calls (60 a minute on the free plan): each symbol is asked three times per `ttl`,
+for its quote, its company and its closes, and a longer `ttl` keeps the card under it.
+
+## How the cards read their services
+
+Hangar's server knows the services, and the page the cards. Each service has one route,
+`/api/services/<service>/<key>`, where `<key>` names the card's placement, and a card asks it the
+parts it shows, as `?counts=true&latest=100` for Jellyfin's counts and its hundred latest items:
+the answer holds those parts, the others empty. A part is one call of the service, kept by that
+call for the widget's `ttl`: two cards asking the same call share it, and a card asking another
+limit makes another call. A card may ask only booleans and limits; what names data, a user, the
+symbols, the repositories or the cards, comes from `hangar.yml`. Images are relayed by
+`/api/services/images/<key>/<id>`, for the ids the server wrote, and only from the card's own
+service.
+
+## Adding a widget
+
+A widget on parts a service already has is a change of the page alone: a card in
+`web/src/modules/widgets/components/cards/`, which writes its entry with `defineWidget` and reads
+its parts through `ServiceWidget`, a line in `web/src/modules/widgets/widgets-registry.ts`, and
+what it does with the parts, how many and in which order, in a helper of
+`web/src/modules/widgets/helpers/` with its test. Its type and options in `hangar.yml` come from
+the core and the contract, as for any widget.
+
+## Adding a service
+
+A service, or a new part of one, is a change of the server too: its read and its data in the
+contract, its calls on the server, each part kept by its call, its route, and its read on the
+page. [`development.md`](development.md#adding-a-widget) lists the places.

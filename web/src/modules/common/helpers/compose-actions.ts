@@ -50,37 +50,28 @@ export function upAction(flags: Iterable<UpFlag> = []): ComposeAction {
   return { operation: "up", pull: ticked.has("pull"), forceRecreate: ticked.has("forceRecreate") };
 }
 
-/**
- * The action a notification names, by its operation and its options, comma-separated as `pull,forceRecreate`;
- * `null` for an operation this page does not know, from a newer server. An option it does not know is left out.
- */
-export function composeActionOfNotification(operation: string, flags: string): ComposeAction | null {
-  if (operation === "restart" || operation === "down") {
-    return { operation };
+/** Each case of a compose command its words tell apart: the operation, and for Up the options it carries. */
+export type ComposeCase = ComposeOperation | "upPull" | "upRecreate" | "upPullRecreate";
+
+/** The case of `action`, which its words are chosen by. */
+export function composeCase(action: ComposeAction): ComposeCase {
+  switch (action.operation) {
+    case "up":
+      if (action.pull) {
+        return action.forceRecreate ? "upPullRecreate" : "upPull";
+      }
+
+      return action.forceRecreate ? "upRecreate" : "up";
+    case "restart":
+      return "restart";
+    case "down":
+      return "down";
   }
-
-  if (operation !== "up") {
-    return null;
-  }
-
-  const named = new Set(flags.split(","));
-
-  return upAction(upFlagOrder.filter(flag => named.has(flag)));
 }
 
 /** What `action` did to `project`, as "jellyfin was updated from its registry and recreated.". */
 export function composeOutcome(action: ComposeAction, project: string): string {
-  return m.common_compose_outcome({ project, operation: action.operation, ...flagVariants(action) });
-}
-
-/**
- * The options of `action` as the variants of a compose message match them: `"true"` or `"false"` for each, both
- * `"false"` for Restart and Down. Paraglide matches a variant's value as text.
- */
-function flagVariants(action: ComposeAction): { pull: `${boolean}`; forceRecreate: `${boolean}` } {
-  const flags = new Set(actionFlags(action));
-
-  return { pull: flags.has("pull") ? "true" : "false", forceRecreate: flags.has("forceRecreate") ? "true" : "false" };
+  return commonLabels.outcomes[composeCase(action)]({ project });
 }
 
 /** The options `action` carries, in their order. */
@@ -106,11 +97,13 @@ export function needsConfirmation(action: ComposeAction): boolean {
 
 /** "Up", "Update", "Update and recreate", "Restart"…: the operation's name, or what its options do when it has some. */
 export function composeLabel(action: ComposeAction): string {
-  if (actionFlags(action).length === 0) {
-    return commonLabels.operations[action.operation]();
+  const composed = composeCase(action);
+
+  if (composed === "up" || composed === "restart" || composed === "down") {
+    return commonLabels.operations[composed]();
   }
 
-  return m.common_compose_combined_label(flagVariants(action));
+  return commonLabels.combined[composed]();
 }
 
 /** How a confirmation or the output names `apps`: the app's name for one, else how many, as "3 apps". */
