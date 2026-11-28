@@ -92,7 +92,39 @@ services:
                 tracing::warn!(app = ?id, error = %Failure::chain(&error), "uninstalling by the link alone");
                 None
             }
-            Err(error) => return Err(Failure::logged(ErrorCode::AppsUnreadable, &error)),
+            Err(
+                error @ (StoreError::DataDirNotSet
+                | StoreError::NotUtf8 { .. }
+                | StoreError::Io { .. }
+                | StoreError::Git { .. }
+                | StoreError::NotInstalled
+                | StoreError::InvalidName { .. }
+                | StoreError::InvalidAppId { .. }
+                | StoreError::InTheWay { .. }
+                | StoreError::InvalidVariable { .. }
+                | StoreError::UnwritableValue { .. }
+                | StoreError::UnknownApp { .. }
+                | StoreError::SharedFile { .. }
+                | StoreError::AppExists { .. }
+                | StoreError::InvalidPath { .. }
+                | StoreError::ThroughFile { .. }
+                | StoreError::OutsideApp { .. }
+                | StoreError::HiddenFile { .. }
+                | StoreError::BrokenSymlink { .. }
+                | StoreError::NoSuchFile { .. }
+                | StoreError::NotAFile { .. }
+                | StoreError::TooLarge { .. }
+                | StoreError::Binary { .. }
+                | StoreError::NotUtf8Text { .. }
+                | StoreError::FileExists { .. }
+                | StoreError::FileAppeared { .. }
+                | StoreError::Interrupted { .. }
+                | StoreError::InvalidFile { .. }
+                | StoreError::Rejected { .. }
+                | StoreError::Unchecked { .. }),
+            ) => {
+                return Err(Failure::logged(ErrorCode::AppsUnreadable, &error));
+            }
         };
 
         match app {
@@ -115,7 +147,15 @@ services:
             .map_err(|error| match error {
                 // A fresh data directory's `.env.global`, which compose cannot run without, could not be created.
                 ComposeError::Env { .. } => Failure::logged(ErrorCode::EnvSaveFailed, &error),
-                _ => Failure::logged(failed(), &error),
+                ComposeError::InvalidProject { .. }
+                | ComposeError::NotInstalled { .. }
+                | ComposeError::OptionBeforeCommand { .. }
+                | ComposeError::EmptyBatch
+                | ComposeError::AttachedBatch { .. }
+                | ComposeError::NotUtf8 { .. }
+                | ComposeError::Failed { .. }
+                | ComposeError::Invalid { .. }
+                | ComposeError::Unchecked { .. } => Failure::logged(failed(), &error),
             })?;
         self.store
             .uninstall_app(&app.id)
@@ -135,7 +175,39 @@ services:
         let is_linked = match self.store.is_linked(id).await {
             Ok(is_linked) => is_linked,
             Err(StoreError::InvalidAppId { .. }) => false,
-            Err(error) => return Err(Failure::logged(failed(), &error)),
+            Err(
+                error @ (StoreError::DataDirNotSet
+                | StoreError::NotUtf8 { .. }
+                | StoreError::Io { .. }
+                | StoreError::Git { .. }
+                | StoreError::Config { .. }
+                | StoreError::NotInstalled
+                | StoreError::InvalidName { .. }
+                | StoreError::InTheWay { .. }
+                | StoreError::InvalidVariable { .. }
+                | StoreError::UnwritableValue { .. }
+                | StoreError::UnknownApp { .. }
+                | StoreError::SharedFile { .. }
+                | StoreError::AppExists { .. }
+                | StoreError::InvalidPath { .. }
+                | StoreError::ThroughFile { .. }
+                | StoreError::OutsideApp { .. }
+                | StoreError::HiddenFile { .. }
+                | StoreError::BrokenSymlink { .. }
+                | StoreError::NoSuchFile { .. }
+                | StoreError::NotAFile { .. }
+                | StoreError::TooLarge { .. }
+                | StoreError::Binary { .. }
+                | StoreError::NotUtf8Text { .. }
+                | StoreError::FileExists { .. }
+                | StoreError::FileAppeared { .. }
+                | StoreError::Interrupted { .. }
+                | StoreError::InvalidFile { .. }
+                | StoreError::Rejected { .. }
+                | StoreError::Unchecked { .. }),
+            ) => {
+                return Err(Failure::logged(failed(), &error));
+            }
         };
 
         if !is_linked {

@@ -73,7 +73,15 @@ impl ComposeViews {
                     ComposeError::NotInstalled { app } => ErrorCode::UnknownProject {
                         project: app.clone(),
                     },
-                    _ => ErrorCode::ComposeFailed {
+                    ComposeError::InvalidProject { .. }
+                    | ComposeError::OptionBeforeCommand { .. }
+                    | ComposeError::EmptyBatch
+                    | ComposeError::AttachedBatch { .. }
+                    | ComposeError::NotUtf8 { .. }
+                    | ComposeError::Env { .. }
+                    | ComposeError::Failed { .. }
+                    | ComposeError::Invalid { .. }
+                    | ComposeError::Unchecked { .. } => ErrorCode::ComposeFailed {
                         app: app.clone(),
                         command: command.to_owned(),
                     },

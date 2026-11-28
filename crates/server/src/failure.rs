@@ -64,7 +64,35 @@ impl Failure {
     pub(crate) fn store_code(failed: ErrorCode, error: &StoreError) -> ErrorCode {
         match error {
             StoreError::Config { source, .. } => Self::config(source),
-            other => Self::logged_code(failed, other),
+            other @ (StoreError::DataDirNotSet
+            | StoreError::NotUtf8 { .. }
+            | StoreError::Io { .. }
+            | StoreError::Git { .. }
+            | StoreError::NotInstalled
+            | StoreError::InvalidName { .. }
+            | StoreError::InvalidAppId { .. }
+            | StoreError::InTheWay { .. }
+            | StoreError::InvalidVariable { .. }
+            | StoreError::UnwritableValue { .. }
+            | StoreError::UnknownApp { .. }
+            | StoreError::SharedFile { .. }
+            | StoreError::AppExists { .. }
+            | StoreError::InvalidPath { .. }
+            | StoreError::ThroughFile { .. }
+            | StoreError::OutsideApp { .. }
+            | StoreError::HiddenFile { .. }
+            | StoreError::BrokenSymlink { .. }
+            | StoreError::NoSuchFile { .. }
+            | StoreError::NotAFile { .. }
+            | StoreError::TooLarge { .. }
+            | StoreError::Binary { .. }
+            | StoreError::NotUtf8Text { .. }
+            | StoreError::FileExists { .. }
+            | StoreError::FileAppeared { .. }
+            | StoreError::Interrupted { .. }
+            | StoreError::InvalidFile { .. }
+            | StoreError::Rejected { .. }
+            | StoreError::Unchecked { .. }) => Self::logged_code(failed, other),
         }
     }
 

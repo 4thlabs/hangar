@@ -227,7 +227,12 @@ impl ComposeState {
             // A fresh data directory's `.env.global`, which compose cannot run without, could not be created.
             ComposeError::Env { .. } => return Failure::logged(ErrorCode::EnvSaveFailed, error),
             // The actions of the page are never attached, and start with their command's name: the server's own bug.
-            other => {
+            other @ (ComposeError::OptionBeforeCommand { .. }
+            | ComposeError::AttachedBatch { .. }
+            | ComposeError::NotUtf8 { .. }
+            | ComposeError::Failed { .. }
+            | ComposeError::Invalid { .. }
+            | ComposeError::Unchecked { .. }) => {
                 return Failure::logged(
                     ErrorCode::BatchUnchecked {
                         command: command.to_string(),

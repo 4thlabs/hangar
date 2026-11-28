@@ -27,7 +27,34 @@ impl StoreState {
             .map_err(|error| match error {
                 StoreError::InvalidAppId { id } => ErrorCode::InvalidAppId { app: id }.into(),
                 StoreError::SharedFile { id } => ErrorCode::AppExists { app: id }.into(),
-                other => Self::refusal(other, failed()),
+                other @ (StoreError::DataDirNotSet
+                | StoreError::NotUtf8 { .. }
+                | StoreError::Io { .. }
+                | StoreError::Git { .. }
+                | StoreError::Config { .. }
+                | StoreError::NotInstalled
+                | StoreError::InvalidName { .. }
+                | StoreError::InTheWay { .. }
+                | StoreError::InvalidVariable { .. }
+                | StoreError::UnwritableValue { .. }
+                | StoreError::UnknownApp { .. }
+                | StoreError::AppExists { .. }
+                | StoreError::InvalidPath { .. }
+                | StoreError::ThroughFile { .. }
+                | StoreError::OutsideApp { .. }
+                | StoreError::HiddenFile { .. }
+                | StoreError::BrokenSymlink { .. }
+                | StoreError::NoSuchFile { .. }
+                | StoreError::NotAFile { .. }
+                | StoreError::TooLarge { .. }
+                | StoreError::Binary { .. }
+                | StoreError::NotUtf8Text { .. }
+                | StoreError::FileExists { .. }
+                | StoreError::FileAppeared { .. }
+                | StoreError::Interrupted { .. }
+                | StoreError::InvalidFile { .. }
+                | StoreError::Rejected { .. }
+                | StoreError::Unchecked { .. }) => Self::refusal(other, failed()),
             })?;
         tracing::info!(app = %new.id, "an app was created");
 
@@ -182,7 +209,17 @@ impl StoreState {
 
                 return Failure::logged(unchecked, &error);
             }
-            other => return Failure::logged(failed, &other),
+            other @ (StoreError::DataDirNotSet
+            | StoreError::NotUtf8 { .. }
+            | StoreError::Io { .. }
+            | StoreError::Git { .. }
+            | StoreError::InvalidName { .. }
+            | StoreError::InTheWay { .. }
+            | StoreError::InvalidVariable { .. }
+            | StoreError::UnwritableValue { .. }
+            | StoreError::Interrupted { .. }) => {
+                return Failure::logged(failed, &other);
+            }
         };
 
         code.into()

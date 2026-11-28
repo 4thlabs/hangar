@@ -490,13 +490,16 @@ mod tests {
             stale: Duration::from_secs(100),
         };
 
-        // A reader of the short policy makes the entry, one of the long policy reads it after.
+        // A reader of the short policy makes the entry, one of the long policy reads it, then the short one again: the
+        // entry is still kept for the long one, not for the last.
         get(&kept, &source).await.expect("loaded");
         tokio::time::advance(Duration::from_secs(5)).await;
         kept.get("key".to_owned(), long, source.load())
             .await
             .expect("kept");
-        tokio::time::advance(Duration::from_secs(20)).await;
+        tokio::time::advance(Duration::from_secs(4)).await;
+        get(&kept, &source).await.expect("still fresh");
+        tokio::time::advance(Duration::from_secs(16)).await;
         kept.get("other".to_owned(), POLICY, other.load())
             .await
             .expect("loaded");

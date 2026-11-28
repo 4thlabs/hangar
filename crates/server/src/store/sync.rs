@@ -178,7 +178,35 @@ impl StoreState {
     fn describe(error: &StoreError, failed: ErrorCode) -> ErrorCode {
         match error {
             StoreError::Config { source, .. } => Failure::config(source),
-            _ => failed,
+            StoreError::DataDirNotSet
+            | StoreError::NotUtf8 { .. }
+            | StoreError::Io { .. }
+            | StoreError::Git { .. }
+            | StoreError::NotInstalled
+            | StoreError::InvalidName { .. }
+            | StoreError::InvalidAppId { .. }
+            | StoreError::InTheWay { .. }
+            | StoreError::InvalidVariable { .. }
+            | StoreError::UnwritableValue { .. }
+            | StoreError::UnknownApp { .. }
+            | StoreError::SharedFile { .. }
+            | StoreError::AppExists { .. }
+            | StoreError::InvalidPath { .. }
+            | StoreError::ThroughFile { .. }
+            | StoreError::OutsideApp { .. }
+            | StoreError::HiddenFile { .. }
+            | StoreError::BrokenSymlink { .. }
+            | StoreError::NoSuchFile { .. }
+            | StoreError::NotAFile { .. }
+            | StoreError::TooLarge { .. }
+            | StoreError::Binary { .. }
+            | StoreError::NotUtf8Text { .. }
+            | StoreError::FileExists { .. }
+            | StoreError::FileAppeared { .. }
+            | StoreError::Interrupted { .. }
+            | StoreError::InvalidFile { .. }
+            | StoreError::Rejected { .. }
+            | StoreError::Unchecked { .. } => failed,
         }
     }
 }

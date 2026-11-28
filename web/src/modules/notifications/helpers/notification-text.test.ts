@@ -72,4 +72,19 @@ describe("describeNotification", () => {
 
     expect(describeNotification(newer)).toEqual({ title: "Notification" });
   });
+
+  it("says a compose command it does not know, from a newer server, in plain words", () => {
+    const run = (key: "composeSucceeded" | "composeFailed") =>
+      ({ key, params: { project: "jellyfin", action: { operation: "pull" } } }) as unknown as NotificationMessage;
+
+    expect(describeNotification(run("composeSucceeded"))).toEqual({
+      title: "Docker Compose finished",
+      description: "The command succeeded for jellyfin.",
+    });
+
+    expect(describeNotification(run("composeFailed"))).toEqual({
+      title: "Docker Compose failed",
+      description: "The Docker Compose command failed for jellyfin. See the server's log.",
+    });
+  });
 });
