@@ -1,9 +1,9 @@
 //! The installed apps that a command holds, a compose batch over them, an install or an uninstall of one, or a backup
 //! that stops its services, so that two never run on one app at once, and the store's sync, which no batch and no such
 //! backup runs beside. An uninstall's `down` then its unlink, with an `up` of a batch between them, would leave a stack
-//! running that no installed app manages; a sync pulls and links the files a batch's compose reads, and the
-//! `compose.yml` a backup starts the services it stopped from; an `up` while a backup has stopped the services would
-//! zip a live database, and a `down` would make its start fail.
+//! running that no installed app manages; a sync pulls and links the files a batch's compose reads; an `up` while a
+//! backup has stopped the containers would zip a live database, and a `down` would remove the containers it starts
+//! again.
 
 use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -107,8 +107,7 @@ impl AppLocks {
     }
 
     /// Holds `app` for a backup that stops its services, from before it reads which run to after it starts them again.
-    /// It runs beside no sync of the store, as a batch does: a pull could rewrite or remove the `compose.yml` it starts
-    /// the services again from.
+    /// It runs beside no sync of the store, as a batch does.
     ///
     /// # Errors
     ///
