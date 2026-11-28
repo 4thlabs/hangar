@@ -435,7 +435,11 @@ async fn backs_an_app_up_when_asked_one_run_at_a_time_and_lists_its_new_archive(
     assert!(after.run.is_none());
     assert_eq!(
         fixture.docker_calls(),
-        ["ps --status running --format json", "stop web", "start web"]
+        [
+            "ps --status running --status restarting --format json",
+            "stop web",
+            "start web"
+        ]
     );
     Ok(())
 }
@@ -674,7 +678,11 @@ async fn holds_its_app_while_its_services_are_stopped_and_runs_beside_no_sync_of
 
     assert_eq!(
         fixture.docker_calls(),
-        ["ps --status running --format json", "stop web", "start web"]
+        [
+            "ps --status running --status restarting --format json",
+            "stop web",
+            "start web"
+        ]
     );
     Ok(())
 }

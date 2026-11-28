@@ -296,9 +296,9 @@ container of Hangar needs a stop grace period longer than the compose stop of th
 A backup zips the data folder of an app, `app-data/<path>` or `app-data/<app>`, as its entry in `hangar.yml`'s
 `backups` says (see [the store's docs](store.md#backups)), into `app-backups/<app>/<time>.zip`, the Waku version's
 archives: written as `.zip.partial`, renamed once complete, and the oldest removed beyond `keep`. Its include and
-exclude globs match dotfiles, and it follows no symbolic link. With `stop`, it stops the services that run, never the
-container Hangar runs in, then starts them again whatever the outcome. Its work on the disk runs on Tokio's blocking
-threads, and the backups of one app take turns.
+exclude globs match dotfiles, and it follows no symbolic link. With `stop`, it stops the services that run, or that
+restart between the attempts of their restart policy, never the container Hangar runs in, then starts them again
+whatever the outcome. Its work on the disk runs on Tokio's blocking threads, and the backups of one app take turns.
 
 A backup with `stop` holds its app, from before it reads which services run to after it starts them again, as a
 compose batch holds its own: a batch, an install, an uninstall of it, or the update of the apps, is refused meanwhile
