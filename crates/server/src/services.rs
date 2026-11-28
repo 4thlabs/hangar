@@ -10,6 +10,7 @@ mod jellyfin;
 mod routes;
 mod time;
 
+use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -37,7 +38,7 @@ pub(crate) use time::Moment;
 pub(crate) struct ServicesState {
     store: Arc<Store<Runtime>>,
     /// The domain the apps are served under, which a service's default address is under.
-    domain: String,
+    domain: Arc<str>,
     jellyfin: Jellyfin,
 }
 
@@ -50,28 +51,70 @@ impl ServicesState {
                 settings.data_dir.clone(),
                 runtime,
             )),
-            domain: settings.domain.clone(),
+            domain: settings.domain.as_str().into(),
             jellyfin: Jellyfin::new(),
         })
     }
 
-    /// The widget placed as `key`, as `hangar.yml` places it now.
-    async fn placement(&self, key: &str) -> quoll::Result<Placement> {
+    /// What a service's route answers for the widget placed as `key`. `pick` takes from its declaration the service
+    /// and what the read needs of it, `None` for a widget of another service, a 404; `read` reads the parts, a 502 when
+    /// one asked failed with no value kept. The service is resolved inside a part's load, never before the cache.
+    async fn read<Needs, T, F>(
+        &self,
+        key: &str,
+        pick: impl for<'a> FnOnce(Declared<'a>) -> Option<(ServiceAt<'a>, Needs)>,
+        read: impl FnOnce(Locator, Needs) -> F,
+    ) -> quoll::Result<T>
+    where
+        F: Future<Output = Result<T, Arc<LoadError>>>,
+    {
+        let (placement, declared) = self.placement(key).await?;
+        let found = Declared::of(&placement.widget.kind);
+        let policy = found.policy();
+        let (at, needs) = pick(found).ok_or_else(|| Self::unknown(key))?;
+        let locator = self.locator(at, policy, declared);
+
+        read(locator, needs)
+            .await
+            .map_err(|error| Self::unavailable(&placement, &error))
+    }
+
+    /// The widget placed as `key`, as `hangar.yml` places it now, and where every declaration of it says its service
+    /// is.
+    async fn placement(&self, key: &str) -> quoll::Result<(Placement, Arc<HashSet<ServiceKey>>)> {
         let config = self
             .store
             .config()
             .await
             .map_err(|error| Failure::store(ErrorCode::ConfigUnreadable, &error))?;
-
-        Placement::all(config.widgets)
+        let declared = config
+            .widgets
+            .iter()
+            .filter_map(|widget| Declared::of(&widget.kind).service().map(ServiceAt::key))
+            .collect();
+        let placement = Placement::all(config.widgets)
             .into_iter()
             .find(|placement| placement.key == key)
-            .ok_or_else(|| Self::unknown(key))
+            .ok_or_else(|| Self::unknown(key))?;
+
+        Ok((placement, Arc::new(declared)))
     }
 
-    /// The service `at` names, with its key, read from `.env.global` now.
-    async fn service(&self, at: &ServiceAt<'_>) -> Result<Service, LoadError> {
-        Service::resolve(&self.store, &self.domain, at.app, at.options).await
+    /// What finds the service `at`, kept by `policy`, among the services `declared`.
+    fn locator(
+        &self,
+        at: ServiceAt<'_>,
+        policy: Policy,
+        declared: Arc<HashSet<ServiceKey>>,
+    ) -> Locator {
+        Locator {
+            app: at.app,
+            options: at.options.clone(),
+            policy,
+            store: Arc::clone(&self.store),
+            domain: Arc::clone(&self.domain),
+            declared,
+        }
     }
 
     /// The answer to a key that places no widget of the service asked: none at all, or one of another service.
@@ -232,6 +275,66 @@ pub(crate) struct ServiceAt<'a> {
 impl<'a> ServiceAt<'a> {
     fn new(app: &'static str, options: &'a ServiceOptions) -> Self {
         Self { app, options }
+    }
+
+    /// Where it is, as the declaration writes it.
+    pub(crate) fn key(&self) -> ServiceKey {
+        ServiceKey {
+            app: self.app,
+            address: self
+                .options
+                .url
+                .clone()
+                .or_else(|| self.options.link.clone()),
+        }
+    }
+}
+
+/// Where a service is, as its declaration writes it, read without the store: its app, and the address the server calls
+/// it at, `url`, else `link`, `None` for the default one under the domain. Two declarations of one key read one service:
+/// it keys the service's client and its calls.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct ServiceKey {
+    app: &'static str,
+    address: Option<String>,
+}
+
+/// What a read takes of its service: where its declaration says it is, how long its calls are kept, and what resolves
+/// its address and key, which a part does only when it loads: on a miss or a stale value, never for a fresh one.
+#[derive(Debug, Clone)]
+pub(crate) struct Locator {
+    app: &'static str,
+    options: ServiceOptions,
+    policy: Policy,
+    store: Arc<Store<Runtime>>,
+    domain: Arc<str>,
+    /// Where every declaration of `hangar.yml` says its service is, as it was read for this read.
+    declared: Arc<HashSet<ServiceKey>>,
+}
+
+impl Locator {
+    /// Where the service is, as its declaration writes it.
+    pub(crate) fn key(&self) -> ServiceKey {
+        ServiceAt::new(self.app, &self.options).key()
+    }
+
+    /// How long its calls are kept.
+    pub(crate) fn policy(&self) -> Policy {
+        self.policy
+    }
+
+    /// Whether a declaration of `hangar.yml` still names the service of `key`.
+    pub(crate) fn is_declared(&self, key: &ServiceKey) -> bool {
+        self.declared.contains(key)
+    }
+
+    /// The service, with its key, resolved now: the store's apps give its container, `.env.global` its key.
+    ///
+    /// # Errors
+    ///
+    /// When the store's apps or `.env.global` cannot be read.
+    pub(crate) async fn service(&self) -> Result<Service, LoadError> {
+        Service::resolve(&self.store, &self.domain, self.app, &self.options).await
     }
 }
 

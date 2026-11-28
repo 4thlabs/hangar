@@ -13,7 +13,9 @@ use futures::FutureExt;
 use futures::future::{BoxFuture, Shared};
 use tokio::time::Instant;
 
+use super::clients::Clients;
 use super::error::LoadError;
+use super::{Locator, ServiceKey};
 use crate::failure::Failure;
 
 /// What a load gives: the value, or why it did not, shared by every reader that waited for it.
@@ -36,8 +38,8 @@ pub(crate) struct Policy {
 /// failed load is not kept; a failed reload keeps the last value, which ages on, so that a service that stopped
 /// answering shows its failure once the value is too old.
 ///
-/// An entry is forgotten once it would no longer be served at all, by the policy of its last reader: its value is older
-/// than `fresh` and `stale` together, 60 seconds and 15 minutes by default, and no load of it runs. A reader that came
+/// An entry is forgotten once it would no longer be served at all, by the longest policy of its readers: its value is
+/// older than `fresh` and `stale` together, 60 seconds and 15 minutes by default, and no load of it runs. A reader that came
 /// then would wait for a load anyway, so forgetting it changes no answer, and the keys no reader asks for any more, as
 /// those of a `hangar.yml` changed since, do not stay.
 pub(crate) struct Kept<K, T> {
@@ -60,7 +62,8 @@ struct Entry<T> {
     /// The last good value, and when it was loaded.
     value: Option<(Arc<T>, Instant)>,
     loading: Option<Loading<T>>,
-    /// How long its value is served, `fresh` and `stale` together, by its last reader's policy.
+    /// How long its value is served, `fresh` and `stale` together, by the longest policy of its readers: a reader of a
+    /// short `ttl` does not forget it for one of a long one.
     served_for: Duration,
 }
 
@@ -115,6 +118,13 @@ where
                 next_generation,
             } = &mut *entries;
 
+            let served_for = policy.fresh + policy.stale;
+
+            // This reader's policy counts before the others' entries are judged, its own among them.
+            if let Some(entry) = by_key.get_mut(&key) {
+                entry.served_for = entry.served_for.max(served_for);
+            }
+
             by_key.retain(|_, entry| entry.is_live());
 
             let entry = by_key.entry(key.clone()).or_insert_with(|| {
@@ -124,11 +134,9 @@ where
                     generation: *next_generation,
                     value: None,
                     loading: None,
-                    served_for: Duration::ZERO,
+                    served_for,
                 }
             });
-
-            entry.served_for = policy.fresh + policy.stale;
 
             if let Some((value, loaded_at)) = &entry.value {
                 let age = loaded_at.elapsed();
@@ -222,6 +230,67 @@ where
         self.entries
             .lock()
             .expect("no code panics while it holds the kept values")
+    }
+}
+
+/// A part of a service: one call of it, kept by the service, as its declaration writes it, and the call's own
+/// parameters, `Call`. The service is resolved and its client taken only when the call is made: a fresh value kept
+/// reads neither the store nor `.env.global`.
+pub(crate) struct Part<Call, T> {
+    kept: Arc<Kept<(ServiceKey, Call), T>>,
+}
+
+impl<Call, T> Part<Call, T>
+where
+    Call: Clone + Eq + Hash + fmt::Debug + Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
+{
+    /// No call kept yet, of what the log calls `name`.
+    pub(crate) fn new(name: &'static str) -> Self {
+        Self {
+            kept: Kept::new(name),
+        }
+    }
+
+    /// What `call` of the service `locator` finds gives, kept by its policy: made by `load` with the service's client,
+    /// on a miss or a stale value.
+    ///
+    /// # Errors
+    ///
+    /// When the call was made, and the service could not be resolved, its client built, or `load` failed.
+    pub(crate) async fn get<C, F>(
+        &self,
+        locator: &Locator,
+        clients: &Arc<Clients<C>>,
+        call: Call,
+        load: impl FnOnce(C) -> F + Send + 'static,
+    ) -> Result<T, Arc<LoadError>>
+    where
+        C: Clone + Send + Sync + 'static,
+        F: Future<Output = Result<T, LoadError>> + Send + 'static,
+    {
+        let (owned, clients) = (locator.clone(), Arc::clone(clients));
+        let value = self
+            .kept
+            .get(
+                (locator.key(), call),
+                locator.policy(),
+                move || async move {
+                    let client = clients.of(&owned).await?;
+
+                    load(client).await
+                },
+            )
+            .await?;
+
+        Ok((*value).clone())
+    }
+}
+
+/// Shows the name alone: the values may be large.
+impl<Call, T> fmt::Debug for Part<Call, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Part").field("kept", &self.kept).finish()
     }
 }
 
@@ -476,6 +545,35 @@ mod tests {
             kept.lock().by_key.keys().collect::<Vec<_>>(),
             ["other"],
             "unread for fresh and stale together, it is gone"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn keeps_an_entry_for_the_longest_policy_of_its_readers() {
+        let kept = Kept::new("test");
+        let source = Arc::new(Source::default());
+        let other = Arc::new(Source::default());
+        let long = Policy {
+            fresh: Duration::from_secs(10),
+            stale: Duration::from_secs(100),
+        };
+
+        kept.get("key".to_owned(), long, source.load())
+            .await
+            .expect("loaded");
+        get(&kept, &source).await.expect("kept");
+        tokio::time::advance(Duration::from_secs(25)).await;
+        kept.get("other".to_owned(), POLICY, other.load())
+            .await
+            .expect("loaded");
+
+        assert_eq!(
+            kept.get("key".to_owned(), long, source.load())
+                .await
+                .map(|value| *value)
+                .map_err(|error| error.to_string()),
+            Ok(1),
+            "still served stale to the reader of the long policy, past the short one's"
         );
     }
 

@@ -1,8 +1,7 @@
 import type { JellyfinCounts, ServicesJellyfinParams } from "#libs/api";
-import { QueryRegion } from "#modules/common/components/region.tsx";
 import { ScrollArea } from "#modules/common/ui/scroll-area.tsx";
 import { servicesQueries } from "#modules/widgets/api/services-queries.ts";
-import { WidgetFailure, WidgetSkeleton } from "#modules/widgets/components/widget-states.tsx";
+import { ServiceWidget } from "#modules/widgets/components/service-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -14,7 +13,6 @@ import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.t
 import { jellyfinLatestAsked, jellyfinView, type JellyfinPoster } from "#modules/widgets/helpers/jellyfin-view.ts";
 import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { widgetImageUrl } from "#modules/widgets/helpers/widget-image.ts";
-import { useServiceRead } from "#modules/widgets/hooks/use-service-read.ts";
 import { m } from "#paraglide/messages.js";
 
 /** What the latest card reads of Jellyfin: what the server holds, and the items added last, which it makes posters of. */
@@ -31,14 +29,12 @@ export const jellyfinWidget = defineWidget("jellyfin-latest", {
 
 /** The latest card, read from its service in its own region. */
 function JellyfinWidget({ placement }: WidgetProps) {
-  const look = widgetLook(jellyfinWidget);
-  const read = useServiceRead(servicesQueries.jellyfin, placement.key, latestRead);
-
   return (
-    <QueryRegion
-      query={read}
-      fallback={<WidgetSkeleton look={look} />}
-      failure={failure => <WidgetFailure look={look} {...failure} />}
+    <ServiceWidget
+      query={servicesQueries.jellyfin}
+      placement={placement}
+      read={latestRead}
+      look={widgetLook(jellyfinWidget)}
     >
       {({ counts, latest }) => (
         <JellyfinCard
@@ -48,7 +44,7 @@ function JellyfinWidget({ placement }: WidgetProps) {
           link={placement.link}
         />
       )}
-    </QueryRegion>
+    </ServiceWidget>
   );
 }
 

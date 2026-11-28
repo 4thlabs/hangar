@@ -44,9 +44,26 @@ impl Image {
             return None;
         }
 
-        match kind {
-            "poster" => Some(Self::JellyfinPoster(service_id.to_owned())),
-            _ => None,
+        Self::VARIANTS
+            .iter()
+            .map(|variant| variant(service_id.to_owned()))
+            .find(|image| image.kind() == kind)
+    }
+
+    /// Each variant, from its service's id, which `parse` tries by its kind.
+    const VARIANTS: [fn(String) -> Self; 1] = [Self::JellyfinPoster];
+
+    /// The kind it is written under, before its service's id: one `match`, which both `parse` and `Display` read.
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::JellyfinPoster(_) => "poster",
+        }
+    }
+
+    /// The service's id of the image.
+    fn service_id(&self) -> &str {
+        match self {
+            Self::JellyfinPoster(item) => item,
         }
     }
 
@@ -90,9 +107,7 @@ impl Image {
 /// The id the page passes back to the relay, as [`Image::parse`] reads it.
 impl fmt::Display for Image {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::JellyfinPoster(item) => write!(f, "poster.{item}"),
-        }
+        write!(f, "{}.{}", self.kind(), self.service_id())
     }
 }
 
@@ -105,20 +120,20 @@ impl ServicesState {
             image: id.to_owned(),
         };
         let image = Image::parse(id).ok_or_else(unknown)?;
-        let placement = self.placement(key).await?;
-        let declared = Declared::of(&placement.widget.kind);
-        // Exhaustive on the image: one of another service than the widget's is not the widget's to relay.
+        let (placement, declared) = self.placement(key).await?;
+        let found = Declared::of(&placement.widget.kind);
+        let policy = found.policy();
+        // Exhaustive on the image: one of another service than the widget's is not the widget's to relay. The service is
+        // resolved as the image is fetched: an image is not kept, the browser keeps it a day.
         let fetched = match &image {
             Image::JellyfinPoster(item) => {
-                let Declared::Jellyfin { at, .. } = declared else {
+                let Declared::Jellyfin { at, .. } = found else {
                     return Err(unknown().into());
                 };
-                let service = self
-                    .service(&at)
-                    .await
-                    .map_err(|error| Self::unavailable(&placement, &error))?;
 
-                self.jellyfin.poster(&service, item).await
+                self.jellyfin
+                    .poster(&self.locator(at, policy, declared), item)
+                    .await
             }
         };
         let fetched = fetched.map_err(|error| Self::unavailable(&placement, &error))?;
@@ -133,12 +148,25 @@ mod tests {
 
     use super::Image;
 
-    #[test]
-    fn reads_back_the_id_it_writes_and_no_other() {
-        let poster = Image::JellyfinPoster("6c1e2f0a9b".to_owned());
+    /// One image of each variant.
+    fn every_image() -> Vec<Image> {
+        vec![Image::JellyfinPoster("6c1e2f0a9b".to_owned())]
+    }
 
-        assert_eq!(poster.to_string(), "poster.6c1e2f0a9b");
-        assert_eq!(Image::parse("poster.6c1e2f0a9b"), Some(poster));
+    #[test]
+    fn reads_back_the_id_it_writes_of_every_variant_and_no_other() {
+        assert_eq!(
+            Image::JellyfinPoster("6c1e2f0a9b".to_owned()).to_string(),
+            "poster.6c1e2f0a9b"
+        );
+
+        for image in every_image() {
+            assert_eq!(
+                Image::parse(&image.to_string()),
+                Some(image.clone()),
+                "{image}"
+            );
+        }
 
         for id in [
             "",

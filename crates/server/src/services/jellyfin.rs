@@ -9,9 +9,10 @@ use http::StatusCode;
 use quoll::Bytes;
 use serde::Deserialize;
 
+use super::cache::Part;
 use super::clients::Clients;
 use super::error::LoadError;
-use super::{Image, Kept, Policy, Service};
+use super::{Image, Locator, Service};
 
 quoll::api! {
     /// Jellyfin's API, at the root. Its key goes in `Authorization: MediaBrowser Token="..."`, the one form Jellyfin
@@ -85,21 +86,13 @@ impl From<Item> for JellyfinItem {
     }
 }
 
-/// A call of the latest items: the service, the user, and how many.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct LatestCall {
-    api: String,
-    user: String,
-    limit: Limit<100>,
-}
-
-/// Jellyfin, as the widgets read it: its clients, and its parts, kept by their call.
+/// Jellyfin, as the widgets read it: its clients, and its parts, each kept by its call.
 #[derive(Debug)]
 pub(super) struct Jellyfin {
-    clients: Clients<JellyfinApiClient>,
-    /// What each service holds, by its address.
-    counts: Arc<Kept<String, JellyfinCounts>>,
-    latest: Arc<Kept<LatestCall, Vec<JellyfinItem>>>,
+    clients: Arc<Clients<JellyfinApiClient>>,
+    counts: Part<(), JellyfinCounts>,
+    /// The latest items, by user and how many.
+    latest: Part<(String, Limit<100>), Vec<JellyfinItem>>,
 }
 
 impl Jellyfin {
@@ -109,29 +102,25 @@ impl Jellyfin {
     /// No client and no part kept yet.
     pub(super) fn new() -> Self {
         Self {
-            clients: Clients::new(),
-            counts: Kept::new("Jellyfin counts"),
-            latest: Kept::new("Jellyfin latest items"),
+            clients: Clients::new(Self::client),
+            counts: Part::new("Jellyfin counts"),
+            latest: Part::new("Jellyfin latest items"),
         }
     }
 
-    /// The parts `read` asks of the Jellyfin of `service`, kept by `policy`, the latest items those `user` may see. A
-    /// part asked fails the read when it fails with no value kept.
+    /// The parts `read` asks of the Jellyfin `locator` finds, the latest items those `user` may see. A part asked fails
+    /// the read when it fails with no value kept.
     pub(super) async fn read(
         &self,
-        service: &Service,
-        policy: Policy,
+        locator: &Locator,
         user: &str,
         read: JellyfinRead,
     ) -> Result<JellyfinData, Arc<LoadError>> {
         // Destructured whole, built whole: a part added to the read is a compile error here.
         let JellyfinRead { counts, latest } = read;
-        let client = self.client(service).map_err(Arc::new)?;
         let (counts, latest) = tokio::join!(
-            OptionFuture::from(counts.then(|| self.counts(&client, service, policy))),
-            OptionFuture::from(
-                latest.map(|limit| self.latest(&client, service, policy, user, limit))
-            ),
+            OptionFuture::from(counts.then(|| self.counts(locator))),
+            OptionFuture::from(latest.map(|limit| self.latest(locator, user, limit))),
         );
 
         Ok(JellyfinData {
@@ -143,10 +132,10 @@ impl Jellyfin {
     /// The poster of the item `id`, `None` when Jellyfin has none.
     pub(super) async fn poster(
         &self,
-        service: &Service,
+        locator: &Locator,
         id: &str,
     ) -> Result<Option<Bytes>, LoadError> {
-        match self.client(service)?.items().poster(id).await {
+        match self.clients.of(locator).await?.items().poster(id).await {
             Ok(poster) => Ok(Some(poster)),
             Err(error) if error.status() == Some(StatusCode::NOT_FOUND) => Ok(None),
             Err(error) => Err(LoadError::call("fetch a poster of Jellyfin's")(error)),
@@ -159,29 +148,20 @@ impl Jellyfin {
     /// # Errors
     ///
     /// When the client cannot be built, or the key cannot go in a header, as one with a line break.
-    fn client(&self, service: &Service) -> Result<JellyfinApiClient, LoadError> {
-        self.clients.get(service, |service| {
-            let Some(key) = service.key() else {
-                return service.keyless_client::<JellyfinApi>("Jellyfin");
-            };
-            let credential =
-                Service::authorization(&format!("MediaBrowser Token=\"{key}\""), "Jellyfin")?;
+    fn client(service: &Service) -> Result<JellyfinApiClient, LoadError> {
+        let Some(key) = service.key() else {
+            return service.keyless_client::<JellyfinApi>("Jellyfin");
+        };
+        let credential =
+            Service::authorization(&format!("MediaBrowser Token=\"{key}\""), "Jellyfin")?;
 
-            service.client::<JellyfinApi>("Jellyfin", Some(credential))
-        })
+        service.client::<JellyfinApi>("Jellyfin", Some(credential))
     }
 
-    /// What the Jellyfin of `client` holds, kept.
-    async fn counts(
-        &self,
-        client: &JellyfinApiClient,
-        service: &Service,
-        policy: Policy,
-    ) -> Result<JellyfinCounts, Arc<LoadError>> {
-        let client = client.clone();
-        let counts = self
-            .counts
-            .get(service.api.clone(), policy, move || async move {
+    /// What the Jellyfin `locator` finds holds.
+    async fn counts(&self, locator: &Locator) -> Result<JellyfinCounts, Arc<LoadError>> {
+        self.counts
+            .get(locator, &self.clients, (), |client| async move {
                 let counts = client
                     .items()
                     .counts()
@@ -195,30 +175,22 @@ impl Jellyfin {
                     songs: counts.song_count,
                 })
             })
-            .await?;
-
-        Ok(*counts)
+            .await
     }
 
-    /// The `limit` items added last that `user` may see, grouped as Jellyfin groups them, kept: Jellyfin has no latest
-    /// of the whole server.
+    /// The `limit` items added last that `user` may see, grouped as Jellyfin groups them: Jellyfin has no latest of the
+    /// whole server.
     async fn latest(
         &self,
-        client: &JellyfinApiClient,
-        service: &Service,
-        policy: Policy,
+        locator: &Locator,
         user: &str,
         limit: Limit<100>,
     ) -> Result<Vec<JellyfinItem>, Arc<LoadError>> {
-        let call = LatestCall {
-            api: service.api.clone(),
-            user: user.to_owned(),
-            limit,
-        };
-        let (client, user) = (client.clone(), user.to_owned());
-        let latest = self
-            .latest
-            .get(call, policy, move || async move {
+        let call = (user.to_owned(), limit);
+        let user = user.to_owned();
+
+        self.latest
+            .get(locator, &self.clients, call, move |client| async move {
                 let items = client.items();
                 let users = items
                     .users()
@@ -238,8 +210,6 @@ impl Jellyfin {
 
                 Ok(latest.into_iter().map(JellyfinItem::from).collect())
             })
-            .await?;
-
-        Ok((*latest).clone())
+            .await
     }
 }
