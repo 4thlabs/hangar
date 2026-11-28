@@ -20,5 +20,9 @@ serde.workspace = true
 # The params of an error, which its problem carries as extension members.
 serde_json.workspace = true
 
+[dev-dependencies]
+# Every variant of `ErrorCode`, walked by its tests rather than listed by hand.
+strum = { version = "0.28", features = ["derive"] }
+
 [lints]
 workspace = true

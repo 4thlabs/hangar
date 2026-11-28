@@ -248,31 +248,15 @@
   "common_operations_up": "Up",
   "common_operations_restart": "Restart",
   "common_operations_down": "Down",
-  "common_compose_outcome": [
-    {
-      "declarations": ["input project", "input operation", "input pull", "input forceRecreate"],
-      "selectors": ["operation", "pull", "forceRecreate"],
-      "match": {
-        "operation=up, pull=false, forceRecreate=false": "{project} was started or updated.",
-        "operation=up, pull=true, forceRecreate=false": "{project} was updated from its registry.",
-        "operation=up, pull=false, forceRecreate=true": "{project} was recreated.",
-        "operation=up, pull=true, forceRecreate=true": "{project} was updated from its registry and recreated.",
-        "operation=restart, pull=false, forceRecreate=false": "{project} was restarted.",
-        "operation=down, pull=false, forceRecreate=false": "{project} was stopped and removed."
-      }
-    }
-  ],
-  "common_compose_combined_label": [
-    {
-      "declarations": ["input pull", "input forceRecreate"],
-      "selectors": ["pull", "forceRecreate"],
-      "match": {
-        "pull=true, forceRecreate=false": "Update",
-        "pull=false, forceRecreate=true": "Recreate",
-        "pull=true, forceRecreate=true": "Update and recreate"
-      }
-    }
-  ],
+  "common_compose_outcome_started": "{project} was started or updated.",
+  "common_compose_outcome_pulled": "{project} was updated from its registry.",
+  "common_compose_outcome_recreated": "{project} was recreated.",
+  "common_compose_outcome_pulled_recreated": "{project} was updated from its registry and recreated.",
+  "common_compose_outcome_restarted": "{project} was restarted.",
+  "common_compose_outcome_removed": "{project} was stopped and removed.",
+  "common_compose_label_update": "Update",
+  "common_compose_label_recreate": "Recreate",
+  "common_compose_label_update_recreate": "Update and recreate",
   "common_compose_app_count": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],

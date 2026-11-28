@@ -1,5 +1,6 @@
 import type { NotificationMessage } from "#libs/api";
-import { composeActionOfNotification, composeLabel, composeOutcome } from "#modules/common/helpers/compose-actions.ts";
+import { commonLabels } from "#modules/common/helpers/common-labels.ts";
+import { composeLabel, composeOutcome } from "#modules/common/helpers/compose-actions.ts";
 import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
 import { m } from "#paraglide/messages.js";
 
@@ -38,10 +39,9 @@ const wordsByKey: Words = {
     title: m.notifications_store_update_failed_title(),
     description: m.notifications_store_update_failed_description(),
   }),
-  composeSucceeded: ({ params: { project, operation, flags } }) => {
-    const action = composeActionOfNotification(operation, flags);
-
-    if (action === null) {
+  composeSucceeded: ({ params: { project, action } }) => {
+    // An operation this page does not know, from a server newer than it, reads as a plain notification.
+    if (!Object.hasOwn(commonLabels.operations, action.operation)) {
       return {
         title: m.notifications_compose_succeeded_plain_title(),
         description: m.notifications_compose_succeeded_plain_description({ project }),
@@ -53,9 +53,10 @@ const wordsByKey: Words = {
       description: composeOutcome(action, project),
     };
   },
-  composeFailed: ({ params: { project, operation, flags } }) => {
-    const action = composeActionOfNotification(operation, flags);
-    const label = action === null ? m.notifications_compose_failed_plain_label() : composeLabel(action);
+  composeFailed: ({ params: { project, action } }) => {
+    const label = Object.hasOwn(commonLabels.operations, action.operation)
+      ? composeLabel(action)
+      : m.notifications_compose_failed_plain_label();
 
     return {
       title: m.notifications_compose_failed_title({ label }),
@@ -68,9 +69,10 @@ const wordsByKey: Words = {
   }),
   autoUpdate: ({ params: { updated, failed } }) => ({
     title: m.notifications_auto_update_title(),
-    description: failed
-      ? m.notifications_auto_update_failed_description({ updated, failed })
-      : m.notifications_auto_update_description({ updated }),
+    description:
+      failed.length > 0
+        ? m.notifications_auto_update_failed_description({ updated, failed: names.format(failed) })
+        : m.notifications_auto_update_description({ updated }),
   }),
   backupFailed: ({ params: { app, error } }) => ({
     title: m.notifications_backup_failed_title(),

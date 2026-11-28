@@ -295,22 +295,13 @@ impl ComposeState {
         self.docker.settle().await;
 
         let project = outcome.app.to_string();
-        let operation = ComposeViews::operation(kept.action()).to_owned();
-        let flags = ComposeViews::flags(kept.action());
+        let action = kept.action();
         let (level, message) = if outcome.status.is_success() {
-            let message = NotificationMessage::ComposeSucceeded {
-                project,
-                operation,
-                flags,
-            };
+            let message = NotificationMessage::ComposeSucceeded { project, action };
 
             (NotificationLevel::Success, message)
         } else {
-            let message = NotificationMessage::ComposeFailed {
-                project,
-                operation,
-                flags,
-            };
+            let message = NotificationMessage::ComposeFailed { project, action };
 
             (NotificationLevel::Error, message)
         };
@@ -409,13 +400,11 @@ mod tests {
 
         let succeeded = NotificationMessage::ComposeSucceeded {
             project: "gamma".to_owned(),
-            operation: "up".to_owned(),
-            flags: "pull,forceRecreate".to_owned(),
+            action,
         };
         let failed = NotificationMessage::ComposeFailed {
             project: "alpha".to_owned(),
-            operation: "up".to_owned(),
-            flags: "pull,forceRecreate".to_owned(),
+            action,
         };
 
         let filed: Vec<_> = state

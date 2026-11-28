@@ -45,8 +45,8 @@ use serde_json::{Map, Value};
 /// );
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(test, derive(strum::EnumIter))]
 #[serde(tag = "code", content = "params")]
-#[non_exhaustive]
 pub enum ErrorCode {
     /// The store carries no app of this id.
     #[serde(rename = "store.unknown_app")]
@@ -590,99 +590,28 @@ impl ErrorCode {
 
     /// Its params by their names, as `{ "app": "alpha" }`; none for a code that has none.
     pub fn params(&self) -> Map<String, Value> {
-        let written = serde_json::to_value(self)
-            .expect("a code holds strings, numbers and lists of strings, which JSON writes");
-
-        match written {
-            Value::Object(mut fields) => match fields.remove("params") {
-                Some(Value::Object(params)) => params,
-                _ => Map::new(),
-            },
+        match self.written().remove("params") {
+            Some(Value::Object(params)) => params,
             _ => Map::new(),
         }
     }
 
-    /// The code, as `store.unknown_app`.
-    pub fn code(&self) -> &'static str {
-        match self {
-            Self::UnknownApp { .. } => "store.unknown_app",
-            Self::AppsUnreadable => "store.apps_unreadable",
-            Self::InstallFailed { .. } => "store.install_failed",
-            Self::UninstallFailed { .. } => "store.uninstall_failed",
-            Self::CloneFailed => "store.clone_failed",
-            Self::PullFailed => "store.pull_failed",
-            Self::StoreNotInstalled => "store.not_installed",
-            Self::ConfigSyntax { .. } => "config.syntax",
-            Self::ConfigInvalid { .. } => "config.invalid",
-            Self::ConfigUnreadable => "config.unreadable",
-            Self::ConfigSaveFailed => "config.save_failed",
-            Self::InvalidVariableName { .. } => "env.invalid_name",
-            Self::LineBreak { .. } => "env.line_break",
-            Self::UnwritableValue { .. } => "env.unwritable_value",
-            Self::EnvUnreadable => "env.unreadable",
-            Self::EnvSaveFailed => "env.save_failed",
-            Self::UpdatedAndRemoved { .. } => "env.updated_and_removed",
-            Self::SyncRunning => "store.sync_running",
-            Self::SyncCrashed => "store.sync_crashed",
-            Self::AppExists { .. } => "editor.app_exists",
-            Self::InvalidAppId { .. } => "editor.invalid_app_id",
-            Self::InvalidPath { .. } => "editor.invalid_path",
-            Self::ThroughFile { .. } => "editor.through_file",
-            Self::OutsideApp { .. } => "editor.outside_app",
-            Self::BrokenSymlink { .. } => "editor.broken_symlink",
-            Self::HiddenFile { .. } => "editor.hidden_file",
-            Self::NoSuchFile { .. } => "editor.no_such_file",
-            Self::NotAFile { .. } => "editor.not_a_file",
-            Self::TooLarge { .. } => "editor.too_large",
-            Self::BinaryFile { .. } => "editor.binary",
-            Self::NotUtf8Text { .. } => "editor.not_utf8",
-            Self::FileExists { .. } => "editor.file_exists",
-            Self::FileAppeared { .. } => "editor.file_appeared",
-            Self::InvalidFile { .. } => "editor.invalid_file",
-            Self::ComposeRejected { .. } => "editor.compose_rejected",
-            Self::FileUnchecked { .. } => "editor.unchecked",
-            Self::FilesUnreadable { .. } => "editor.files_unreadable",
-            Self::FileReadFailed { .. } => "editor.read_failed",
-            Self::FileSaveFailed { .. } => "editor.save_failed",
-            Self::AppCreateFailed { .. } => "editor.create_failed",
-            Self::DockerUnavailable => "docker.unavailable",
-            Self::UnknownProject { .. } => "docker.unknown_project",
-            Self::InvalidProject { .. } => "docker.invalid_project",
-            Self::UnknownContainer { .. } => "docker.unknown_container",
-            Self::NoApps => "compose.no_apps",
-            Self::BatchRunning { .. } => "store.batch_running",
-            Self::AppBusy { .. } => "compose.app_busy",
-            Self::BatchUnchecked { .. } => "compose.unchecked",
-            Self::ComposeFailed { .. } => "compose.failed",
-            Self::UnknownBatch { .. } => "compose.unknown_batch",
-            Self::UnknownJobRun { .. } => "jobs.unknown_run",
-            Self::JobEnded { .. } => "jobs.ended",
-            Self::JobCrashed => "jobs.crashed",
-            Self::BackupNotDeclared { .. } => "backups.not_declared",
-            Self::BackupQueued { .. } => "backups.queued",
-            Self::UnknownArchive { .. } => "backups.unknown_archive",
-            Self::BackupsUnreadable { .. } => "backups.unreadable",
-            Self::ArchiveRemoveFailed { .. } => "backups.remove_failed",
-            Self::NoDataFolder { .. } => "backups.no_data_folder",
-            Self::LinkedDataFolder { .. } => "backups.linked_folder",
-            Self::DataFolderOutside { .. } => "backups.outside_app_data",
-            Self::InvalidGlob { .. } => "backups.invalid_glob",
-            Self::RunsHangar { .. } => "backups.runs_hangar",
-            Self::NotStopped { .. } => "backups.not_stopped",
-            Self::NotRestarted { .. } => "backups.not_restarted",
-            Self::BackupTimedOut { .. } => "backups.timed_out",
-            Self::BackupFailed { .. } => "backups.failed",
-            Self::UnknownPlacement { .. } => "widgets.unknown_placement",
-            Self::WidgetUnavailable { .. } => "widgets.unavailable",
-            Self::UnknownImage { .. } => "widgets.unknown_image",
-            Self::InvalidCredentials => "auth.invalid_credentials",
-            Self::TooManySignIns => "auth.too_many_sign_ins",
-            Self::SessionExpired => "auth.session_expired",
-            Self::UserRemoved => "auth.user_removed",
-            Self::CredentialsChanged => "auth.credentials_changed",
-            Self::UnreadableCookie => "auth.unreadable_cookie",
-            Self::NoOidcProvider => "auth.no_oidc_provider",
-            Self::CrossOrigin { .. } => "auth.cross_origin",
+    /// The code as serde writes it: its tag, `code`, and its `params`, when it has some.
+    fn written(&self) -> Map<String, Value> {
+        let written = serde_json::to_value(self)
+            .expect("a code holds strings, numbers and lists of strings, which JSON writes");
+
+        match written {
+            Value::Object(fields) => fields,
+            _ => unreachable!("an adjacently tagged enum writes an object"),
+        }
+    }
+
+    /// The code, as `store.unknown_app`: the tag serde writes, its `rename`, so that each code is written once.
+    pub fn code(&self) -> String {
+        match self.written().remove("code") {
+            Some(Value::String(code)) => code,
+            _ => unreachable!("an adjacently tagged code writes its tag as a string"),
         }
     }
 
@@ -953,178 +882,35 @@ impl From<ErrorCode> for quoll::Error {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
+    use strum::IntoEnumIterator;
+
     use super::ErrorCode;
 
-    /// One of each code, so that a test sees them all.
-    pub(super) fn every_code() -> Vec<ErrorCode> {
-        let app = || "alpha".to_owned();
-        let name = || "ALPHA_KEY".to_owned();
+    /// One of each code, its params empty, so that a test sees them all: strum walks every variant.
+    pub(super) fn every_code() -> impl Iterator<Item = ErrorCode> {
+        ErrorCode::iter()
+    }
 
-        vec![
-            ErrorCode::UnknownApp { app: app() },
-            ErrorCode::AppsUnreadable,
-            ErrorCode::InstallFailed { app: app() },
-            ErrorCode::UninstallFailed { app: app() },
-            ErrorCode::CloneFailed,
-            ErrorCode::PullFailed,
-            ErrorCode::StoreNotInstalled,
-            ErrorCode::ConfigSyntax {
-                reason: "a tab".to_owned(),
-            },
-            ErrorCode::ConfigInvalid {
-                field: "categories".to_owned(),
-                reason: "required".to_owned(),
-            },
-            ErrorCode::ConfigUnreadable,
-            ErrorCode::ConfigSaveFailed,
-            ErrorCode::InvalidVariableName { name: name() },
-            ErrorCode::LineBreak { name: name() },
-            ErrorCode::UnwritableValue { name: name() },
-            ErrorCode::EnvUnreadable,
-            ErrorCode::EnvSaveFailed,
-            ErrorCode::UpdatedAndRemoved { name: name() },
-            ErrorCode::SyncRunning,
-            ErrorCode::SyncCrashed,
-            ErrorCode::AppExists { app: app() },
-            ErrorCode::InvalidAppId { app: app() },
-            ErrorCode::InvalidPath {
-                path: "path".to_owned(),
-            },
-            ErrorCode::ThroughFile {
-                path: "path".to_owned(),
-            },
-            ErrorCode::OutsideApp {
-                app: app(),
-                path: "path".to_owned(),
-            },
-            ErrorCode::HiddenFile {
-                path: "path".to_owned(),
-            },
-            ErrorCode::BrokenSymlink {
-                path: "path".to_owned(),
-            },
-            ErrorCode::NoSuchFile {
-                app: app(),
-                path: "path".to_owned(),
-            },
-            ErrorCode::NotAFile {
-                path: "path".to_owned(),
-            },
-            ErrorCode::TooLarge {
-                path: "path".to_owned(),
-                size: 1_048_577,
-            },
-            ErrorCode::BinaryFile {
-                path: "path".to_owned(),
-            },
-            ErrorCode::NotUtf8Text {
-                path: "path".to_owned(),
-            },
-            ErrorCode::FileExists {
-                path: "path".to_owned(),
-            },
-            ErrorCode::FileAppeared {
-                path: "path".to_owned(),
-            },
-            ErrorCode::InvalidFile {
-                path: "path".to_owned(),
-                reason: "reason".to_owned(),
-            },
-            ErrorCode::ComposeRejected {
-                path: "path".to_owned(),
-                complaint: "complaint".to_owned(),
-            },
-            ErrorCode::FileUnchecked {
-                path: "path".to_owned(),
-            },
-            ErrorCode::FilesUnreadable { app: app() },
-            ErrorCode::FileReadFailed {
-                path: "path".to_owned(),
-            },
-            ErrorCode::FileSaveFailed {
-                path: "path".to_owned(),
-            },
-            ErrorCode::AppCreateFailed { app: app() },
-            ErrorCode::DockerUnavailable,
-            ErrorCode::UnknownProject { project: app() },
-            ErrorCode::InvalidProject {
-                project: "llama.cpp".to_owned(),
-            },
-            ErrorCode::NoApps,
-            ErrorCode::BatchRunning {
-                apps: vec![app(), "gamma".to_owned()],
-            },
-            ErrorCode::AppBusy { app: app() },
-            ErrorCode::BatchUnchecked {
-                command: "docker compose up -d".to_owned(),
-            },
-            ErrorCode::ComposeFailed {
-                app: app(),
-                command: "docker compose up -d".to_owned(),
-            },
-            ErrorCode::UnknownBatch { batch: 7 },
-            ErrorCode::UnknownJobRun { run: 7 },
-            ErrorCode::JobEnded { run: 7 },
-            ErrorCode::JobCrashed,
-            ErrorCode::BackupNotDeclared { app: app() },
-            ErrorCode::BackupQueued { app: app() },
-            ErrorCode::UnknownArchive {
-                app: app(),
-                archive: "2026-10-18T03-30-00-000Z".to_owned(),
-            },
-            ErrorCode::BackupsUnreadable { app: app() },
-            ErrorCode::ArchiveRemoveFailed {
-                app: app(),
-                archive: "2026-10-18T03-30-00-000Z".to_owned(),
-            },
-            ErrorCode::NoDataFolder {
-                app: app(),
-                folder: "alpha/config".to_owned(),
-            },
-            ErrorCode::LinkedDataFolder {
-                app: app(),
-                folder: "alpha/config".to_owned(),
-            },
-            ErrorCode::DataFolderOutside {
-                app: app(),
-                folder: "alpha/../beta".to_owned(),
-            },
-            ErrorCode::InvalidGlob {
-                glob: "{**".to_owned(),
-            },
-            ErrorCode::RunsHangar { app: app() },
-            ErrorCode::NotStopped { app: app() },
-            ErrorCode::NotRestarted {
-                app: app(),
-                services: vec!["web".to_owned(), "db".to_owned()],
-            },
-            ErrorCode::BackupTimedOut { app: app() },
-            ErrorCode::BackupFailed { app: app() },
-            ErrorCode::UnknownPlacement {
-                key: "frigate-events-1x2y3z".to_owned(),
-            },
-            ErrorCode::WidgetUnavailable {
-                widget: "frigate-events".to_owned(),
-            },
-            ErrorCode::UnknownImage {
-                key: "frigate-events-1x2y3z".to_owned(),
-                image: "1700000000.0-person".to_owned(),
-            },
-            ErrorCode::UnknownContainer {
-                project: app(),
-                container: "0123456789ab".to_owned(),
-            },
-            ErrorCode::InvalidCredentials,
-            ErrorCode::TooManySignIns,
-            ErrorCode::SessionExpired,
-            ErrorCode::UserRemoved,
-            ErrorCode::CredentialsChanged,
-            ErrorCode::UnreadableCookie,
-            ErrorCode::NoOidcProvider,
-            ErrorCode::CrossOrigin {
-                origin: "https://hangar.example.com".to_owned(),
-            },
-        ]
+    #[test]
+    fn names_each_code_once_by_its_domain_and_its_name() {
+        let codes: Vec<String> = every_code().map(|code| code.code()).collect();
+        let distinct: HashSet<&String> = codes.iter().collect();
+
+        assert_eq!(distinct.len(), codes.len(), "{codes:?}");
+
+        for code in &codes {
+            let (domain, name) = code.split_once('.').unwrap_or_else(|| panic!("{code}"));
+            let is_word = |part: &str| {
+                !part.is_empty()
+                    && part.bytes().all(|byte| {
+                        byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'
+                    })
+            };
+
+            assert!(is_word(domain) && is_word(name), "{code}");
+        }
     }
 
     #[test]

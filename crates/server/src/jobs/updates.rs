@@ -155,7 +155,7 @@ impl Updates {
                 level,
                 message: NotificationMessage::AutoUpdate {
                     updated: Self::count(updated.len()),
-                    failed: failed.join(", "),
+                    failed: failed.clone(),
                 },
                 href: Some("/apps".to_owned()),
                 dedupe_key: Some("auto-update".to_owned()),
@@ -560,7 +560,7 @@ done
                 NotificationLevel::Success,
                 NotificationMessage::AutoUpdate {
                     updated: 2,
-                    failed: String::new()
+                    failed: Vec::new()
                 },
                 Some("/apps".to_owned()),
                 Some("auto-update".to_owned()),
@@ -586,7 +586,7 @@ done
             message,
             NotificationMessage::AutoUpdate {
                 updated: 1,
-                failed: "gamma".to_owned()
+                failed: vec!["gamma".to_owned()]
             }
         );
     }

@@ -4226,13 +4226,13 @@
               },
               "params": {
                 "properties": {
-                  "flags": {
-                    "description": "The options of `up`, comma-separated, as `pull,forceRecreate`; empty for none.",
-                    "type": "string"
-                  },
-                  "operation": {
-                    "description": "`up`, `restart` or `down`.",
-                    "type": "string"
+                  "action": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ComposeAction"
+                      }
+                    ],
+                    "description": "The command, with its options."
                   },
                   "project": {
                     "description": "The app.",
@@ -4241,8 +4241,7 @@
                 },
                 "required": [
                   "project",
-                  "operation",
-                  "flags"
+                  "action"
                 ],
                 "type": "object"
               }
@@ -4262,13 +4261,13 @@
               },
               "params": {
                 "properties": {
-                  "flags": {
-                    "description": "The options of `up`, comma-separated, as `pull,forceRecreate`; empty for none.",
-                    "type": "string"
-                  },
-                  "operation": {
-                    "description": "`up`, `restart` or `down`.",
-                    "type": "string"
+                  "action": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ComposeAction"
+                      }
+                    ],
+                    "description": "The command, with its options."
                   },
                   "project": {
                     "description": "The app.",
@@ -4277,8 +4276,7 @@
                 },
                 "required": [
                   "project",
-                  "operation",
-                  "flags"
+                  "action"
                 ],
                 "type": "object"
               }
@@ -4327,8 +4325,11 @@
               "params": {
                 "properties": {
                   "failed": {
-                    "description": "The apps it failed to update, comma-separated, as `alpha, gamma`; empty for none.",
-                    "type": "string"
+                    "description": "The apps it failed to update, in the order it tried them; none when none failed.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
                   },
                   "updated": {
                     "description": "How many apps it updated.",
@@ -7950,7 +7951,7 @@
       "name": "Widgets"
     },
     {
-      "description": "The services the widgets read, one route each. A route takes the key of a placement of `GET /widgets` and a\nread, the parts of the service its card shows: each part asked is in the answer, the others are `null`. Each\npart is one call of the service, kept by the call: the service and its parameters, a limit included. Two cards\nthat make the same call share it. A call is fresh for the widget's `ttl`, 60 seconds unless `hangar.yml` says,\nthen served while it is made again behind the reader for 15 minutes more, which is also how long a service that\nstops answering keeps its last answer. Nothing is called without a reader. A 404 for a key the dashboard does not\nplace, or that of a widget of another service; a 400 for a read the query cannot hold, as a limit past its part's;\na 502 when the service did not answer a part asked.",
+      "description": "The services the widgets read, one route each. A route takes the key of a placement of `GET /widgets` and a\nread, the parts of the service its card shows: each part asked is in the answer, the others are `null`. Each\npart is one call of the service, kept by the call: the service and its parameters, a limit included. Two cards\nthat make the same call share it. A call is fresh for the widget's `ttl`, 30 minutes unless `hangar.yml` says,\nthen served while it is made again behind the reader for 15 minutes more, which is also how long a service that\nstops answering keeps its last answer. Nothing is called without a reader. A 404 for a key the dashboard does not\nplace, or that of a widget of another service; a 400 for a read the query cannot hold, as a limit past its part's;\na 502 when the service did not answer a part asked.",
       "name": "Services"
     }
   ]

@@ -11,14 +11,17 @@ describe("describeNotification", () => {
   });
 
   it("words a compose command by its operation and its options, as the Waku version does", () => {
-    const run = { project: "jellyfin", operation: "up", flags: "pull,forceRecreate" };
+    const run = {
+      project: "jellyfin",
+      action: { operation: "up", pull: true, forceRecreate: true },
+    } satisfies Extract<NotificationMessage, { key: "composeSucceeded" }>["params"];
 
     expect(describeNotification({ key: "composeSucceeded", params: run })).toEqual({
       title: "Update and recreate finished",
       description: "jellyfin was updated from its registry and recreated.",
     });
 
-    expect(describeNotification({ key: "composeFailed", params: { ...run, operation: "down", flags: "" } })).toEqual({
+    expect(describeNotification({ key: "composeFailed", params: { ...run, action: { operation: "down" } } })).toEqual({
       title: "Down failed",
       description: "The Docker Compose command failed for jellyfin. See the server's log.",
     });
@@ -30,14 +33,14 @@ describe("describeNotification", () => {
       description: "1 app has a newer image in the registry.",
     });
 
-    expect(describeNotification({ key: "autoUpdate", params: { updated: 2, failed: "" } })).toEqual({
+    expect(describeNotification({ key: "autoUpdate", params: { updated: 2, failed: [] } })).toEqual({
       title: "Automatic update",
       description: "2 apps were updated.",
     });
 
-    expect(describeNotification({ key: "autoUpdate", params: { updated: 1, failed: "alpha, gamma" } })).toEqual({
+    expect(describeNotification({ key: "autoUpdate", params: { updated: 1, failed: ["alpha", "gamma"] } })).toEqual({
       title: "Automatic update",
-      description: "1 app was updated. Failed for: alpha, gamma.",
+      description: "1 app was updated. Failed for: alpha and gamma.",
     });
   });
 

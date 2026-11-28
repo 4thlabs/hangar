@@ -7,7 +7,6 @@ use crate::ComposeError;
 
 /// A backup that failed, or an archive that could not be listed, read or removed.
 #[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
 pub enum BackupError {
     /// A name that is not an app id, which could climb out of `app-backups/`.
     #[error("{app:?} is not an app id")]

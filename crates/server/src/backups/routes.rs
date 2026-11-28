@@ -58,8 +58,18 @@ impl Backups {
                 archive: archive.to_owned(),
             }
             .into(),
-            // The core's error is non-exhaustive, so a wildcard is needed: any other is the server's failure.
-            _ => Failure::logged(failed, error),
+            // Any other is the server's failure.
+            BackupError::NoDataFolder { .. }
+            | BackupError::OutsideAppData { .. }
+            | BackupError::LinkedFolder { .. }
+            | BackupError::InvalidGlob { .. }
+            | BackupError::RunsHangar { .. }
+            | BackupError::NotStopped { .. }
+            | BackupError::UnreadableServices { .. }
+            | BackupError::NotRestarted { .. }
+            | BackupError::Canceled { .. }
+            | BackupError::Io { .. }
+            | BackupError::Crashed { .. } => Failure::logged(failed, error),
         }
     }
 }
