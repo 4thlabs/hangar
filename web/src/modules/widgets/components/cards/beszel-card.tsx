@@ -2,6 +2,7 @@ import { cn } from "cn";
 import type { BeszelServerStats } from "#libs/api";
 import { compactRelativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
+import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -10,8 +11,27 @@ import {
   WidgetListItem,
   WidgetMetadata,
 } from "#modules/widgets/components/widget.tsx";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
+import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { m } from "#paraglide/messages.js";
+
+/** `beszel-server-stats`: the systems a Beszel hub monitors. */
+export const beszelWidget = defineWidget("beszel-server-stats", {
+  icon: WidgetIcon.dashboard("beszel", "beszel-light"),
+  className: "min-h-40",
+  title: m.widgets_beszel_server_stats_title,
+  errorDescription: m.widgets_beszel_server_stats_error_description,
+  card: BeszelWidget,
+});
+
+/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+function BeszelWidget({ placement }: WidgetProps) {
+  return (
+    <LoadedWidget placement={placement} type="beszel-server-stats" look={widgetLook(beszelWidget)}>
+      {stats => <BeszelCard stats={stats} link={placement.link} />}
+    </LoadedWidget>
+  );
+}
 
 /** The usage past which a bar is the thing on the card to look at. */
 const hotUsage = 85;
@@ -47,7 +67,7 @@ type BeszelCardProps = {
 /** The systems a Beszel hub monitors, with their CPU, memory and disk. */
 export function BeszelCard({ stats: { systems }, link }: BeszelCardProps) {
   const now = useNow();
-  const look = widgetLook("beszel-server-stats");
+  const look = widgetLook(beszelWidget);
   const down = systems.filter(system => !system.up).length;
 
   return (

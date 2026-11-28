@@ -55,8 +55,9 @@ file says what Hangar adds to it or decides. Where the two differ, this file win
     so no other module, no `#routes/` and none of the wiring, and no `..` segment anywhere (`../`, `./../`,
     `#modules/a/../b/`), so that every import names its module; `no-restricted-syntax` does the same for `import()`,
     of a string or of a template with no expression;
-  - #207's loose files, `no-restricted-syntax` on `modules/*.{ts,tsx}` and `modules/*/*.{ts,tsx}`: no file directly
-    under `modules/` or directly under a module;
+  - #207's loose files, `no-restricted-syntax` on `modules/*.{ts,tsx}`: no file directly under `modules/`, which is in
+    no module. A file directly under a module is allowed since #220, for what several of its levels use, as the
+    widgets' registry;
   - #214's catalog, `no-restricted-imports` on every file of `web/src`: no import of `messages/en.json`, whose ids
     `tsc` does not check, so that the words are read through `m`;
   - rule 2, `no-restricted-imports` on `modules/`, `routes/` and the wiring at `src/`: no name of `#libs/api` that

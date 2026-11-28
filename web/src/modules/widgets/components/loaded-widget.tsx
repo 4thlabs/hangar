@@ -1,13 +1,14 @@
 import type { ReactNode } from "react";
 import type { WidgetPlacement } from "#libs/api";
 import { QueryRegion } from "#modules/common/components/region.tsx";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import type { WidgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { useWidgetData, type LoadingWidgetType, type WidgetDataOf } from "#modules/widgets/hooks/use-widget-data.ts";
 import { WidgetFailure, WidgetSkeleton } from "./widget-states.tsx";
 
 type LoadedWidgetProps<Type extends LoadingWidgetType> = {
   placement: WidgetPlacement;
   type: Type;
+  look: WidgetLook;
   /** The card of what the widget loaded. */
   children: (data: WidgetDataOf<Type>) => ReactNode;
 };
@@ -19,8 +20,12 @@ type LoadedWidgetProps<Type extends LoadingWidgetType> = {
  * the tab comes back while the server restarts: the server keeps the last answer of a service for 15 minutes, and says
  * when it is too old.
  */
-export function LoadedWidget<Type extends LoadingWidgetType>({ placement, type, children }: LoadedWidgetProps<Type>) {
-  const look = widgetLook(type);
+export function LoadedWidget<Type extends LoadingWidgetType>({
+  placement,
+  type,
+  look,
+  children,
+}: LoadedWidgetProps<Type>) {
   const data = useWidgetData(placement.key, type);
 
   return (

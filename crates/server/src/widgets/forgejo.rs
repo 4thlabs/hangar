@@ -11,9 +11,9 @@ use jiff::Timestamp;
 use quoll::client;
 use serde::Deserialize;
 
-use super::error::LoadError;
-use super::service::Service;
 use crate::failure::Failure;
+use crate::services::LoadError;
+use crate::services::Service;
 
 quoll::api! {
     /// Forgejo's API, under `/api/v1`. Its key, an access token, goes in `Authorization: Bearer ...`, which Forgejo

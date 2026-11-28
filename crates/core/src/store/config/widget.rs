@@ -34,9 +34,9 @@ pub enum Column {
 }
 
 /// Which widget a declaration places, its `type`, with the options it takes. Two declarations of the same type and
-/// options hash alike, wherever they are placed.
+/// options hash alike, wherever they are placed. Not `#[non_exhaustive]`: nothing outside Hangar matches on it, and the
+/// server's `match`es name each type, so that a type added here is a compile error at each.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[non_exhaustive]
 pub enum WidgetKind {
     /// `clock`.
     Clock,

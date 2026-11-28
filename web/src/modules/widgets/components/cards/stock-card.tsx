@@ -1,4 +1,5 @@
 import type { Stock, StockPrices } from "#libs/api";
+import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
 import { WidgetSparkline } from "#modules/widgets/components/widget-sparkline.tsx";
 import {
   WidgetCard,
@@ -8,8 +9,27 @@ import {
   WidgetMetric,
   WidgetMetricGrid,
 } from "#modules/widgets/components/widget.tsx";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
+import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { m } from "#paraglide/messages.js";
+
+/** `stock-prices`: stock quotes from Finnhub. */
+export const stockWidget = defineWidget("stock-prices", {
+  icon: new WidgetIcon("/images/widgets/stock.svg"),
+  className: "min-h-64",
+  title: m.widgets_stock_prices_title,
+  errorDescription: m.widgets_stock_prices_error_description,
+  card: StockWidget,
+});
+
+/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+function StockWidget({ placement }: WidgetProps) {
+  return (
+    <LoadedWidget placement={placement} type="stock-prices" look={widgetLook(stockWidget)}>
+      {prices => <StockCard prices={prices} />}
+    </LoadedWidget>
+  );
+}
 
 // How the card writes prices and their changes.
 
@@ -146,7 +166,7 @@ function StockMetrics({ stocks }: { stocks: Stock[] }) {
 
 /** The quote of each stock, in the order `hangar.yml` lists them. */
 export function StockCard({ prices: { stocks } }: { prices: StockPrices }) {
-  const look = widgetLook("stock-prices");
+  const look = widgetLook(stockWidget);
 
   return (
     <WidgetCard className={look.className}>

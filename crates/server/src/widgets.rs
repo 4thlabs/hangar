@@ -4,24 +4,18 @@
 mod arcane;
 mod backrest;
 mod beszel;
-mod cache;
 mod clients;
-mod error;
 mod finnhub;
 mod forgejo;
 mod frigate;
 mod github;
 mod gluetun;
-mod jellyfin;
 mod miniflux;
 mod placement;
 mod routes;
-mod service;
 mod tcg_collector;
-mod time;
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use hangar_api::{ErrorCode, WidgetData};
 use hangar_core::{Runtime, Store, WidgetKind};
@@ -29,13 +23,11 @@ use quoll::Bytes;
 
 use crate::Settings;
 use crate::failure::Failure;
-use cache::{Kept, Policy};
+use crate::services::{Declared, Kept, LoadError, Service};
 use clients::Clients;
-use error::LoadError;
 use finnhub::Finnhub;
 use github::Github;
-use placement::Placement;
-use service::Service;
+pub(crate) use placement::Placement;
 
 /// What the widgets' routes run on: the store, whose `hangar.yml` places them, the client of each placement's service,
 /// and what each placement loaded.
@@ -47,20 +39,12 @@ pub(crate) struct WidgetsState {
     /// The client of each placement's service, by its key.
     clients: Arc<Clients>,
     /// What each placement loaded, by its key.
-    loads: Arc<Kept<WidgetData>>,
+    loads: Arc<Kept<String, WidgetData>>,
     github: Github,
     finnhub: Finnhub,
 }
 
 impl WidgetsState {
-    /// How long a widget's data is served as it is when `hangar.yml` gives it no `ttl`: the dashboard does not read it
-    /// again by itself, so this is what a visit sees.
-    const FRESH: Duration = Duration::from_secs(60);
-
-    /// How long past its `ttl` a widget's data is still served while it reloads: how long a service that stopped
-    /// answering keeps showing its last card.
-    const STALE: Duration = Duration::from_secs(15 * 60);
-
     /// The widgets of the store of `settings`, read with `runtime`.
     ///
     /// # Panics
@@ -105,28 +89,22 @@ impl WidgetsState {
             .find(|placement| placement.key == key)
             .ok_or_else(unknown)?;
 
-        if !Self::loads(&placement.widget.kind) {
+        if Declared::of(&placement.widget.kind) == Declared::Nothing {
             return Err(unknown().into());
         }
 
         Ok(placement)
     }
 
-    /// Whether a widget loads data of its own, rather than none, as the clock, or the Docker routes', as Docker's
-    /// stats.
-    fn loads(kind: &WidgetKind) -> bool {
-        !matches!(kind, WidgetKind::Clock | WidgetKind::DockerGeneralStats)
-    }
-
     /// What the widget of `placement` loaded, kept: fresh for its `ttl`, then served while it reloads, then awaited.
     async fn data(&self, placement: Placement) -> quoll::Result<WidgetData> {
         let kind = placement.widget.kind;
-        let policy = Self::policy(&kind);
+        let policy = Declared::of(&kind).policy();
         let widget = kind.name();
         let loader = self.loader(&placement.key);
         let loaded = self
             .loads
-            .get(&placement.key, policy, move || loader.load(kind))
+            .get(placement.key, policy, move || loader.load(kind))
             .await;
 
         loaded.map(|data| (*data).clone()).map_err(|error| {
@@ -151,28 +129,12 @@ impl WidgetsState {
         }
     }
 
-    /// How long what a widget of `kind` loaded is kept: fresh for its `ttl`, else a minute, then stale for 15 minutes.
-    fn policy(kind: &WidgetKind) -> Policy {
-        Policy {
-            fresh: Self::ttl(kind).unwrap_or(Self::FRESH),
-            stale: Self::STALE,
-        }
-    }
-
-    /// The `ttl` `hangar.yml` gives a widget, if it does.
-    fn ttl(kind: &WidgetKind) -> Option<Duration> {
-        match kind {
-            WidgetKind::GithubReleases { ttl, .. } | WidgetKind::StockPrices { ttl, .. } => *ttl,
-            other => Service::options(other).and_then(|(_, options)| options.ttl),
-        }
-    }
-
     /// Forgets what the widgets no longer placed loaded, so that a `hangar.yml` changed over and over does not grow the
     /// cache.
     fn forget_unplaced(&self, placed: &[Placement]) {
         let is_placed = |key: &str| placed.iter().any(|placement| placement.key == key);
 
-        self.loads.retain(is_placed);
+        self.loads.retain(|key| is_placed(key));
         self.clients.retain(is_placed);
     }
 }
@@ -239,13 +201,6 @@ impl Loader {
                     .await
                     .map(WidgetData::MinifluxEntries)
             }
-            WidgetKind::JellyfinLatest { user, .. } => {
-                let client = self.client(&kind, jellyfin::Client::new).await?;
-
-                jellyfin::load(&client, user)
-                    .await
-                    .map(WidgetData::JellyfinLatest)
-            }
             WidgetKind::TcgCollectorCards { days, cards, .. } => {
                 let client = self.client(&kind, tcg_collector::Client::new).await?;
 
@@ -277,9 +232,6 @@ impl Loader {
             WidgetKind::FrigateEvents { .. } => {
                 frigate::thumbnail(&self.client(kind, frigate::Client::new).await?, id).await
             }
-            WidgetKind::JellyfinLatest { .. } => {
-                jellyfin::poster(&self.client(kind, jellyfin::Client::new).await?, id).await
-            }
             WidgetKind::TcgCollectorCards { .. } => {
                 tcg_collector::image(&self.client(kind, tcg_collector::Client::new).await?, id)
                     .await
@@ -298,82 +250,12 @@ impl Loader {
     where
         C: Clone + Send + Sync + 'static,
     {
-        let (app, options) = Service::options(kind).ok_or_else(|| {
+        let declared = Declared::of(kind);
+        let at = declared.service().ok_or_else(|| {
             LoadError::refused(format!("the {} widget reads no store app", kind.name()))
         })?;
-        let service = Service::resolve(&self.store, &self.domain, app, options).await?;
+        let service = Service::resolve(&self.store, &self.domain, at.app, at.options).await?;
 
         self.clients.get(&self.key, service, build)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::time::Duration;
-
-    use hangar_core::Config;
-
-    use super::WidgetsState;
-    use super::cache::Kept;
-
-    /// Lets the reloads that a stale read starts, each in a task of its own, run to their end.
-    async fn settle() {
-        for _ in 0..10 {
-            tokio::task::yield_now().await;
-        }
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn keeps_what_a_placement_loaded_for_its_ttl_or_a_minute() {
-        let config = Config::parse(
-            "categories: []\nwidgets:\n  - { type: miniflux-entries, column: 1, ttl: 5 }\n  - { type: \
-             github-releases, column: 1, repositories: [a/b] }\n  - { type: stock-prices, column: 1, ttl: 600, \
-             tickers: [AAPL] }\n",
-        )
-        .expect("the configuration is valid");
-        let kept = Kept::new("test");
-        let loads = Arc::new(AtomicUsize::new(0));
-        let read = async |index: usize| {
-            let policy = WidgetsState::policy(&config.widgets[index].kind);
-            let loads = Arc::clone(&loads);
-
-            kept.get(&index.to_string(), policy, move || async move {
-                loads.fetch_add(1, Ordering::SeqCst);
-
-                Ok(index)
-            })
-            .await
-            .expect("loaded");
-        };
-
-        for index in 0..3 {
-            read(index).await;
-        }
-
-        tokio::time::advance(Duration::from_secs(6)).await;
-
-        for index in 0..3 {
-            read(index).await;
-        }
-
-        settle().await;
-        assert_eq!(
-            loads.load(Ordering::SeqCst),
-            4,
-            "the ttl of 5 s alone went stale"
-        );
-
-        tokio::time::advance(Duration::from_secs(55)).await;
-        read(1).await;
-        read(2).await;
-        settle().await;
-
-        assert_eq!(
-            loads.load(Ordering::SeqCst),
-            5,
-            "a minute without a ttl, ten with 600 s"
-        );
     }
 }

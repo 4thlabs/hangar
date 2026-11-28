@@ -4,8 +4,8 @@ use hangar_api::GluetunVpnStatus;
 use quoll::client;
 use serde::{Deserialize, Deserializer};
 
-use super::error::LoadError;
-use super::service::Service;
+use crate::services::LoadError;
+use crate::services::Service;
 
 quoll::api! {
     /// The control server of gluetun, which versions its API under `/v1`.

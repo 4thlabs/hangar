@@ -4,8 +4,8 @@ use hangar_api::{MinifluxEntries, MinifluxEntry};
 use quoll::client;
 use serde::Deserialize;
 
-use super::error::LoadError;
-use super::service::Service;
+use crate::services::LoadError;
+use crate::services::Service;
 
 quoll::api! {
     /// Miniflux's API, under `/v1`.

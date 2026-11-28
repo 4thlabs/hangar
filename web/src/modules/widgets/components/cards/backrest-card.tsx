@@ -2,6 +2,7 @@ import { cn } from "cn";
 import type { BackrestHealth, BackrestSummary } from "#libs/api";
 import { compactRelativeTime } from "#libs/format";
 import { useNow } from "#modules/common/hooks/use-now.ts";
+import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -11,9 +12,28 @@ import {
   WidgetMetadata,
   WidgetTime,
 } from "#modules/widgets/components/widget.tsx";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
+import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { formatBytes } from "#modules/widgets/helpers/widget-format.ts";
 import { m } from "#paraglide/messages.js";
+
+/** `backrest-summary`: Backrest's repositories and their last backups. */
+export const backrestWidget = defineWidget("backrest-summary", {
+  icon: WidgetIcon.dashboard("backrest"),
+  className: "min-h-40",
+  title: m.widgets_backrest_summary_title,
+  errorDescription: m.widgets_backrest_summary_error_description,
+  card: BackrestWidget,
+});
+
+/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+function BackrestWidget({ placement }: WidgetProps) {
+  return (
+    <LoadedWidget placement={placement} type="backrest-summary" look={widgetLook(backrestWidget)}>
+      {summary => <BackrestCard summary={summary} link={placement.link} />}
+    </LoadedWidget>
+  );
+}
 
 /** The dot of a repository: muted for one that has not run, which is neither healthy nor failed. */
 const healthDotClasses: Readonly<Record<BackrestHealth, string>> = {
@@ -30,7 +50,7 @@ type BackrestCardProps = {
 /** Each repository of Backrest's, and how its last backup went. */
 export function BackrestCard({ summary: { repositories }, link }: BackrestCardProps) {
   const now = useNow();
-  const look = widgetLook("backrest-summary");
+  const look = widgetLook(backrestWidget);
   const protectedBytes = repositories.reduce((total, repository) => total + repository.protectedBytes, 0);
 
   return (

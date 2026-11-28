@@ -10,11 +10,11 @@ use hangar_api::{GithubRelease, GithubReleases};
 use quoll::client;
 use serde::Deserialize;
 
-use super::cache::{Kept, Policy};
-use super::error::LoadError;
-use super::service::Service;
 use crate::Settings;
 use crate::failure::Failure;
+use crate::services::LoadError;
+use crate::services::Service;
+use crate::services::{Kept, Policy};
 
 /// The version of GitHub's REST API the contract follows.
 const VERSION: &str = "2022-11-28";
@@ -57,7 +57,7 @@ struct Release {
 #[derive(Debug, Clone)]
 pub(super) struct Github {
     client: GithubApiClient,
-    releases: Arc<Kept<GithubRelease>>,
+    releases: Arc<Kept<String, GithubRelease>>,
 }
 
 impl Github {
@@ -128,7 +128,7 @@ impl Github {
         let owned = repository.to_owned();
 
         self.releases
-            .get(repository, Self::POLICY, move || async move {
+            .get(repository.to_owned(), Self::POLICY, move || async move {
                 let (owner, repo) = owned.split_once('/').ok_or_else(|| {
                     LoadError::refused(format!("{owned} is not a repository, owner/repo"))
                 })?;

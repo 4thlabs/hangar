@@ -7,22 +7,9 @@ import { describeError } from "#modules/common/helpers/error-message.ts";
 import { Alert, AlertDescription, AlertTitle } from "#modules/common/ui/alert.tsx";
 import { Skeleton } from "#modules/common/ui/skeleton.tsx";
 import { widgetsQueries } from "#modules/widgets/api/widgets-queries.ts";
-import { ArcaneCard } from "#modules/widgets/components/cards/arcane-card.tsx";
-import { BackrestCard } from "#modules/widgets/components/cards/backrest-card.tsx";
-import { BeszelCard } from "#modules/widgets/components/cards/beszel-card.tsx";
-import { ClockCard } from "#modules/widgets/components/cards/clock-card.tsx";
-import { DockerCard } from "#modules/widgets/components/cards/docker-card.tsx";
-import { ForgejoCard } from "#modules/widgets/components/cards/forgejo-card.tsx";
-import { FrigateCard } from "#modules/widgets/components/cards/frigate-card.tsx";
-import { GithubCard } from "#modules/widgets/components/cards/github-card.tsx";
-import { GluetunCard } from "#modules/widgets/components/cards/gluetun-card.tsx";
-import { JellyfinCard } from "#modules/widgets/components/cards/jellyfin-card.tsx";
-import { MinifluxCard } from "#modules/widgets/components/cards/miniflux-card.tsx";
-import { StockCard } from "#modules/widgets/components/cards/stock-card.tsx";
-import { TcgCollectorCard } from "#modules/widgets/components/cards/tcg-collector-card.tsx";
-import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
 import { WidgetCardFailure } from "#modules/widgets/components/widget-states.tsx";
 import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { widgetEntry } from "#modules/widgets/widgets-registry.ts";
 import { m } from "#paraglide/messages.js";
 
 /** `/`, the dashboard. */
@@ -40,94 +27,18 @@ const columnClassNames: Readonly<Record<(typeof columnNumbers)[number], string>>
   3: "flex min-w-0 flex-col gap-4 md:col-start-2 xl:col-start-3",
 };
 
-/** The card of one placement, by its type. */
-function PlacedWidget({ placement }: { placement: WidgetPlacement }) {
-  const { key, link } = placement;
-
-  switch (placement.type) {
-    case "clock":
-      return <ClockCard />;
-    case "docker-general-stats":
-      return <DockerCard />;
-    case "arcane-general-stats":
-      return (
-        <LoadedWidget placement={placement} type="arcane-general-stats">
-          {stats => <ArcaneCard stats={stats} link={link} />}
-        </LoadedWidget>
-      );
-    case "backrest-summary":
-      return (
-        <LoadedWidget placement={placement} type="backrest-summary">
-          {summary => <BackrestCard summary={summary} link={link} />}
-        </LoadedWidget>
-      );
-    case "beszel-server-stats":
-      return (
-        <LoadedWidget placement={placement} type="beszel-server-stats">
-          {stats => <BeszelCard stats={stats} link={link} />}
-        </LoadedWidget>
-      );
-    case "forgejo-ci":
-      return (
-        <LoadedWidget placement={placement} type="forgejo-ci">
-          {ci => <ForgejoCard ci={ci} link={link} />}
-        </LoadedWidget>
-      );
-    case "frigate-events":
-      return (
-        <LoadedWidget placement={placement} type="frigate-events">
-          {events => <FrigateCard events={events} placementKey={key} link={link} />}
-        </LoadedWidget>
-      );
-    case "gluetun-vpn-status":
-      return (
-        <LoadedWidget placement={placement} type="gluetun-vpn-status">
-          {status => <GluetunCard status={status} />}
-        </LoadedWidget>
-      );
-    case "miniflux-entries":
-      return (
-        <LoadedWidget placement={placement} type="miniflux-entries">
-          {entries => <MinifluxCard entries={entries} link={link} />}
-        </LoadedWidget>
-      );
-    case "jellyfin-latest":
-      return (
-        <LoadedWidget placement={placement} type="jellyfin-latest">
-          {latest => <JellyfinCard latest={latest} placementKey={key} link={link} />}
-        </LoadedWidget>
-      );
-    case "tcg-collector-cards":
-      return (
-        <LoadedWidget placement={placement} type="tcg-collector-cards">
-          {cards => <TcgCollectorCard cards={cards} placementKey={key} link={link} />}
-        </LoadedWidget>
-      );
-    case "github-releases":
-      return (
-        <LoadedWidget placement={placement} type="github-releases">
-          {releases => <GithubCard releases={releases} />}
-        </LoadedWidget>
-      );
-    case "stock-prices":
-      return (
-        <LoadedWidget placement={placement} type="stock-prices">
-          {prices => <StockCard prices={prices} />}
-        </LoadedWidget>
-      );
-  }
-}
-
 /**
- * A widget in its own region: a card that throws as it renders, as the clock, fails alone, and the rest of the
- * dashboard stands. A widget that reads has a region of its own around what it read, which catches first.
+ * A widget in its own region, its card that of its entry in the registry: a card that throws as it renders, as the
+ * clock, fails alone, and the rest of the dashboard stands. A widget that reads has a region of its own around what it
+ * read, which catches first.
  */
 function PlacedRegion({ placement }: { placement: WidgetPlacement }) {
-  const look = widgetLook(placement.type);
+  const entry = widgetEntry(placement.type);
+  const look = widgetLook(entry);
 
   return (
     <RenderRegion failure={({ retry }) => <WidgetCardFailure look={look} retry={retry} />}>
-      <PlacedWidget placement={placement} />
+      <entry.card placement={placement} />
     </RenderRegion>
   );
 }

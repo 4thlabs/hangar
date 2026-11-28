@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import type { ForgejoCi } from "#libs/api";
 import { useNow } from "#modules/common/hooks/use-now.ts";
+import { LoadedWidget } from "#modules/widgets/components/loaded-widget.tsx";
 import {
   WidgetCard,
   WidgetContent,
@@ -11,8 +12,27 @@ import {
   WidgetMetadata,
   WidgetTime,
 } from "#modules/widgets/components/widget.tsx";
-import { widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
+import { defineWidget, type WidgetProps } from "#modules/widgets/define-widget.ts";
+import { WidgetIcon, widgetLook } from "#modules/widgets/helpers/widget-appearance.ts";
 import { m } from "#paraglide/messages.js";
+
+/** `forgejo-ci`: what Forgejo Actions runs, and the repositories updated last. */
+export const forgejoWidget = defineWidget("forgejo-ci", {
+  icon: WidgetIcon.dashboard("forgejo"),
+  className: "min-h-40",
+  title: m.widgets_forgejo_ci_title,
+  errorDescription: m.widgets_forgejo_ci_error_description,
+  card: ForgejoWidget,
+});
+
+/** The card, with what it loaded of `GET /widgets/{key}`, in its own region. */
+function ForgejoWidget({ placement }: WidgetProps) {
+  return (
+    <LoadedWidget placement={placement} type="forgejo-ci" look={widgetLook(forgejoWidget)}>
+      {ci => <ForgejoCard ci={ci} link={placement.link} />}
+    </LoadedWidget>
+  );
+}
 
 type ForgejoCardProps = {
   ci: ForgejoCi;
@@ -22,7 +42,7 @@ type ForgejoCardProps = {
 /** What Forgejo Actions runs or has queued, and the repositories updated last. */
 export function ForgejoCard({ ci: { repositoryCount, activeRuns, recentRepositories }, link }: ForgejoCardProps) {
   const now = useNow();
-  const look = widgetLook("forgejo-ci");
+  const look = widgetLook(forgejoWidget);
   const queued = activeRuns.filter(run => run.isQueued).length;
   const running = activeRuns.length - queued;
 

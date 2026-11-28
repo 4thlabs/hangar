@@ -1,8 +1,10 @@
 //! Values from the widgets' services, kept by key and loaded on demand: fresh for a while, then served stale while they
-//! reload behind their reader, then awaited. Nothing is loaded without a reader.
+//! reload behind their reader, then awaited, and forgotten once too old to be served. Nothing is loaded without a
+//! reader.
 
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::Hash;
 use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -29,18 +31,24 @@ pub(crate) struct Policy {
     pub(crate) stale: Duration,
 }
 
-/// Values kept by key. The readers of a key share one load, which runs in a task of its own, so that a reader who
-/// leaves does not cancel it for the others. A failed load is not kept; a failed reload keeps the last value, which
-/// ages on, so that a service that stopped answering shows its failure once the value is too old.
-pub(crate) struct Kept<T> {
+/// Values kept by key, as the call that loads them: a service and the parameters of its call. The readers of a key
+/// share one load, which runs in a task of its own, so that a reader who leaves does not cancel it for the others. A
+/// failed load is not kept; a failed reload keeps the last value, which ages on, so that a service that stopped
+/// answering shows its failure once the value is too old.
+///
+/// An entry is forgotten once it would no longer be served at all, by the policy of its last reader: its value is older
+/// than `fresh` and `stale` together, 60 seconds and 15 minutes by default, and no load of it runs. A reader that came
+/// then would wait for a load anyway, so forgetting it changes no answer, and the keys no reader asks for any more, as
+/// those of a `hangar.yml` changed since, do not stay.
+pub(crate) struct Kept<K, T> {
     /// What the values are, in the log.
     name: &'static str,
-    entries: Mutex<Entries<T>>,
+    entries: Mutex<Entries<K, T>>,
 }
 
 /// The entries, and the generation the next one takes.
-struct Entries<T> {
-    by_key: HashMap<String, Entry<T>>,
+struct Entries<K, T> {
+    by_key: HashMap<K, Entry<T>>,
     next_generation: u64,
 }
 
@@ -52,9 +60,27 @@ struct Entry<T> {
     /// The last good value, and when it was loaded.
     value: Option<(Arc<T>, Instant)>,
     loading: Option<Loading<T>>,
+    /// How long its value is served, `fresh` and `stale` together, by its last reader's policy.
+    served_for: Duration,
 }
 
-impl<T: Send + Sync + 'static> Kept<T> {
+impl<T> Entry<T> {
+    /// Whether it would still be served, or is loading.
+    fn is_live(&self) -> bool {
+        let is_served = self
+            .value
+            .as_ref()
+            .is_some_and(|(_, loaded_at)| loaded_at.elapsed() < self.served_for);
+
+        is_served || self.loading.is_some()
+    }
+}
+
+impl<K, T> Kept<K, T>
+where
+    K: Clone + Eq + Hash + fmt::Debug + Send + Sync + 'static,
+    T: Send + Sync + 'static,
+{
     /// No value yet, of what the log calls `name`.
     pub(crate) fn new(name: &'static str) -> Arc<Self> {
         Arc::new(Self {
@@ -75,7 +101,7 @@ impl<T: Send + Sync + 'static> Kept<T> {
     /// The error of the load awaited, when one was.
     pub(crate) async fn get<F>(
         self: &Arc<Self>,
-        key: &str,
+        key: K,
         policy: Policy,
         load: impl FnOnce() -> F,
     ) -> Loaded<T>
@@ -88,15 +114,21 @@ impl<T: Send + Sync + 'static> Kept<T> {
                 by_key,
                 next_generation,
             } = &mut *entries;
-            let entry = by_key.entry(key.to_owned()).or_insert_with(|| {
+
+            by_key.retain(|_, entry| entry.is_live());
+
+            let entry = by_key.entry(key.clone()).or_insert_with(|| {
                 *next_generation += 1;
 
                 Entry {
                     generation: *next_generation,
                     value: None,
                     loading: None,
+                    served_for: Duration::ZERO,
                 }
             });
+
+            entry.served_for = policy.fresh + policy.stale;
 
             if let Some((value, loaded_at)) = &entry.value {
                 let age = loaded_at.elapsed();
@@ -126,17 +158,16 @@ impl<T: Send + Sync + 'static> Kept<T> {
     }
 
     /// Forgets the values whose key `is_kept` refuses; their loads running end unheard.
-    pub(crate) fn retain(&self, is_kept: impl Fn(&str) -> bool) {
+    pub(crate) fn retain(&self, is_kept: impl Fn(&K) -> bool) {
         self.lock().by_key.retain(|key, _| is_kept(key));
     }
 
     /// Starts `load` as the load of `entry`, the entry of `key`, in a task of its own.
-    fn start<F>(self: &Arc<Self>, entry: &mut Entry<T>, key: &str, load: F) -> Loading<T>
+    fn start<F>(self: &Arc<Self>, entry: &mut Entry<T>, key: K, load: F) -> Loading<T>
     where
         F: Future<Output = Result<T, LoadError>> + Send + 'static,
     {
         let this = Arc::clone(self);
-        let key = key.to_owned();
         let generation = entry.generation;
         let loading = async move {
             // A load that panics fails as any other, rather than leave its shared future to panic every reader.
@@ -161,7 +192,7 @@ impl<T: Send + Sync + 'static> Kept<T> {
 
     /// Keeps what the load of `key` gave, in the entry of `generation` it was started for: one forgotten meanwhile,
     /// and maybe made again, is left alone. A key whose first load failed is forgotten.
-    fn finish(&self, key: &str, generation: u64, loaded: &Loaded<T>) {
+    fn finish(&self, key: &K, generation: u64, loaded: &Loaded<T>) {
         let mut entries = self.lock();
         let Some(entry) = entries
             .by_key
@@ -177,7 +208,7 @@ impl<T: Send + Sync + 'static> Kept<T> {
             Ok(value) => entry.value = Some((Arc::clone(value), Instant::now())),
             Err(error) if entry.value.is_some() => tracing::warn!(
                 value = self.name,
-                key,
+                ?key,
                 error = %Failure::chain(&**error),
                 "could not reload a value: the last one is kept"
             ),
@@ -187,7 +218,7 @@ impl<T: Send + Sync + 'static> Kept<T> {
         }
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Entries<T>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Entries<K, T>> {
         self.entries
             .lock()
             .expect("no code panics while it holds the kept values")
@@ -195,7 +226,7 @@ impl<T: Send + Sync + 'static> Kept<T> {
 }
 
 /// Shows the name alone: the values may be large.
-impl<T> fmt::Debug for Kept<T> {
+impl<K, T> fmt::Debug for Kept<K, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Kept")
             .field("name", &self.name)
@@ -253,8 +284,8 @@ mod tests {
         }
     }
 
-    async fn get(kept: &Arc<Kept<usize>>, source: &Arc<Source>) -> Result<usize, String> {
-        kept.get("key", POLICY, source.load())
+    async fn get(kept: &Arc<Kept<String, usize>>, source: &Arc<Source>) -> Result<usize, String> {
+        kept.get("key".to_owned(), POLICY, source.load())
             .await
             .map(|value| *value)
             .map_err(|error| error.to_string())
@@ -391,7 +422,7 @@ mod tests {
             gate: Some(Arc::clone(&gate)),
             ..Source::default()
         });
-        let reader = |kept: &Arc<Kept<usize>>, source: &Arc<Source>| {
+        let reader = |kept: &Arc<Kept<String, usize>>, source: &Arc<Source>| {
             let (kept, source) = (Arc::clone(kept), Arc::clone(source));
 
             tokio::spawn(async move { get(&kept, &source).await })
@@ -421,6 +452,57 @@ mod tests {
             "it joined the second load"
         );
         assert_eq!(source.loads(), 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn forgets_an_entry_once_it_would_no_longer_be_served() {
+        let kept = Kept::new("test");
+        let source = Arc::new(Source::default());
+        let other = Arc::new(Source::default());
+
+        get(&kept, &source).await.expect("loaded");
+        tokio::time::advance(Duration::from_secs(19)).await;
+        kept.get("other".to_owned(), POLICY, other.load())
+            .await
+            .expect("loaded");
+        assert_eq!(kept.lock().by_key.len(), 2, "still served, stale");
+
+        tokio::time::advance(Duration::from_secs(1)).await;
+        kept.get("other".to_owned(), POLICY, other.load())
+            .await
+            .expect("fresh");
+
+        assert_eq!(
+            kept.lock().by_key.keys().collect::<Vec<_>>(),
+            ["other"],
+            "unread for fresh and stale together, it is gone"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn keeps_an_entry_whose_load_runs_past_its_policy() {
+        let kept = Kept::new("test");
+        let gate = Arc::new(Semaphore::new(0));
+        let source = Arc::new(Source {
+            gate: Some(Arc::clone(&gate)),
+            ..Source::default()
+        });
+        let other = Arc::new(Source::default());
+        let reader = tokio::spawn({
+            let (kept, source) = (Arc::clone(&kept), Arc::clone(&source));
+
+            async move { get(&kept, &source).await }
+        });
+
+        settle().await;
+        tokio::time::advance(Duration::from_secs(30)).await;
+        kept.get("other".to_owned(), POLICY, other.load())
+            .await
+            .expect("loaded");
+        gate.add_permits(1);
+
+        assert_eq!(reader.await.expect("no panic"), Ok(1));
+        assert_eq!(get(&kept, &source).await, Ok(1), "kept by its load");
     }
 
     #[tokio::test(start_paused = true)]

@@ -16,6 +16,7 @@ use crate::compose::ComposeState;
 use crate::docker::{DockerChanges, DockerState};
 use crate::jobs::{Clock, HangarJobs, Jobs, Updates};
 use crate::notifications::Notifier;
+use crate::services::ServicesState;
 use crate::store::StoreState;
 use crate::trailing_slash::TrailingSlash;
 use crate::widgets::WidgetsState;
@@ -31,6 +32,7 @@ pub struct App {
     pub(crate) jobs: Arc<Jobs>,
     pub(crate) backups: Arc<Backups>,
     pub(crate) widgets: Arc<WidgetsState>,
+    pub(crate) services: Arc<ServicesState>,
 }
 
 impl App {
@@ -78,6 +80,7 @@ impl App {
                 Arc::clone(&locks),
             ),
             widgets: WidgetsState::new(settings, runtime.clone()),
+            services: ServicesState::new(settings, runtime.clone()),
             compose: ComposeState::new(
                 settings,
                 runtime,
@@ -133,7 +136,8 @@ pub fn router(app: App) -> axum::Router {
         compose: app.clone(),
         jobs: app.clone(),
         backups: app.clone(),
-        widgets: app,
+        widgets: app.clone(),
+        services: app,
     })
 }
 
