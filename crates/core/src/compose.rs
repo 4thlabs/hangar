@@ -123,35 +123,12 @@ impl<R: CommandRunner> Compose<R> {
             })
     }
 
-    /// Runs `command` on the installed app `app`, as [`run`](Self::run) does, and gives its stdout; its stderr only
-    /// feeds the error.
-    ///
-    /// # Errors
-    ///
-    /// The errors of [`run`](Self::run), and [`ComposeError::Failed`] when stdout is not UTF-8.
-    pub(crate) async fn capture(
-        &self,
-        app: &str,
-        command: ComposeCommand,
-    ) -> Result<String, ComposeError> {
-        let run = self.project_command(app, &command).await?;
-
-        self.runner
-            .capture(&run)
-            .await
-            .map_err(|source| ComposeError::Failed {
-                app: app.to_owned(),
-                command,
-                source,
-            })
-    }
-
-    /// Runs `command` on the project of `app` as Docker knows it, by its name alone, and gives its stdout, as
-    /// [`capture`](Self::capture) does. It reads no compose file: compose takes the project from the labels of its
-    /// containers, their dependencies and health checks included, so that it stops and starts them in their order, and
-    /// a file changed or removed since they were created changes nothing of what it runs. It runs from `/` and with no
-    /// `COMPOSE_FILE`, as compose would otherwise read a file it finds in the directory it runs in, or in a parent, or
-    /// the one that variable names; and with no `.env.global`, which only the commands that create containers read.
+    /// Runs `command` on the project of `app` as Docker knows it, by its name alone, and gives its stdout; its stderr
+    /// only feeds the error. Given a project's name and no `-f`, `ps`, `stop` and `start` read no compose
+    /// file, nor `COMPOSE_FILE`, nor an `.env`: compose takes the project from the labels of its containers, their
+    /// dependencies and health checks included, so that it stops and starts them in their order, and a file changed,
+    /// broken or removed since they were created changes nothing of what it runs. Nor is `.env.global` read, which
+    /// only the commands that create containers need.
     ///
     /// # Errors
     ///
@@ -172,9 +149,7 @@ impl<R: CommandRunner> Compose<R> {
 
         let run = Command::new("docker")
             .args(["compose", "-p", app])
-            .args(command.args())
-            .current_dir("/")
-            .env_remove("COMPOSE_FILE");
+            .args(command.args());
 
         self.runner
             .capture(&run)

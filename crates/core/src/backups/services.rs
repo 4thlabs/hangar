@@ -1,7 +1,7 @@
-//! The services a backup stops while it reads their files, and starts again after: by the project's name alone, with no
-//! compose file, so that compose stops and starts them in the order of their dependencies, as their containers' labels
-//! say, and a compose file changed or removed meanwhile, by a sync of the store, the editor, or a shared file it
-//! includes, cannot keep them from starting again.
+//! The services a backup stops while it reads their files, and starts again after: listed, stopped and started by the
+//! project's name alone, with no compose file, so that compose stops and starts them in the order of their
+//! dependencies, as their containers' labels say, and a compose file changed, broken or removed meanwhile, by a sync of
+//! the store, the editor, or a shared file it includes, cannot keep them from being listed or from starting again.
 
 use std::sync::LazyLock;
 
@@ -117,7 +117,7 @@ impl Services {
         app: &str,
     ) -> Result<Vec<String>, BackupError> {
         let listed = compose
-            .capture(
+            .capture_by_name(
                 app,
                 ComposeCommand::Args(
                     [
@@ -136,10 +136,8 @@ impl Services {
             .await;
         let stdout = match listed {
             Ok(stdout) => stdout,
-            // Compose can run nothing of an app it cannot take as a project, or that is not installed.
-            Err(ComposeError::InvalidProject { .. } | ComposeError::NotInstalled { .. }) => {
-                return Ok(Vec::new());
-            }
+            // Compose runs nothing of an app it cannot take as a project; one not installed lists none.
+            Err(ComposeError::InvalidProject { .. }) => return Ok(Vec::new()),
             Err(source) => {
                 return Err(BackupError::NotStopped {
                     app: app.to_owned(),
