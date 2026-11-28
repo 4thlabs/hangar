@@ -25,6 +25,7 @@ use http::header::{
     ORIGIN, SET_COOKIE,
 };
 use serde_json::json;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 const URL: &str = "https://hangar.example.com";
 
@@ -297,13 +298,20 @@ where
     }
 }
 
-/// Waits, within [`PATIENCE`], for the fake `docker` to say on `fifo` that it stops the services.
+/// Waits, within [`PATIENCE`], for the fake `docker` to say on `fifo` that it stops the services. The FIFO is opened
+/// for reading and writing, which does not block for a writer, and read asynchronously: a fake `docker` that never
+/// stops fails the test rather than hold a blocked thread the runtime would wait for.
 async fn stopping(fifo: PathBuf) {
-    let read = tokio::task::spawn_blocking(move || fs::read_to_string(fifo));
-    let said = tokio::time::timeout(PATIENCE, read)
+    let receiver = tokio::net::unix::pipe::OpenOptions::new()
+        .read_write(true)
+        .open_receiver(&fifo)
+        .expect("the FIFO opens");
+    let mut reader = BufReader::new(receiver);
+    let mut said = String::new();
+
+    tokio::time::timeout(PATIENCE, reader.read_line(&mut said))
         .await
         .expect("the services are stopped")
-        .expect("the read ends")
         .expect("the FIFO reads");
 
     assert_eq!(said.trim(), "stopping");
@@ -600,7 +608,7 @@ async fn schedules_a_backup_hangar_yml_gives_a_cron_once_the_store_is_synced() -
 }
 
 #[tokio::test]
-async fn holds_its_app_while_its_services_are_stopped_but_not_a_sync_of_the_store()
+async fn holds_its_app_while_its_services_are_stopped_and_runs_beside_no_sync_of_the_store()
 -> quoll::Result<()> {
     let fixture = Fixture::new();
     let signal = fixture.signal();
@@ -648,8 +656,16 @@ async fn holds_its_app_while_its_services_are_stopped_but_not_a_sync_of_the_stor
     assert_eq!(refused.status(), StatusCode::CONFLICT);
     assert!(fixture.data.join("app-installed/alpha").is_symlink());
 
-    // A sync of the store does not wait for the backup.
-    assert_eq!(api.store().sync().await?.state, SyncState::Running);
+    // Nor is the store synced, which could rewrite the compose.yml its services are started again from.
+    let refused = api.store().sync().await.expect_err("a backup stops alpha");
+
+    assert_eq!(refused.status(), Some(StatusCode::CONFLICT));
+    assert_eq!(
+        ErrorCode::read(&refused),
+        Some(ErrorCode::BatchRunning {
+            apps: vec!["alpha".to_owned()]
+        })
+    );
 
     // Beta's waits its turn after alpha's: its failure says alpha's has ended.
     api.backups().back_up("beta").await?;

@@ -1,8 +1,9 @@
 //! The installed apps that a command holds, a compose batch over them, an install or an uninstall of one, or a backup
-//! that stops its services, so that two never run on one app at once, and the store's sync, which no batch runs beside.
-//! An uninstall's `down` then its unlink, with an `up` of a batch between them, would leave a stack running that no
-//! installed app manages; a sync pulls and links the files a batch's compose reads; an `up` while a backup has stopped
-//! the services would zip a live database, and a `down` would make its start fail.
+//! that stops its services, so that two never run on one app at once, and the store's sync, which no batch and no such
+//! backup runs beside. An uninstall's `down` then its unlink, with an `up` of a batch between them, would leave a stack
+//! running that no installed app manages; a sync pulls and links the files a batch's compose reads, and the
+//! `compose.yml` a backup starts the services it stopped from; an `up` while a backup has stopped the services would
+//! zip a live database, and a `down` would make its start fail.
 
 use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -106,16 +107,17 @@ impl AppLocks {
     }
 
     /// Holds `app` for a backup that stops its services, from before it reads which run to after it starts them again.
-    /// A sync of the store does not wait for it, nor it for a sync: a backup may run for hours.
+    /// It runs beside no sync of the store, as a batch does: a pull could rewrite or remove the `compose.yml` it starts
+    /// the services again from.
     ///
     /// # Errors
     ///
-    /// A 409, `compose.app_busy`, when another command holds it.
+    /// A 409, `compose.app_busy`, when another command holds it or a sync of the store runs.
     pub(crate) fn claim_backup(self: &Arc<Self>, app: &str) -> Result<AppClaim, ErrorCode> {
         let mut held = self.held();
 
-        if held.holds(app) {
-            tracing::warn!(%app, "a backup was refused: another command holds its app");
+        if held.is_syncing || held.holds(app) {
+            tracing::warn!(%app, is_syncing = held.is_syncing, "a backup was refused: its app is busy");
 
             return Err(ErrorCode::AppBusy {
                 app: app.to_owned(),
@@ -127,18 +129,18 @@ impl AppLocks {
         Ok(self.claimed(Holder::Backup, vec![app.to_owned()]))
     }
 
-    /// Marks a sync of the store running, which no batch runs beside; a backup that holds an app does not hold it up.
+    /// Marks a sync of the store running, which no batch and no backup that stops services runs beside.
     ///
     /// # Errors
     ///
-    /// A 409, `store.batch_running`, naming the apps the batches hold.
+    /// A 409, `store.batch_running`, naming the apps the batches and those backups hold.
     pub(crate) fn claim_sync(self: &Arc<Self>) -> Result<SyncClaim, ErrorCode> {
         let mut held = self.held();
 
-        if !held.batches.is_empty() {
-            let apps: Vec<String> = held.batches.iter().cloned().collect();
+        if !held.batches.is_empty() || !held.backups.is_empty() {
+            let apps: Vec<String> = held.batches.union(&held.backups).cloned().collect();
 
-            tracing::warn!(apps = %apps.join(", "), "a sync of the store was refused: compose batches run");
+            tracing::warn!(apps = %apps.join(", "), "a sync of the store was refused: compose batches or backups run");
 
             return Err(ErrorCode::BatchRunning { apps });
         }
@@ -272,7 +274,7 @@ mod tests {
     }
 
     #[test]
-    fn holds_the_app_of_a_backup_apart_from_every_other_command_but_a_sync() {
+    fn holds_the_app_of_a_backup_apart_from_every_other_command() {
         let locks = Arc::new(AppLocks::default());
         let backup = locks.claim_backup("alpha").expect("nothing is held");
 
@@ -291,26 +293,26 @@ mod tests {
             busy("alpha")
         );
 
-        let sync = locks
-            .claim_sync()
-            .expect("a sync does not wait for a backup");
-
-        assert!(
-            locks.claim_backup("beta").is_ok(),
-            "nor a backup for a sync"
-        );
-
-        drop((sync, backup));
-
-        let batch = locks.claim_batch(["alpha"]).expect("released");
+        let batch = locks.claim_batch(["gamma"]).expect("gamma is free");
 
         assert_eq!(
-            locks
-                .claim_backup("alpha")
-                .expect_err("a batch holds alpha"),
+            locks.claim_sync().expect_err("a batch and a backup run"),
+            ErrorCode::BatchRunning {
+                apps: vec!["alpha".to_owned(), "gamma".to_owned()]
+            }
+        );
+
+        drop((batch, backup));
+
+        let sync = locks.claim_sync().expect("released");
+
+        assert_eq!(
+            locks.claim_backup("alpha").expect_err("a sync runs"),
             busy("alpha")
         );
 
-        drop(batch);
+        drop(sync);
+
+        assert!(locks.claim_backup("alpha").is_ok(), "released");
     }
 }
