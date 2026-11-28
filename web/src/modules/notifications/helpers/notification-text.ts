@@ -67,12 +67,9 @@ const wordsByKey: Words = {
     title: m.notifications_updates_available_title(),
     description: m.notifications_updates_available_description({ count }),
   }),
-  autoUpdate: ({ params: { updated, failed } }) => ({
+  autoUpdate: ({ params }) => ({
     title: m.notifications_auto_update_title(),
-    description:
-      failed.length > 0
-        ? m.notifications_auto_update_failed_description({ updated, failed: names.format(failed) })
-        : m.notifications_auto_update_description({ updated }),
+    description: autoUpdateDescription(params),
   }),
   backupFailed: ({ params: { app, error } }) => ({
     title: m.notifications_backup_failed_title(),
@@ -83,6 +80,31 @@ const wordsByKey: Words = {
     description: m.notifications_backup_restart_failed_description({ app, services: names.format(services) }),
   }),
 };
+
+/** What an update of the apps says it did: how many it updated, then the apps it failed for and those it skipped. */
+function autoUpdateDescription({
+  updated,
+  failed,
+  skipped,
+}: Extract<NotificationMessage, { key: "autoUpdate" }>["params"]): string {
+  if (failed.length > 0 && skipped.length > 0) {
+    return m.notifications_auto_update_failed_skipped_description({
+      updated,
+      failed: names.format(failed),
+      skipped: names.format(skipped),
+    });
+  }
+
+  if (failed.length > 0) {
+    return m.notifications_auto_update_failed_description({ updated, failed: names.format(failed) });
+  }
+
+  if (skipped.length > 0) {
+    return m.notifications_auto_update_skipped_description({ updated, skipped: names.format(skipped) });
+  }
+
+  return m.notifications_auto_update_description({ updated });
+}
 
 /** What `message` says. */
 export function describeNotification(message: NotificationMessage): NotificationWords {

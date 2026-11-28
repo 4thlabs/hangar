@@ -477,6 +477,7 @@ describe("the backups of /apps/:project", () => {
     startedAt: null,
     endedAt: null,
     error: null,
+    result: null,
   };
 
   it("says when and how the app is backed up, and lists its archives to download", async () => {

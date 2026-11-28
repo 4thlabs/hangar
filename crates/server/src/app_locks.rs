@@ -84,6 +84,35 @@ impl AppLocks {
         Ok(self.claimed(Holder::Batch, apps))
     }
 
+    /// Holds, for a compose batch, each of `apps` that no other command holds, and gives the others, by name: the
+    /// update of the night skips them, where a batch of the page is refused whole.
+    ///
+    /// # Errors
+    ///
+    /// A 409, `compose.app_busy`, naming the first app while a sync of the store runs; none is held then.
+    pub(crate) fn claim_free<'a>(
+        self: &Arc<Self>,
+        apps: impl IntoIterator<Item = &'a str>,
+    ) -> Result<(AppClaim, Vec<String>), ErrorCode> {
+        let apps = Self::sorted(apps);
+        let mut held = self.held();
+
+        if held.is_syncing
+            && let Some(first) = apps.first()
+        {
+            tracing::warn!(app = %first, "a compose batch was refused: a sync of the store runs");
+
+            return Err(ErrorCode::AppBusy { app: first.clone() });
+        }
+
+        let (busy, free): (Vec<String>, Vec<String>) =
+            apps.into_iter().partition(|app| held.holds(app));
+
+        held.batches.extend(free.iter().cloned());
+
+        Ok((self.claimed(Holder::Batch, free), busy))
+    }
+
     /// Holds `app` for its install or its uninstall, which take their turn with a sync of the store apart.
     ///
     /// # Errors
@@ -312,5 +341,55 @@ mod tests {
         );
 
         drop(batch);
+    }
+
+    #[test]
+    fn holds_for_a_batch_the_apps_nobody_holds_and_names_the_others() {
+        let locks = Arc::new(AppLocks::default());
+        let backup = locks.claim_backup("beta").expect("nothing is held");
+        let change = locks.claim_change("delta").expect("nothing is held");
+
+        assert_eq!(
+            locks
+                .claim_batch(["gamma", "beta", "alpha"])
+                .expect_err("a backup holds beta"),
+            busy("beta"),
+            "a batch of the page is still refused whole"
+        );
+
+        let (batch, held) = locks
+            .claim_free(["gamma", "delta", "beta", "alpha"])
+            .expect("no sync runs");
+
+        assert_eq!(held, ["beta", "delta"]);
+        assert_eq!(
+            locks
+                .claim_change("gamma")
+                .expect_err("the batch holds gamma"),
+            busy("gamma")
+        );
+        assert_eq!(
+            locks
+                .claim_backup("alpha")
+                .expect_err("the batch holds alpha"),
+            busy("alpha")
+        );
+
+        drop((batch, backup, change));
+
+        let sync = locks.claim_sync().expect("nothing is held");
+
+        assert_eq!(
+            locks
+                .claim_free(["gamma", "beta"])
+                .expect_err("a sync runs"),
+            busy("beta")
+        );
+
+        drop(sync);
+
+        let (_, held) = locks.claim_free(["gamma", "beta"]).expect("released");
+
+        assert!(held.is_empty());
     }
 }

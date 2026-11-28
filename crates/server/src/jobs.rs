@@ -11,7 +11,7 @@ mod updates;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use hangar_api::{ErrorCode, Job};
+use hangar_api::{ErrorCode, Job, JobResult};
 use hangar_core::{CancellationToken, Config, CronSchedule};
 use tokio::sync::watch;
 
@@ -125,11 +125,15 @@ impl HangarJobs {
 }
 
 impl JobRunner for HangarJobs {
-    async fn run(&self, job: Job, cancel: CancellationToken) -> Result<(), ErrorCode> {
+    async fn run(
+        &self,
+        job: Job,
+        cancel: CancellationToken,
+    ) -> Result<Option<JobResult>, ErrorCode> {
         match job {
-            Job::ImageCheck => self.updates.check_images(&cancel).await,
-            Job::AutoUpdate => self.updates.update_apps(&cancel).await,
-            Job::Backup { app } => self.backups.back_up(&app, &cancel).await,
+            Job::ImageCheck => self.updates.check_images(&cancel).await.map(|()| None),
+            Job::AutoUpdate => self.updates.update_apps(&cancel).await.map(Some),
+            Job::Backup { app } => self.backups.back_up(&app, &cancel).await.map(|()| None),
         }
     }
 }
@@ -138,7 +142,7 @@ impl JobRunner for HangarJobs {
 mod tests {
     use std::collections::HashSet;
 
-    use hangar_api::{ErrorCode, Job};
+    use hangar_api::{ErrorCode, Job, JobResult};
     use hangar_core::{CancellationToken, Config, CronSchedule};
 
     use super::{Clock, HangarJobs, JobRunner, Scheduler};
@@ -147,8 +151,8 @@ mod tests {
     struct Idle;
 
     impl JobRunner for Idle {
-        async fn run(&self, _: Job, _: CancellationToken) -> Result<(), ErrorCode> {
-            Ok(())
+        async fn run(&self, _: Job, _: CancellationToken) -> Result<Option<JobResult>, ErrorCode> {
+            Ok(None)
         }
     }
 

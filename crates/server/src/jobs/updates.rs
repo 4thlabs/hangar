@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use hangar_api::{ErrorCode, NotificationLevel, NotificationMessage};
+use hangar_api::{ErrorCode, JobResult, NotificationLevel, NotificationMessage};
 use hangar_core::{
     CancellationToken, Compose, ComposeCommand, ComposeError, Config, Docker, Output, Runtime,
     Store, UpOptions,
@@ -43,6 +43,13 @@ impl Updates {
         pull: true,
         force_recreate: false,
     });
+
+    /// What an update of the apps that found none to update did.
+    const NOTHING_UPDATED: JobResult = JobResult::AutoUpdate {
+        updated: Vec::new(),
+        failed: Vec::new(),
+        skipped: Vec::new(),
+    };
 
     /// How many lines of compose's output wait at most to be read, and dropped: the log has its failure.
     const OUTPUT_BACKLOG: usize = 64;
@@ -97,25 +104,40 @@ impl Updates {
 
     /// The update of the apps: checks the images again, as the last check may be hours old, then runs `docker compose
     /// up -d --pull always` on each app the registry has moved past, one at a time in the order of `hangar.yml`,
-    /// carrying on after one that fails, and notifies `autoUpdate` once for them all. The apps are held until it ends,
-    /// as a compose batch holds its own; once canceled, it ends the app it updates and starts no other.
+    /// carrying on after one that fails, and notifies `autoUpdate` once for them all. It skips an app another command
+    /// holds, a backup, a batch, an install or an uninstall, which a later run updates. The others are held until it
+    /// ends, as a compose batch holds its own; once canceled, it ends the app it updates and starts no other. It gives
+    /// the apps it updated, failed to update and skipped.
     ///
     /// # Errors
     ///
-    /// The errors of [`check_images`](Self::check_images), and `compose.app_busy` when another command holds one of
-    /// the apps, or a sync of the store runs: no app is updated then.
-    pub(crate) async fn update_apps(&self, cancel: &CancellationToken) -> Result<(), ErrorCode> {
+    /// The errors of [`check_images`](Self::check_images), and `compose.app_busy` while a sync of the store runs: no
+    /// app is updated then.
+    pub(crate) async fn update_apps(
+        &self,
+        cancel: &CancellationToken,
+    ) -> Result<JobResult, ErrorCode> {
         let Some(checked) = self.check(cancel).await? else {
-            return Ok(());
+            return Ok(Self::NOTHING_UPDATED);
         };
 
         if checked.outdated.is_empty() {
             tracing::info!("no app to update: the registries serve what they run");
-            return Ok(());
+            return Ok(Self::NOTHING_UPDATED);
         }
 
         let apps = Self::in_order(&checked.outdated, &checked.config);
-        let claim = self.locks.claim_batch(apps.iter().map(String::as_str))?;
+        let (claim, held) = self.locks.claim_free(apps.iter().map(String::as_str))?;
+        let (skipped, apps): (Vec<String>, Vec<String>) =
+            apps.into_iter().partition(|app| held.contains(app));
+
+        if !skipped.is_empty() {
+            tracing::warn!(
+                skipped = %skipped.join(", "),
+                "apps another command holds are not updated: a later run updates them"
+            );
+        }
+
         let mut updated = Vec::new();
         let mut failed = Vec::new();
 
@@ -140,15 +162,18 @@ impl Updates {
         tracing::info!(
             updated = %updated.join(", "),
             failed = %failed.join(", "),
+            skipped = %skipped.join(", "),
             "the apps the registries moved past are updated"
         );
 
         // One notification for them all: this runs while nobody watches.
-        if !updated.is_empty() || !failed.is_empty() {
-            let level = if failed.is_empty() {
-                NotificationLevel::Success
-            } else {
+        if !updated.is_empty() || !failed.is_empty() || !skipped.is_empty() {
+            let level = if !failed.is_empty() {
                 NotificationLevel::Error
+            } else if !skipped.is_empty() {
+                NotificationLevel::Warning
+            } else {
+                NotificationLevel::Success
             };
 
             self.notifier.notify(Notification {
@@ -156,13 +181,18 @@ impl Updates {
                 message: NotificationMessage::AutoUpdate {
                     updated: Self::count(updated.len()),
                     failed: failed.clone(),
+                    skipped: skipped.clone(),
                 },
                 href: Some("/apps".to_owned()),
                 dedupe_key: Some("auto-update".to_owned()),
             });
         }
 
-        Ok(())
+        Ok(JobResult::AutoUpdate {
+            updated,
+            failed,
+            skipped,
+        })
     }
 
     /// Asks the registries what they serve for the images the installed apps run, as `hangar.yml` spaces the calls,
@@ -262,7 +292,7 @@ mod tests {
     use axum::Json;
     use axum::extract::Path;
     use axum::routing::get;
-    use hangar_api::{NotificationLevel, NotificationMessage};
+    use hangar_api::{JobResult, NotificationLevel, NotificationMessage};
     use hangar_core::{CancellationToken, Docker, Runtime};
     use serde_json::{Value, json};
 
@@ -282,10 +312,10 @@ done
 "#;
 
     /// The installed apps, the image each runs, the digest of the image it runs, and the digest its registry serves:
-    /// `gamma` and `alpha` run an image the registry has moved past, `beta` the one it serves, and `delta` one its
-    /// `compose.yml` builds, its registry digest its own id as on containerd's store, which the daemon keeps, of a name
-    /// a registry serves another image of.
-    const APPS: [(&str, &str, &str, &str); 4] = [
+    /// `gamma`, `alpha` and `epsilon` run an image the registry has moved past, `beta` the one it serves, and `delta`
+    /// one its `compose.yml` builds, its registry digest its own id as on containerd's store, which the daemon keeps, of
+    /// a name a registry serves another image of.
+    const APPS: [(&str, &str, &str, &str); 5] = [
         (
             "alpha",
             "nginx:alpine",
@@ -299,6 +329,12 @@ done
             "acme/delta:dev",
             "sha256:delta",
             "sha256:registry-delta",
+        ),
+        (
+            "epsilon",
+            "postgres:17",
+            "sha256:old-postgres",
+            "sha256:new-postgres",
         ),
     ];
 
@@ -382,7 +418,7 @@ done
         Json(json!({ "Descriptor": { "digest": served } }))
     }
 
-    /// A data directory where [`APPS`] are installed, `hangar.yml` listing `gamma` first, a fake `docker` that fails
+    /// A data directory where [`APPS`] are installed, `hangar.yml` listing `gamma` first and `epsilon` last, a fake `docker` that fails
     /// on `fail`, and the log of its calls.
     struct Fixture {
         _dir: tempfile::TempDir,
@@ -419,7 +455,7 @@ done
 
             fs::write(
                 store.join("config/hangar.yml"),
-                "categories:\n  - { name: Apps, color: blue, stacks: [gamma, beta, alpha, delta] }\nregistryThrottling: 0\n",
+                "categories:\n  - { name: Apps, color: blue, stacks: [gamma, beta, alpha, delta, epsilon] }\nregistryThrottling: 0\n",
             )
             .expect("written");
             fs::create_dir_all(&bin).expect("created");
@@ -530,13 +566,16 @@ done
             .outdated(&containers, &apps)
             .await;
 
-        assert_eq!(outdated.into_iter().collect::<Vec<_>>(), ["alpha", "gamma"]);
+        assert_eq!(
+            outdated.into_iter().collect::<Vec<_>>(),
+            ["alpha", "epsilon", "gamma"]
+        );
         assert!(fixture.updated().is_empty(), "a check updates nothing");
         assert_eq!(
             fixture.notified(),
             [(
                 NotificationLevel::Info,
-                NotificationMessage::UpdatesAvailable { count: 2 },
+                NotificationMessage::UpdatesAvailable { count: 3 },
                 Some("/apps".to_owned()),
                 Some("image-updates".to_owned()),
             )]
@@ -547,20 +586,29 @@ done
     async fn updates_each_app_the_registry_moved_past_in_turn_in_the_order_of_hangar_yml() {
         let fixture = Fixture::new(None).await;
 
-        fixture
+        let result = fixture
             .updates
             .update_apps(&CancellationToken::new())
             .await
             .expect("updated");
 
-        assert_eq!(fixture.updated(), ["gamma", "alpha"]);
+        assert_eq!(fixture.updated(), ["gamma", "alpha", "epsilon"]);
+        assert_eq!(
+            result,
+            JobResult::AutoUpdate {
+                updated: names(&["gamma", "alpha", "epsilon"]),
+                failed: Vec::new(),
+                skipped: Vec::new(),
+            }
+        );
         assert_eq!(
             fixture.notified(),
             [(
                 NotificationLevel::Success,
                 NotificationMessage::AutoUpdate {
-                    updated: 2,
-                    failed: Vec::new()
+                    updated: 3,
+                    failed: Vec::new(),
+                    skipped: Vec::new(),
                 },
                 Some("/apps".to_owned()),
                 Some("auto-update".to_owned()),
@@ -572,7 +620,7 @@ done
     async fn carries_on_after_an_app_that_fails_and_names_it() {
         let fixture = Fixture::new(Some("gamma")).await;
 
-        fixture
+        let result = fixture
             .updates
             .update_apps(&CancellationToken::new())
             .await
@@ -580,13 +628,22 @@ done
 
         let (level, message, _, _) = fixture.notified().remove(0);
 
-        assert_eq!(fixture.updated(), ["gamma", "alpha"]);
+        assert_eq!(fixture.updated(), ["gamma", "alpha", "epsilon"]);
+        assert_eq!(
+            result,
+            JobResult::AutoUpdate {
+                updated: names(&["alpha", "epsilon"]),
+                failed: names(&["gamma"]),
+                skipped: Vec::new(),
+            }
+        );
         assert_eq!(level, NotificationLevel::Error);
         assert_eq!(
             message,
             NotificationMessage::AutoUpdate {
-                updated: 1,
-                failed: vec!["gamma".to_owned()]
+                updated: 2,
+                failed: names(&["gamma"]),
+                skipped: Vec::new(),
             }
         );
     }
@@ -597,32 +654,105 @@ done
         let cancel = CancellationToken::new();
 
         cancel.cancel();
-        fixture.updates.update_apps(&cancel).await.expect("ended");
 
+        let result = fixture.updates.update_apps(&cancel).await.expect("ended");
+
+        assert_eq!(result, Updates::NOTHING_UPDATED);
         assert!(fixture.updated().is_empty());
         assert!(fixture.notified().is_empty());
     }
 
     #[tokio::test]
-    async fn updates_no_app_another_command_holds() {
+    async fn skips_an_app_a_backup_holds_updates_the_others_and_names_it() {
         let fixture = Fixture::new(None).await;
-        let _held = fixture.updates.locks.claim_change("alpha").expect("held");
+        let backup = fixture.updates.locks.claim_backup("alpha").expect("held");
 
-        let refused = fixture.updates.update_apps(&CancellationToken::new()).await;
+        let result = fixture
+            .updates
+            .update_apps(&CancellationToken::new())
+            .await
+            .expect("updated");
+
+        assert_eq!(fixture.updated(), ["gamma", "epsilon"]);
+        assert_eq!(
+            result,
+            JobResult::AutoUpdate {
+                updated: names(&["gamma", "epsilon"]),
+                failed: Vec::new(),
+                skipped: names(&["alpha"]),
+            }
+        );
+        assert_eq!(
+            fixture.notified(),
+            [(
+                NotificationLevel::Warning,
+                NotificationMessage::AutoUpdate {
+                    updated: 2,
+                    failed: Vec::new(),
+                    skipped: names(&["alpha"]),
+                },
+                Some("/apps".to_owned()),
+                Some("auto-update".to_owned()),
+            )]
+        );
+        assert!(
+            fixture.updates.locks.claim_change("gamma").is_ok(),
+            "the update held its apps until it ended"
+        );
+
+        // The next run, once the backup ends, updates it.
+        drop(backup);
+        fixture
+            .updates
+            .update_apps(&CancellationToken::new())
+            .await
+            .expect("updated");
 
         assert_eq!(
-            refused,
-            Err(hangar_api::ErrorCode::AppBusy {
-                app: "alpha".to_owned()
-            })
+            fixture.updated(),
+            ["gamma", "epsilon", "gamma", "alpha", "epsilon"]
         );
-        assert!(fixture.updated().is_empty());
     }
 
     #[tokio::test]
-    async fn updates_no_app_while_a_backup_has_stopped_the_services_of_one() {
+    async fn skips_the_apps_an_install_and_a_batch_hold_and_notifies_them_alone() {
         let fixture = Fixture::new(None).await;
-        let _backup = fixture.updates.locks.claim_backup("alpha").expect("held");
+        let _change = fixture.updates.locks.claim_change("alpha").expect("held");
+        let _batch = fixture
+            .updates
+            .locks
+            .claim_batch(["gamma", "epsilon"])
+            .expect("held");
+
+        let result = fixture
+            .updates
+            .update_apps(&CancellationToken::new())
+            .await
+            .expect("updated");
+
+        assert!(fixture.updated().is_empty());
+        assert_eq!(
+            result,
+            JobResult::AutoUpdate {
+                updated: Vec::new(),
+                failed: Vec::new(),
+                skipped: names(&["gamma", "alpha", "epsilon"]),
+            }
+        );
+        assert_eq!(
+            fixture.notified().remove(0).1,
+            NotificationMessage::AutoUpdate {
+                updated: 0,
+                failed: Vec::new(),
+                skipped: names(&["gamma", "alpha", "epsilon"]),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn updates_no_app_while_a_sync_of_the_store_runs() {
+        let fixture = Fixture::new(None).await;
+        let _sync = fixture.updates.locks.claim_sync().expect("nothing runs");
 
         let refused = fixture.updates.update_apps(&CancellationToken::new()).await;
 
@@ -633,5 +763,11 @@ done
             })
         );
         assert!(fixture.updated().is_empty());
+        assert!(fixture.notified().is_empty());
+    }
+
+    /// `apps`, owned.
+    fn names(apps: &[&str]) -> Vec<String> {
+        apps.iter().map(|&app| app.to_owned()).collect()
     }
 }

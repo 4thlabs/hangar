@@ -1,4 +1,4 @@
-import type { Job, JobRun, JobState } from "#libs/api";
+import type { Job, JobResult, JobRun, JobState } from "#libs/api";
 import { describeErrorDetail } from "#modules/common/helpers/error-message.ts";
 import {
   settingsLabels,
@@ -24,6 +24,30 @@ export const jobsIdlePollMs = 30_000;
 export function jobsPollDelay(runs: readonly JobRun[]): number {
   return runs.some(isRunActive) ? jobsPollMs : jobsIdlePollMs;
 }
+
+/** A list of apps, as `alpha and gamma`. */
+const apps = new Intl.ListFormat("en", { type: "conjunction" });
+
+/** A kind of what a run did, as `auto_update`. */
+type JobResultKind = JobResult["kind"];
+
+/** What a run of each kind did, a sentence each, from what it says. */
+type ResultWordsByKind = { [Kind in JobResultKind]: (result: Extract<JobResult, { kind: Kind }>) => string[] };
+
+/** What a run of each kind did. */
+const resultWords: ResultWordsByKind = {
+  auto_update: ({ params: { updated, failed, skipped } }) => {
+    if (updated.length === 0 && failed.length === 0 && skipped.length === 0) {
+      return [m.settings_results_nothing()];
+    }
+
+    return [
+      ...(updated.length > 0 ? [m.settings_results_updated({ apps: apps.format(updated) })] : []),
+      ...(failed.length > 0 ? [m.settings_results_failed({ apps: apps.format(failed) })] : []),
+      ...(skipped.length > 0 ? [m.settings_results_skipped({ apps: apps.format(skipped) })] : []),
+    ];
+  },
+};
 
 /** A time of a run, in English. */
 const runTimeFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "medium" });
@@ -74,6 +98,18 @@ export function formatRunTime(time: string | null): string {
 /** Why `run` failed, as the server says it; nothing for a run that did not. */
 export function runFailure(run: JobRun): string | undefined {
   return run.error ? describeErrorDetail(run.error) : undefined;
+}
+
+/**
+ * What `run` did, a sentence each, as the update of the apps names the apps it updated, failed for and skipped; none
+ * for a run that says nothing, or what a newer server says that this page does not know.
+ */
+export function runResult(run: JobRun): string[] {
+  if (run.result === null || !Object.hasOwn(resultWords, run.result.kind)) {
+    return [];
+  }
+
+  return resultWords[run.result.kind](run.result);
 }
 
 /** What the toast of a job asked for again says: its run waits its turn, or already runs. */

@@ -86,6 +86,42 @@ pub struct JobRun {
     pub ended_at: Option<String>,
     /// Why it failed; `None` for one that did not.
     pub error: Option<ErrorDetail>,
+    /// What it did, for a job that says so, as the update of the apps; `None` while it waits or runs, for one that
+    /// failed, and for a job that says nothing. A run canceled says what it did before it stopped.
+    pub result: Option<JobResult>,
+}
+
+/// What a run of a job did: its kind, the job's, and its params, as `{ "kind": "auto_update", "params": { "updated":
+/// ["gamma"], "failed": [], "skipped": ["alpha"] } }`.
+///
+/// ```
+/// use hangar_api::JobResult;
+///
+/// assert_eq!(
+///     serde_json::to_value(JobResult::AutoUpdate {
+///         updated: vec!["gamma".to_owned()],
+///         failed: Vec::new(),
+///         skipped: vec!["alpha".to_owned()],
+///     })
+///     .expect("JSON"),
+///     serde_json::json!({
+///         "kind": "auto_update",
+///         "params": { "updated": ["gamma"], "failed": [], "skipped": ["alpha"] },
+///     })
+/// );
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", content = "params", rename_all = "snake_case")]
+pub enum JobResult {
+    /// The update of the apps: the apps the registry has moved past, each in one list, in the order of `hangar.yml`.
+    AutoUpdate {
+        /// The apps it updated.
+        updated: Vec<String>,
+        /// The apps it failed to update.
+        failed: Vec<String>,
+        /// The apps another command held, a backup, a batch, an install or an uninstall: a later run updates them.
+        skipped: Vec<String>,
+    },
 }
 
 quoll::group! {

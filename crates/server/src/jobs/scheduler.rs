@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use futures::FutureExt;
-use hangar_api::{ErrorCode, ErrorDetail, Job, JobQueue, JobRun, JobState};
+use hangar_api::{ErrorCode, ErrorDetail, Job, JobQueue, JobResult, JobRun, JobState};
 use hangar_core::{CancellationToken, CronSchedule};
 use jiff::Zoned;
 use tokio::sync::{Notify, watch};
@@ -19,12 +19,13 @@ use crate::timestamp::Timestamp;
 /// What runs the jobs, for the [`Scheduler`]: the server's own, or a test's.
 pub(crate) trait JobRunner: Send + Sync + 'static {
     /// Runs `job` to its end, or until `cancel` is cancelled, which it stops at its next step for: it then ends as it
-    /// is, its run canceled. A failure is the code the run keeps, its cause logged.
+    /// is, its run canceled. It gives what it did, for a job that says so, which the run keeps; a failure is the code
+    /// the run keeps, its cause logged.
     fn run(
         &self,
         job: Job,
         cancel: CancellationToken,
-    ) -> impl Future<Output = Result<(), ErrorCode>> + Send;
+    ) -> impl Future<Output = Result<Option<JobResult>, ErrorCode>> + Send;
 }
 
 /// Asks for the jobs on their crons, runs each in its queue, one at a time per queue in the order they were asked
@@ -68,6 +69,8 @@ struct Run {
     started_at: Option<jiff::Timestamp>,
     ended_at: Option<jiff::Timestamp>,
     error: Option<ErrorCode>,
+    /// What it did, for a job that says so.
+    result: Option<JobResult>,
     /// Cancelled to stop it.
     cancel: CancellationToken,
 }
@@ -226,6 +229,7 @@ impl<R: JobRunner> Scheduler<R> {
                 started_at: None,
                 ended_at,
                 error: None,
+                result: None,
                 cancel: CancellationToken::new(),
             };
             let view = Self::view(id, &run);
@@ -418,22 +422,23 @@ impl<R: JobRunner> Scheduler<R> {
         Some(started)
     }
 
-    /// Ends the run `id` as `ran` says, canceled when `cancel` was cancelled, whatever it gave.
+    /// Ends the run `id` as `ran` says, canceled when `cancel` was cancelled, whatever it gave but what it did.
     fn end(
         &self,
         id: u64,
-        ran: std::thread::Result<Result<(), ErrorCode>>,
+        ran: std::thread::Result<Result<Option<JobResult>, ErrorCode>>,
         cancel: &CancellationToken,
     ) {
         let now = self.clock.now().timestamp();
-        let (state, error) = match ran {
-            _ if cancel.is_cancelled() => (JobState::Canceled, None),
-            Ok(Ok(())) => (JobState::Completed, None),
-            Ok(Err(code)) => (JobState::Failed, Some(code)),
+        let (state, error, result) = match ran {
+            Ok(Ok(result)) if cancel.is_cancelled() => (JobState::Canceled, None, result),
+            _ if cancel.is_cancelled() => (JobState::Canceled, None, None),
+            Ok(Ok(result)) => (JobState::Completed, None, result),
+            Ok(Err(code)) => (JobState::Failed, Some(code), None),
             Err(_) => {
                 tracing::error!(id, "a job panicked");
 
-                (JobState::Failed, Some(ErrorCode::JobCrashed))
+                (JobState::Failed, Some(ErrorCode::JobCrashed), None)
             }
         };
         let mut runs = self.runs();
@@ -445,6 +450,7 @@ impl<R: JobRunner> Scheduler<R> {
             run.state = state;
             run.ended_at = Some(now);
             run.error = error;
+            run.result = result;
         }
 
         drop(runs);
@@ -462,6 +468,7 @@ impl<R: JobRunner> Scheduler<R> {
             started_at: run.started_at.map(Timestamp::format),
             ended_at: run.ended_at.map(Timestamp::format),
             error: run.error.clone().map(ErrorDetail::from),
+            result: run.result.clone(),
         }
     }
 
@@ -509,7 +516,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
-    use hangar_api::{ErrorCode, Job, JobQueue, JobRun, JobState};
+    use hangar_api::{ErrorCode, Job, JobQueue, JobResult, JobRun, JobState};
     use hangar_core::{CancellationToken, CronSchedule};
     use jiff::Zoned;
     use tokio::sync::{Semaphore, mpsc};
@@ -527,19 +534,27 @@ mod tests {
     #[derive(Debug, Clone)]
     enum Outcome {
         Succeeds,
+        /// It succeeds and says what it did, as it does when it is canceled.
+        Says(JobResult),
         Fails(ErrorCode),
         Panics,
     }
 
     impl JobRunner for FakeRunner {
-        async fn run(&self, job: Job, cancel: CancellationToken) -> Result<(), ErrorCode> {
+        async fn run(
+            &self,
+            job: Job,
+            cancel: CancellationToken,
+        ) -> Result<Option<JobResult>, ErrorCode> {
             self.started.send(job).expect("the test listens");
 
-            tokio::select! {
-                permit = self.released.acquire() => permit.expect("the semaphore stays open").forget(),
-                () = cancel.cancelled() => return Ok(()),
-            }
-
+            let is_canceled = tokio::select! {
+                permit = self.released.acquire() => {
+                    permit.expect("the semaphore stays open").forget();
+                    false
+                }
+                () = cancel.cancelled() => true,
+            };
             let outcome = self
                 .outcome
                 .lock()
@@ -547,7 +562,9 @@ mod tests {
                 .clone();
 
             match outcome {
-                Outcome::Succeeds => Ok(()),
+                Outcome::Says(result) => Ok(Some(result)),
+                _ if is_canceled => Ok(None),
+                Outcome::Succeeds => Ok(None),
                 Outcome::Fails(code) => Err(code),
                 Outcome::Panics => panic!("the job fails as the test says"),
             }
@@ -798,6 +815,7 @@ mod tests {
         let failed = scheduler.enqueue(Job::ImageCheck);
         let failed = reaches(&scheduler, failed.id, JobState::Failed).await;
 
+        assert!(failed.result.is_none());
         assert_eq!(
             failed.error.map(|error| error.code),
             Some(ErrorCode::DockerUnavailable)
@@ -822,6 +840,39 @@ mod tests {
         for job in [Job::ImageCheck, Job::ImageCheck, Job::AutoUpdate] {
             assert_eq!(starts.recv().await, Some(job));
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn keeps_what_a_run_did_and_what_a_canceled_one_did_before_it_stopped() {
+        let (scheduler, mut starts) = scheduler();
+        let said = |updated: &str| JobResult::AutoUpdate {
+            updated: vec![updated.to_owned()],
+            failed: Vec::new(),
+            skipped: vec!["alpha".to_owned()],
+        };
+
+        *scheduler.runner.outcome.lock().expect("the lock") = Outcome::Says(said("gamma"));
+        scheduler.runner.released.add_permits(1);
+
+        let completed = scheduler.enqueue(Job::AutoUpdate);
+
+        assert!(completed.result.is_none(), "it says nothing while it waits");
+
+        let completed = reaches(&scheduler, completed.id, JobState::Completed).await;
+
+        assert_eq!(completed.result, Some(said("gamma")));
+
+        *scheduler.runner.outcome.lock().expect("the lock") = Outcome::Says(said("beta"));
+
+        let canceled = scheduler.enqueue(Job::AutoUpdate);
+
+        starts.recv().await;
+        starts.recv().await;
+        scheduler.cancel(canceled.id).expect("told to stop");
+
+        let canceled = reaches(&scheduler, canceled.id, JobState::Canceled).await;
+
+        assert_eq!(canceled.result, Some(said("beta")));
     }
 
     /// The job of the backup of `app`.
