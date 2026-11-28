@@ -237,13 +237,10 @@ where
 /// parameters, `Call`. The service is resolved and its client taken only when the call is made: a fresh value kept
 /// reads neither the store nor `.env.global`.
 ///
-/// A part kept by the declaration's policy is fresh for its `ttl`. One that holds a policy of its own, for a service
-/// whose limits are tight or whose answer changes slowly, is kept by the longer of the two, fresh and stale each: it
-/// never asks its service more often than its own policy says, and a `ttl` can only make it ask less often.
+/// It is kept by the declaration's policy: fresh for its `ttl`, else a minute. A service whose calls are limited is
+/// asked less often by a longer `ttl`.
 pub(crate) struct Part<Call, T> {
     kept: Arc<Kept<(ServiceKey, Call), T>>,
-    /// Its own policy, the least it is kept by; `None`, the declaration's alone.
-    own: Option<Policy>,
 }
 
 impl<Call, T> Part<Call, T>
@@ -251,38 +248,10 @@ where
     Call: Clone + Eq + Hash + fmt::Debug + Send + Sync + 'static,
     T: Clone + Send + Sync + 'static,
 {
-    /// No call kept yet, of what the log calls `name`, kept by the declaration's policy.
+    /// No call kept yet, of what the log calls `name`.
     pub(crate) fn new(name: &'static str) -> Self {
         Self {
             kept: Kept::new(name),
-            own: None,
-        }
-    }
-
-    /// No call kept yet, of what the log calls `name`, kept by `own` at least.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "GitHub's and Finnhub's parts take it as they move to their routes"
-        )
-    )]
-    pub(crate) fn kept_for(name: &'static str, own: Policy) -> Self {
-        Self {
-            kept: Kept::new(name),
-            own: Some(own),
-        }
-    }
-
-    /// The policy a call is kept by, for a declaration of policy `declared`.
-    fn policy(&self, declared: Policy) -> Policy {
-        let Some(own) = self.own else {
-            return declared;
-        };
-
-        Policy {
-            fresh: own.fresh.max(declared.fresh),
-            stale: own.stale.max(declared.stale),
         }
     }
 
@@ -308,7 +277,7 @@ where
             .kept
             .get(
                 (locator.key(), call),
-                self.policy(locator.policy()),
+                locator.policy(),
                 move || async move {
                     let client = clients.of(&owned).await?;
 
@@ -579,28 +548,6 @@ mod tests {
             kept.lock().by_key.keys().collect::<Vec<_>>(),
             ["other"],
             "unread for fresh and stale together, it is gone"
-        );
-    }
-
-    #[test]
-    fn keeps_a_call_by_the_declaration_s_policy_or_the_longer_of_it_and_the_part_s_own() {
-        let declared = |fresh, stale| Policy {
-            fresh: Duration::from_secs(fresh),
-            stale: Duration::from_secs(stale),
-        };
-        let plain = Part::<(), ()>::new("plain");
-        let own = Part::<(), ()>::kept_for("own", declared(1_800, 86_400));
-
-        assert_eq!(plain.policy(declared(60, 900)), declared(60, 900));
-        assert_eq!(
-            own.policy(declared(60, 900)),
-            declared(1_800, 86_400),
-            "a short ttl does not make it ask more often"
-        );
-        assert_eq!(
-            own.policy(declared(3_600, 900)),
-            declared(3_600, 86_400),
-            "a long ttl makes it ask less often"
         );
     }
 
