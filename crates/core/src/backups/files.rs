@@ -1,57 +1,178 @@
-//! The files of a folder that a backup archives, and the globs that pick them.
+//! The files of a folder that a backup archives, the globs that pick them, and the walk that opens them through the
+//! descriptors of their folders, never through a link.
 
-use std::ffi::OsString;
-use std::fs::{self, Metadata};
+use std::ffi::{CString, OsStr};
+use std::fs::File;
 use std::io;
+use std::os::fd::{AsFd, OwnedFd};
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
+use nix::dir::Dir;
+use nix::errno::Errno;
+use nix::fcntl::{self, AtFlags, OFlag};
+use nix::sys::stat::{self, FileStat, Mode, SFlag};
 
 use super::BackupError;
 
-/// A regular file a backup archives.
+/// A regular file a backup archives, open.
 #[derive(Debug)]
 pub(super) struct BackupFile {
-    /// Its path.
-    pub(super) path: PathBuf,
-    /// Its path relative to the backed-up folder, with `/` separators: what the globs match and the archive names.
-    pub(super) relative: String,
-    /// Its metadata, read without following a link.
-    pub(super) metadata: Metadata,
+    /// The file, opened through its folder's descriptor.
+    pub(super) file: File,
+    /// Its path relative to the backed-up folder, with `/` separators, its bytes as the system gives them: what the
+    /// globs match and the archive names.
+    pub(super) relative: Vec<u8>,
+    /// Its size when it was opened, in bytes.
+    pub(super) size: u64,
+    /// Its permissions, as `0o644`.
+    pub(super) mode: u32,
+    /// When it was last changed, in seconds since 1970.
+    pub(super) modified: i64,
+}
+
+/// What a name of a folder turned out to be when it was opened.
+#[derive(Debug)]
+pub(super) enum Opened<T> {
+    /// What was asked for, open.
+    Open(T),
+    /// A symbolic link, not followed.
+    Link,
+    /// A FIFO, a socket or a device, which has nothing to read, or a folder that is not one any more.
+    Special,
+    /// Gone since the folder was read.
+    Gone,
 }
 
 /// The files of a folder that a backup archives: the regular files `include` matches and `exclude` does not.
 ///
-/// The globs read as the Waku version's picomatch reads them: `*` stops at a `/`, `**` crosses them, a dotfile matches
-/// as any other file, as an app's data is full of them (`.config`, `.local`), and `folder/**` matches `folder` too.
+/// The globs read as the Waku version's picomatch reads them with `dot: true`, for the globs both read alike: `*`
+/// stops at a `/`, `**` crosses them, `{a,b}` and `[ab]` pick, a dotfile matches as any other file, as an app's data is
+/// full of them (`.config`, `.local`), `folder/**` matches `folder` too, and a leading `./` is dropped. The globs they
+/// read otherwise, a negation (`!media/**`) and an extglob (`+(a|b)`), are refused rather than read another way.
 ///
-/// A symbolic link is never followed: it could loop, or lead out of the app's data. The walk counts those it leaves
-/// out, so that the report can say the archive misses them.
+/// The walk opens each folder and each file through the descriptor of the folder it is in, never following a link:
+/// one put in place of a folder or a file while the app runs is left out, as one there from the start, and counted.
+/// A FIFO, a socket or a device is left out too, and counted, as it has nothing to read.
 #[derive(Debug)]
 pub(super) struct BackupFiles {
-    root: PathBuf,
+    /// The backed-up folder, open.
+    root: Dir,
+    /// Its path, for the errors.
+    root_path: PathBuf,
     include: GlobSet,
     exclude: GlobSet,
     skipped_links: u64,
+    skipped_special: u64,
 }
 
 impl BackupFiles {
-    /// The files of `root` that `include` matches and `exclude` does not; an excluded folder is not walked into.
+    /// The extglobs picomatch reads, which globset would read as plain characters.
+    const EXTGLOBS: [&str; 5] = ["!(", "@(", "+(", "*(", "?("];
+
+    /// The flags a folder is opened with.
+    const FOLDER: OFlag = OFlag::O_RDONLY
+        .union(OFlag::O_DIRECTORY)
+        .union(OFlag::O_CLOEXEC);
+
+    /// The files of `root`, the backed-up folder, open, that `include` matches and `exclude` does not; an excluded
+    /// folder is not walked into.
     ///
     /// # Errors
     ///
-    /// [`BackupError::InvalidGlob`] for a glob globset cannot read.
+    /// [`BackupError::InvalidGlob`] for a glob globset cannot read, or that picomatch would read another way.
     pub(super) fn new(
-        root: impl Into<PathBuf>,
+        root: Dir,
+        root_path: PathBuf,
         include: &[String],
         exclude: &[String],
     ) -> Result<Self, BackupError> {
         Ok(Self {
-            root: root.into(),
+            root,
+            root_path,
             include: Self::globs(include)?,
             exclude: Self::globs(exclude)?,
             skipped_links: 0,
+            skipped_special: 0,
         })
+    }
+
+    /// Opens the folder `prefix` of `app_data`, the folder to back up, once: a link in its path is followed only while
+    /// it stays under `app_data`, by a relative path, and no other system call reads the path again after.
+    ///
+    /// On Linux, `openat2` resolves the path beneath `app_data`. Elsewhere, or where a sandbox refuses `openat2`, each
+    /// folder of the path is opened without following a link, and a link is refused.
+    ///
+    /// # Errors
+    ///
+    /// [`BackupError::NoDataFolder`] when the folder is not there or is not a folder, [`BackupError::OutsideAppData`]
+    /// when it leads out of `app_data` or is `app_data` itself, and [`BackupError::Io`] when it cannot be opened.
+    pub(super) fn open_root(app_data: &Path, app: &str, prefix: &str) -> Result<Dir, BackupError> {
+        let folder = app_data.join(prefix);
+        let refused = |errno: Errno| match errno {
+            Errno::ENOENT | Errno::ENOTDIR => BackupError::NoDataFolder {
+                app: app.to_owned(),
+                folder: folder.clone(),
+            },
+            Errno::EXDEV | Errno::ELOOP => BackupError::OutsideAppData {
+                app: app.to_owned(),
+                folder: folder.clone(),
+            },
+            errno => BackupError::io("open", &folder, errno.into()),
+        };
+        let parent = fcntl::open(app_data, Self::FOLDER, Mode::empty()).map_err(refused)?;
+        let opened = Self::beneath(&parent, prefix).map_err(refused)?;
+        let (parent_stat, opened_stat) = (
+            stat::fstat(&parent).map_err(refused)?,
+            stat::fstat(&opened).map_err(refused)?,
+        );
+
+        if (parent_stat.st_dev, parent_stat.st_ino) == (opened_stat.st_dev, opened_stat.st_ino) {
+            return Err(BackupError::OutsideAppData {
+                app: app.to_owned(),
+                folder,
+            });
+        }
+
+        Dir::from_fd(opened).map_err(refused)
+    }
+
+    /// Opens the folder `path` of `parent`, resolved beneath it.
+    #[cfg(target_os = "linux")]
+    fn beneath(parent: &OwnedFd, path: &str) -> nix::Result<OwnedFd> {
+        use nix::fcntl::{OpenHow, ResolveFlag};
+
+        let how = OpenHow::new()
+            .flags(Self::FOLDER)
+            .resolve(ResolveFlag::RESOLVE_BENEATH | ResolveFlag::RESOLVE_NO_MAGICLINKS);
+
+        match fcntl::openat2(parent, path, how) {
+            // Before Linux 5.6, or a sandbox that does not let it through.
+            Err(Errno::ENOSYS | Errno::EPERM) => Self::folder_by_folder(parent, path),
+            opened => opened,
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn beneath(parent: &OwnedFd, path: &str) -> nix::Result<OwnedFd> {
+        Self::folder_by_folder(parent, path)
+    }
+
+    /// Opens the folder `path` of `parent` one folder at a time, without following a link: `ELOOP` for one.
+    fn folder_by_folder(parent: &OwnedFd, path: &str) -> nix::Result<OwnedFd> {
+        let mut current = nix::unistd::dup(parent)?;
+
+        for segment in path.split('/') {
+            current = fcntl::openat(
+                &current,
+                segment,
+                Self::FOLDER | OFlag::O_NOFOLLOW,
+                Mode::empty(),
+            )?;
+        }
+
+        Ok(current)
     }
 
     /// How many symbolic links the walk has left out so far.
@@ -59,97 +180,195 @@ impl BackupFiles {
         self.skipped_links
     }
 
-    /// Gives each file to archive to `visit`, folder by folder, in the order of their names, until `visit` fails.
+    /// How many FIFOs, sockets and devices the globs matched that the walk has left out so far.
+    pub(super) fn skipped_special(&self) -> u64 {
+        self.skipped_special
+    }
+
+    /// Gives each file to archive to `visit`, open, folder by folder, in the order of their names, until `visit`
+    /// fails.
     ///
     /// # Errors
     ///
-    /// [`BackupError::Io`] for a folder that cannot be read, and the errors of `visit`.
+    /// [`BackupError::Io`] for a folder or a file that cannot be read, and the errors of `visit`.
     pub(super) fn walk(
         &mut self,
         visit: &mut impl FnMut(BackupFile) -> Result<(), BackupError>,
     ) -> Result<(), BackupError> {
-        self.walk_folder("", visit)
+        let root = nix::unistd::dup(&self.root)
+            .and_then(Dir::from_fd)
+            .map_err(|errno| BackupError::io("read", &self.root_path, errno.into()))?;
+
+        self.walk_folder(root, &[], visit)
     }
 
     fn walk_folder(
         &mut self,
-        relative_folder: &str,
+        mut folder: Dir,
+        relative_folder: &[u8],
         visit: &mut impl FnMut(BackupFile) -> Result<(), BackupError>,
     ) -> Result<(), BackupError> {
-        let folder = self.root.join(relative_folder);
+        let mut names = Vec::new();
 
-        for name in Self::names(&folder)? {
-            let name_text = name.to_string_lossy();
-            let relative = if relative_folder.is_empty() {
-                name_text.into_owned()
-            } else {
-                format!("{relative_folder}/{name_text}")
-            };
-
-            if self.exclude.is_match(&relative) {
-                continue;
-            }
-
-            let path = folder.join(&name);
-            // Gone since the folder was read: a live app removes files at any time, a journal, a temporary file.
-            let Some(metadata) = Self::unless_gone(fs::symlink_metadata(&path))
-                .map_err(|error| BackupError::io("read", &path, error))?
-            else {
-                continue;
-            };
-            let kind = metadata.file_type();
-
-            if kind.is_symlink() {
-                self.skipped_links += 1;
-                continue;
-            }
-
-            if kind.is_dir() {
-                self.walk_folder(&relative, visit)?;
-                continue;
-            }
-
-            // Sockets, pipes and devices have nothing to read.
-            if !kind.is_file() || !self.include.is_match(&relative) {
-                continue;
-            }
-
-            visit(BackupFile {
-                path,
-                relative,
-                metadata,
+        for entry in folder.iter() {
+            let entry = entry.map_err(|errno| {
+                BackupError::io("read", self.path_of(relative_folder), errno.into())
             })?;
+            let name = entry.file_name().to_owned();
+
+            if !matches!(name.as_bytes(), b"." | b"..") {
+                names.push(name);
+            }
+        }
+
+        names.sort();
+
+        for name in names {
+            let relative = if relative_folder.is_empty() {
+                name.as_bytes().to_vec()
+            } else {
+                [relative_folder, b"/", name.as_bytes()].concat()
+            };
+            let matched = |globs: &GlobSet| globs.is_match(Path::new(OsStr::from_bytes(&relative)));
+
+            if matched(&self.exclude) {
+                continue;
+            }
+
+            let is_included = matched(&self.include);
+            let read =
+                |errno: Errno| BackupError::io("read", self.path_of(&relative), errno.into());
+            let stat = match stat::fstatat(&folder, name.as_c_str(), AtFlags::AT_SYMLINK_NOFOLLOW) {
+                Ok(stat) => stat,
+                // Gone since the folder was read: a live app removes files at any time, a journal, a temporary file.
+                Err(Errno::ENOENT) => continue,
+                Err(errno) => return Err(read(errno)),
+            };
+
+            match Self::kind(&stat) {
+                SFlag::S_IFLNK => self.skipped_links += 1,
+                SFlag::S_IFDIR => match Self::open_folder(&folder, &name).map_err(read)? {
+                    Opened::Open(child) => self.walk_folder(child, &relative, visit)?,
+                    Opened::Link => self.skipped_links += 1,
+                    Opened::Special | Opened::Gone => {}
+                },
+                SFlag::S_IFREG if is_included => {
+                    match Self::open_file(&folder, &name).map_err(read)? {
+                        Opened::Open((file, stat)) => visit(BackupFile {
+                            file,
+                            relative,
+                            size: u64::try_from(stat.st_size).unwrap_or(0),
+                            mode: Self::mode(&stat),
+                            modified: stat.st_mtime,
+                        })?,
+                        Opened::Link => self.skipped_links += 1,
+                        Opened::Special => self.skipped_special += 1,
+                        Opened::Gone => {}
+                    }
+                }
+                SFlag::S_IFREG => {}
+                // Sockets, FIFOs and devices have nothing to read.
+                _ if is_included => self.skipped_special += 1,
+                _ => {}
+            }
         }
 
         Ok(())
     }
 
-    /// The names in `folder`, in order; none when it is gone.
-    fn names(folder: &Path) -> Result<Vec<OsString>, BackupError> {
-        let read = |error| BackupError::io("read", folder, error);
-        let Some(entries) = Self::unless_gone(fs::read_dir(folder)).map_err(read)? else {
-            return Ok(Vec::new());
-        };
-        let mut names = entries
-            .map(|entry| entry.map(|entry| entry.file_name()))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(read)?;
-
-        names.sort();
-
-        Ok(names)
+    /// Opens the folder `name` of `folder`, unless it is a link or no folder any more.
+    pub(super) fn open_folder(folder: &impl AsFd, name: &CString) -> nix::Result<Opened<Dir>> {
+        match fcntl::openat(
+            folder,
+            name.as_c_str(),
+            Self::FOLDER | OFlag::O_NOFOLLOW,
+            Mode::empty(),
+        ) {
+            Ok(fd) => Dir::from_fd(fd).map(Opened::Open),
+            // Linux answers `ENOTDIR` for a link, as `O_DIRECTORY` is checked first: what is there now tells which.
+            Err(Errno::ELOOP | Errno::ENOTDIR) => {
+                match stat::fstatat(folder, name.as_c_str(), AtFlags::AT_SYMLINK_NOFOLLOW) {
+                    Ok(stat) if Self::kind(&stat) == SFlag::S_IFLNK => Ok(Opened::Link),
+                    Ok(_) => Ok(Opened::Special),
+                    Err(Errno::ENOENT) => Ok(Opened::Gone),
+                    Err(errno) => Err(errno),
+                }
+            }
+            Err(Errno::ENOENT) => Ok(Opened::Gone),
+            Err(errno) => Err(errno),
+        }
     }
 
-    /// The globs of `patterns`, each `folder/**` with `folder` beside it, which picomatch matches with it.
+    /// Opens the file `name` of `folder` to read, with what `fstat` says of it, unless it is a link or no regular file
+    /// any more. `O_NONBLOCK`, so that a FIFO put in its place does not wait for a writer: it is then left out.
+    pub(super) fn open_file(
+        folder: &impl AsFd,
+        name: &CString,
+    ) -> nix::Result<Opened<(File, FileStat)>> {
+        let flags = OFlag::O_RDONLY | OFlag::O_NOFOLLOW | OFlag::O_NONBLOCK | OFlag::O_CLOEXEC;
+        let fd = match fcntl::openat(folder, name.as_c_str(), flags, Mode::empty()) {
+            Ok(fd) => fd,
+            Err(Errno::ELOOP) => return Ok(Opened::Link),
+            Err(Errno::ENXIO) => return Ok(Opened::Special),
+            Err(Errno::ENOENT) => return Ok(Opened::Gone),
+            Err(errno) => return Err(errno),
+        };
+        let stat = stat::fstat(&fd)?;
+
+        if Self::kind(&stat) != SFlag::S_IFREG {
+            return Ok(Opened::Special);
+        }
+
+        Ok(Opened::Open((File::from(fd), stat)))
+    }
+
+    /// The type of what `stat` describes: `S_IFREG`, `S_IFDIR`, `S_IFLNK`…
+    fn kind(stat: &FileStat) -> SFlag {
+        SFlag::from_bits_truncate(stat.st_mode) & SFlag::S_IFMT
+    }
+
+    /// The permissions `stat` gives, as `0o644`.
+    #[allow(
+        clippy::useless_conversion,
+        reason = "mode_t is u32 on Linux, u16 on macOS"
+    )]
+    fn mode(stat: &FileStat) -> u32 {
+        u32::from(stat.st_mode) & 0o7777
+    }
+
+    /// The path of `relative`, for an error.
+    fn path_of(&self, relative: &[u8]) -> PathBuf {
+        self.root_path.join(OsStr::from_bytes(relative))
+    }
+
+    /// The globs of `patterns`: each `folder/**` with `folder` beside it, which picomatch matches with it, and a leading
+    /// `./` dropped.
     fn globs(patterns: &[String]) -> Result<GlobSet, BackupError> {
         let mut set = GlobSetBuilder::new();
 
         for pattern in patterns {
-            let folder = pattern
-                .strip_suffix("/**")
-                .filter(|folder| !folder.is_empty());
+            let refused = |reason: &str| BackupError::InvalidGlob {
+                glob: pattern.clone(),
+                source: reason.into(),
+            };
 
-            for glob in std::iter::once(pattern.as_str()).chain(folder) {
+            if pattern.starts_with('!') {
+                return Err(refused(
+                    "a negation is not read: list what to leave out in exclude",
+                ));
+            }
+
+            if Self::EXTGLOBS
+                .iter()
+                .any(|extglob| pattern.contains(extglob))
+            {
+                return Err(refused("an extglob is not read"));
+            }
+
+            let glob = pattern.strip_prefix("./").unwrap_or(pattern);
+            let folder = glob.strip_suffix("/**").filter(|folder| !folder.is_empty());
+
+            for glob in std::iter::once(glob).chain(folder) {
                 let built = GlobBuilder::new(glob)
                     .literal_separator(true)
                     .build()
@@ -180,32 +399,49 @@ impl BackupFiles {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::{CString, OsStr};
     use std::fs;
+    use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::symlink;
+    use std::os::unix::net::UnixListener;
     use std::path::Path;
 
-    use super::BackupFiles;
+    use nix::dir::Dir;
+    use nix::sys::stat::Mode;
 
-    /// The files of `root` that `include` and `exclude` keep, by their relative paths, and the links left out.
-    fn kept(root: &Path, include: &[&str], exclude: &[&str]) -> (Vec<String>, u64) {
+    use super::{BackupError, BackupFiles, Opened};
+
+    /// `root`, open as a folder.
+    fn open(root: &Path) -> Dir {
+        Dir::open(root, BackupFiles::FOLDER, Mode::empty()).expect("opened")
+    }
+
+    /// The files of `root` that `include` and `exclude` keep, by their relative paths, the links and the special files
+    /// left out.
+    fn kept(root: &Path, include: &[&str], exclude: &[&str]) -> (Vec<String>, u64, u64) {
         let strings = |globs: &[&str]| {
             globs
                 .iter()
                 .map(|glob| (*glob).to_owned())
                 .collect::<Vec<_>>()
         };
-        let mut files =
-            BackupFiles::new(root, &strings(include), &strings(exclude)).expect("valid globs");
+        let mut files = BackupFiles::new(
+            open(root),
+            root.to_owned(),
+            &strings(include),
+            &strings(exclude),
+        )
+        .expect("valid globs");
         let mut kept = Vec::new();
 
         files
             .walk(&mut |file| {
-                kept.push(file.relative);
+                kept.push(String::from_utf8(file.relative).expect("UTF-8"));
                 Ok(())
             })
             .expect("walked");
 
-        (kept, files.skipped_links())
+        (kept, files.skipped_links(), files.skipped_special())
     }
 
     /// A folder of `paths`, each a file with its own path in it.
@@ -220,6 +456,11 @@ mod tests {
         }
 
         dir
+    }
+
+    /// `name` as a name of a folder.
+    fn name(name: &str) -> CString {
+        CString::new(name).expect("a name")
     }
 
     #[test]
@@ -252,6 +493,11 @@ mod tests {
             ["app.db", "config/cache/blob", "config/deep/app.db"],
             "* stops at a /"
         );
+        assert_eq!(
+            kept(dir.path(), &["./config/**"], &["./config/deep/**"]).0,
+            ["config/app.ini", "config/cache/blob"],
+            "a leading ./ is dropped"
+        );
     }
 
     #[test]
@@ -260,7 +506,7 @@ mod tests {
 
         symlink("/etc", dir.path().join("media")).expect("linked");
 
-        let (files, skipped) = kept(dir.path(), &["**"], &["cache/**", "media/**", "logs/**"]);
+        let (files, skipped, _) = kept(dir.path(), &["**"], &["cache/**", "media/**", "logs/**"]);
 
         assert_eq!(
             files,
@@ -283,19 +529,108 @@ mod tests {
         .expect("linked");
         symlink(dir.path(), dir.path().join("data/loop")).expect("linked");
 
-        let (files, skipped) = kept(dir.path(), &["**"], &[]);
+        let (files, skipped, _) = kept(dir.path(), &["**"], &[]);
 
         assert_eq!(files, ["data/real.txt"]);
         assert_eq!(skipped, 3);
     }
 
     #[test]
-    fn refuses_a_glob_it_cannot_read() {
-        let refused = BackupFiles::new("/", &["a[".to_owned()], &[]);
+    fn leaves_out_a_fifo_and_a_socket_without_waiting_on_them() {
+        let dir = folder(&["data/real.txt"]);
+
+        nix::unistd::mkfifo(&dir.path().join("data/pipe"), Mode::S_IRWXU).expect("made");
+
+        let _socket = UnixListener::bind(dir.path().join("data/socket")).expect("bound");
+        let (files, _, special) = kept(dir.path(), &["**"], &[]);
+
+        assert_eq!(files, ["data/real.txt"]);
+        assert_eq!(special, 2);
+
+        // Put in place of a file once the walk saw a regular one: opened without waiting for a writer, then left out.
+        let data = open(&dir.path().join("data"));
 
         assert!(matches!(
-            refused,
-            Err(super::BackupError::InvalidGlob { glob, .. }) if glob == "a["
+            BackupFiles::open_file(&data, &name("pipe")),
+            Ok(Opened::Special)
         ));
+        assert!(matches!(
+            BackupFiles::open_file(&data, &name("socket")),
+            Ok(Opened::Special)
+        ));
+    }
+
+    #[test]
+    fn opens_no_folder_or_file_through_a_link_put_in_its_place() {
+        let dir = folder(&["data/real.txt"]);
+        let outside = folder(&["secret.txt"]);
+
+        // As if the folder and the file were swapped for links once the walk had read what they were.
+        symlink(outside.path(), dir.path().join("data/swapped")).expect("linked");
+        symlink(
+            outside.path().join("secret.txt"),
+            dir.path().join("data/file"),
+        )
+        .expect("linked");
+
+        let data = open(&dir.path().join("data"));
+
+        assert!(matches!(
+            BackupFiles::open_folder(&data, &name("swapped")),
+            Ok(Opened::Link)
+        ));
+        assert!(matches!(
+            BackupFiles::open_file(&data, &name("file")),
+            Ok(Opened::Link)
+        ));
+        assert!(matches!(
+            BackupFiles::open_folder(&data, &name("real.txt")),
+            Ok(Opened::Special)
+        ));
+    }
+
+    #[test]
+    fn gives_a_name_that_is_not_utf8_as_its_bytes() {
+        let dir = folder(&[]);
+        let bytes = [b'a', 0xff, b'.', b't', b'x', b't'];
+
+        fs::write(dir.path().join(OsStr::from_bytes(&bytes)), "x").expect("written");
+
+        let mut files = BackupFiles::new(
+            open(dir.path()),
+            dir.path().to_owned(),
+            &["**".to_owned()],
+            &[],
+        )
+        .expect("valid globs");
+        let mut names = Vec::new();
+
+        files
+            .walk(&mut |file| {
+                names.push(file.relative);
+                Ok(())
+            })
+            .expect("walked");
+
+        assert_eq!(names, [bytes.to_vec()]);
+    }
+
+    #[test]
+    fn refuses_a_glob_it_cannot_read_or_that_picomatch_reads_another_way() {
+        let dir = folder(&[]);
+
+        for glob in ["a[", "!media/**", "+(a|b).txt", "@(a).txt", "data/!(cache)"] {
+            let refused = BackupFiles::new(
+                open(dir.path()),
+                dir.path().to_owned(),
+                &[glob.to_owned()],
+                &[],
+            );
+
+            assert!(
+                matches!(&refused, Err(BackupError::InvalidGlob { glob: named, .. }) if named == glob),
+                "{glob}"
+            );
+        }
     }
 }

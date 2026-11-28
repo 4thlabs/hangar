@@ -33,10 +33,11 @@ url = "2"
 # The archives of an app's backup, deflated, as the Waku version's yazl writes them: no other method is read or written.
 zip = { version = "9.8", default-features = false, features = ["deflate"] }
 
-# SIGTERM, which lets a child stop on its own before the SIGKILL of tokio's `Child::kill`; `O_NOFOLLOW`, so that a
-# backup never reads a file through a link; and the hostname, which tells the container Hangar runs in.
+# SIGTERM, which lets a child stop on its own before the SIGKILL of tokio's `Child::kill`; the descriptors of the
+# folders a backup walks and opens each file through, never following a link; and the hostname, which tells the
+# container Hangar runs in. The backups are Unix's alone.
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["fs", "hostname", "signal"] }
+nix = { workspace = true, features = ["dir", "fs", "hostname", "signal"] }
 
 [dev-dependencies]
 # The statuses a fake answer of the daemon has.

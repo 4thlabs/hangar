@@ -1,11 +1,11 @@
 //! The zip of a backup: the files of the backed-up folder written into a new archive, as blocking work.
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{File, OpenOptions};
 use std::io::{self, BufWriter, Read};
 use std::path::Path;
 
 use tokio_util::sync::CancellationToken;
-use zip::write::SimpleFileOptions;
+use zip::write::{FullFileOptions, SimpleFileOptions};
 use zip::{CompressionMethod, DateTime, ZipWriter};
 
 use super::BackupError;
@@ -28,8 +28,7 @@ impl<'a> Archive<'a> {
         Self { prefix, cancel }
     }
 
-    /// Writes `files` into a new zip at `target`, which must not exist, and gives how many files it holds. A file gone
-    /// since the walk listed it is passed over.
+    /// Writes `files` into a new zip at `target`, which must not exist, and gives how many files it holds.
     ///
     /// # Errors
     ///
@@ -46,9 +45,8 @@ impl<'a> Archive<'a> {
         let mut count = 0;
 
         files.walk(&mut |file| {
-            if self.add(&mut zip, &file, target)? {
-                count += 1;
-            }
+            self.add(&mut zip, file, target)?;
+            count += 1;
 
             Ok(())
         })?;
@@ -65,58 +63,55 @@ impl<'a> Archive<'a> {
         Ok(count)
     }
 
-    /// Adds `file` to `zip`, and says whether it did: not when it is gone since the walk.
+    /// Adds `file` to `zip`, under its name's bytes as the system gives them.
     fn add(
         &self,
         zip: &mut ZipWriter<BufWriter<File>>,
-        file: &BackupFile,
+        file: BackupFile,
         target: &Path,
-    ) -> Result<bool, BackupError> {
+    ) -> Result<(), BackupError> {
+        let zipped = |error| BackupError::io("write", target, error);
+
         if self.cancel.is_cancelled() {
-            return Err(BackupError::io("write", target, canceled()));
+            return Err(zipped(canceled()));
         }
 
-        // Opened only now, once the previous file is in: one file open at a time.
-        let Some(source) = BackupFiles::unless_gone(Self::open(&file.path))
-            .map_err(|error| BackupError::io("read", &file.path, error))?
-        else {
-            return Ok(false);
-        };
-        let options = self.options(file);
+        let name = [self.prefix.as_bytes(), b"/", &file.relative].concat();
+        let options = Self::options(&file)
+            .map_err(|error| zipped(io::Error::other(error)))?
+            .name(&name);
 
-        zip.start_file(format!("{}/{}", self.prefix, file.relative), options)
-            .map_err(|error| BackupError::io("write", target, io::Error::other(error)))?;
+        zip.start_file_with_options(options)
+            .map_err(|error| zipped(io::Error::other(error)))?;
 
         let mut reader = Cancellable {
-            inner: source,
+            inner: file.file,
             cancel: self.cancel,
         };
 
-        io::copy(&mut reader, zip)
-            .map_err(|error| BackupError::io("archive", &file.path, error))?;
+        io::copy(&mut reader, zip).map_err(zipped)?;
 
-        Ok(true)
+        Ok(())
     }
 
-    /// The options of `file`'s entry: deflated, with its mode and the time it was changed at, in UTC.
-    fn options(&self, file: &BackupFile) -> SimpleFileOptions {
+    /// The options of `file`'s entry: deflated, with its mode and the time it was changed at, as a DOS time in UTC and
+    /// as an extended timestamp, which readers take over the DOS time, which has no time zone.
+    fn options(file: &BackupFile) -> zip::result::ZipResult<FullFileOptions<'static, 'static>> {
         let options = SimpleFileOptions::default()
             .compression_method(CompressionMethod::Deflated)
-            .large_file(file.metadata.len() >= Self::LARGE_FILE);
-        let options = match Self::mode(&file.metadata) {
-            Some(mode) => options.unix_permissions(mode),
+            .unix_permissions(file.mode)
+            .large_file(file.size >= Self::LARGE_FILE);
+        let options = match Self::dos_time(file.modified) {
+            Some(time) => options.last_modified_time(time),
             None => options,
         };
 
-        match file.metadata.modified().ok().and_then(Self::zip_time) {
-            Some(time) => options.last_modified_time(time),
-            None => options,
-        }
+        options.with_extended_timestamp(u32::try_from(file.modified).ok(), None, None)
     }
 
-    /// `time` as a zip writes it, which holds 1980 to 2107 and even seconds: `None` out of its range.
-    fn zip_time(time: std::time::SystemTime) -> Option<DateTime> {
-        let utc = jiff::Timestamp::try_from(time)
+    /// `seconds` since 1970 as a DOS time in UTC, which holds 1980 to 2107 and even seconds: `None` out of its range.
+    fn dos_time(seconds: i64) -> Option<DateTime> {
+        let utc = jiff::Timestamp::from_second(seconds)
             .ok()?
             .to_zoned(jiff::tz::TimeZone::UTC);
         let field = |value: i8| u8::try_from(value).ok();
@@ -130,35 +125,6 @@ impl<'a> Archive<'a> {
             field(utc.second())?,
         )
         .ok()
-    }
-
-    /// The permissions of a file, on Unix.
-    #[cfg(unix)]
-    fn mode(metadata: &fs::Metadata) -> Option<u32> {
-        use std::os::unix::fs::PermissionsExt;
-
-        Some(metadata.permissions().mode() & 0o7777)
-    }
-
-    #[cfg(not(unix))]
-    fn mode(_: &fs::Metadata) -> Option<u32> {
-        None
-    }
-
-    /// Opens `path` to read, never through a link: one put in the place of the file since the walk is refused.
-    #[cfg(unix)]
-    fn open(path: &Path) -> io::Result<File> {
-        use std::os::unix::fs::OpenOptionsExt;
-
-        OpenOptions::new()
-            .read(true)
-            .custom_flags(nix::fcntl::OFlag::O_NOFOLLOW.bits())
-            .open(path)
-    }
-
-    #[cfg(not(unix))]
-    fn open(path: &Path) -> io::Result<File> {
-        File::open(path)
     }
 }
 

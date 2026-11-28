@@ -4,6 +4,7 @@
 //! passwords, compose, which brings the installed apps up and down, one or a batch, the backups of the apps' data, and
 //! the secrets a command's output may echo, taken out before it is shown.
 
+#[cfg(unix)]
 mod backups;
 mod compose;
 mod docker;
@@ -14,6 +15,7 @@ mod secrets;
 mod store;
 mod version;
 
+#[cfg(unix)]
 pub use backups::{AppBackups, ArchiveFile, BackupArchive, BackupError, BackupSummary};
 pub use compose::{
     AppOutcome, AppStatus, BatchEvent, BatchReport, Compose, ComposeBatch, ComposeCommand,
