@@ -266,7 +266,25 @@ describe("/", () => {
         { key: "forgejo-ci-1", type: "forgejo-ci", column: 2, link: null },
         { key: "github-releases-1", type: "github-releases", column: 3, link: null },
         { key: "tcg-collector-cards-1", type: "tcg-collector-cards", column: 3, link: null },
+        { key: "frigate-events-1", type: "frigate-events", column: 3, link: null },
+        { key: "miniflux-entries-1", type: "miniflux-entries", column: 3, link: null },
       ]),
+      getServicesFrigateMockHandler(read(frigate)),
+      getServicesMinifluxMockHandler(
+        read({
+          unread: 3,
+          entries: [
+            {
+              id: 9,
+              title: "A new post",
+              url: "https://blog.example.com/9",
+              feedTitle: "A blog",
+              publishedAt: "2026-11-25T08:00:00+01:00",
+              isUnread: true,
+            },
+          ],
+        }),
+      ),
       getServicesArcaneMockHandler(
         read({
           dashboard: {
@@ -378,12 +396,20 @@ describe("/", () => {
       "/api/services/images/tcg-collector-cards-1/card.21-7",
     );
 
+    const miniflux = await card("Miniflux");
+
+    expect(within(miniflux).getByText("A new post")).toBeDefined();
+    expect(within(miniflux).getByText("3 unread")).toBeDefined();
+    expect(within(await card("Frigate")).getByText("2 cameras")).toBeDefined();
+    // The limits are the cards' own: five events, eight entries.
     expect(asked.toSorted()).toEqual([
       "/api/services/arcane/arcane-general-stats-1?dashboard=true",
       "/api/services/backrest/backrest-summary-1?repositories=true",
       "/api/services/beszel/beszel-server-stats-1?systems=true",
       "/api/services/forgejo/forgejo-ci-1?repositories=true&runs=true",
+      "/api/services/frigate/frigate-events-1?stats=true&events=5",
       "/api/services/github/github-releases-1?releases=true",
+      "/api/services/miniflux/miniflux-entries-1?unread=true&entries=8",
       "/api/services/tcg-collector/tcg-collector-cards-1?cards=true&prices=true",
     ]);
   });

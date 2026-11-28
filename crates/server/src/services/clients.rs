@@ -32,7 +32,8 @@ impl<C: Clone> Clients<C> {
     }
 
     /// The client of the service `locator` finds, resolved now: the one built for it before, unless its address or its
-    /// key changed since, or one built now, kept. The clients of services no declaration names any more are dropped.
+    /// key changed since, or one built now, kept. The clients of services no declaration names any more are dropped
+    /// then, as a client of the same service's contract is taken: until then, or until the server stops, they stay.
     ///
     /// # Errors
     ///
@@ -155,6 +156,34 @@ mod tests {
             clients.lock().keys().collect::<Vec<_>>(),
             [&key("b")],
             "a dropped"
+        );
+    }
+
+    #[tokio::test]
+    async fn reuses_the_client_of_a_declared_service_across_two_reads() {
+        static OF_A_READ: AtomicUsize = AtomicUsize::new(0);
+
+        fn counted(service: &Service) -> Result<Option<String>, crate::services::LoadError> {
+            OF_A_READ.fetch_add(1, Ordering::SeqCst);
+
+            Ok(service.key.clone())
+        }
+
+        let clients = Clients::new(counted);
+        let read = || crate::services::tests::fixed_locator("https://api.github.com");
+
+        assert_eq!(
+            clients.of(&read()).await.ok().flatten(),
+            Some("token".to_owned())
+        );
+        assert_eq!(
+            clients.of(&read()).await.ok().flatten(),
+            Some("token".to_owned())
+        );
+        assert_eq!(
+            OF_A_READ.load(Ordering::SeqCst),
+            1,
+            "built once, for the first read"
         );
     }
 }

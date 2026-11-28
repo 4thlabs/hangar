@@ -53,4 +53,14 @@ describe("forgejoView", () => {
     expect(view.repositoryCount).toBe(5);
     expect(view.recentRepositories.map(recent => recent.fullName)).toEqual(["ana/hangar", "cleo/site", "ana/notes"]);
   });
+
+  it("sorts a run or a repository whose time does not parse last, as the oldest", () => {
+    const view = forgejoView(
+      [repository("ana/odd", "yesterday"), repository("ana/hangar", "2026-11-25T09:00:00.000Z")],
+      [run(1, "running", "not a time", null), run(2, "running", "2026-11-26T08:00:00.000Z", null)],
+    );
+
+    expect(view.activeRuns.map(active => active.id)).toEqual([2, 1]);
+    expect(view.recentRepositories.map(recent => recent.fullName)).toEqual(["ana/hangar", "ana/odd"]);
+  });
 });

@@ -179,3 +179,33 @@ async fn reads_each_card_in_its_order_with_its_prices_and_one_it_does_not_know()
 
     Ok(())
 }
+
+#[tokio::test]
+async fn relays_a_card_s_image_for_tcg_collector_s_widget_alone() {
+    let url = tcg_collector().await;
+    // A Frigate at tcg-collector's address: a card asked through it would be found, were the relay to fetch it.
+    let fixture = Fixture::new(&format!(
+        "  - {{ type: tcg-collector-cards, column: 2, url: '{url}', cards: [{{ game: 21, product: 7 }}] }}\n  - {{ \
+         type: frigate-events, column: 3, url: '{url}' }}\n"
+    ));
+    let server = fixture.serve().await;
+    let tcg_collector = server.key("tcg-collector-cards").await;
+    let frigate = server.key("frigate-events").await;
+
+    assert_eq!(
+        server
+            .get(&format!("/api/services/images/{tcg_collector}/card.21-7"))
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        server
+            .problem(&format!("/api/services/images/{frigate}/card.21-7"))
+            .await,
+        (
+            StatusCode::NOT_FOUND,
+            Some("widgets.unknown_image".to_owned())
+        )
+    );
+}

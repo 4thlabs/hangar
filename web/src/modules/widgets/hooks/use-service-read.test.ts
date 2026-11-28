@@ -46,7 +46,7 @@ describe("useServiceRead", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    const data: ServiceParts<JellyfinData, typeof read> | undefined = result.current.data;
+    const data = result.current.data;
 
     expect(data?.counts.movies).toBe(1);
 
